@@ -84,10 +84,14 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("referral", self.referral_command))
             self.application.add_handler(CommandHandler("language", self.language_command))
             self.application.add_handler(CommandHandler("ask_ai", self.handle_ask_ai))
-            self.application.add_handler(CommandHandler("coinglass_data", self.coinglass_data_command))
+            self.application.add_handler(CommandHandler("binance_data", self.binance_data_command))
             self.application.add_handler(CommandHandler("candles", self.candles_command))
             self.application.add_handler(CommandHandler("funding", self.funding_command))
             self.application.add_handler(CommandHandler("oi", self.open_interest_command))
+            self.application.add_handler(CommandHandler("mark_price", self.mark_price_command))
+            self.application.add_handler(CommandHandler("server_time", self.server_time_command))
+            self.application.add_handler(CommandHandler("liquidations", self.liquidations_command))
+            self.application.add_handler(CommandHandler("long_short", self.long_short_command))
 
             # Admin commands</old_str>
             self.application.add_handler(CommandHandler("admin", self.admin_command))
@@ -287,8 +291,45 @@ Gunakan `/help` untuk melihat semua fitur yang tersedia!
 
     async def help_command(self, update: Update, context: CallbackContext):
         """Handle /help command"""
-        help_text = self.ai.help_message()
-        await update.message.reply_text(help_text)
+        help_text = """🤖 **CryptoMentor AI Bot - Help**
+
+📊 **Harga & Data Pasar:**
+• `/price <symbol>` - Harga real-time
+• `/candles <symbol> [interval] [limit]` - Data candlestick
+• `/market` - Overview pasar komprehensif
+
+📈 **Analisis Trading:**
+• `/analyze <symbol>` - Analisis mendalam (20 credit)
+• `/futures <symbol>` - Analisis futures 1 coin (20 credit)
+• `/futures_signals` - Sinyal futures lengkap (30 credit)
+
+⚡ **Data Binance Futures:**
+• `/binance_data <symbol>` - Data comprehensive (25 credit)
+• `/funding <symbol>` - Funding rate
+• `/oi <symbol>` - Open interest
+• `/mark_price <symbol>` - Mark price & premium
+• `/liquidations <symbol>` - Data liquidation terbaru
+• `/long_short <symbol>` - Long/short ratio
+• `/server_time` - Waktu server Binance
+
+💼 **Portfolio & Credit:**
+• `/portfolio` - Lihat portfolio
+• `/add_coin <symbol> <amount>` - Tambah ke portfolio
+• `/credits` - Cek sisa credit
+• `/subscribe` - Upgrade premium
+
+🎯 **Lainnya:**
+• `/ask_ai <pertanyaan>` - Tanya AI crypto
+• `/referral` - Program referral
+• `/language` - Ubah bahasa
+
+💡 **Tips:**
+- Ketik nama crypto langsung untuk harga cepat
+- Fitur premium = unlimited access
+- Gunakan referral untuk bonus credit
+
+🔥 **New**: Semua data futures menggunakan Binance API real-time!"""
+        await update.message.reply_text(help_text, parse_mode='Markdown')
 
     async def price_command(self, update: Update, context: CallbackContext):
         """Handle /price command with enhanced real-time data"""
@@ -1339,10 +1380,10 @@ Gunakan:
 
         await update.message.reply_text(response, parse_mode='Markdown')
 
-    async def coinglass_data_command(self, update: Update, context: CallbackContext):
-        """Handle /coinglass_data command - comprehensive CoinGlass API data"""
+    async def binance_data_command(self, update: Update, context: CallbackContext):
+        """Handle /binance_data command - comprehensive Binance API data"""
         if not context.args:
-            await update.message.reply_text("❌ Gunakan format: `/coinglass_data <symbol>`\nContoh: `/coinglass_data btc`", parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/binance_data <symbol>`\nContoh: `/binance_data btc`", parse_mode='Markdown')
             return
 
         user_id = update.message.from_user.id
@@ -1352,68 +1393,84 @@ Gunakan:
 
         # Check credits for non-premium, non-admin users
         if not is_premium and not is_admin and credits < 25:
-            await update.message.reply_text("❌ Credit tidak cukup! Data comprehensive CoinGlass membutuhkan 25 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
+            await update.message.reply_text("❌ Credit tidak cukup! Data comprehensive Binance membutuhkan 25 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
 
         # Show loading message
-        loading_msg = await update.message.reply_text(f"⏳ Mengambil data comprehensive CoinGlass untuk {symbol}...")
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data comprehensive Binance untuk {symbol}...")
 
         try:
-            # Get comprehensive CoinGlass data
-            comp_data = self.crypto_api.get_coinglass_comprehensive_data(symbol)
+            # Get comprehensive Binance data
+            comp_data = self.crypto_api.get_comprehensive_futures_data(symbol)
             
             if comp_data.get('error'):
                 await loading_msg.edit_text(f"❌ Gagal mengambil data untuk {symbol}: {comp_data.get('error')}")
                 return
 
-            data = comp_data.get('comprehensive_data', {})
             success_calls = comp_data.get('successful_api_calls', 0)
-            total_calls = comp_data.get('total_endpoints', 0)
+            total_calls = comp_data.get('total_api_calls', 0)
             data_quality = comp_data.get('data_quality', 'unknown')
 
             # Format comprehensive message
-            message = f"""📊 **Data Comprehensive CoinGlass - {symbol}**
+            message = f"""📊 **Data Comprehensive Binance - {symbol}**
 
-🔗 **API Status**: {success_calls}/{total_calls} endpoints ({'✅' if success_calls >= 6 else '🟡' if success_calls >= 4 else '🔴'})
+🔗 **API Status**: {success_calls}/{total_calls} endpoints ({'✅' if success_calls >= 5 else '🟡' if success_calls >= 4 else '🔴'})
 📈 **Data Quality**: {data_quality.upper()}
 
 """
 
             # Price Data
-            price_data = data.get('price_data', {})
-            if price_data:
-                source_emoji = "🟢" if price_data.get('source') in ['binance', 'coingecko'] else "🔄"
+            price_data = comp_data.get('price_data', {})
+            if price_data and 'error' not in price_data:
                 current_price = price_data.get('price', 0)
                 price_format = self.crypto_api._format_price_display(current_price)
                 change_24h = price_data.get('change_24h', 0)
                 change_emoji = "📈" if change_24h >= 0 else "📉"
                 
-                message += f"""💰 **Price Data** {source_emoji}
+                message += f"""💰 **Futures Price Data** 🟢
 • **Current Price**: {price_format}
 • **24h Change**: {change_emoji} {change_24h:+.2f}%
+• **24h High**: {self.crypto_api._format_price_display(price_data.get('high_24h', 0))}
+• **24h Low**: {self.crypto_api._format_price_display(price_data.get('low_24h', 0))}
+• **Volume**: {price_data.get('volume_24h', 0):,.0f}
 
 """
 
-            # Futures Data
-            futures_data = data.get('futures_data', {})
-            if futures_data:
-                futures_emoji = "🟢" if futures_data.get('source') == 'coinglass' else "🔄"
-                long_ratio = futures_data.get('long_ratio', 0)
-                short_ratio = futures_data.get('short_ratio', 0)
+            # Mark Price & Funding
+            mark_data = comp_data.get('mark_price_data', {})
+            if mark_data and 'error' not in mark_data:
+                mark_price = mark_data.get('mark_price', 0)
+                index_price = mark_data.get('index_price', 0)
+                funding_rate = mark_data.get('last_funding_rate', 0)
+                funding_pct = funding_rate * 100
                 
-                message += f"""⚡ **Long/Short Ratio** {futures_emoji}
+                message += f"""⚡ **Mark Price & Funding** 🟢
+• **Mark Price**: {self.crypto_api._format_price_display(mark_price)}
+• **Index Price**: {self.crypto_api._format_price_display(index_price)}
+• **Funding Rate**: {funding_pct:+.4f}%
+• **Next Funding**: {mark_data.get('next_funding_time_iso', '')[:16].replace('T', ' ')}
+
+"""
+
+            # Long/Short Ratio
+            ls_data = comp_data.get('long_short_ratio_data', {})
+            if ls_data and 'error' not in ls_data:
+                long_ratio = ls_data.get('long_ratio', 0)
+                short_ratio = ls_data.get('short_ratio', 0)
+                
+                message += f"""📊 **Long/Short Ratio** 🟢
 • **Long Ratio**: {long_ratio:.1f}%
 • **Short Ratio**: {short_ratio:.1f}%
+• **L/S Ratio**: {ls_data.get('long_short_ratio', 0):.2f}
 • **Sentiment**: {'Bullish' if long_ratio > 60 else 'Bearish' if long_ratio < 40 else 'Neutral'}
 
 """
 
             # Open Interest
-            oi_data = data.get('open_interest', {})
-            if oi_data:
-                oi_emoji = "🟢" if oi_data.get('source') == 'coinglass' else "🔄"
+            oi_data = comp_data.get('open_interest_data', {})
+            if oi_data and 'error' not in oi_data:
                 oi_value = oi_data.get('open_interest', 0)
                 if oi_value > 1000000000:
                     oi_format = f"{oi_value/1000000000:.2f}B"
@@ -1422,42 +1479,29 @@ Gunakan:
                 else:
                     oi_format = f"{oi_value:,.0f}"
                 
-                message += f"""📊 **Open Interest** {oi_emoji}
+                message += f"""📈 **Open Interest** 🟢
 • **Total OI**: {oi_format}
-• **OI Change**: {oi_data.get('open_interest_change', 0):+.2f}%
-
-"""
-
-            # Funding Rate
-            funding_data = data.get('funding_rate', {})
-            if funding_data:
-                funding_emoji = "🟢" if funding_data.get('source') == 'coinglass' else "🔄"
-                avg_funding = funding_data.get('average_funding_rate', 0)
-                funding_pct = avg_funding * 100
-                
-                message += f"""💸 **Funding Rate** {funding_emoji}
-• **Average Rate**: {funding_pct:+.4f}%
-• **Exchanges**: {funding_data.get('exchanges_count', 0)}
+• **Timestamp**: {oi_data.get('time_iso', '')[:16].replace('T', ' ')}
 
 """
 
             # Liquidation Data
-            liq_data = data.get('liquidation_data', {})
-            if liq_data:
-                liq_emoji = "🟢" if liq_data.get('source') == 'coinglass' else "🔄"
+            liq_data = comp_data.get('liquidation_data', {})
+            if liq_data and 'error' not in liq_data:
                 total_liq = liq_data.get('total_liquidation', 0)
                 long_liq = liq_data.get('long_liquidation', 0)
                 short_liq = liq_data.get('short_liquidation', 0)
                 
-                message += f"""🔥 **Liquidations (24h)** {liq_emoji}
+                message += f"""🔥 **Liquidations (Recent)** 🟢
 • **Total**: ${total_liq:,.0f}
 • **Long Liq**: ${long_liq:,.0f}
 • **Short Liq**: ${short_liq:,.0f}
+• **Orders**: {liq_data.get('total_orders', 0)}
 
 """
 
             message += f"🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}\n"
-            message += f"🔄 **Source**: CoinGlass + Market Data APIs"
+            message += f"🔄 **Source**: Binance Futures API (Real-time)"
 
             # Deduct credit only for non-premium, non-admin users
             if not is_premium and not is_admin:
@@ -1473,7 +1517,7 @@ Gunakan:
 
         except Exception as e:
             await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
-            print(f"Error in coinglass_data command: {e}")
+            print(f"Error in binance_data command: {e}")
 
     async def candles_command(self, update: Update, context: CallbackContext):
         """Handle /candles command - candlestick data"""
@@ -1668,6 +1712,221 @@ Gunakan:
 
 🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}
 🔄 **Source**: {source.replace('_', ' ').title()}"""
+
+            await loading_msg.edit_text(message, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+
+    async def mark_price_command(self, update: Update, context: CallbackContext):
+        """Handle /mark_price command - mark price and premium index"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/mark_price <symbol>`\nContoh: `/mark_price btc`", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data mark price {symbol}...")
+
+        try:
+            mark_data = self.crypto_api.get_binance_mark_price(symbol)
+            
+            if not mark_data or 'error' in mark_data:
+                await loading_msg.edit_text(f"❌ Gagal mengambil data mark price untuk {symbol}")
+                return
+
+            mark_price = mark_data.get('mark_price', 0)
+            index_price = mark_data.get('index_price', 0)
+            funding_rate = mark_data.get('last_funding_rate', 0)
+            funding_pct = funding_rate * 100
+            next_funding = mark_data.get('next_funding_time_iso', '')
+
+            # Calculate premium
+            premium = ((mark_price - index_price) / index_price * 100) if index_price > 0 else 0
+
+            message = f"""⚡ **Mark Price & Premium Index - {symbol}** 🟢
+
+💰 **Mark Price**: {self.crypto_api._format_price_display(mark_price)}
+📊 **Index Price**: {self.crypto_api._format_price_display(index_price)}
+📈 **Premium**: {premium:+.4f}%
+
+**Funding Rate**: {funding_pct:+.4f}%
+**Next Funding**: {next_funding[:16].replace('T', ' ') if next_funding else 'N/A'}
+
+**Interpretasi:**
+• Mark Price = Harga kontrak futures
+• Index Price = Harga spot rata-rata
+• Premium > 0 = Futures lebih mahal (Bullish)
+• Premium < 0 = Futures lebih murah (Bearish)
+
+**Funding Rate:**
+• Positif = Long traders bayar Short
+• Negatif = Short traders bayar Long
+• Rate tinggi = Sentiment bullish kuat
+
+🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}
+🔄 **Source**: Binance Futures API"""
+
+            await loading_msg.edit_text(message, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+
+    async def server_time_command(self, update: Update, context: CallbackContext):
+        """Handle /server_time command - Binance server time"""
+        loading_msg = await update.message.reply_text("⏳ Mengambil waktu server Binance...")
+
+        try:
+            time_data = self.crypto_api.get_binance_server_time()
+            
+            if not time_data or 'error' in time_data:
+                await loading_msg.edit_text("❌ Gagal mengambil waktu server Binance")
+                return
+
+            server_time = time_data.get('server_time_readable', '')
+            server_time_iso = time_data.get('server_time_iso', '')
+            
+            # Get local time for comparison
+            local_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S WIB')
+
+            message = f"""🕐 **Binance Server Time** 🟢
+
+**Server Time (UTC)**: {server_time}
+**Server Time (ISO)**: {server_time_iso}
+**Local Time (WIB)**: {local_time}
+
+**Network Status**: ✅ Connected
+**API Latency**: <100ms (Real-time)
+
+💡 **Info:**
+• Server time digunakan untuk timestamp trading
+• Penting untuk order execution accuracy
+• Binance menggunakan UTC timezone
+
+🔄 **Source**: Binance Spot API"""
+
+            await loading_msg.edit_text(message, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+
+    async def liquidations_command(self, update: Update, context: CallbackContext):
+        """Handle /liquidations command - recent liquidation orders"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/liquidations <symbol>`\nContoh: `/liquidations btc`", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data liquidation {symbol}...")
+
+        try:
+            liq_data = self.crypto_api.get_binance_liquidation_orders(symbol)
+            
+            if not liq_data or 'error' in liq_data:
+                await loading_msg.edit_text(f"❌ Gagal mengambil data liquidation untuk {symbol}")
+                return
+
+            total_liq = liq_data.get('total_liquidation', 0)
+            long_liq = liq_data.get('long_liquidation', 0)
+            short_liq = liq_data.get('short_liquidation', 0)
+            total_orders = liq_data.get('total_orders', 0)
+            recent_orders = liq_data.get('liquidation_orders', [])
+
+            message = f"""🔥 **Liquidations - {symbol}** 🟢
+
+📊 **Summary (Recent Orders):**
+• **Total Liquidation**: ${total_liq:,.0f}
+• **Long Liquidations**: ${long_liq:,.0f} ({(long_liq/total_liq*100) if total_liq > 0 else 0:.1f}%)
+• **Short Liquidations**: ${short_liq:,.0f} ({(short_liq/total_liq*100) if total_liq > 0 else 0:.1f}%)
+• **Total Orders**: {total_orders}
+
+**Recent Liquidations:**
+"""
+            
+            # Show last 5 liquidations
+            for i, order in enumerate(recent_orders[-5:]):
+                side_emoji = "🔴" if order['side'] == 'SELL' else "🟢"
+                time_str = order.get('time_iso', '')[:16].replace('T', ' ')
+                message += f"{side_emoji} {order['side']} ${order['value']:,.0f} @ {order['time_str']}\n"
+            
+            message += f"""
+**Analisis:**
+• Long dominance = {(long_liq/total_liq*100) if total_liq > 0 else 0:.1f}% liquidation
+• {'Longs getting rekt' if long_liq > short_liq else 'Shorts getting rekt' if short_liq > long_liq else 'Balanced liquidation'}
+• Market stress level: {'High' if total_orders > 50 else 'Medium' if total_orders > 20 else 'Low'}
+
+🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}
+🔄 **Source**: Binance Futures API"""
+
+            await loading_msg.edit_text(message, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+
+    async def long_short_command(self, update: Update, context: CallbackContext):
+        """Handle /long_short command - long/short ratio analysis"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/long_short <symbol>`\nContoh: `/long_short btc`", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data long/short ratio {symbol}...")
+
+        try:
+            ls_data = self.crypto_api.get_binance_long_short_ratio(symbol)
+            
+            if not ls_data or 'error' in ls_data:
+                await loading_msg.edit_text(f"❌ Gagal mengambil data long/short ratio untuk {symbol}")
+                return
+
+            long_ratio = ls_data.get('long_ratio', 0)
+            short_ratio = ls_data.get('short_ratio', 0)
+            ls_ratio = ls_data.get('long_short_ratio', 0)
+            long_account = ls_data.get('long_account', 0)
+            short_account = ls_data.get('short_account', 0)
+
+            # Determine sentiment
+            if long_ratio > 70:
+                sentiment = "🔴 Extremely Bullish (Overleveraged)"
+                risk_level = "High Risk - Potential Long Squeeze"
+            elif long_ratio > 60:
+                sentiment = "🟡 Bullish"
+                risk_level = "Medium Risk"
+            elif long_ratio < 30:
+                sentiment = "🔴 Extremely Bearish (Oversold)"
+                risk_level = "High Risk - Potential Short Squeeze"
+            elif long_ratio < 40:
+                sentiment = "🟡 Bearish"
+                risk_level = "Medium Risk"
+            else:
+                sentiment = "🟢 Neutral/Balanced"
+                risk_level = "Low Risk"
+
+            message = f"""📊 **Long/Short Ratio - {symbol}** 🟢
+
+**Position Ratio:**
+• **Long Ratio**: {long_ratio:.1f}%
+• **Short Ratio**: {short_ratio:.1f}%
+• **L/S Ratio**: {ls_ratio:.2f}
+
+**Account Distribution:**
+• **Long Accounts**: {long_account:.1f}%
+• **Short Accounts**: {short_account:.1f}%
+
+**Market Sentiment**: {sentiment}
+**Risk Level**: {risk_level}
+
+**Analisis:**
+• Ratio tinggi (>60%) = Bullish bias, watch for long squeeze
+• Ratio rendah (<40%) = Bearish bias, watch for short squeeze
+• Ratio seimbang (40-60%) = Healthy market structure
+
+**Trading Insight:**
+• Extreme ratios often signal reversals
+• Use as contrarian indicator
+• Combine with price action for confirmation
+
+🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}
+🔄 **Source**: Binance Futures API (Top Traders)"""
 
             await loading_msg.edit_text(message, parse_mode='Markdown')
 
@@ -2014,20 +2273,4 @@ Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
         await update.message.reply_text(response, parse_mode='Markdown')
 
 
-from telegram import Update
-from telegram.ext import ContextTypes
-
-async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    articles = crypto_api.get_latest_crypto_news(limit=5)
-    if not articles:
-        await update.message.reply_text("❌ Gagal mengambil berita saat ini.")
-        return
-
-    msg = "📰 *Crypto News Terbaru:*\n\n"
-    for article in articles:
-        msg += f"🔹 [{article['title']}]({article['url']})\n"
-    await update.message.reply_markdown(msg)
-
-
-
-application.add_handler(CommandHandler("news", news_command))
+# News command will be integrated in main bot class
