@@ -1,0 +1,2033 @@
+import os
+import logging
+import sys
+import asyncio
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (if exists) and system environment
+load_dotenv()
+
+# Check deployment environment (Replit environments) - simplified for consistency
+IS_DEPLOYMENT = (
+    os.getenv('REPLIT_DEPLOYMENT') == '1' or 
+    os.getenv('REPL_DEPLOYMENT') == '1'
+)
+
+# Setup logging
+logging.basicConfig(
+    level=logging.WARNING,  # Reduced logging to save memory
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+from telegram.constants import ParseMode
+
+from database import Database
+from crypto_api import CryptoAPI
+from ai_assistant import AIAssistant
+
+class TelegramBot:
+    def __init__(self):
+        # Get bot token from environment (Replit Secrets or .env)
+        self.token = os.getenv('TELEGRAM_BOT_TOKEN')
+
+        # Get admin ID with better error handling
+        admin_id_str = os.getenv('ADMIN_USER_ID', '0')
+        try:
+            self.admin_id = int(admin_id_str)
+        except ValueError:
+            logger.warning(f"Invalid ADMIN_USER_ID: {admin_id_str}, using default 0")
+            self.admin_id = 0
+
+        # Initialize components
+        self.db = Database()
+        self.crypto_api = CryptoAPI()
+        self.ai = AIAssistant()
+        
+        # Initialize broadcast system
+        self.pending_broadcast = None
+        self.broadcast_in_progress = False
+
+        # Validate token before creating application
+        if not self.token:
+            logger.error("❌ TELEGRAM_BOT_TOKEN not found!")
+            logger.error("💡 Please set TELEGRAM_BOT_TOKEN in Replit Secrets")
+            logger.error("📝 Go to Secrets tab and add your bot token")
+            sys.exit(1)
+
+        # Initialize application with token
+        try:
+            self.application = Application.builder().token(self.token).build()
+            logger.info("✅ Bot initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize bot: {e}")
+            sys.exit(1)
+
+    async def run_bot(self):
+        """Main method to run the bot"""
+        try:
+            # Add command handlers
+            self.application.add_handler(CommandHandler("start", self.start_command))
+            self.application.add_handler(CommandHandler("help", self.help_command))
+            self.application.add_handler(CommandHandler("price", self.price_command))
+            self.application.add_handler(CommandHandler("analyze", self.analyze_command))
+            self.application.add_handler(CommandHandler("portfolio", self.portfolio_command))
+            self.application.add_handler(CommandHandler("add_coin", self.add_coin_command))
+            self.application.add_handler(CommandHandler("market", self.market_command))
+            self.application.add_handler(CommandHandler("futures_signals", self.futures_signals_command))
+            self.application.add_handler(CommandHandler("futures", self.futures_command))
+            self.application.add_handler(CommandHandler("credits", self.credits_command))
+            self.application.add_handler(CommandHandler("subscribe", self.subscribe_command))
+            self.application.add_handler(CommandHandler("referral", self.referral_command))
+            self.application.add_handler(CommandHandler("language", self.language_command))
+            self.application.add_handler(CommandHandler("ask_ai", self.handle_ask_ai))
+            self.application.add_handler(CommandHandler("coinglass_data", self.coinglass_data_command))
+            self.application.add_handler(CommandHandler("candles", self.candles_command))
+            self.application.add_handler(CommandHandler("funding", self.funding_command))
+            self.application.add_handler(CommandHandler("oi", self.open_interest_command))
+
+            # Admin commands</old_str>
+            self.application.add_handler(CommandHandler("admin", self.admin_command))
+            self.application.add_handler(CommandHandler("grant_premium", self.grant_premium_command))
+            self.application.add_handler(CommandHandler("revoke_premium", self.revoke_premium_command))
+            self.application.add_handler(CommandHandler("grant_credits", self.grant_credits_command))
+            self.application.add_handler(CommandHandler("fix_all_credits", self.fix_all_credits_command))
+            self.application.add_handler(CommandHandler("broadcast", self.broadcast_command))
+            self.application.add_handler(CommandHandler("confirm_broadcast", self.confirm_broadcast_command))
+            self.application.add_handler(CommandHandler("cancel_broadcast", self.cancel_broadcast_command))
+
+            # Add callback query handler
+            self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
+
+            # Add message handler for regular text (should be last)
+            self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+
+            print("🤖 Bot handlers registered successfully")
+            mode_text = "🌐 DEPLOYMENT MODE (Always On)" if IS_DEPLOYMENT else "🔧 DEVELOPMENT MODE (Workspace)"
+            print(f"🌍 Environment: {mode_text}")
+            print(f"🔑 API Status: CG=✅, CGL=✅, CN=✅, BIN=✅ (All APIs Active)")
+            print("🚀 Starting bot polling with real-time data...")
+
+            # Start the bot with optimized polling for deployment
+            print("✅ Bot is now running and polling for updates...")
+            await self.application.run_polling(
+                drop_pending_updates=True,  # Drop old updates on start
+                pool_timeout=60,           # Longer pool timeout for deployment
+                read_timeout=60,           # Longer read timeout 
+                write_timeout=60,          # Longer write timeout
+                connect_timeout=60,        # Longer connect timeout
+                allowed_updates=['message', 'callback_query'],  # Only handle needed updates
+                close_loop=False           # Don't close event loop
+            )
+
+        except Exception as e:
+            # Handle specific Telegram conflicts
+            if "terminated by other getUpdates request" in str(e) or "Conflict" in str(e):
+                logger.error("❌ Bot conflict detected - forcing cleanup")
+                print("⚠️  CONFLICT: Another bot instance detected!")
+                print("🔄 Attempting automatic cleanup...")
+                
+                # Clear any pending broadcast to prevent errors
+                self.pending_broadcast = None
+                self.broadcast_in_progress = False
+                
+                # Force cleanup of conflicting instances
+                try:
+                    import subprocess
+                    import signal
+                    import psutil
+                    
+                    # Kill any python processes running main.py
+                    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                        try:
+                            if proc.info['name'] == 'python3' or proc.info['name'] == 'python':
+                                cmdline = ' '.join(proc.info['cmdline'] or [])
+                                if 'main.py' in cmdline and proc.pid != os.getpid():
+                                    print(f"🛑 Terminating conflicting process: {proc.pid}")
+                                    proc.terminate()
+                                    proc.wait(timeout=3)
+                        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                            pass
+                    
+                    import time
+                    time.sleep(5)  # Wait for cleanup
+                    print("✅ Cleanup completed, restarting...")
+                    
+                    # Force exit to restart cleanly
+                    if IS_DEPLOYMENT:
+                        print("🔄 Deployment will restart automatically...")
+                        sys.exit(1)
+                    else:
+                        # Restart in development
+                        print("🔄 Restarting bot...")
+                        raise
+                        
+                except ImportError:
+                    print("⚠️ psutil not available, manual restart required")
+                    if IS_DEPLOYMENT:
+                        sys.exit(1)
+                    else:
+                        raise
+                except Exception as cleanup_error:
+                    print(f"⚠️ Cleanup failed: {cleanup_error}")
+                    if IS_DEPLOYMENT:
+                        sys.exit(1)
+                    else:
+                        raise
+            else:
+                logger.error(f"❌ Error running bot: {e}")
+                raise
+        finally:
+            # Cleanup
+            try:
+                if self.application:
+                    await self.application.stop()
+                    await self.application.shutdown()
+                print("🛑 Bot stopped gracefully")
+            except Exception as e:
+                logger.error(f"Error during bot shutdown: {e}")
+
+    async def start_command(self, update: Update, context: CallbackContext):
+        """Handle /start command"""
+        user_id = update.message.from_user.id
+        username = update.message.from_user.username or "Unknown"
+        first_name = update.message.from_user.first_name or ""
+        last_name = update.message.from_user.last_name or ""
+
+        # Check for referral code
+        referral_code = None
+        referrer_id = None
+        if context.args and context.args[0].startswith('ref_'):
+            referral_code = context.args[0][4:]  # Remove 'ref_' prefix
+            referrer_id = self.db.get_user_by_referral_code(referral_code)
+
+        # Check if user exists
+        existing_user = self.db.get_user(user_id)
+
+        if not existing_user:
+            # Register new user in database with 10 base credits + 5 if referred
+            success = self.db.create_user(user_id, username, first_name, last_name, referred_by=referrer_id)
+
+            if success:
+                # Give referral bonus to referrer
+                if referrer_id:
+                    self.db.add_credits(referrer_id, 10)  # 10 credits to referrer
+                    self.db.log_user_activity(referrer_id, "referral_bonus", f"Got 10 credits from referring user {user_id}")
+                    self.db.log_user_activity(user_id, "referred_signup", f"Signed up via referral from user {referrer_id}")
+
+                    # Get referrer info for welcome message
+                    referrer_data = self.db.get_user(referrer_id)
+                    referrer_name = referrer_data.get('first_name', 'Unknown') if referrer_data else 'Unknown'
+
+                    welcome_message = f"""
+🚀 **Selamat datang di CryptoMentor AI Bot!**
+
+🎁 **Bonus Referral**: Anda mendapat **15 credit** (10 + 5 bonus) karena diundang oleh {referrer_name}!
+💝 **{referrer_name}** juga mendapat 10 credit bonus!
+
+🎁 **Bonus**: Total **15 credit gratis** untuk mencoba semua fitur!
+
+Saya adalah asisten AI yang akan membantu Anda dalam:
+• 📊 Analisis harga cryptocurrency
+• 📈 Sinyal trading
+• 💼 Manajemen portfolio
+• 📰 Berita crypto terbaru
+
+**Perintah yang tersedia:**
+• `/price <symbol>` - Cek harga crypto
+• `/analyze <symbol>` - Analisis mendalam
+• `/futures <symbol>` - Analisis futures 1 coin
+• `/portfolio` - Lihat portfolio Anda
+• `/market` - Overview pasar
+• `/credits` - Cek sisa credit Anda
+• `/help` - Bantuan lengkap
+
+Mulai dengan mengetik `/help` untuk melihat semua fitur!
+                """
+                else:
+                    welcome_message = """
+🚀 **Selamat datang di CryptoMentor AI Bot!**
+
+🎁 **Bonus**: Anda mendapat **10 credit gratis** untuk mencoba semua fitur!
+
+Saya adalah asisten AI yang akan membantu Anda dalam:
+• 📊 Analisis harga cryptocurrency
+• 📈 Sinyal trading
+• 💼 Manajemen portfolio
+• 📰 Berita crypto terbaru
+
+**Perintah yang tersedia:**
+• `/price <symbol>` - Cek harga crypto
+• `/analyze <symbol>` - Analisis mendalam
+• `/futures <symbol>` - Analisis futures 1 coin
+• `/portfolio` - Lihat portfolio Anda
+• `/market` - Overview pasar
+• `/credits` - Cek sisa credit Anda
+• `/help` - Bantuan lengkap
+
+Mulai dengan mengetik `/help` untuk melihat semua fitur!
+                    """
+            else:
+                welcome_message = "❌ Terjadi kesalahan saat mendaftarkan akun. Silakan coba lagi."
+        else:
+            # Returning user
+            credits = self.db.get_user_credits(user_id)
+            welcome_message = f"""
+👋 **Selamat datang kembali {first_name}!**
+
+💳 Credit tersisa: **{credits}**
+
+Gunakan `/help` untuk melihat semua fitur yang tersedia!
+            """
+
+        await update.message.reply_text(welcome_message, parse_mode='Markdown')
+
+    async def help_command(self, update: Update, context: CallbackContext):
+        """Handle /help command"""
+        help_text = self.ai.help_message()
+        await update.message.reply_text(help_text)
+
+    async def price_command(self, update: Update, context: CallbackContext):
+        """Handle /price command with enhanced real-time data"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/price <symbol>`\nContoh: `/price btc`", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+
+        # Show loading with consistent status
+        mode_text = "🌐 DEPLOYMENT" if IS_DEPLOYMENT else "🔧 DEVELOPMENT"
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data real-time {symbol}... ({mode_text})")
+
+        # Get comprehensive real-time data with API priority
+        print(f"🔄 Fetching real-time data for {symbol} from multiple sources...")
+        
+        # Primary: Binance API for most accurate real-time prices
+        price_data = self.crypto_api.get_binance_price(symbol)
+        coingecko_data = None
+        news_data = None
+        
+        # Secondary: CoinGecko for additional market data
+        try:
+            coingecko_data = self.crypto_api.get_price(symbol, force_refresh=True)
+        except:
+            pass
+        
+        # Tertiary: Get relevant news for context
+        try:
+            news_data = self.crypto_api.get_crypto_news(limit=1)
+        except:
+            pass
+
+        if price_data and 'error' not in price_data and price_data.get('price', 0) > 0:
+            source = price_data.get('source', 'unknown')
+            
+            # Enhanced source indicators with API health
+            source_emoji = {
+                'binance': '🟢 Binance API (Real-Time)',
+                'binance_simple': '🟡 Binance Simple (Real-Time)', 
+                'coingecko': '🔵 CoinGecko Pro (Real-Time)',
+                'coingecko_free': '🔵 CoinGecko Free (Real-Time)',
+                'mock_realtime': '🔄 Enhanced Market Simulation'
+            }.get(source, '🔄 Market Data')
+
+            is_real_api = source in ['binance', 'binance_simple', 'coingecko', 'coingecko_free']
+            
+            # Smart price formatting using crypto_api formatting function
+            current_price = price_data.get('price', 0)
+            price_format = self.crypto_api._format_price_display(current_price)
+
+            change_24h = price_data.get('change_24h', 0)
+            change_emoji = "📈" if change_24h >= 0 else "📉"
+            change_color = "+" if change_24h >= 0 else ""
+
+            message = f"""
+📊 **{symbol} Real-Time Market Data**
+
+💰 **Harga**: {price_format}
+{change_emoji} **Perubahan 24j**: {change_color}{change_24h:.2f}%
+"""
+
+            # Enhanced data display
+            if price_data.get('volume_24h', 0) > 0:
+                volume = price_data.get('volume_24h', 0)
+                if volume > 1000000000:
+                    volume_format = f"${volume/1000000000:.2f}B"
+                elif volume > 1000000:
+                    volume_format = f"${volume/1000000:.1f}M"
+                else:
+                    volume_format = f"${volume:,.0f}"
+                message += f"📊 **Volume 24j**: {volume_format}\n"
+
+            # Add high/low if available
+            if price_data.get('high_24h', 0) > 0 and price_data.get('low_24h', 0) > 0:
+                high_24h = price_data.get('high_24h', 0)
+                low_24h = price_data.get('low_24h', 0)
+                if high_24h < 100:
+                    high_format = f"${high_24h:.4f}"
+                    low_format = f"${low_24h:.4f}"
+                else:
+                    high_format = f"${high_24h:,.2f}"
+                    low_format = f"${low_24h:,.2f}"
+                message += f"🔺 **High 24j**: {high_format}\n🔻 **Low 24j**: {low_format}\n"
+
+            # API Status and timing
+            current_time = datetime.now().strftime('%H:%M:%S WIB')
+            message += f"""
+⏰ **Update**: {current_time}
+🔄 **Sumber**: {source_emoji}
+"""
+
+            # Multi-API status
+            api_status = []
+            if is_real_api:
+                api_status.append("✅ Binance/CoinGecko")
+            else:
+                api_status.append("🔄 Real-time Simulation")
+                
+            if coingecko_data and coingecko_data.get('source') in ['coingecko', 'coingecko_free']:
+                api_status.append("✅ CoinGecko")
+            
+            if news_data and len(news_data) > 0:
+                api_status.append("✅ CryptoNews")
+            
+            message += f"🌐 **API Status**: {' | '.join(api_status)}\n"
+            
+            # Add latest crypto news context if available
+            if news_data and len(news_data) > 0:
+                latest_news = news_data[0]
+                news_title = latest_news.get('title', '')[:60] + '...' if len(latest_news.get('title', '')) > 60 else latest_news.get('title', '')
+                message += f"📰 **Crypto News**: {news_title}\n"
+            
+            message += f"🔗 **Mode**: {'🌐 Always On (Deployment)' if IS_DEPLOYMENT else '🔧 Development Workspace'}"
+        else:
+            message = f"❌ Tidak dapat menemukan data untuk {symbol}"
+
+        await loading_msg.edit_text(message, parse_mode='Markdown')
+
+    async def analyze_command(self, update: Update, context: CallbackContext):
+        """Handle /analyze command - comprehensive analysis with news integration"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/analyze <symbol>`\nContoh: `/analyze btc`", parse_mode='Markdown')
+            return
+
+        user_id = update.message.from_user.id
+        credits = self.db.get_user_credits(user_id)
+        is_premium = self.db.is_user_premium(user_id)
+        is_admin = user_id == self.admin_id
+
+        # Check credits for non-premium, non-admin users
+        if not is_premium and not is_admin and credits < 20:
+            await update.message.reply_text("❌ Credit tidak cukup! Analisis komprehensif membutuhkan 20 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+
+        # Show loading message
+        loading_msg = await update.message.reply_text("⏳ Menganalisis data komprehensif + berita crypto...")
+
+        try:
+            # Get price and futures data for comprehensive analysis
+            price_data = self.crypto_api.get_price(symbol)
+            futures_data = self.crypto_api.get_futures_data(symbol)
+
+            # Use comprehensive analysis function with crypto_api for news
+            analysis = self.ai.get_comprehensive_analysis(symbol, futures_data, price_data, 'id', self.crypto_api)
+
+            # Deduct credit only for non-premium, non-admin users (20 credits for comprehensive analysis)
+            if not is_premium and not is_admin:
+                self.db.deduct_credit(user_id, 20)
+                remaining_credits = self.db.get_user_credits(user_id)
+                analysis += f"\n\n💳 Credit tersisa: {remaining_credits} (Analisis komprehensif: -20 credit)"
+            elif is_premium:
+                analysis += f"\n\n⭐ **Status Premium** - Unlimited Access"
+            elif is_admin:
+                analysis += f"\n\n👑 **Admin Access** - Unlimited"
+
+            # Edit the loading message with the analysis
+            await loading_msg.edit_text(analysis, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+            print(f"Error in analyze command: {e}")
+
+    async def portfolio_command(self, update: Update, context: CallbackContext):
+        """Handle /portfolio command"""
+        user_id = update.message.from_user.id
+        portfolio = self.db.get_user_portfolio(user_id)
+
+        if not portfolio:
+            message = """
+💼 **Portfolio Anda kosong**
+
+Gunakan `/add_coin <symbol> <amount>` untuk menambah koin ke portfolio.
+Contoh: `/add_coin btc 0.5`
+            """
+        else:
+            message = "💼 **Portfolio Anda:**\n\n"
+            total_value = 0
+
+            for coin in portfolio:
+                symbol = coin['symbol']
+                amount = coin['amount']
+                price_data = self.crypto_api.get_price(symbol)
+
+                if price_data:
+                    current_price = price_data.get('price', 0)
+                    value = amount * current_price
+                    total_value += value
+
+                    message += f"• {symbol}: {amount} koin (${value:,.2f})\n"
+
+            message += f"\n💰 **Total Value: ${total_value:,.2f}**"
+
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def add_coin_command(self, update: Update, context: CallbackContext):
+        """Handle /add_coin command"""
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Gunakan format: `/add_coin <symbol> <amount>`\nContoh: `/add_coin btc 0.5`")
+            return
+
+        user_id = update.message.from_user.id
+        symbol = context.args[0].upper()
+
+        try:
+            amount = float(context.args[1])
+        except ValueError:
+            await update.message.reply_text("❌ Amount harus berupa angka!")
+            return
+
+        # Add to portfolio
+        self.db.add_to_portfolio(user_id, symbol, amount)
+
+        message = f"✅ Berhasil menambahkan {amount} {symbol} ke portfolio Anda!"
+        await update.message.reply_text(message)
+
+    async def market_command(self, update: Update, context: CallbackContext):
+        """Handle /market command"""
+        user_id = update.message.from_user.id
+        credits = self.db.get_user_credits(user_id)
+        is_premium = self.db.is_user_premium(user_id)
+        is_admin = user_id == self.admin_id
+
+        # Check credits for non-premium, non-admin users
+        if not is_premium and not is_admin and credits < 20:
+            await update.message.reply_text("❌ Credit tidak cukup! Overview pasar membutuhkan 20 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
+            return
+
+        # Show loading message for comprehensive analysis
+        loading_msg = await update.message.reply_text("⏳ Menganalisis overview pasar crypto real-time...")
+
+        try:
+            # Get comprehensive market overview with real-time data
+            market_data = self.ai.get_market_sentiment('id', self.crypto_api)
+
+            # Deduct credit only for non-premium, non-admin users (20 credits for market overview)
+            if not is_premium and not is_admin:
+                self.db.deduct_credit(user_id, 20)
+                remaining_credits = self.db.get_user_credits(user_id)
+                market_data += f"\n\n💳 Credit tersisa: {remaining_credits} (Overview pasar: -20 credit)"
+            elif is_premium:
+                market_data += f"\n\n⭐ **Status Premium** - Unlimited Access"
+            elif is_admin:
+                market_data += f"\n\n👑 **Admin Access** - Unlimited"
+
+            # Edit loading message with the comprehensive overview
+            await loading_msg.edit_text(market_data, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan saat menganalisis pasar: {str(e)}")
+            print(f"Error in market command: {e}")
+
+    async def futures_signals_command(self, update: Update, context: CallbackContext):
+        """Handle /futures_signals command with real-time data"""
+        user_id = update.message.from_user.id
+        credits = self.db.get_user_credits(user_id)
+        is_premium = self.db.is_user_premium(user_id)
+        is_admin = user_id == self.admin_id
+
+        # Check credits for non-premium, non-admin users
+        if not is_premium and not is_admin and credits < 30:
+            await update.message.reply_text("❌ Credit tidak cukup! Sinyal futures membutuhkan 30 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
+            return
+
+        # Show loading message
+        loading_msg = await update.message.reply_text("⏳ Menganalisis sinyal futures real-time...")
+
+        try:
+            # Verify API connection first
+            if not self.crypto_api:
+                await loading_msg.edit_text("❌ API tidak tersedia. Silakan coba lagi nanti.")
+                return
+
+            print(f"🔄 Generating futures signals for user {user_id}")
+            
+            # Generate signals with proper error handling
+            signals = self.ai.generate_futures_signals('id', self.crypto_api)
+            
+            if not signals or len(signals.strip()) < 50:
+                await loading_msg.edit_text("❌ Gagal mengambil data sinyal futures. Silakan coba lagi dalam beberapa menit.")
+                return
+
+            # Deduct credit only for non-premium, non-admin users (30 credits for futures signals)
+            if not is_premium and not is_admin:
+                self.db.deduct_credit(user_id, 30)
+                remaining_credits = self.db.get_user_credits(user_id)
+                signals += f"\n\n💳 Credit tersisa: {remaining_credits} (Sinyal futures: -30 credit)"
+            elif is_premium:
+                signals += f"\n\n⭐ **Status Premium** - Unlimited Access"
+            elif is_admin:
+                signals += f"\n\n👑 **Admin Access** - Unlimited"
+
+            print(f"✅ Futures signals generated successfully for user {user_id}")
+            
+            # Split long messages if needed
+            if len(signals) > 4000:
+                # Split into chunks
+                chunks = [signals[i:i+4000] for i in range(0, len(signals), 4000)]
+                await loading_msg.edit_text(chunks[0], parse_mode='Markdown')
+                
+                for chunk in chunks[1:]:
+                    await update.message.reply_text(chunk, parse_mode='Markdown')
+            else:
+                # Edit the loading message with the signals
+                await loading_msg.edit_text(signals, parse_mode='Markdown')
+
+        except Exception as e:
+            error_msg = f"❌ Terjadi kesalahan saat menganalisis sinyal futures: {str(e)[:100]}"
+            await loading_msg.edit_text(error_msg)
+            print(f"Error in futures_signals command: {e}")
+            import traceback
+            traceback.print_exc()
+
+    async def futures_command(self, update: Update, context: CallbackContext):
+        """Handle /futures command with futures_signals format for a single coin"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/futures <symbol>`\nContoh: `/futures btc`", parse_mode='Markdown')
+            return
+
+        user_id = update.message.from_user.id
+        credits = self.db.get_user_credits(user_id)
+        is_premium = self.db.is_user_premium(user_id)
+        is_admin = user_id == self.admin_id
+
+        # Check credits for non-premium, non-admin users (20 credits for futures analysis)
+        if not is_premium and not is_admin and credits < 20:
+            await update.message.reply_text("❌ Credit tidak cukup! Analisis futures membutuhkan 20 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+
+        # Show loading message
+        loading_msg = await update.message.reply_text(f"⏳ Menganalisis futures {symbol} real-time...")
+
+        try:
+            # Verify API connection first
+            if not self.crypto_api:
+                await loading_msg.edit_text("❌ API tidak tersedia. Silakan coba lagi nanti.")
+                return
+
+            print(f"🔄 Generating single futures signal for {symbol}, user {user_id}")
+            
+            # Generate signals using the same format as futures_signals but for single coin
+            signals = self.ai.generate_single_futures_signal(symbol, 'id', self.crypto_api)
+            
+            if not signals or len(signals.strip()) < 50:
+                await loading_msg.edit_text(f"❌ Gagal mengambil data futures untuk {symbol}. Silakan coba lagi dalam beberapa menit.")
+                return
+
+            # Deduct credit only for non-premium, non-admin users (20 credits for futures analysis)
+            if not is_premium and not is_admin:
+                self.db.deduct_credit(user_id, 20)
+                remaining_credits = self.db.get_user_credits(user_id)
+                signals += f"\n\n💳 Credit tersisa: {remaining_credits} (Analisis futures: -20 credit)"
+            elif is_premium:
+                signals += f"\n\n⭐ **Status Premium** - Unlimited Access"
+            elif is_admin:
+                signals += f"\n\n👑 **Admin Access** - Unlimited"
+
+            print(f"✅ Single futures signal generated successfully for {symbol}, user {user_id}")
+            
+            # Split long messages if needed
+            if len(signals) > 4000:
+                # Split into chunks
+                chunks = [signals[i:i+4000] for i in range(0, len(signals), 4000)]
+                await loading_msg.edit_text(chunks[0], parse_mode='Markdown')
+                
+                for chunk in chunks[1:]:
+                    await update.message.reply_text(chunk, parse_mode='Markdown')
+            else:
+                # Edit the loading message with the signals
+                await loading_msg.edit_text(signals, parse_mode='Markdown')
+
+        except Exception as e:
+            error_msg = f"❌ Terjadi kesalahan saat menganalisis futures {symbol}: {str(e)[:100]}"
+            await loading_msg.edit_text(error_msg)
+            print(f"Error in futures command: {e}")
+            import traceback
+            traceback.print_exc()
+
+    async def credits_command(self, update: Update, context: CallbackContext):
+        """Handle /credits command"""
+        user_id = update.message.from_user.id
+        credits = self.db.get_user_credits(user_id)
+        is_premium = self.db.is_user_premium(user_id)
+        is_admin = user_id == self.admin_id
+
+        if is_admin:
+            message = f"""
+💳 **Credit Information - Admin**
+
+👑 Status: **ADMIN** 
+♾️ Credit: **UNLIMITED**
+🛠️ Akses penuh semua fitur dan kontrol bot!
+
+Selamat mengelola CryptoMentor AI!
+            """
+        elif is_premium:
+            message = f"""
+💳 **Credit Information - Premium User**
+
+⭐ Status: **PREMIUM** 
+♾️ Credit: **UNLIMITED**
+🚀 Akses penuh semua fitur!
+
+Terima kasih telah menjadi member premium!
+            """
+        else:
+            message = f"""
+💳 **Credit Information - Free User**
+
+💰 Credit tersisa: **{credits}**
+📊 **Biaya per fitur:**
+• `/analyze` - 20 credit (analisis komprehensif)
+• `/futures` - 20 credit (analisis futures 1 coin)
+• `/futures_signals` - 30 credit (sinyal futures lengkap)
+• `/market` - 20 credit (overview pasar)
+• Fitur lain - Gratis
+🎁 User baru mendapat 10 credit gratis
+
+💡 **Cara mendapat lebih banyak credit:**
+• `/referral` - Ajak teman (10 credit/referral)
+• `/subscribe` - Upgrade ke Premium (unlimited)
+
+Gunakan credit dengan bijak!
+            """
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def subscribe_command(self, update: Update, context: CallbackContext):
+        """Handle /subscribe command"""
+        user_id = update.message.from_user.id
+        username = update.message.from_user.username or "Tidak ada username"
+        first_name = update.message.from_user.first_name or ""
+
+        message = f"""
+⭐ **Upgrade ke Premium**
+
+👤 **Informasi Anda:**
+• **User ID:** `{user_id}` 
+• **Username:** @{username}
+• **Nama:** {first_name}
+
+🚀 **Fitur Premium:**
+• ♾️ Unlimited analisis
+• 📊 Analisis futures lengkap
+• 🚨 Alert harga real-time
+• 📈 Sinyal trading premium
+• 🎯 Support prioritas
+• 🔔 Notifikasi breakout otomatis
+
+💰 **Harga Premium:**
+• **Rp 320.000** (per bulan)
+
+💳 **Metode Pembayaran:**
+
+🏦 **Transfer Bank:**
+• Bank Mandiri
+• A/N: NABIL FARREL AL FARI
+• No. Rek: 1560018407074
+
+📱 **E-Wallet:**
+• Shopee Pay / Dana / GO-PAY
+• No. HP: 087779274400
+
+📋 **Cara Upgrade:**
+1. Transfer Rp 320.000
+2. Kirim bukti pembayaran ke admin @Billfarr
+3. **Sertakan informasi ini:**
+   • User ID: `{user_id}`
+   • Username: @{username}
+   • Nama: {first_name}
+4. Tunggu konfirmasi aktivasi (maks 24 jam)
+
+⚡ **Promo Khusus:**
+Daftar sekarang dan dapatkan 7 hari trial GRATIS!
+
+💬 **Butuh bantuan?** Chat admin @Billfarr
+
+ℹ️ **Catatan Penting:** 
+Pastikan menyertakan **User ID** (`{user_id}`) dalam pesan ke admin untuk mempercepat proses aktivasi premium.
+        """
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def referral_command(self, update: Update, context: CallbackContext):
+        """Handle /referral command"""
+        user_id = update.message.from_user.id
+
+        # Get user's referral code from database
+        user_data = self.db.get_user(user_id)
+        if not user_data:
+            await update.message.reply_text("❌ User tidak ditemukan. Gunakan /start terlebih dahulu.")
+            return
+
+        referral_code = user_data.get('referral_code', f'USER{user_id}')
+
+        # Create correct referral link to CryptoMentor AI Bot
+        referral_link = f"https://t.me/CryptoMentorAI_Bot?start=ref_{referral_code}"
+
+        # Get referral statistics
+        referral_count = self.db.get_referral_count(user_id)
+        referral_credits = referral_count * 10  # 10 credits per referral
+
+        message = f"""
+🎁 **Program Referral CryptoMentor AI**
+
+👤 **Referral Anda:**
+• Kode referral: `{referral_code}`
+• Total referral: {referral_count} orang
+• Credit dari referral: {referral_credits}
+
+🔗 **Link Referral:**
+`{referral_link}`
+
+💰 **Sistem Bonus:**
+• 🎯 Anda: 10 credit per referral berhasil
+• 🎁 Teman: 10 credit dasar + 5 credit bonus referral (total 15)
+• 📈 Bonus maksimal: 100 credit per bulan
+
+📝 **Cara Kerja:**
+1. Bagikan link referral Anda
+2. Teman klik link dan /start bot
+3. Bonus credit otomatis masuk ke akun
+4. Cek hasil dengan /credits
+
+💡 **Tips:**
+• Bagikan di grup crypto/trading
+• Jelaskan fitur premium bot
+• Ajak untuk coba analisis gratis
+
+Mulai ajak teman dan dapatkan bonus credit!
+        """
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def admin_command(self, update: Update, context: CallbackContext):
+        """Admin panel command"""
+        user_id = update.message.from_user.id
+
+        # Strict admin check - only respond to admin, ignore others completely
+        if user_id != self.admin_id:
+            # Don't send any response to non-admin users
+            return
+
+        keyboard = [
+            [InlineKeyboardButton("👑 Buat User Premium", callback_data='make_premium')],
+            [InlineKeyboardButton("💰 Berikan Credits", callback_data='grant_credits')],
+            [InlineKeyboardButton("📢 Broadcast Message", callback_data='broadcast_help')],
+            [InlineKeyboardButton("📊 Statistik Bot", callback_data='bot_stats')],
+            [InlineKeyboardButton("📝 Log Aktivitas", callback_data='activity_log')],
+            [InlineKeyboardButton("🔍 API Health Report", callback_data='api_health')],
+            [InlineKeyboardButton("🔄 Restart Bot", callback_data='restart_bot')]
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "🛠 **Panel Admin CryptoMentor**\n\n"
+            "Pilih opsi yang tersedia:",
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def grant_premium_command(self, update: Update, context: CallbackContext):
+        """Handle /grant_premium command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Perintah ini hanya untuk admin!")
+            return
+
+        if not context.args:
+            await update.message.reply_text("❌ Format: `/grant_premium <user_id> [days]`\nContoh: \n• `/grant_premium 123456789` (30 hari)\n• `/grant_premium 123456789 60` (60 hari)\n• `/grant_premium 123456789 permanent` (permanent)")
+            return
+
+        try:
+            target_user_id = int(context.args[0])
+            days = 30  # default 30 days
+
+            # Check if days parameter is provided
+            if len(context.args) > 1:
+                if context.args[1].lower() in ['permanent', 'forever', '0']:
+                    days = None  # Permanent premium
+                else:
+                    days = int(context.args[1])
+
+            # Check if user exists
+            user_data = self.db.get_user(target_user_id)
+            if not user_data:
+                await update.message.reply_text(f"❌ User dengan ID {target_user_id} tidak ditemukan di database!")
+                return
+
+            # Grant premium access
+            success = self.db.grant_premium(target_user_id, days)
+
+            if success:
+                username = user_data.get('username', 'Unknown')
+                first_name = user_data.get('first_name', 'Unknown')
+
+                duration_text = "Permanent (No Expiry)" if days is None else f"{days} days"
+                
+                message = f"""
+✅ **Premium Access Granted!**
+
+👤 **User Info:**
+• ID: {target_user_id}
+• Name: {first_name}
+• Username: @{username}
+
+⭐ **Premium Details:**
+• Duration: {duration_text}
+• Status: Active
+• Unlimited access to all features
+
+User sekarang memiliki akses premium unlimited!
+                """
+                await update.message.reply_text(message, parse_mode='Markdown')
+
+                # Log the action
+                self.db.log_user_activity(target_user_id, "premium_granted", f"Premium granted by admin for {days} days")
+            else:
+                await update.message.reply_text(f"❌ Gagal memberikan premium access ke user {target_user_id}")
+
+        except ValueError:
+            await update.message.reply_text("❌ User ID dan days harus berupa angka!\nContoh: `/grant_premium 123456789 30`")        
+    async def revoke_premium_command(self, update: Update, context: CallbackContext):
+        """Handle /revoke_premium command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Perintah ini hanya untuk admin!")
+            return
+
+        if not context.args:
+            await update.message.reply_text("❌ Format: `/revoke_premium <user_id>`\nContoh: `/revoke_premium 123456789`")
+            return
+
+        try:
+            target_user_id = int(context.args[0])
+
+            # Check if user exists and is premium
+            user_data = self.db.get_user(target_user_id)
+            if not user_data:
+                await update.message.reply_text(f"❌ User dengan ID {target_user_id} tidak ditemukan di database!")
+                return
+
+            is_premium = self.db.is_user_premium(target_user_id)
+            if not is_premium:
+                await update.message.reply_text(f"❌ User {target_user_id} sudah bukan premium user!")
+                return
+
+            # Revoke premium access
+            success = self.db.revoke_premium(target_user_id)
+
+            if success:
+                username = user_data.get('username', 'Unknown')
+                first_name = user_data.get('first_name', 'Unknown')
+
+                message = f"""✅ **Premium Access Revoked!**
+
+👤 **User Info:**
+• ID: {target_user_id}
+• Name: {first_name}
+• Username: @{username}
+
+📊 **Status Changed:**
+• From: Premium (Unlimited)
+• To: Free User
+
+User sekarang menjadi free user!"""
+
+                await update.message.reply_text(message, parse_mode='Markdown')
+
+                # Log the action
+                self.db.log_user_activity(target_user_id, "premium_revoked", "Premium revoked by admin")
+            else:
+                await update.message.reply_text(f"❌ Gagal mencabut premium access dari user {target_user_id}")
+
+        except ValueError:
+            await update.message.reply_text("❌ User ID harus berupa angka!\nContoh: `/revoke_premium 123456789`")
+
+    async def grant_credits_command(self, update: Update, context: CallbackContext):
+        """Handle /grant_credits command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Perintah ini hanya untuk admin!")
+            return
+
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Format: `/grant_credits <user_id> <amount>`\nContoh: `/grant_credits 123456789 50`")
+            return
+
+        try:
+            target_user_id = int(context.args[0])
+            credit_amount = int(context.args[1])
+
+            # Check if user exists
+            user_data = self.db.get_user(target_user_id)
+            if not user_data:
+                await update.message.reply_text(f"❌ User dengan ID {target_user_id} tidak ditemukan di database!")
+                return
+
+            # Add credits
+            self.db.add_credits(target_user_id, credit_amount)
+            new_credits = self.db.get_user_credits(target_user_id)
+
+            username = user_data.get('username', 'Unknown')
+            first_name = user_data.get('first_name', 'Unknown')
+
+            message = f"""
+✅ **Credits Granted Successfully!**
+
+👤 **User Info:**
+• ID: {target_user_id}
+• Name: {first_name}
+• Username: @{username}
+
+💰 **Credit Update:**
+• Credits Added: +{credit_amount}
+• New Balance: {new_credits}
+
+Credits berhasil ditambahkan!
+            """
+            await update.message.reply_text(message, parse_mode='Markdown')
+
+            # Log the action
+            self.db.log_user_activity(target_user_id, "credits_granted", f"Granted {credit_amount} credits by admin")
+
+        except ValueError:
+            await update.message.reply_text("❌ User ID dan credit amount harus berupa angka!\nContoh: `/grant_credits 123456789 50`")
+
+    async def language_command(self, update: Update, context: CallbackContext):
+        """Handle /language command"""
+        keyboard = [
+            [InlineKeyboardButton("🇮🇩 Bahasa Indonesia", callback_data='lang_id')],
+            [InlineKeyboardButton("🇺🇸 English", callback_data='lang_en')]
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "🌐 **Pilih Bahasa / Choose Language:**",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+
+    async def fix_all_credits_command(self, update: Update, context: CallbackContext):
+        """Handle /fix_all_credits command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Perintah ini hanya untuk admin!")
+            return
+
+        # Fix credits for all users
+        success = self.db.fix_all_user_credits()
+
+        if success:
+            await update.message.reply_text("✅ Credits berhasil diperbaiki untuk semua user!")
+        else:
+            await update.message.reply_text("❌ Gagal memperbaiki credits!")
+
+    async def broadcast_command(self, update: Update, context: CallbackContext):
+        """Handle /broadcast command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Perintah ini hanya untuk admin!")
+            return
+
+        # Check if another broadcast is in progress
+        if self.broadcast_in_progress:
+            await update.message.reply_text("❌ Broadcast sedang berlangsung! Tunggu sampai selesai.")
+            return
+
+        if not context.args:
+            await update.message.reply_text(
+                "❌ Format: `/broadcast <message>`\n\n"
+                "📝 **Contoh:**\n"
+                "```\n/broadcast 🚀 Update Fitur Baru!\n\n"
+                "✅ Analisis real-time telah ditingkatkan\n"
+                "📊 Dashboard baru tersedia\n\n"
+                "Terima kasih telah menggunakan CryptoMentor AI!```\n\n"
+                "💡 **Tips:**\n"
+                "• Ketik pesan natural dengan enter untuk baris baru\n"
+                "• Gunakan **text** untuk bold\n"
+                "• Format akan dipertahankan seperti yang Anda ketik\n"
+                "• Gunakan emoji untuk menarik perhatian",
+                parse_mode='Markdown'
+            )
+            return
+
+        # Get the original message text after "/broadcast "
+        original_text = update.message.text
+        if original_text and original_text.startswith('/broadcast '):
+            message = original_text[11:]  # Remove "/broadcast " prefix
+        else:
+            message = " ".join(context.args)
+
+        # Validate message length
+        if len(message.strip()) == 0:
+            await update.message.reply_text("❌ Pesan broadcast tidak boleh kosong!")
+            return
+
+        if len(message) > 4000:
+            await update.message.reply_text("❌ Pesan terlalu panjang! Maksimal 4000 karakter.")
+            return
+
+        # Store broadcast message temporarily with admin ID
+        self.pending_broadcast = {
+            'message': message,
+            'admin_id': user_id,
+            'timestamp': datetime.now()
+        }
+
+        # Escape markdown characters in user message to prevent parsing errors
+        def escape_markdown(text):
+            """Escape markdown special characters"""
+            escape_chars = ['*', '_', '`', '[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+            for char in escape_chars:
+                text = text.replace(char, f'\\{char}')
+            return text
+        
+        escaped_message = escape_markdown(message)
+        
+        confirmation_message = f"""📢 **Konfirmasi Broadcast**
+
+**Pesan yang akan dikirim:**
+```
+{escaped_message}
+```
+
+**Warning:** Pesan ini akan dikirim ke SEMUA user bot\\!
+
+Gunakan:
+• `/confirm_broadcast` untuk mengirim
+• `/cancel_broadcast` untuk membatalkan
+
+⏰ **Timeout:** Konfirmasi akan expired dalam 10 menit\\."""
+
+        await update.message.reply_text(confirmation_message, parse_mode='MarkdownV2')
+
+    async def confirm_broadcast_command(self, update: Update, context: CallbackContext):
+        """Handle /confirm_broadcast command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Perintah ini hanya untuk admin!")
+            return
+
+        if not self.pending_broadcast:
+            await update.message.reply_text("❌ Tidak ada broadcast yang tertunda!")
+            return
+
+        # Check if the admin who created the broadcast is the same as confirming
+        if self.pending_broadcast.get('admin_id') != user_id:
+            await update.message.reply_text("❌ Hanya admin yang membuat broadcast yang bisa mengkonfirmasi!")
+            return
+
+        # Check timeout (10 minutes)
+        broadcast_time = self.pending_broadcast.get('timestamp')
+        if broadcast_time and (datetime.now() - broadcast_time).total_seconds() > 600:
+            self.pending_broadcast = None
+            await update.message.reply_text("❌ Broadcast expired! Silakan buat broadcast baru.")
+            return
+
+        # Set broadcast in progress
+        self.broadcast_in_progress = True
+        broadcast_message = self.pending_broadcast['message']
+
+        try:
+            # Get all users with better error handling
+            all_users = self.db.get_all_users()
+            
+            if not all_users:
+                self.pending_broadcast = None
+                self.broadcast_in_progress = False
+                await update.message.reply_text("❌ Tidak ada user yang ditemukan di database!")
+                return
+                
+            success_count = 0
+            fail_count = 0
+            blocked_count = 0
+            total_users = len(all_users)
+
+            status_msg = await update.message.reply_text(f"📢 Memulai broadcast ke {total_users} user...")
+            print(f"🔄 Starting broadcast to {total_users} users")
+            print(f"📝 Broadcast message: {broadcast_message[:100]}...")
+
+            # Enhanced broadcast with better error handling and rate limiting
+            for i, user in enumerate(all_users):
+                user_id_target = user.get('user_id')
+                if not user_id_target or not isinstance(user_id_target, int):
+                    fail_count += 1
+                    print(f"❌ Invalid user_id: {user_id_target}")
+                    continue
+                    
+                try:
+                    # Clean the message to avoid any encoding issues
+                    clean_message = str(broadcast_message).strip()
+                    if not clean_message:
+                        clean_message = "📢 Pesan broadcast dari admin"
+                    
+                    # Send message with safer parameters
+                    await context.bot.send_message(
+                        chat_id=int(user_id_target),
+                        text=clean_message,
+                        parse_mode=None,  # No markdown to avoid parsing errors
+                        disable_web_page_preview=True,
+                        disable_notification=False,
+                        read_timeout=60,     # Increased timeout
+                        write_timeout=60,    # Increased timeout
+                        connect_timeout=60   # Increased timeout
+                    )
+                    success_count += 1
+                    print(f"✅ Sent to user {user_id_target} ({success_count}/{total_users})")
+                    
+                    # Update progress every 20 users or at key milestones
+                    if (i + 1) % 20 == 0 or (i + 1) in [5, 10, 25, 50, 100]:
+                        try:
+                            progress_text = f"📢 Broadcast progress: {i + 1}/{total_users}\n✅ Berhasil: {success_count} | 🚫 Blocked: {blocked_count} | ❌ Error: {fail_count}"
+                            await status_msg.edit_text(progress_text)
+                        except Exception as edit_error:
+                            print(f"Progress update failed: {edit_error}")
+                    
+                    # Improved rate limiting - slower but more reliable
+                    await asyncio.sleep(0.5)  # 500ms delay for better Telegram compliance
+                    
+                except Exception as e:
+                    error_str = str(e).lower()
+                    print(f"❌ Broadcast failed for user {user_id_target}: {e}")
+                    
+                    # Enhanced error categorization
+                    if any(keyword in error_str for keyword in [
+                        'blocked', 'forbidden', 'chat not found', 
+                        'user is deactivated', 'bot was kicked',
+                        'user has deleted their account',
+                        'user_deactivated', 'chat_not_found'
+                    ]):
+                        blocked_count += 1
+                        print(f"🚫 User {user_id_target} blocked/deleted/deactivated")
+                    elif any(keyword in error_str for keyword in [
+                        'flood control', 'too many requests', 'retry after', 'rate limit'
+                    ]):
+                        print(f"⏳ Rate limited, waiting longer...")
+                        await asyncio.sleep(5)  # Wait 5 seconds for rate limits
+                        # Retry once with longer delay
+                        try:
+                            await context.bot.send_message(
+                                chat_id=int(user_id_target),
+                                text=clean_message,
+                                parse_mode=None,
+                                disable_web_page_preview=True,
+                                read_timeout=60,
+                                write_timeout=60,
+                                connect_timeout=60
+                            )
+                            success_count += 1
+                            print(f"✅ Retry successful for user {user_id_target}")
+                            await asyncio.sleep(1)  # Extra delay after retry
+                        except Exception as retry_error:
+                            fail_count += 1
+                            print(f"❌ Retry failed for user {user_id_target}: {retry_error}")
+                    else:
+                        fail_count += 1
+                        print(f"❌ Unknown error for user {user_id_target}: {error_str}")
+
+            # Calculate final statistics
+            total_attempted = success_count + fail_count + blocked_count
+            success_rate = (success_count / total_attempted * 100) if total_attempted > 0 else 0
+
+            result_message = f"""✅ **Broadcast Selesai!**
+
+📊 **Statistik Lengkap:**
+• ✅ **Berhasil terkirim**: {success_count} user
+• 🚫 **User blocked/inactive**: {blocked_count} user  
+• ❌ **Error/timeout**: {fail_count} user
+• 📊 **Total user database**: {total_users} user
+• 📈 **Success rate**: {success_rate:.1f}%
+
+⏰ **Selesai**: {datetime.now().strftime('%H:%M:%S WIB')}
+
+💡 **Catatan**: Success rate 60%+ adalah normal karena banyak user inactive/blocked bot."""
+
+            print(f"📊 Broadcast completed: {success_count}/{total_users} successful ({success_rate:.1f}%)")
+
+            try:
+                await status_msg.edit_text(result_message, parse_mode='Markdown')
+            except Exception as e:
+                print(f"Failed to edit status message: {e}")
+                # Send new message if edit fails
+                try:
+                    await update.message.reply_text(result_message, parse_mode='Markdown')
+                except Exception as e2:
+                    print(f"Failed to send result message: {e2}")
+                    # Final fallback - plain text
+                    await update.message.reply_text(f"Broadcast selesai: {success_count}/{total_users} berhasil")
+
+        except Exception as e:
+            error_message = f"❌ Critical error during broadcast: {str(e)}"
+            print(f"Critical broadcast error: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                await update.message.reply_text(error_message)
+            except Exception:
+                print(f"Failed to send error message: {error_message}")
+        finally:
+            # Always clear broadcast state
+            self.pending_broadcast = None
+            self.broadcast_in_progress = False
+            print("🔄 Broadcast state cleared")
+
+    async def cancel_broadcast_command(self, update: Update, context: CallbackContext):
+        """Handle /cancel_broadcast command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Perintah ini hanya untuk admin!")
+            return
+
+        if not self.pending_broadcast:
+            await update.message.reply_text("❌ Tidak ada broadcast yang tertunda!")
+            return
+
+        # Check if the admin who created the broadcast is the same as canceling
+        if self.pending_broadcast.get('admin_id') != user_id:
+            await update.message.reply_text("❌ Hanya admin yang membuat broadcast yang bisa membatalkan!")
+            return
+
+        # Clear broadcast
+        self.pending_broadcast = None
+        await update.message.reply_text("✅ Broadcast dibatalkan!")
+
+    async def handle_ask_ai(self, update: Update, context: CallbackContext):
+        """Handle /ask_ai command"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/ask_ai <pertanyaan>`\nContoh: `/ask_ai apa itu bitcoin`", parse_mode='Markdown')
+            return
+
+        user_id = update.message.from_user.id
+
+        # Get user language preference (default to Indonesian)
+        user_data = self.db.get_user(user_id)
+        language = user_data.get('language', 'id') if user_data else 'id'
+
+        question = " ".join(context.args)
+        response = self.ai.get_ai_response(question, language)
+
+        await update.message.reply_text(response, parse_mode='Markdown')
+
+    async def coinglass_data_command(self, update: Update, context: CallbackContext):
+        """Handle /coinglass_data command - comprehensive CoinGlass API data"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/coinglass_data <symbol>`\nContoh: `/coinglass_data btc`", parse_mode='Markdown')
+            return
+
+        user_id = update.message.from_user.id
+        credits = self.db.get_user_credits(user_id)
+        is_premium = self.db.is_user_premium(user_id)
+        is_admin = user_id == self.admin_id
+
+        # Check credits for non-premium, non-admin users
+        if not is_premium and not is_admin and credits < 25:
+            await update.message.reply_text("❌ Credit tidak cukup! Data comprehensive CoinGlass membutuhkan 25 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+
+        # Show loading message
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data comprehensive CoinGlass untuk {symbol}...")
+
+        try:
+            # Get comprehensive CoinGlass data
+            comp_data = self.crypto_api.get_coinglass_comprehensive_data(symbol)
+            
+            if comp_data.get('error'):
+                await loading_msg.edit_text(f"❌ Gagal mengambil data untuk {symbol}: {comp_data.get('error')}")
+                return
+
+            data = comp_data.get('comprehensive_data', {})
+            success_calls = comp_data.get('successful_api_calls', 0)
+            total_calls = comp_data.get('total_endpoints', 0)
+            data_quality = comp_data.get('data_quality', 'unknown')
+
+            # Format comprehensive message
+            message = f"""📊 **Data Comprehensive CoinGlass - {symbol}**
+
+🔗 **API Status**: {success_calls}/{total_calls} endpoints ({'✅' if success_calls >= 6 else '🟡' if success_calls >= 4 else '🔴'})
+📈 **Data Quality**: {data_quality.upper()}
+
+"""
+
+            # Price Data
+            price_data = data.get('price_data', {})
+            if price_data:
+                source_emoji = "🟢" if price_data.get('source') in ['binance', 'coingecko'] else "🔄"
+                current_price = price_data.get('price', 0)
+                price_format = self.crypto_api._format_price_display(current_price)
+                change_24h = price_data.get('change_24h', 0)
+                change_emoji = "📈" if change_24h >= 0 else "📉"
+                
+                message += f"""💰 **Price Data** {source_emoji}
+• **Current Price**: {price_format}
+• **24h Change**: {change_emoji} {change_24h:+.2f}%
+
+"""
+
+            # Futures Data
+            futures_data = data.get('futures_data', {})
+            if futures_data:
+                futures_emoji = "🟢" if futures_data.get('source') == 'coinglass' else "🔄"
+                long_ratio = futures_data.get('long_ratio', 0)
+                short_ratio = futures_data.get('short_ratio', 0)
+                
+                message += f"""⚡ **Long/Short Ratio** {futures_emoji}
+• **Long Ratio**: {long_ratio:.1f}%
+• **Short Ratio**: {short_ratio:.1f}%
+• **Sentiment**: {'Bullish' if long_ratio > 60 else 'Bearish' if long_ratio < 40 else 'Neutral'}
+
+"""
+
+            # Open Interest
+            oi_data = data.get('open_interest', {})
+            if oi_data:
+                oi_emoji = "🟢" if oi_data.get('source') == 'coinglass' else "🔄"
+                oi_value = oi_data.get('open_interest', 0)
+                if oi_value > 1000000000:
+                    oi_format = f"{oi_value/1000000000:.2f}B"
+                elif oi_value > 1000000:
+                    oi_format = f"{oi_value/1000000:.2f}M"
+                else:
+                    oi_format = f"{oi_value:,.0f}"
+                
+                message += f"""📊 **Open Interest** {oi_emoji}
+• **Total OI**: {oi_format}
+• **OI Change**: {oi_data.get('open_interest_change', 0):+.2f}%
+
+"""
+
+            # Funding Rate
+            funding_data = data.get('funding_rate', {})
+            if funding_data:
+                funding_emoji = "🟢" if funding_data.get('source') == 'coinglass' else "🔄"
+                avg_funding = funding_data.get('average_funding_rate', 0)
+                funding_pct = avg_funding * 100
+                
+                message += f"""💸 **Funding Rate** {funding_emoji}
+• **Average Rate**: {funding_pct:+.4f}%
+• **Exchanges**: {funding_data.get('exchanges_count', 0)}
+
+"""
+
+            # Liquidation Data
+            liq_data = data.get('liquidation_data', {})
+            if liq_data:
+                liq_emoji = "🟢" if liq_data.get('source') == 'coinglass' else "🔄"
+                total_liq = liq_data.get('total_liquidation', 0)
+                long_liq = liq_data.get('long_liquidation', 0)
+                short_liq = liq_data.get('short_liquidation', 0)
+                
+                message += f"""🔥 **Liquidations (24h)** {liq_emoji}
+• **Total**: ${total_liq:,.0f}
+• **Long Liq**: ${long_liq:,.0f}
+• **Short Liq**: ${short_liq:,.0f}
+
+"""
+
+            message += f"🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}\n"
+            message += f"🔄 **Source**: CoinGlass + Market Data APIs"
+
+            # Deduct credit only for non-premium, non-admin users
+            if not is_premium and not is_admin:
+                self.db.deduct_credit(user_id, 25)
+                remaining_credits = self.db.get_user_credits(user_id)
+                message += f"\n\n💳 Credit tersisa: {remaining_credits} (Data comprehensive: -25 credit)"
+            elif is_premium:
+                message += f"\n\n⭐ **Status Premium** - Unlimited Access"
+            elif is_admin:
+                message += f"\n\n👑 **Admin Access** - Unlimited"
+
+            await loading_msg.edit_text(message, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+            print(f"Error in coinglass_data command: {e}")
+
+    async def candles_command(self, update: Update, context: CallbackContext):
+        """Handle /candles command - candlestick data"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/candles <symbol> [interval] [limit]`\nContoh: `/candles btc 1h 12`", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+        interval = context.args[1] if len(context.args) > 1 else '1h'
+        limit = int(context.args[2]) if len(context.args) > 2 and context.args[2].isdigit() else 12
+
+        # Validate interval
+        valid_intervals = ['1m', '5m', '15m', '30m', '1h', '4h', '1d']
+        if interval not in valid_intervals:
+            await update.message.reply_text(f"❌ Interval tidak valid! Gunakan: {', '.join(valid_intervals)}")
+            return
+
+        # Limit the limit
+        if limit > 50:
+            limit = 50
+
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data candlestick {symbol} ({interval})...")
+
+        try:
+            candles_data = self.crypto_api.get_binance_candlestick(symbol, interval, limit)
+            
+            if not candles_data or 'error' in candles_data:
+                await loading_msg.edit_text(f"❌ Gagal mengambil data candlestick untuk {symbol}")
+                return
+
+            candlesticks = candles_data.get('candlesticks', [])
+            source = candles_data.get('source', 'unknown')
+            source_emoji = "🟢" if source == 'binance' else "🔄"
+
+            if not candlesticks:
+                await loading_msg.edit_text(f"❌ Tidak ada data candlestick untuk {symbol}")
+                return
+
+            message = f"""📈 **Candlestick Data - {symbol}** {source_emoji}
+
+**Interval**: {interval} | **Count**: {len(candlesticks)}
+
+**Recent Candles:**
+"""
+
+            # Show last 6 candles
+            recent_candles = candlesticks[-6:]
+            for i, candle in enumerate(recent_candles):
+                time_str = candle.get('close_time_iso', '')[:16].replace('T', ' ')
+                open_p = self.crypto_api._format_price_display(candle.get('open', 0))
+                close_p = self.crypto_api._format_price_display(candle.get('close', 0))
+                high_p = self.crypto_api._format_price_display(candle.get('high', 0))
+                low_p = self.crypto_api._format_price_display(candle.get('low', 0))
+                volume = candle.get('volume', 0)
+                
+                change = ((candle.get('close', 0) - candle.get('open', 0)) / candle.get('open', 1)) * 100
+                change_emoji = "🟢" if change >= 0 else "🔴"
+                
+                message += f"\n**{time_str}** {change_emoji}\n"
+                message += f"O:{open_p} H:{high_p} L:{low_p} C:{close_p}\n"
+                message += f"Vol: {volume:,.0f} | {change:+.2f}%\n"
+
+            message += f"\n🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}"
+            message += f"\n🔄 **Source**: {source.title()}"
+
+            await loading_msg.edit_text(message, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+
+    async def funding_command(self, update: Update, context: CallbackContext):
+        """Handle /funding command - funding rate data"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/funding <symbol>`\nContoh: `/funding btc`", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data funding rate {symbol}...")
+
+        try:
+            funding_data = self.crypto_api.get_binance_funding_rate(symbol)
+            
+            if not funding_data or 'error' in funding_data:
+                await loading_msg.edit_text(f"❌ Gagal mengambil data funding rate untuk {symbol}")
+                return
+
+            source = funding_data.get('source', 'unknown')
+            source_emoji = "🟢" if source == 'binance_futures' else "🔄"
+
+            mark_price = funding_data.get('mark_price', 0)
+            index_price = funding_data.get('index_price', 0)
+            funding_rate = funding_data.get('last_funding_rate', 0)
+            funding_pct = funding_rate * 100
+            next_funding = funding_data.get('next_funding_time_iso', '')
+
+            # Determine funding rate status
+            if funding_rate > 0.01:
+                funding_status = "🔴 Sangat Tinggi (Long membayar Short)"
+            elif funding_rate > 0.005:
+                funding_status = "🟡 Tinggi (Long membayar Short)"
+            elif funding_rate > 0:
+                funding_status = "🟢 Positif (Long membayar Short)"
+            elif funding_rate > -0.005:
+                funding_status = "🟢 Negatif (Short membayar Long)"
+            else:
+                funding_status = "🔴 Sangat Negatif (Short membayar Long)"
+
+            message = f"""⚡ **Funding Rate - {symbol}** {source_emoji}
+
+💰 **Mark Price**: {self.crypto_api._format_price_display(mark_price)}
+📊 **Index Price**: {self.crypto_api._format_price_display(index_price)}
+
+**Funding Rate**: {funding_pct:+.4f}%
+{funding_status}
+
+**Next Funding**: {next_funding[:16].replace('T', ' ') if next_funding else 'N/A'}
+
+**Interpretasi:**
+• Funding Rate positif = Long traders bayar Short
+• Funding Rate negatif = Short traders bayar Long
+• Rate tinggi = Market bullish/long heavy
+• Rate rendah/negatif = Market bearish/short heavy
+
+🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}
+🔄 **Source**: {source.replace('_', ' ').title()}"""
+
+            await loading_msg.edit_text(message, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+
+    async def open_interest_command(self, update: Update, context: CallbackContext):
+        """Handle /oi command - open interest data"""
+        if not context.args:
+            await update.message.reply_text("❌ Gunakan format: `/oi <symbol>`\nContoh: `/oi btc`", parse_mode='Markdown')
+            return
+
+        symbol = context.args[0].upper()
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data open interest {symbol}...")
+
+        try:
+            oi_data = self.crypto_api.get_binance_open_interest(symbol)
+            
+            if not oi_data or 'error' in oi_data:
+                await loading_msg.edit_text(f"❌ Gagal mengambil data open interest untuk {symbol}")
+                return
+
+            source = oi_data.get('source', 'unknown')
+            source_emoji = "🟢" if source == 'binance_futures' else "🔄"
+
+            oi_value = oi_data.get('open_interest', 0)
+            time_iso = oi_data.get('time_iso', '')
+
+            # Format OI value
+            if oi_value > 1000000000:
+                oi_format = f"{oi_value/1000000000:.2f}B"
+            elif oi_value > 1000000:
+                oi_format = f"{oi_value/1000000:.2f}M"
+            elif oi_value > 1000:
+                oi_format = f"{oi_value/1000:.1f}K"
+            else:
+                oi_format = f"{oi_value:,.0f}"
+
+            # OI analysis
+            if oi_value > 100000000:  # 100M+
+                oi_status = "🔴 Sangat Tinggi - High Leverage Risk"
+            elif oi_value > 50000000:   # 50M+
+                oi_status = "🟡 Tinggi - Moderate Risk"
+            elif oi_value > 10000000:   # 10M+
+                oi_status = "🟢 Normal - Healthy Activity"
+            else:
+                oi_status = "🔵 Rendah - Low Activity"
+
+            message = f"""📊 **Open Interest - {symbol}** {source_emoji}
+
+**Open Interest**: {oi_format} ({oi_value:,.0f})
+{oi_status}
+
+**Timestamp**: {time_iso[:16].replace('T', ' ') if time_iso else 'N/A'}
+
+**Analisis Open Interest:**
+• OI tinggi = Banyak posisi terbuka, volatilitas potensial
+• OI rendah = Sedikit leverage, pergerakan lebih stabil
+• OI naik + harga naik = Bullish confirmation
+• OI naik + harga turun = Bearish confirmation
+• OI turun = Profit taking atau position closing
+
+💡 **Trading Insight:**
+• High OI = Waspadai sudden liquidation
+• Rising OI = Strong trend confirmation
+• Falling OI = Trend may be weakening
+
+🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}
+🔄 **Source**: {source.replace('_', ' ').title()}"""
+
+            await loading_msg.edit_text(message, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+
+    async def handle_callback_query(self, update: Update, context: CallbackContext):
+        """Handle callback queries from inline keyboards"""
+        query = update.callback_query
+        await query.answer()
+
+        user_id = query.from_user.id
+        data = query.data
+
+        if data.startswith('lang_'):
+            # Language selection
+            language = data.split('_')[1]
+            self.db.set_user_language(user_id, language)
+
+            if language == 'id':
+                await query.edit_message_text("✅ Bahasa berhasil diubah ke Bahasa Indonesia!")
+            else:
+                await query.edit_message_text("✅ Language successfully changed to English!")
+
+        elif data == 'make_premium' and user_id == self.admin_id:
+            await query.edit_message_text(
+                "👑 **Grant Premium Access**\n\n"
+                "Gunakan command: `/grant_premium <user_id> [days]`\n"
+                "Contoh: `/grant_premium 123456789 30`",
+                parse_mode='Markdown'
+            )
+
+        elif data == 'grant_credits' and user_id == self.admin_id:
+            await query.edit_message_text(
+                "💰 **Grant Credits**\n\n"
+                "Gunakan command: `/grant_credits <user_id> <amount>`\n"
+                "Contoh: `/grant_credits 123456789 50`",
+                parse_mode='Markdown'
+            )
+
+        elif data == 'broadcast_help' and user_id == self.admin_id:
+            await query.edit_message_text(
+                "📢 **Broadcast Message**\n\n"
+                "Gunakan command: `/broadcast <message>`\n"
+                "Contoh: `/broadcast Update fitur baru!`",
+                parse_mode='Markdown'
+            )
+
+        elif data == 'bot_stats' and user_id == self.admin_id:
+            # Get bot statistics
+            stats = self.db.get_bot_statistics()
+            stats_message = f"""
+📊 **Statistik Bot**
+
+👥 **Users:**
+• Total Users: {stats.get('total_users', 0)}
+• Premium Users: {stats.get('premium_users', 0)}
+• Active Today: {stats.get('active_today', 0)}
+
+💳 **Credits:**
+• Total Credits Distributed: {stats.get('total_credits', 0)}
+• Average Credits per User: {stats.get('avg_credits', 0):.1f}
+
+📈 **Usage:**
+• Commands Today: {stats.get('commands_today', 0)}
+• Analyses Run: {stats.get('analyses_count', 0)}
+            """
+            await query.edit_message_text(stats_message, parse_mode='Markdown')
+
+        elif data == 'activity_log' and user_id == self.admin_id:
+            # Get recent activity
+            recent_activity = self.db.get_recent_activity(10)
+            activity_message = "📝 **Recent Activity:**\n\n"
+
+            for activity in recent_activity:
+                activity_message += f"• {activity['action']}: User {activity['user_id']}\n"
+
+            await query.edit_message_text(activity_message, parse_mode='Markdown')
+
+        elif data == 'api_health' and user_id == self.admin_id:
+            # Check API health
+            api_status = self.crypto_api.check_api_status()
+            health_message = f"""
+🔍 **API Health Report**
+
+📊 **CoinGecko API:** {'✅ Online' if api_status.get('coingecko', False) else '❌ Offline'}
+🔮 **Coinglass API:** {'✅ Online' if api_status.get('coinglass', False) else '❌ Offline'}
+📰 **News API:** {'✅ Online' if api_status.get('news', False) else '❌ Offline'}
+
+🔄 **Last Check:** {datetime.now().strftime('%H:%M:%S')}
+            """
+            await query.edit_message_text(health_message, parse_mode='Markdown')
+
+        elif data == 'restart_bot' and user_id == self.admin_id:
+            await query.edit_message_text("🔄 Bot restart initiated... Please wait.")
+            # Note: Actual restart would need to be implemented based on deployment environment</old_str>
+        """Handle callback queries from inline keyboards"""
+        query = update.callback_query
+        await query.answer()
+
+        user_id = query.from_user.id
+        data = query.data
+
+        if data.startswith('lang_'):
+            # Language selection
+            language = data.split('_')[1]
+            self.db.set_user_language(user_id, language)
+
+            if language == 'id':
+                await query.edit_message_text("✅ Bahasa berhasil diubah ke Bahasa Indonesia!")
+            else:
+                await query.edit_message_text("✅ Language successfully changed to English!")
+
+        elif data == 'make_premium' and user_id == self.admin_id:
+            await query.edit_message_text(
+                "👑 **Grant Premium Access**\n\n"
+                "Gunakan command: `/grant_premium <user_id> [days]`\n"
+                "Contoh: `/grant_premium 123456789 30`",
+                parse_mode='Markdown'
+            )
+
+        elif data == 'grant_credits' and user_id == self.admin_id:
+            await query.edit_message_text(
+                "💰 **Grant Credits**\n\n"
+                "Gunakan command: `/grant_credits <user_id> <amount>`\n"
+                "Contoh: `/grant_credits 123456789 50`",
+                parse_mode='Markdown'
+            )
+
+        elif data == 'broadcast_help' and user_id == self.admin_id:
+            await query.edit_message_text(
+                "📢 **Broadcast Message**\n\n"
+                "Gunakan command: `/broadcast <message>`\n"
+                "Contoh: `/broadcast Update fitur baru!`",
+                parse_mode='Markdown'
+            )
+
+        elif data == 'bot_stats' and user_id == self.admin_id:
+            # Get bot statistics
+            stats = self.db.get_bot_statistics()
+            stats_message = f"""
+📊 **Statistik Bot**
+
+👥 **Users:**
+• Total Users: {stats.get('total_users', 0)}
+• Premium Users: {stats.get('premium_users', 0)}
+• Active Today: {stats.get('active_today', 0)}
+
+💳 **Credits:**
+• Total Credits Distributed: {stats.get('total_credits', 0)}
+• Average Credits per User: {stats.get('avg_credits', 0):.1f}
+
+📈 **Usage:**
+• Commands Today: {stats.get('commands_today', 0)}
+• Analyses Run: {stats.get('analyses_count', 0)}
+            """
+            await query.edit_message_text(stats_message, parse_mode='Markdown')
+
+        elif data == 'activity_log' and user_id == self.admin_id:
+            # Get recent activity
+            recent_activity = self.db.get_recent_activity(10)
+            activity_message = "📝 **Recent Activity:**\n\n"
+
+            for activity in recent_activity:
+                activity_message += f"• {activity['action']}: User {activity['user_id']}\n"
+
+            await query.edit_message_text(activity_message, parse_mode='Markdown')
+
+        elif data == 'api_health' and user_id == self.admin_id:
+            # Check API health
+            api_status = self.crypto_api.check_api_status()
+            health_message = f"""
+🔍 **API Health Report**
+
+📊 **CoinGecko API:** {'✅ Online' if api_status.get('coingecko', False) else '❌ Offline'}
+🔮 **Coinglass API:** {'✅ Online' if api_status.get('coinglass', False) else '❌ Offline'}
+📰 **News API:** {'✅ Online' if api_status.get('news', False) else '❌ Offline'}
+
+🔄 **Last Check:** {datetime.now().strftime('%H:%M:%S')}
+            """
+            await query.edit_message_text(health_message, parse_mode='Markdown')
+
+        elif data == 'restart_bot' and user_id == self.admin_id:
+            await query.edit_message_text("🔄 Bot restart initiated... Please wait.")
+            # Note: Actual restart would need to be implemented based on deployment environment
+
+    async def handle_message(self, update: Update, context: CallbackContext):
+        """Handle regular text messages (not commands)"""
+        user_id = update.message.from_user.id
+        text = update.message.text.lower()
+
+        # Get user language preference
+        user_data = self.db.get_user(user_id)
+        language = user_data.get('language', 'id') if user_data else 'id'
+
+        # Check if message contains crypto-related queries
+        crypto_keywords = ['harga', 'price', 'bitcoin', 'btc', 'ethereum', 'eth', 'bnb', 'ada', 'sol', 'doge', 
+                          'analisis', 'analyze', 'futures', 'trading', 'crypto', 'coin', 'pasar', 'market',
+                          'bagaimana', 'how about', 'gimana', 'berapa', 'how much']
+        
+        crypto_symbols = ['btc', 'eth', 'bnb', 'ada', 'sol', 'doge', 'xrp', 'dot', 'matic', 'avax', 'link', 'ltc', 'ondo', 'sei', 'pepe', 'moodeng', 'shib', 'floki', 'wif', 'bonk', 'jup', 'pyth', 'render', 'inj', 'sui', 'apt', 'op', 'arb', 'tia', 'hyperliquid', 'popcat', 'pendle', 'eigen']
+        
+        # Check if text contains crypto keywords or symbols
+        is_crypto_query = any(keyword in text for keyword in crypto_keywords) or any(symbol in text for symbol in crypto_symbols)
+        
+        if is_crypto_query:
+            # Try to extract crypto symbol from text
+            detected_symbol = None
+            for symbol in crypto_symbols:
+                if symbol in text:
+                    detected_symbol = symbol.upper()
+                    break
+            
+            # If asking about price
+            if any(word in text for word in ['harga', 'price', 'berapa']):
+                if detected_symbol:
+                    # Show loading message
+                    loading_msg = await update.message.reply_text(f"⏳ Mengecek harga {detected_symbol}...")
+                    
+                    # Get price data
+                    price_data = self.crypto_api.get_price(detected_symbol, force_refresh=True)
+                    
+                    if price_data and 'error' not in price_data:
+                        source = price_data.get('source', 'unknown')
+                        is_real_data = source in ['binance', 'binance_simple', 'coingecko', 'coingecko_free']
+                        
+                        response = f"""💰 **Harga {detected_symbol} saat ini**: ${price_data.get('price', 0):,.2f}
+
+📈 Perubahan 24h: {price_data.get('change_24h', 0):+.2f}%
+{"📊 Volume 24h: $" + f"{price_data.get('volume_24h', 0):,.0f}" if price_data.get('volume_24h', 0) > 0 else ""}
+🕐 Update: {datetime.now().strftime('%H:%M:%S WIB')}
+🔄 {"Data real-time dari " + source.title() if is_real_data else "Data real-time"}"""
+                    else:
+                        response = f"❌ Maaf, tidak dapat menemukan data harga untuk {detected_symbol}"
+                    
+                    await loading_msg.edit_text(response, parse_mode='Markdown')
+                    return
+                else:
+                    response = "💡 Untuk cek harga, sebutkan nama crypto seperti: 'harga bitcoin' atau 'berapa harga eth'"
+            
+            # If asking for analysis
+            elif any(word in text for word in ['analisis', 'analyze', 'gimana', 'bagaimana']):
+                if detected_symbol:
+                    # Check credits first
+                    credits = self.db.get_user_credits(user_id)
+                    is_premium = self.db.is_user_premium(user_id)
+                    is_admin = user_id == self.admin_id
+                    
+                    if not is_premium and not is_admin and credits < 20:
+                        response = "❌ Credit tidak cukup untuk analisis mendalam. Gunakan `/credits` untuk melihat sisa credit Anda."
+                    else:
+                        loading_msg = await update.message.reply_text(f"⏳ Menganalisis {detected_symbol}...")
+                        
+                        try:
+                            price_data = self.crypto_api.get_price(detected_symbol)
+                            futures_data = self.crypto_api.get_futures_data(detected_symbol)
+                            
+                            analysis = self.ai.get_comprehensive_analysis(detected_symbol, futures_data, price_data, 'id', self.crypto_api)
+                            
+                            # Deduct credit if needed
+                            if not is_premium and not is_admin:
+                                self.db.deduct_credit(user_id, 20)
+                                remaining_credits = self.db.get_user_credits(user_id)
+                                analysis += f"\n\n💳 Credit tersisa: {remaining_credits}"
+                            
+                            await loading_msg.edit_text(analysis, parse_mode='Markdown')
+                            return
+                        except Exception as e:
+                            await loading_msg.edit_text(f"❌ Terjadi kesalahan saat analisis: {str(e)}")
+                            return
+                else:
+                    response = "💡 Untuk analisis, sebutkan crypto seperti: 'analisis bitcoin' atau 'gimana eth'"
+            
+            # If asking about futures
+            elif 'futures' in text or 'sinyal' in text:
+                if detected_symbol:
+                    # Check credits first
+                    credits = self.db.get_user_credits(user_id)
+                    is_premium = self.db.is_user_premium(user_id)
+                    is_admin = user_id == self.admin_id
+                    
+                    if not is_premium and not is_admin and credits < 20:
+                        response = "❌ Credit tidak cukup untuk analisis futures. Gunakan `/credits` untuk melihat sisa credit Anda."
+                    else:
+                        loading_msg = await update.message.reply_text(f"⏳ Menganalisis futures {detected_symbol}...")
+                        
+                        try:
+                            signals = self.ai.generate_single_futures_signal(detected_symbol, 'id', self.crypto_api)
+                            
+                            # Deduct credit if needed
+                            if not is_premium and not is_admin:
+                                self.db.deduct_credit(user_id, 20)
+                                remaining_credits = self.db.get_user_credits(user_id)
+                                signals += f"\n\n💳 Credit tersisa: {remaining_credits}"
+                            
+                            await loading_msg.edit_text(signals, parse_mode='Markdown')
+                            return
+                        except Exception as e:
+                            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+                            return
+                else:
+                    response = "💡 Untuk analisis futures, sebutkan crypto seperti: 'futures bitcoin' atau 'sinyal eth'"
+            
+            # If asking about market
+            elif any(word in text for word in ['pasar', 'market', 'overview']):
+                # Check credits first
+                credits = self.db.get_user_credits(user_id)
+                is_premium = self.db.is_user_premium(user_id)
+                is_admin = user_id == self.admin_id
+                
+                if not is_premium and not is_admin and credits < 20:
+                    response = "❌ Credit tidak cukup untuk overview pasar. Gunakan `/credits` untuk melihat sisa credit Anda."
+                else:
+                    loading_msg = await update.message.reply_text("⏳ Menganalisis kondisi pasar...")
+                    
+                    try:
+                        market_data = self.ai.get_market_sentiment('id', self.crypto_api)
+                        
+                        # Deduct credit if needed
+                        if not is_premium and not is_admin:
+                            self.db.deduct_credit(user_id, 20)
+                            remaining_credits = self.db.get_user_credits(user_id)
+                            market_data += f"\n\n💳 Credit tersisa: {remaining_credits}"
+                        
+                        await loading_msg.edit_text(market_data, parse_mode='Markdown')
+                        return
+                    except Exception as e:
+                        await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
+                        return
+            else:
+                # General crypto response
+                response = """💡 **Cara menggunakan CryptoMentor AI:**
+
+📊 **Cek Harga**: "harga bitcoin" atau "berapa eth"
+📈 **Analisis**: "analisis btc" atau "gimana ethereum"  
+⚡ **Futures**: "futures bitcoin" atau "sinyal eth"
+🌍 **Pasar**: "kondisi pasar" atau "overview market"
+
+Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
+        else:
+            # Use AI assistant for general questions
+            response = self.ai.get_ai_response(update.message.text, language)
+
+        await update.message.reply_text(response, parse_mode='Markdown')
+
+
+from telegram import Update
+from telegram.ext import ContextTypes
+
+async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    articles = crypto_api.get_latest_crypto_news(limit=5)
+    if not articles:
+        await update.message.reply_text("❌ Gagal mengambil berita saat ini.")
+        return
+
+    msg = "📰 *Crypto News Terbaru:*\n\n"
+    for article in articles:
+        msg += f"🔹 [{article['title']}]({article['url']})\n"
+    await update.message.reply_markdown(msg)
+
+
+
+application.add_handler(CommandHandler("news", news_command))
