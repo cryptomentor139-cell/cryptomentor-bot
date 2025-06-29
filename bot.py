@@ -710,7 +710,7 @@ Contoh: `/add_coin btc 0.5`
             await loading_msg.edit_text(error_msg)
             print(f"Error in futures command: {e}")
             import traceback
-traceback.print_exc()
+            traceback.print_exc()
 
             # Add inline keyboard for deeper analysis
             keyboard = [
