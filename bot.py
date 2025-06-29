@@ -46,7 +46,7 @@ class TelegramBot:
         self.db = Database()
         self.crypto_api = CryptoAPI()
         self.ai = AIAssistant()
-        
+
         # Initialize broadcast system
         self.pending_broadcast = None
         self.broadcast_in_progress = False
@@ -93,7 +93,7 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("liquidations", self.liquidations_command))
             self.application.add_handler(CommandHandler("long_short", self.long_short_command))
 
-            # Admin commands</old_str>
+            # Admin commands
             self.application.add_handler(CommandHandler("admin", self.admin_command))
             self.application.add_handler(CommandHandler("grant_premium", self.grant_premium_command))
             self.application.add_handler(CommandHandler("revoke_premium", self.revoke_premium_command))
@@ -133,17 +133,17 @@ class TelegramBot:
                 logger.error("❌ Bot conflict detected - forcing cleanup")
                 print("⚠️  CONFLICT: Another bot instance detected!")
                 print("🔄 Attempting automatic cleanup...")
-                
+
                 # Clear any pending broadcast to prevent errors
                 self.pending_broadcast = None
                 self.broadcast_in_progress = False
-                
+
                 # Force cleanup of conflicting instances
                 try:
                     import subprocess
                     import signal
                     import psutil
-                    
+
                     # Kill any python processes running main.py
                     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                         try:
@@ -155,11 +155,11 @@ class TelegramBot:
                                     proc.wait(timeout=3)
                         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
                             pass
-                    
+
                     import time
                     time.sleep(5)  # Wait for cleanup
                     print("✅ Cleanup completed, restarting...")
-                    
+
                     # Force exit to restart cleanly
                     if IS_DEPLOYMENT:
                         print("🔄 Deployment will restart automatically...")
@@ -168,7 +168,7 @@ class TelegramBot:
                         # Restart in development
                         print("🔄 Restarting bot...")
                         raise
-                        
+
                 except ImportError:
                     print("⚠️ psutil not available, manual restart required")
                     if IS_DEPLOYMENT:
@@ -345,18 +345,18 @@ Gunakan `/help` untuk melihat semua fitur yang tersedia!
 
         # Get comprehensive real-time data with API priority
         print(f"🔄 Fetching real-time data for {symbol} from multiple sources...")
-        
+
         # Primary: Binance API for most accurate real-time prices
         price_data = self.crypto_api.get_binance_price(symbol)
         coingecko_data = None
         news_data = None
-        
+
         # Secondary: CoinGecko for additional market data
         try:
             coingecko_data = self.crypto_api.get_price(symbol, force_refresh=True)
         except:
             pass
-        
+
         # Tertiary: Get relevant news for context
         try:
             news_data = self.crypto_api.get_crypto_news(limit=1)
@@ -365,7 +365,7 @@ Gunakan `/help` untuk melihat semua fitur yang tersedia!
 
         if price_data and 'error' not in price_data and price_data.get('price', 0) > 0:
             source = price_data.get('source', 'unknown')
-            
+
             # Enhanced source indicators with API health
             source_emoji = {
                 'binance': '🟢 Binance API (Real-Time)',
@@ -376,7 +376,7 @@ Gunakan `/help` untuk melihat semua fitur yang tersedia!
             }.get(source, '🔄 Market Data')
 
             is_real_api = source in ['binance', 'binance_simple', 'coingecko', 'coingecko_free']
-            
+
             # Smart price formatting using crypto_api formatting function
             current_price = price_data.get('price', 0)
             price_format = self.crypto_api._format_price_display(current_price)
@@ -428,21 +428,21 @@ Gunakan `/help` untuk melihat semua fitur yang tersedia!
                 api_status.append("✅ Binance/CoinGecko")
             else:
                 api_status.append("🔄 Real-time Simulation")
-                
+
             if coingecko_data and coingecko_data.get('source') in ['coingecko', 'coingecko_free']:
                 api_status.append("✅ CoinGecko")
-            
+
             if news_data and len(news_data) > 0:
                 api_status.append("✅ CryptoNews")
-            
+
             message += f"🌐 **API Status**: {' | '.join(api_status)}\n"
-            
+
             # Add latest crypto news context if available
             if news_data and len(news_data) > 0:
                 latest_news = news_data[0]
                 news_title = latest_news.get('title', '')[:60] + '...' if len(latest_news.get('title', '')) > 60 else latest_news.get('title', '')
                 message += f"📰 **Crypto News**: {news_title}\n"
-            
+
             message += f"🔗 **Mode**: {'🌐 Always On (Deployment)' if IS_DEPLOYMENT else '🔧 Development Workspace'}"
         else:
             message = f"❌ Tidak dapat menemukan data untuk {symbol}"
@@ -606,10 +606,10 @@ Contoh: `/add_coin btc 0.5`
                 return
 
             print(f"🔄 Generating futures signals for user {user_id}")
-            
+
             # Generate signals with proper error handling
             signals = self.ai.generate_futures_signals('id', self.crypto_api)
-            
+
             if not signals or len(signals.strip()) < 50:
                 await loading_msg.edit_text("❌ Gagal mengambil data sinyal futures. Silakan coba lagi dalam beberapa menit.")
                 return
@@ -625,13 +625,13 @@ Contoh: `/add_coin btc 0.5`
                 signals += f"\n\n👑 **Admin Access** - Unlimited"
 
             print(f"✅ Futures signals generated successfully for user {user_id}")
-            
+
             # Split long messages if needed
             if len(signals) > 4000:
                 # Split into chunks
                 chunks = [signals[i:i+4000] for i in range(0, len(signals), 4000)]
                 await loading_msg.edit_text(chunks[0], parse_mode='Markdown')
-                
+
                 for chunk in chunks[1:]:
                     await update.message.reply_text(chunk, parse_mode='Markdown')
             else:
@@ -673,10 +673,10 @@ Contoh: `/add_coin btc 0.5`
                 return
 
             print(f"🔄 Generating single futures signal for {symbol}, user {user_id}")
-            
+
             # Generate signals using the same format as futures_signals but for single coin
             signals = self.ai.generate_single_futures_signal(symbol, 'id', self.crypto_api)
-            
+
             if not signals or len(signals.strip()) < 50:
                 await loading_msg.edit_text(f"❌ Gagal mengambil data futures untuk {symbol}. Silakan coba lagi dalam beberapa menit.")
                 return
@@ -692,13 +692,13 @@ Contoh: `/add_coin btc 0.5`
                 signals += f"\n\n👑 **Admin Access** - Unlimited"
 
             print(f"✅ Single futures signal generated successfully for {symbol}, user {user_id}")
-            
+
             # Split long messages if needed
             if len(signals) > 4000:
                 # Split into chunks
                 chunks = [signals[i:i+4000] for i in range(0, len(signals), 4000)]
                 await loading_msg.edit_text(chunks[0], parse_mode='Markdown')
-                
+
                 for chunk in chunks[1:]:
                     await update.message.reply_text(chunk, parse_mode='Markdown')
             else:
@@ -710,7 +710,20 @@ Contoh: `/add_coin btc 0.5`
             await loading_msg.edit_text(error_msg)
             print(f"Error in futures command: {e}")
             import traceback
-            traceback.print_exc()
+traceback.print_exc()
+
+            # Add inline keyboard for deeper analysis
+            keyboard = [
+                [InlineKeyboardButton("📚 Deep Technical Analysis", callback_data=f'deep_technical_{symbol}')],
+                [InlineKeyboardButton("📊 Binance Data", callback_data=f'binance_data_{symbol}')],
+                [InlineKeyboardButton("🔥 Liquidation Data", callback_data=f'liquidation_{symbol}')],
+                [InlineKeyboardButton("🐂 Long/Short Ratio", callback_data=f'long_short_{symbol}')],
+                [InlineKeyboardButton("💰 Funding Rate History", callback_data=f'funding_history_{symbol}')]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text("Pilih pendalaman analisis:", reply_markup=reply_markup)
 
     async def credits_command(self, update: Update, context: CallbackContext):
         """Handle /credits command"""
@@ -929,7 +942,7 @@ Mulai ajak teman dan dapatkan bonus credit!
                 first_name = user_data.get('first_name', 'Unknown')
 
                 duration_text = "Permanent (No Expiry)" if days is None else f"{days} days"
-                
+
                 message = f"""
 ✅ **Premium Access Granted!**
 
@@ -1151,15 +1164,14 @@ Credits berhasil ditambahkan!
             for char in escape_chars:
                 text = text.replace(char, f'\\{char}')
             return text
-        
+
         escaped_message = escape_markdown(message)
-        
+
         confirmation_message = f"""📢 **Konfirmasi Broadcast**
 
 **Pesan yang akan dikirim:**
 ```
-{escaped_message}
-```
+{escaped_message}```
 
 **Warning:** Pesan ini akan dikirim ke SEMUA user bot\\!
 
@@ -1202,13 +1214,13 @@ Gunakan:
         try:
             # Get all users with better error handling
             all_users = self.db.get_all_users()
-            
+
             if not all_users:
                 self.pending_broadcast = None
                 self.broadcast_in_progress = False
                 await update.message.reply_text("❌ Tidak ada user yang ditemukan di database!")
                 return
-                
+
             success_count = 0
             fail_count = 0
             blocked_count = 0
@@ -1225,13 +1237,13 @@ Gunakan:
                     fail_count += 1
                     print(f"❌ Invalid user_id: {user_id_target}")
                     continue
-                    
+
                 try:
                     # Clean the message to avoid any encoding issues
                     clean_message = str(broadcast_message).strip()
                     if not clean_message:
                         clean_message = "📢 Pesan broadcast dari admin"
-                    
+
                     # Send message with safer parameters
                     await context.bot.send_message(
                         chat_id=int(user_id_target),
@@ -1245,7 +1257,7 @@ Gunakan:
                     )
                     success_count += 1
                     print(f"✅ Sent to user {user_id_target} ({success_count}/{total_users})")
-                    
+
                     # Update progress every 20 users or at key milestones
                     if (i + 1) % 20 == 0 or (i + 1) in [5, 10, 25, 50, 100]:
                         try:
@@ -1253,14 +1265,14 @@ Gunakan:
                             await status_msg.edit_text(progress_text)
                         except Exception as edit_error:
                             print(f"Progress update failed: {edit_error}")
-                    
+
                     # Improved rate limiting - slower but more reliable
                     await asyncio.sleep(0.5)  # 500ms delay for better Telegram compliance
-                    
+
                 except Exception as e:
                     error_str = str(e).lower()
                     print(f"❌ Broadcast failed for user {user_id_target}: {e}")
-                    
+
                     # Enhanced error categorization
                     if any(keyword in error_str for keyword in [
                         'blocked', 'forbidden', 'chat not found', 
@@ -1404,7 +1416,7 @@ Gunakan:
         try:
             # Get comprehensive Binance data
             comp_data = self.crypto_api.get_comprehensive_futures_data(symbol)
-            
+
             if comp_data.get('error'):
                 await loading_msg.edit_text(f"❌ Gagal mengambil data untuk {symbol}: {comp_data.get('error')}")
                 return
@@ -1428,7 +1440,7 @@ Gunakan:
                 price_format = self.crypto_api._format_price_display(current_price)
                 change_24h = price_data.get('change_24h', 0)
                 change_emoji = "📈" if change_24h >= 0 else "📉"
-                
+
                 message += f"""💰 **Futures Price Data** 🟢
 • **Current Price**: {price_format}
 • **24h Change**: {change_emoji} {change_24h:+.2f}%
@@ -1445,7 +1457,7 @@ Gunakan:
                 index_price = mark_data.get('index_price', 0)
                 funding_rate = mark_data.get('last_funding_rate', 0)
                 funding_pct = funding_rate * 100
-                
+
                 message += f"""⚡ **Mark Price & Funding** 🟢
 • **Mark Price**: {self.crypto_api._format_price_display(mark_price)}
 • **Index Price**: {self.crypto_api._format_price_display(index_price)}
@@ -1459,7 +1471,7 @@ Gunakan:
             if ls_data and 'error' not in ls_data:
                 long_ratio = ls_data.get('long_ratio', 0)
                 short_ratio = ls_data.get('short_ratio', 0)
-                
+
                 message += f"""📊 **Long/Short Ratio** 🟢
 • **Long Ratio**: {long_ratio:.1f}%
 • **Short Ratio**: {short_ratio:.1f}%
@@ -1478,7 +1490,7 @@ Gunakan:
                     oi_format = f"{oi_value/1000000:.2f}M"
                 else:
                     oi_format = f"{oi_value:,.0f}"
-                
+
                 message += f"""📈 **Open Interest** 🟢
 • **Total OI**: {oi_format}
 • **Timestamp**: {oi_data.get('time_iso', '')[:16].replace('T', ' ')}
@@ -1491,7 +1503,7 @@ Gunakan:
                 total_liq = liq_data.get('total_liquidation', 0)
                 long_liq = liq_data.get('long_liquidation', 0)
                 short_liq = liq_data.get('short_liquidation', 0)
-                
+
                 message += f"""🔥 **Liquidations (Recent)** 🟢
 • **Total**: ${total_liq:,.0f}
 • **Long Liq**: ${long_liq:,.0f}
@@ -1543,7 +1555,7 @@ Gunakan:
 
         try:
             candles_data = self.crypto_api.get_binance_candlestick(symbol, interval, limit)
-            
+
             if not candles_data or 'error' in candles_data:
                 await loading_msg.edit_text(f"❌ Gagal mengambil data candlestick untuk {symbol}")
                 return
@@ -1572,10 +1584,10 @@ Gunakan:
                 high_p = self.crypto_api._format_price_display(candle.get('high', 0))
                 low_p = self.crypto_api._format_price_display(candle.get('low', 0))
                 volume = candle.get('volume', 0)
-                
+
                 change = ((candle.get('close', 0) - candle.get('open', 0)) / candle.get('open', 1)) * 100
                 change_emoji = "🟢" if change >= 0 else "🔴"
-                
+
                 message += f"\n**{time_str}** {change_emoji}\n"
                 message += f"O:{open_p} H:{high_p} L:{low_p} C:{close_p}\n"
                 message += f"Vol: {volume:,.0f} | {change:+.2f}%\n"
@@ -1599,7 +1611,7 @@ Gunakan:
 
         try:
             funding_data = self.crypto_api.get_binance_funding_rate(symbol)
-            
+
             if not funding_data or 'error' in funding_data:
                 await loading_msg.edit_text(f"❌ Gagal mengambil data funding rate untuk {symbol}")
                 return
@@ -1660,7 +1672,7 @@ Gunakan:
 
         try:
             oi_data = self.crypto_api.get_binance_open_interest(symbol)
-            
+
             if not oi_data or 'error' in oi_data:
                 await loading_msg.edit_text(f"❌ Gagal mengambil data open interest untuk {symbol}")
                 return
@@ -1729,7 +1741,7 @@ Gunakan:
 
         try:
             mark_data = self.crypto_api.get_binance_mark_price(symbol)
-            
+
             if not mark_data or 'error' in mark_data:
                 await loading_msg.edit_text(f"❌ Gagal mengambil data mark price untuk {symbol}")
                 return
@@ -1777,14 +1789,14 @@ Gunakan:
 
         try:
             time_data = self.crypto_api.get_binance_server_time()
-            
+
             if not time_data or 'error' in time_data:
                 await loading_msg.edit_text("❌ Gagal mengambil waktu server Binance")
                 return
 
             server_time = time_data.get('server_time_readable', '')
             server_time_iso = time_data.get('server_time_iso', '')
-            
+
             # Get local time for comparison
             local_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S WIB')
 
@@ -1820,7 +1832,7 @@ Gunakan:
 
         try:
             liq_data = self.crypto_api.get_binance_liquidation_orders(symbol)
-            
+
             if not liq_data or 'error' in liq_data:
                 await loading_msg.edit_text(f"❌ Gagal mengambil data liquidation untuk {symbol}")
                 return
@@ -1841,16 +1853,16 @@ Gunakan:
 
 **Recent Liquidations:**
 """
-            
+
             # Show last 5 liquidations
             for i, order in enumerate(recent_orders[-5:]):
                 side_emoji = "🔴" if order['side'] == 'SELL' else "🟢"
                 time_str = order.get('time_iso', '')[:16].replace('T', ' ')
                 message += f"{side_emoji} {order['side']} ${order['value']:,.0f} @ {order['time_str']}\n"
-            
+
             message += f"""
 **Analisis:**
-• Long dominance = {(long_liq/total_liq*100) if total_liq > 0 else 0:.1f}% liquidation
+• Long dominance = {(long_liqtotal_liq*100) if total_liq > 0 else 0:.1f}% liquidation
 • {'Longs getting rekt' if long_liq > short_liq else 'Shorts getting rekt' if short_liq > long_liq else 'Balanced liquidation'}
 • Market stress level: {'High' if total_orders > 50 else 'Medium' if total_orders > 20 else 'Low'}
 
@@ -1873,7 +1885,7 @@ Gunakan:
 
         try:
             ls_data = self.crypto_api.get_binance_long_short_ratio(symbol)
-            
+
             if not ls_data or 'error' in ls_data:
                 await loading_msg.edit_text(f"❌ Gagal mengambil data long/short ratio untuk {symbol}")
                 return
@@ -2022,96 +2034,28 @@ Gunakan:
 
         elif data == 'restart_bot' and user_id == self.admin_id:
             await query.edit_message_text("🔄 Bot restart initiated... Please wait.")
-            # Note: Actual restart would need to be implemented based on deployment environment</old_str>
-        """Handle callback queries from inline keyboards"""
-        query = update.callback_query
-        await query.answer()
-
-        user_id = query.from_user.id
-        data = query.data
-
-        if data.startswith('lang_'):
-            # Language selection
-            language = data.split('_')[1]
-            self.db.set_user_language(user_id, language)
-
-            if language == 'id':
-                await query.edit_message_text("✅ Bahasa berhasil diubah ke Bahasa Indonesia!")
-            else:
-                await query.edit_message_text("✅ Language successfully changed to English!")
-
-        elif data == 'make_premium' and user_id == self.admin_id:
-            await query.edit_message_text(
-                "👑 **Grant Premium Access**\n\n"
-                "Gunakan command: `/grant_premium <user_id> [days]`\n"
-                "Contoh: `/grant_premium 123456789 30`",
-                parse_mode='Markdown'
-            )
-
-        elif data == 'grant_credits' and user_id == self.admin_id:
-            await query.edit_message_text(
-                "💰 **Grant Credits**\n\n"
-                "Gunakan command: `/grant_credits <user_id> <amount>`\n"
-                "Contoh: `/grant_credits 123456789 50`",
-                parse_mode='Markdown'
-            )
-
-        elif data == 'broadcast_help' and user_id == self.admin_id:
-            await query.edit_message_text(
-                "📢 **Broadcast Message**\n\n"
-                "Gunakan command: `/broadcast <message>`\n"
-                "Contoh: `/broadcast Update fitur baru!`",
-                parse_mode='Markdown'
-            )
-
-        elif data == 'bot_stats' and user_id == self.admin_id:
-            # Get bot statistics
-            stats = self.db.get_bot_statistics()
-            stats_message = f"""
-📊 **Statistik Bot**
-
-👥 **Users:**
-• Total Users: {stats.get('total_users', 0)}
-• Premium Users: {stats.get('premium_users', 0)}
-• Active Today: {stats.get('active_today', 0)}
-
-💳 **Credits:**
-• Total Credits Distributed: {stats.get('total_credits', 0)}
-• Average Credits per User: {stats.get('avg_credits', 0):.1f}
-
-📈 **Usage:**
-• Commands Today: {stats.get('commands_today', 0)}
-• Analyses Run: {stats.get('analyses_count', 0)}
-            """
-            await query.edit_message_text(stats_message, parse_mode='Markdown')
-
-        elif data == 'activity_log' and user_id == self.admin_id:
-            # Get recent activity
-            recent_activity = self.db.get_recent_activity(10)
-            activity_message = "📝 **Recent Activity:**\n\n"
-
-            for activity in recent_activity:
-                activity_message += f"• {activity['action']}: User {activity['user_id']}\n"
-
-            await query.edit_message_text(activity_message, parse_mode='Markdown')
-
-        elif data == 'api_health' and user_id == self.admin_id:
-            # Check API health
-            api_status = self.crypto_api.check_api_status()
-            health_message = f"""
-🔍 **API Health Report**
-
-📊 **CoinGecko API:** {'✅ Online' if api_status.get('coingecko', False) else '❌ Offline'}
-🔮 **Coinglass API:** {'✅ Online' if api_status.get('coinglass', False) else '❌ Offline'}
-📰 **News API:** {'✅ Online' if api_status.get('news', False) else '❌ Offline'}
-
-🔄 **Last Check:** {datetime.now().strftime('%H:%M:%S')}
-            """
-            await query.edit_message_text(health_message, parse_mode='Markdown')
-
-        elif data == 'restart_bot' and user_id == self.admin_id:
-            await query.edit_message_text("🔄 Bot restart initiated... Please wait.")
             # Note: Actual restart would need to be implemented based on deployment environment
+
+        # Handle futures analysis callbacks
+        elif data.startswith('deep_technical_'):
+            symbol = data.split('_')[-1]
+            await self._handle_deep_technical_analysis(query, symbol)
+
+        elif data.startswith('binance_data_'):
+            symbol = data.split('_')[-1]
+            await self._handle_binance_data_callback(query, symbol)
+
+        elif data.startswith('liquidation_'):
+            symbol = data.split('_')[-1]
+            await self._handle_liquidation_analysis(query, symbol)
+
+        elif data.startswith('long_short_'):
+            symbol = data.split('_')[-1]
+            await self._handle_long_short_analysis(query, symbol)
+
+        elif data.startswith('funding_history_'):
+            symbol = data.split('_')[-1]
+            await self._handle_funding_history(query, symbol)
 
     async def handle_message(self, update: Update, context: CallbackContext):
         """Handle regular text messages (not commands)"""
@@ -2126,12 +2070,12 @@ Gunakan:
         crypto_keywords = ['harga', 'price', 'bitcoin', 'btc', 'ethereum', 'eth', 'bnb', 'ada', 'sol', 'doge', 
                           'analisis', 'analyze', 'futures', 'trading', 'crypto', 'coin', 'pasar', 'market',
                           'bagaimana', 'how about', 'gimana', 'berapa', 'how much']
-        
+
         crypto_symbols = ['btc', 'eth', 'bnb', 'ada', 'sol', 'doge', 'xrp', 'dot', 'matic', 'avax', 'link', 'ltc', 'ondo', 'sei', 'pepe', 'moodeng', 'shib', 'floki', 'wif', 'bonk', 'jup', 'pyth', 'render', 'inj', 'sui', 'apt', 'op', 'arb', 'tia', 'hyperliquid', 'popcat', 'pendle', 'eigen']
-        
+
         # Check if text contains crypto keywords or symbols
         is_crypto_query = any(keyword in text for keyword in crypto_keywords) or any(symbol in text for symbol in crypto_symbols)
-        
+
         if is_crypto_query:
             # Try to extract crypto symbol from text
             detected_symbol = None
@@ -2139,20 +2083,20 @@ Gunakan:
                 if symbol in text:
                     detected_symbol = symbol.upper()
                     break
-            
+
             # If asking about price
             if any(word in text for word in ['harga', 'price', 'berapa']):
                 if detected_symbol:
                     # Show loading message
                     loading_msg = await update.message.reply_text(f"⏳ Mengecek harga {detected_symbol}...")
-                    
+
                     # Get price data
                     price_data = self.crypto_api.get_price(detected_symbol, force_refresh=True)
-                    
+
                     if price_data and 'error' not in price_data:
                         source = price_data.get('source', 'unknown')
                         is_real_data = source in ['binance', 'binance_simple', 'coingecko', 'coingecko_free']
-                        
+
                         response = f"""💰 **Harga {detected_symbol} saat ini**: ${price_data.get('price', 0):,.2f}
 
 📈 Perubahan 24h: {price_data.get('change_24h', 0):+.2f}%
@@ -2161,12 +2105,12 @@ Gunakan:
 🔄 {"Data real-time dari " + source.title() if is_real_data else "Data real-time"}"""
                     else:
                         response = f"❌ Maaf, tidak dapat menemukan data harga untuk {detected_symbol}"
-                    
+
                     await loading_msg.edit_text(response, parse_mode='Markdown')
                     return
                 else:
                     response = "💡 Untuk cek harga, sebutkan nama crypto seperti: 'harga bitcoin' atau 'berapa harga eth'"
-            
+
             # If asking for analysis
             elif any(word in text for word in ['analisis', 'analyze', 'gimana', 'bagaimana']):
                 if detected_symbol:
@@ -2174,24 +2118,24 @@ Gunakan:
                     credits = self.db.get_user_credits(user_id)
                     is_premium = self.db.is_user_premium(user_id)
                     is_admin = user_id == self.admin_id
-                    
+
                     if not is_premium and not is_admin and credits < 20:
                         response = "❌ Credit tidak cukup untuk analisis mendalam. Gunakan `/credits` untuk melihat sisa credit Anda."
                     else:
                         loading_msg = await update.message.reply_text(f"⏳ Menganalisis {detected_symbol}...")
-                        
+
                         try:
                             price_data = self.crypto_api.get_price(detected_symbol)
                             futures_data = self.crypto_api.get_futures_data(detected_symbol)
-                            
+
                             analysis = self.ai.get_comprehensive_analysis(detected_symbol, futures_data, price_data, 'id', self.crypto_api)
-                            
+
                             # Deduct credit if needed
                             if not is_premium and not is_admin:
                                 self.db.deduct_credit(user_id, 20)
                                 remaining_credits = self.db.get_user_credits(user_id)
                                 analysis += f"\n\n💳 Credit tersisa: {remaining_credits}"
-                            
+
                             await loading_msg.edit_text(analysis, parse_mode='Markdown')
                             return
                         except Exception as e:
@@ -2199,7 +2143,7 @@ Gunakan:
                             return
                 else:
                     response = "💡 Untuk analisis, sebutkan crypto seperti: 'analisis bitcoin' atau 'gimana eth'"
-            
+
             # If asking about futures
             elif 'futures' in text or 'sinyal' in text:
                 if detected_symbol:
@@ -2207,21 +2151,21 @@ Gunakan:
                     credits = self.db.get_user_credits(user_id)
                     is_premium = self.db.is_user_premium(user_id)
                     is_admin = user_id == self.admin_id
-                    
+
                     if not is_premium and not is_admin and credits < 20:
                         response = "❌ Credit tidak cukup untuk analisis futures. Gunakan `/credits` untuk melihat sisa credit Anda."
                     else:
                         loading_msg = await update.message.reply_text(f"⏳ Menganalisis futures {detected_symbol}...")
-                        
+
                         try:
                             signals = self.ai.generate_single_futures_signal(detected_symbol, 'id', self.crypto_api)
-                            
+
                             # Deduct credit if needed
                             if not is_premium and not is_admin:
                                 self.db.deduct_credit(user_id, 20)
                                 remaining_credits = self.db.get_user_credits(user_id)
                                 signals += f"\n\n💳 Credit tersisa: {remaining_credits}"
-                            
+
                             await loading_msg.edit_text(signals, parse_mode='Markdown')
                             return
                         except Exception as e:
@@ -2229,28 +2173,28 @@ Gunakan:
                             return
                 else:
                     response = "💡 Untuk analisis futures, sebutkan crypto seperti: 'futures bitcoin' atau 'sinyal eth'"
-            
+
             # If asking about market
             elif any(word in text for word in ['pasar', 'market', 'overview']):
                 # Check credits first
                 credits = self.db.get_user_credits(user_id)
                 is_premium = self.db.is_user_premium(user_id)
                 is_admin = user_id == self.admin_id
-                
+
                 if not is_premium and not is_admin and credits < 20:
                     response = "❌ Credit tidak cukup untuk overview pasar. Gunakan `/credits` untuk melihat sisa credit Anda."
                 else:
                     loading_msg = await update.message.reply_text("⏳ Menganalisis kondisi pasar...")
-                    
+
                     try:
                         market_data = self.ai.get_market_sentiment('id', self.crypto_api)
-                        
+
                         # Deduct credit if needed
                         if not is_premium and not is_admin:
                             self.db.deduct_credit(user_id, 20)
                             remaining_credits = self.db.get_user_credits(user_id)
                             market_data += f"\n\n💳 Credit tersisa: {remaining_credits}"
-                        
+
                         await loading_msg.edit_text(market_data, parse_mode='Markdown')
                         return
                     except Exception as e:
@@ -2272,5 +2216,24 @@ Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
 
         await update.message.reply_text(response, parse_mode='Markdown')
 
+    async def _handle_deep_technical_analysis(self, query, symbol):
+        """Handle deep technical analysis callback"""
+        await query.edit_message_text(f"📚 Analisis teknikal mendalam untuk {symbol} akan segera hadir!")
+
+    async def _handle_binance_data_callback(self, query, symbol):
+        """Handle Binance data callback"""
+        await query.edit_message_text(f"📊 Data Binance untuk {symbol} akan segera hadir!")
+
+    async def _handle_liquidation_analysis(self, query, symbol):
+        """Handle liquidation analysis callback"""
+        await query.edit_message_text(f"🔥 Analisis likuidasi untuk {symbol} akan segera hadir!")
+
+    async def _handle_long_short_analysis(self, query, symbol):
+        """Handle long/short ratio analysis callback"""
+        await query.edit_message_text(f"🐂 Analisis long/short ratio untuk {symbol} akan segera hadir!")
+
+    async def _handle_funding_history(self, query, symbol):
+        """Handle funding rate history callback"""
+        await query.edit_message_text(f"💰 Histori funding rate untuk {symbol} akan segera hadir!")
 
 # News command will be integrated in main bot class
