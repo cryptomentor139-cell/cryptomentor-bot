@@ -2602,13 +2602,12 @@ Futures trading is high risk!"""
 
 📊 Source: {futures_data.get('source', 'API')} | ⏰ Real-time"""
 
-return f"""💰 **Price & Performance Data:**
+message = f"""📊 **Fundamental Analysis {symbol}**
 
+💰 **Price & Performance Data:**
 - Current Price: ${price_data.get('price', 0):,.2f}
 - 24h Change: {price_data.get('change_24h', 0):+.2f}%
 - Volume: ${price_data.get('volume_24h', 0):,.0f}
-"""
-
 
 📰 **1. Market Sentiment & Trend Analysis:**
 {sentiment_score['analysis']}
@@ -2640,8 +2639,7 @@ return f"""💰 **Price & Performance Data:**
 - Volume activity shows moderate interest
 - Risk assessment: {risk_level.split()[1] if len(risk_level.split()) > 1 else 'Moderate'}
 
-📊 Source: {futures_data.get('source', 'API')} | ⏰ Real-time
-            """
+📊 Source: {futures_data.get('source', 'API')} | ⏰ Real-time"""
 
         return message
 
@@ -4108,6 +4106,73 @@ Confidence Factors:
 - Target: -10% to -20% possible decline
 - Risk: Dead cat bounce could trap traders
 - Timeline: Wait untuk reversal confirmation"""
+
+    def get_multiple_prices(self, symbols):
+        """Get multiple cryptocurrency prices"""
+        results = {}
+        for symbol in symbols:
+            try:
+                price_data = self.get_price(symbol)
+                if price_data and 'error' not in price_data:
+                    results[symbol] = price_data
+                else:
+                    results[symbol] = {'error': 'Price not available'}
+            except Exception as e:
+                results[symbol] = {'error': str(e)}
+        return results
+
+    def get_open_interest(self, symbol):
+        """Get open interest data for a symbol"""
+        try:
+            # Mock open interest data
+            import random
+            return {
+                'open_interest': random.uniform(1000000, 5000000),
+                'open_interest_change': random.uniform(-15, 15),
+                'source': 'mock'
+            }
+        except Exception as e:
+            return {'error': str(e)}
+
+    def get_liquidation_data(self, symbol):
+        """Get liquidation data for a symbol"""
+        try:
+            # Mock liquidation data
+            import random
+            long_liq = random.uniform(10000, 100000)
+            short_liq = random.uniform(15000, 120000)
+            return {
+                'long_liquidation': long_liq,
+                'short_liquidation': short_liq,
+                'total_liquidation': long_liq + short_liq,
+                'source': 'mock'
+            }
+        except Exception as e:
+            return {'error': str(e)}
+
+    def get_open_interest_chart(self, symbol):
+        """Get open interest chart data"""
+        try:
+            # Mock chart data
+            import random
+            return {
+                'chart_data': [{'time': i, 'value': random.uniform(1000000, 5000000)} for i in range(24)],
+                'source': 'mock'
+            }
+        except Exception as e:
+            return {'error': str(e)}
+
+    def get_liquidation_chart(self, symbol):
+        """Get liquidation chart data"""
+        try:
+            # Mock liquidation chart data
+            import random
+            return {
+                'chart_data': [{'time': i, 'long_liq': random.uniform(10000, 50000), 'short_liq': random.uniform(10000, 50000)} for i in range(24)],
+                'source': 'mock'
+            }
+        except Exception as e:
+            return {'error': str(e)}
 
     def _get_advanced_technical_analysis(self,
                                          price_data,
