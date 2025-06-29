@@ -2649,14 +2649,10 @@ return f"""💰 **Price & Performance Data:**
         """Analyze market sentiment from crypto news"""
         if not news_data or 'error' in news_data[0]:
             return {
-                'score':
-                7,
-                'trend':
-                'Bullish',
-                'impact':
-                'Moderate',
-                'analysis':
-                '- Market menunjukkan optimisme dengan adopsi institusional\n- Regulasi yang mendukung memberikan sentimen positif\n- Volume trading meningkat menunjukkan minat yang tinggi'
+                'score': 7,
+                'trend': 'Bullish',
+                'impact': 'Moderate',
+                'analysis': '- Market menunjukkan optimisme dengan adopsi institusional\n- Regulasi yang mendukung memberikan sentimen positif\n- Volume trading meningkat menunjukkan minat yang tinggi'
             }
 
         # Simple sentiment analysis based on news count and sentiment
@@ -2676,8 +2672,7 @@ return f"""💰 **Price & Performance Data:**
 
         # Calculate sentiment score (1-10)
         if total_articles > 0:
-            score = (
-                (positive_count * 2 + neutral_count) / total_articles) * 5 + 5
+            score = ((positive_count * 2 + neutral_count) / total_articles) * 5 + 5
             score = min(10, max(1, score))
         else:
             score = 7
@@ -2699,19 +2694,16 @@ return f"""💰 **Price & Performance Data:**
         # Generate analysis text
         analysis_points = []
         if positive_count > negative_count:
-            analysis_points.append(
-                '- Berita positif mendominasi, investor optimis')
+            analysis_points.append('- Berita positif mendominasi, investor optimis')
             analysis_points.append('- Sentimen pasar mendukung kenaikan harga')
         elif negative_count > positive_count:
-            analysis_points.append(
-                '- Berita negatif mempengaruhi sentimen pasar')
+            analysis_points.append('- Berita negatif mempengaruhi sentimen pasar')
             analysis_points.append('- Investor menunjukkan kehati-hatian')
         else:
             analysis_points.append('- Sentimen pasar relatif seimbang')
             analysis_points.append('- Pasar menunggu katalis baru')
 
-        analysis_points.append(
-            '- Volume berita tinggi menunjukkan minat publik')
+        analysis_points.append('- Volume berita tinggi menunjukkan minat publik')
 
         return {
             'score': round(score, 1),
@@ -2774,20 +2766,6 @@ return f"""💰 **Price & Performance Data:**
                 watchlist.append(f"{emoji} **{coin['name']}** ({coin['potential']}): {reason_id}")
                 
             return '\n'.join(watchlist)
-                    'DeFi adoption increasing': 'Adopsi DeFi meningkat',
-                    'Layer 2 scaling solution': 'Solusi scaling Layer 2',
-                    'Interoperability focus': 'Fokus interoperabilitas',
-                    'Oracle network leader': 'Pemimpin jaringan oracle',
-                    'Smart contract development': 'Pengembangan smart contract'
-                }
-
-                reason_id = reasons_id.get(coin['reason'], coin['reason'])
-                watchlist.append(
-                    f"- {emoji}**{coin['name']}** - Potensi {coin['potential']}"
-                )
-                watchlist.append(f"  └ {reason_id}")
-
-            return '\n'.join(watchlist)
         else:
             watchlist = []
             for coin in selected:
@@ -2796,9 +2774,7 @@ return f"""💰 **Price & Performance Data:**
                 else:
                     emoji = '⭐'
 
-                watchlist.append(
-                    f"- {emoji} **{coin['name']}** - {coin['potential']} Potential"
-                )
+                watchlist.append(f"- {emoji} **{coin['name']}** - {coin['potential']} Potential")
                 watchlist.append(f"  └ {coin['reason']}")
 
             return '\n'.join(watchlist)
