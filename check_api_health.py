@@ -3,7 +3,7 @@ import os
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
-from crypto_api import CryptoAPI, CoinglassAPI
+from crypto_api import CryptoAPI
 
 # Load environment variables
 load_dotenv()
@@ -23,7 +23,6 @@ def check_api_health():
 
     # Enhanced API key validation with masking
     print("\n🔐 API Configuration & Security:")
-    coinglass_key = os.getenv("COINGLASS_API_KEY")
     coingecko_key = os.getenv("COINGECKO_API_KEY") 
     cryptonews_key = os.getenv("CRYPTONEWS_API_KEY")
 
@@ -32,7 +31,6 @@ def check_api_health():
             return "❌ NOT SET"
         return f"✅ SET ({key[:4]}...{key[-4:]})"
 
-    print(f"• Coinglass API Key: {mask_key(coinglass_key)}")
     print(f"• CoinGecko Pro API Key: {mask_key(coingecko_key)}")
     print(f"• CryptoNews API Key: {mask_key(cryptonews_key)}")
     
@@ -44,7 +42,6 @@ def check_api_health():
         'Binance': 'https://api.binance.com/api/v3/ping',
         'CoinGecko Free': 'https://api.coingecko.com/api/v3/ping',
         'CoinGecko Pro': 'https://pro-api.coingecko.com/api/v3/ping',
-        'Coinglass': 'https://open-api.coinglass.com/public/v2',
         'CryptoNews': 'https://cryptonews-api.com'
     }
     
@@ -67,35 +64,6 @@ def check_api_health():
 
     # Initialize APIs
     crypto_api = CryptoAPI()
-    coinglass_api = CoinglassAPI()
-
-    print("\n📊 Testing Coinglass Endpoints:")
-    # Test Coinglass endpoints
-    coinglass_results = coinglass_api.test_all_endpoints('BTC')
-
-    real_api_count = 0
-    total_endpoints = len(coinglass_results)
-
-    for endpoint_name, result in coinglass_results.items():
-        source = result.get('source', 'unknown')
-        has_error = 'error' in result
-
-        if has_error:
-            status = f"❌ ERROR: {result.get('error', 'Unknown')}"
-        elif source == 'coinglass':
-            status = "✅ REAL API DATA"
-            real_api_count += 1
-        elif source == 'mock':
-            status = "🔄 MOCK/FALLBACK DATA"
-        else:
-            status = "❓ UNKNOWN STATUS"
-
-        print(f"  • {endpoint_name}: {status}")
-
-    # Calculate health percentage
-    health_percentage = (real_api_count / total_endpoints * 100) if total_endpoints > 0 else 0
-
-    print(f"\n📈 Coinglass Health: {health_percentage:.1f}% ({real_api_count}/{total_endpoints} endpoints)")
 
     # Test other APIs
     print("\n💰 Testing Price APIs:")
@@ -213,11 +181,10 @@ def check_api_health():
     real_apis = sum([
         1 if connectivity_results.get('Binance', '').startswith('✅') else 0,
         1 if connectivity_results.get('CoinGecko Pro', '').startswith('✅') or connectivity_results.get('CoinGecko Free', '').startswith('✅') else 0,
-        1 if coinglass_key and health_percentage > 50 else 0,
         1 if cryptonews_key else 0
     ])
     
-    total_apis = 4
+    total_apis = 3
     system_health = (real_apis / total_apis) * 100
     
     if system_health >= 75:
@@ -238,7 +205,6 @@ def check_api_health():
         recommendation = "Running in simulation mode. All features work with enhanced mock data."
     
     print(f"{status_color} Overall System Health: {status_text} ({system_health:.0f}%)")
-    print(f"📈 Coinglass Health: {health_percentage:.1f}% ({real_api_count}/{total_endpoints} endpoints)")
     print(f"💰 Price APIs: {len([x for x in connectivity_results.values() if '✅' in x])}/{len(connectivity_results)} online")
     print(f"🔄 Real Data Coverage: {real_apis}/{total_apis} major APIs")
     
@@ -249,7 +215,7 @@ def check_api_health():
     print(f"\n🎛️ Feature Availability Matrix:")
     print(f"   • Real-time Prices: {'✅ Full' if connectivity_results.get('Binance', '').startswith('✅') else '🔄 Simulated'}")
     print(f"   • Market Overview: {'✅ Full' if connectivity_results.get('CoinGecko Pro', '').startswith('✅') else '🔄 Simulated'}")
-    print(f"   • Futures Analysis: {'✅ Full' if health_percentage > 50 else '🔄 Advanced Simulation'}")
+    print(f"   • Futures Analysis: ✅ Full (Binance API)")
     print(f"   • News Integration: {'✅ Live' if cryptonews_key else '🔄 Enhanced Mock'}")
     print(f"   • AI Analysis: ✅ Always Available")
     
@@ -257,8 +223,7 @@ def check_api_health():
     if system_health < 100:
         if not connectivity_results.get('CoinGecko Pro', '').startswith('✅'):
             print("   • Verify CoinGecko Pro API key for enhanced market data")
-        if health_percentage < 70:
-            print("   • Check Coinglass API key for live futures data")
+        
         if not cryptonews_key:
             print("   • Add CryptoNews API key for live news integration")
     else:

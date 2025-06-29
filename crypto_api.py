@@ -410,9 +410,7 @@ class CryptoAPI:
         # Fallback to CoinGecko if available
         return self._fallback_price(symbol, "Binance unavailable")
 
-    def get_coinglass_comprehensive_data(self, symbol):
-        """Replace Coinglass with comprehensive Binance data"""
-        return self.get_comprehensive_futures_data(symbol)
+    
 
     def get_funding_rate(self, symbol):
         """Get funding rate data from Binance"""
