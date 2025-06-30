@@ -31,6 +31,51 @@ def main():
     else:
         print("🔧 Running in development mode")
 
+    # Kill any existing bot instances first
+    try:
+        import psutil
+        import signal
+        import time
+        
+        current_pid = os.getpid()
+        killed_count = 0
+        
+        print("🔍 Checking for existing bot instances...")
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.pid == current_pid:
+                    continue
+                    
+                cmdline = ' '.join(proc.info['cmdline'] or [])
+                if any(keyword in cmdline.lower() for keyword in ['main.py', 'bot.py', 'telegram']):
+                    print(f"🛑 Terminating existing process: {proc.pid}")
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=3)
+                        killed_count += 1
+                    except psutil.TimeoutExpired:
+                        proc.kill()
+                        killed_count += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        if killed_count > 0:
+            print(f"✅ Cleaned up {killed_count} existing instances")
+            time.sleep(5)  # Wait for cleanup
+        else:
+            print("✅ No conflicting instances found")
+            
+    except ImportError:
+        print("⚠️ psutil not available, using basic cleanup")
+        try:
+            import subprocess
+            subprocess.run(["pkill", "-f", "main.py"], check=False)
+            time.sleep(3)
+        except:
+            pass
+    except Exception as e:
+        print(f"⚠️ Cleanup warning: {e}")
+
     max_retries = 3
     retry_count = 0
 

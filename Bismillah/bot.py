@@ -69,6 +69,14 @@ class TelegramBot:
     async def run_bot(self):
         """Main method to run the bot"""
         try:
+            # Force cleanup any pending updates to prevent conflicts
+            print("🔄 Clearing pending updates...")
+            try:
+                await self.application.bot.delete_webhook(drop_pending_updates=True)
+                await asyncio.sleep(2)
+            except Exception as cleanup_error:
+                print(f"⚠️ Cleanup warning: {cleanup_error}")
+
             # Add command handlers
             self.application.add_handler(CommandHandler("start", self.start_command))
             self.application.add_handler(CommandHandler("help", self.help_command))
