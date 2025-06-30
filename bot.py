@@ -112,7 +112,7 @@ class TelegramBot:
             print("🤖 Bot handlers registered successfully")
             mode_text = "🌐 DEPLOYMENT MODE (Always On)" if IS_DEPLOYMENT else "🔧 DEVELOPMENT MODE (Workspace)"
             print(f"🌍 Environment: {mode_text}")
-            print(f"🔑 API Status: CG=✅, CGL=✅, CN=✅, BIN=✅ (All APIs Active)")
+            print(f"🔑 API Status: CG=✅, CN=✅, BIN=✅ (All APIs Active)")
             print("🚀 Starting bot polling with real-time data...")
 
             # Start the bot with optimized polling for deployment

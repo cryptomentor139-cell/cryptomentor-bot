@@ -416,6 +416,14 @@ class CryptoAPI:
         """Get funding rate data from Binance"""
         return self.get_binance_funding_rate(symbol)
 
+    def get_open_interest(self, symbol):
+        """Get open interest data from Binance"""
+        return self.get_binance_open_interest(symbol)
+
+    def get_liquidation_data(self, symbol):
+        """Get liquidation data from Binance"""
+        return self.get_binance_liquidation_orders(symbol)
+
     # === UTILITY METHODS ===
 
     def get_futures_tickers(self):
