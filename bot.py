@@ -745,22 +745,44 @@ Gunakan credit dengan bijak!
 • **Username:** @{username}
 • **Nama:** {first_name}
 
-🚀 **Keuntungan Premium:**
-• Unlimited analisis dan sinyal
-• Akses prioritas ke fitur baru
-• Support 24/7
-• No credit limitations
+🚀 **Fitur Premium:**
+• ♾️ Unlimited analisis
+• 📊 Analisis futures lengkap
+• 🚨 Alert harga real-time
+• 📈 Sinyal trading premium
+• 🎯 Support prioritas
+• 🔔 Notifikasi breakout otomatis
 
-💰 **Harga:**
-• 1 Bulan: $9.99
-• 3 Bulan: $24.99 (Save 17%)
-• 1 Tahun: $79.99 (Save 33%)
+💰 **Harga Premium:**
+• Rp 320.000 (per bulan)
 
-📞 **Untuk berlangganan, hubungi admin:**
-• Telegram: @admin_username
-• Email: support@cryptomentor.ai
+💳 **Metode Pembayaran:**
 
-Kirimkan User ID Anda untuk proses upgrade!"""
+🏦 **Transfer Bank:**
+• Bank Mandiri
+• A/N: NABIL FARREL AL FARI
+• No. Rek: 1560018407074
+
+📱 **E-Wallet:**
+• Shopee Pay / Dana / GO-PAY
+• No. HP: 087779274400
+
+📋 **Cara Upgrade:**
+1. Transfer Rp 320.000
+2. Kirim bukti pembayaran ke admin @Billfarr
+3. Sertakan informasi ini:
+   • User ID: {user_id}
+   • Username: @{username}
+   • Nama: {first_name}
+4. Tunggu konfirmasi aktivasi (maks 24 jam)
+
+⚡ **Promo Khusus:**
+Daftar sekarang dan dapatkan 7 hari trial GRATIS!
+
+💬 **Butuh bantuan?** Chat admin @Billfarr
+
+ℹ️ **Catatan Penting:** 
+Pastikan menyertakan User ID ({user_id}) dalam pesan ke admin untuk mempercepat proses aktivasi premium."""
         
         try:
             await update.message.reply_text(message, parse_mode='Markdown')
