@@ -559,7 +559,9 @@ class CryptoAPI:
             binance_data = self.get_binance_price(symbol)
             if 'error' not in binance_data and binance_data.get('price', 0) > 0:
                 price_sources['binance'] = binance_data
-        except:
+                print(f"✅ Real-time Binance data for {symbol}: ${binance_data.get('price', 0):,.2f}")
+        except Exception as e:
+            print(f"⚠️ Binance API error for {symbol}: {e}")
             pass
 
         # 2. Try CoinGecko (comprehensive market data)
