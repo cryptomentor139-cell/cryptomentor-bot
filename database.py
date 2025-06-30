@@ -618,6 +618,49 @@ class Database:
             print(f"DB Error (get_all_users): {e}")
             return []
 
+    def add_credits(self, telegram_id, amount):
+        """Add credits to user account"""
+        try:
+            # Check if user exists first
+            user = self.get_user(telegram_id)
+            if not user:
+                print(f"User {telegram_id} not found for adding credits")
+                return False
+
+            self.cursor.execute("""
+                UPDATE users SET credits = credits + ? WHERE telegram_id = ?
+            """, (amount, telegram_id))
+            
+            if self.cursor.rowcount > 0:
+                self.conn.commit()
+                # Log the credit addition
+                self.log_user_activity(telegram_id, "credits_added", f"Added {amount} credits by admin")
+                print(f"✅ Added {amount} credits to user {telegram_id}")
+                return True
+            else:
+                print(f"❌ Failed to add credits to user {telegram_id}")
+                return False
+        except Exception as e:
+            print(f"DB Error (add_credits): {e}")
+            return False
+
+    def fix_user_credits(self):
+        """Fix users with 0 or negative credits"""
+        try:
+            # Update users with 0 or negative credits to 10
+            self.cursor.execute("""
+                UPDATE users SET credits = 10 
+                WHERE credits <= 0 AND telegram_id IS NOT NULL
+            """)
+            
+            fixed_count = self.cursor.rowcount
+            self.conn.commit()
+            print(f"✅ Fixed credits for {fixed_count} users")
+            return fixed_count
+        except Exception as e:
+            print(f"DB Error (fix_user_credits): {e}")
+            return 0
+
     def set_user_language(self, telegram_id, language):
         """Set user's language preference"""
         try:

@@ -102,6 +102,7 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("broadcast", self.broadcast_command))
             self.application.add_handler(CommandHandler("confirm_broadcast", self.confirm_broadcast_command))
             self.application.add_handler(CommandHandler("cancel_broadcast", self.cancel_broadcast_command))
+            self.application.add_handler(CommandHandler("check_admin", self.check_admin_command))
 
             # Add callback query handler
             self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
@@ -799,29 +800,104 @@ Bagikan link Anda dan mulai earning!"""
         """Handle /grant_premium command"""
         user_id = update.message.from_user.id
 
+        # Enhanced admin check
         if user_id != self.admin_id:
+            await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
         if len(context.args) < 1:
-            await update.message.reply_text("❌ Gunakan format: `/grant_premium <user_id> [days]`\nContoh: `/grant_premium 123456789 30`", parse_mode='Markdown')
+            await update.message.reply_text(
+                "❌ **Format salah!**\n\n"
+                "Gunakan: `/grant_premium <user_id> [days]`\n\n"
+                "**Contoh:**\n"
+                "• `/grant_premium 123456789 30` - Premium 30 hari\n"
+                "• `/grant_premium 123456789 0` - Premium permanent\n"
+                "• `/grant_premium 123456789` - Premium 30 hari (default)",
+                parse_mode='Markdown'
+            )
             return
 
         try:
             target_user_id = int(context.args[0])
             days = int(context.args[1]) if len(context.args) > 1 else 30
         except ValueError:
-            await update.message.reply_text("❌ User ID dan days harus berupa angka!")
+            await update.message.reply_text("❌ User ID dan days harus berupa angka!\n\nContoh: `/grant_premium 123456789 30`")
             return
 
-        # Grant premium status
-        success = self.db.grant_premium(target_user_id, days)
-        
-        if success:
-            message = f"✅ Berhasil memberikan premium {days} hari kepada user {target_user_id}"
-        else:
-            message = f"❌ Gagal memberikan premium kepada user {target_user_id}"
+        # Validate user ID
+        if target_user_id <= 0:
+            await update.message.reply_text("❌ User ID tidak valid!")
+            return
 
-        await update.message.reply_text(message)
+        # Check if user exists in database
+        existing_user = self.db.get_user(target_user_id)
+        if not existing_user:
+            await update.message.reply_text(
+                f"⚠️ **User {target_user_id} belum terdaftar!**\n\n"
+                "User harus menggunakan bot terlebih dahulu dengan command `/start` sebelum bisa diberi premium."
+            )
+            return
+
+        # Show current status
+        is_currently_premium = self.db.is_user_premium(target_user_id)
+        current_credits = self.db.get_user_credits(target_user_id)
+
+        # Grant premium status
+        try:
+            if days == 0:
+                success = self.db.grant_permanent_premium(target_user_id)
+                premium_type = "permanent"
+            else:
+                success = self.db.grant_premium(target_user_id, days)
+                premium_type = f"{days} hari"
+
+            if success:
+                # Get user info for confirmation
+                user_info = self.db.get_user(target_user_id)
+                username = user_info.get('username', 'No username')
+                first_name = user_info.get('first_name', 'Unknown')
+
+                message = f"""✅ **Premium berhasil diberikan!**
+
+👤 **User Info:**
+• **ID**: {target_user_id}
+• **Name**: {first_name}
+• **Username**: @{username}
+
+⭐ **Premium Status:**
+• **Type**: {premium_type}
+• **Previous**: {"Premium" if is_currently_premium else "Free"}
+• **Current Credits**: {current_credits}
+
+🎉 User sekarang memiliki akses unlimited ke semua fitur premium!"""
+
+                # Log admin action
+                self.db.log_user_activity(
+                    user_id, 
+                    "admin_grant_premium", 
+                    f"Granted {premium_type} premium to user {target_user_id}"
+                )
+
+            else:
+                message = f"""❌ **Gagal memberikan premium!**
+
+🔍 **Troubleshooting:**
+• Pastikan User ID benar: {target_user_id}
+• User harus sudah menggunakan `/start` di bot
+• Cek koneksi database
+
+⚠️ Coba lagi atau hubungi developer."""
+
+        except Exception as e:
+            message = f"""❌ **Error sistem saat memberikan premium!**
+
+**Error**: {str(e)}
+**User ID**: {target_user_id}
+
+🔧 Silakan coba lagi atau restart bot."""
+            print(f"Error in grant_premium_command: {e}")
+
+        await update.message.reply_text(message, parse_mode='Markdown')
 
     async def revoke_premium_command(self, update: Update, context: CallbackContext):
         """Handle /revoke_premium command"""
@@ -855,10 +931,18 @@ Bagikan link Anda dan mulai earning!"""
         user_id = update.message.from_user.id
 
         if user_id != self.admin_id:
+            await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
         if len(context.args) < 2:
-            await update.message.reply_text("❌ Gunakan format: `/grant_credits <user_id> <amount>`\nContoh: `/grant_credits 123456789 50`", parse_mode='Markdown')
+            await update.message.reply_text(
+                "❌ **Format salah!**\n\n"
+                "Gunakan: `/grant_credits <user_id> <amount>`\n\n"
+                "**Contoh:**\n"
+                "• `/grant_credits 123456789 50`\n"
+                "• `/grant_credits 123456789 100`",
+                parse_mode='Markdown'
+            )
             return
 
         try:
@@ -868,15 +952,65 @@ Bagikan link Anda dan mulai earning!"""
             await update.message.reply_text("❌ User ID dan amount harus berupa angka!")
             return
 
+        # Validate inputs
+        if target_user_id <= 0:
+            await update.message.reply_text("❌ User ID tidak valid!")
+            return
+
+        if amount <= 0:
+            await update.message.reply_text("❌ Amount harus lebih dari 0!")
+            return
+
+        # Check if user exists
+        existing_user = self.db.get_user(target_user_id)
+        if not existing_user:
+            await update.message.reply_text(
+                f"⚠️ **User {target_user_id} belum terdaftar!**\n\n"
+                "User harus menggunakan bot terlebih dahulu dengan command `/start`."
+            )
+            return
+
+        # Get current credits
+        current_credits = self.db.get_user_credits(target_user_id)
+
         # Grant credits
         success = self.db.add_credits(target_user_id, amount)
         
         if success:
-            message = f"✅ Berhasil memberikan {amount} credit kepada user {target_user_id}"
-        else:
-            message = f"❌ Gagal memberikan credit kepada user {target_user_id}"
+            new_credits = self.db.get_user_credits(target_user_id)
+            user_info = self.db.get_user(target_user_id)
+            username = user_info.get('username', 'No username')
+            first_name = user_info.get('first_name', 'Unknown')
 
-        await update.message.reply_text(message)
+            message = f"""✅ **Credits berhasil diberikan!**
+
+👤 **User Info:**
+• **ID**: {target_user_id}
+• **Name**: {first_name}
+• **Username**: @{username}
+
+💰 **Credits Update:**
+• **Previous**: {current_credits} credits
+• **Added**: +{amount} credits
+• **New Total**: {new_credits} credits"""
+
+            # Log admin action
+            self.db.log_user_activity(
+                user_id, 
+                "admin_grant_credits", 
+                f"Granted {amount} credits to user {target_user_id}"
+            )
+        else:
+            message = f"""❌ **Gagal memberikan credits!**
+
+🔍 **Troubleshooting:**
+• Pastikan User ID benar: {target_user_id}
+• User harus sudah terdaftar di bot
+• Cek koneksi database
+
+⚠️ Coba lagi atau hubungi developer."""
+
+        await update.message.reply_text(message, parse_mode='Markdown')
 
     async def fix_all_credits_command(self, update: Update, context: CallbackContext):
         """Handle /fix_all_credits command"""
@@ -2192,5 +2326,34 @@ System Status: 🟢 Operational"""
         except Exception as e:
             await update.message.reply_text(f"❌ Error fetching stats: {str(e)}")
             print(f"Admin stats error: {e}")
+
+    async def check_admin_command(self, update: Update, context: CallbackContext):
+        """Check admin status - debugging command"""
+        user_id = update.effective_user.id
+        username = update.effective_user.username or "No username"
+        first_name = update.effective_user.first_name or "Unknown"
+
+        message = f"""🔍 **Admin Status Check**
+
+👤 **Your Info:**
+• **User ID**: {user_id}
+• **Username**: @{username}
+• **Name**: {first_name}
+
+🛠 **Bot Config:**
+• **Admin ID**: {self.admin_id}
+• **Match**: {"✅ YES" if user_id == self.admin_id else "❌ NO"}
+
+💡 **To fix admin access:**
+1. Set ADMIN_USER_ID in Secrets
+2. Use your Telegram User ID: {user_id}
+3. Restart bot
+
+🔧 **Commands available:**
+• `/grant_premium <user_id> [days]`
+• `/grant_credits <user_id> <amount>`
+• `/admin` - Admin panel"""
+
+        await update.message.reply_text(message, parse_mode='Markdown')
 
 # News command will be integrated in main bot class
