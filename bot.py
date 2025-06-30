@@ -326,7 +326,12 @@ Type a command to start your trading journey! 📈"""
 - Gunakan referral untuk bonus credit
 
 🔥 **New**: Semua data futures menggunakan Binance API real-time!"""
-        await update.message.reply_text(help_text, parse_mode='Markdown')
+        try:
+            await update.message.reply_text(help_text, parse_mode='Markdown')
+        except Exception as e:
+            # If markdown parsing fails, send without markdown
+            await update.message.reply_text(help_text)
+            print(f"Help command markdown error: {e}")
 
     async def price_command(self, update: Update, context: CallbackContext):
         """Handle /price command with enhanced real-time data"""
@@ -736,7 +741,7 @@ Gunakan credit dengan bijak!
         message = f"""⭐ **Upgrade ke Premium**
 
 👤 **Informasi Anda:**
-• **User ID:** `{user_id}` 
+• **User ID:** {user_id}
 • **Username:** @{username}
 • **Nama:** {first_name}
 
@@ -757,7 +762,12 @@ Gunakan credit dengan bijak!
 
 Kirimkan User ID Anda untuk proses upgrade!"""
         
-        await update.message.reply_text(message, parse_mode='Markdown')
+        try:
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            # If markdown parsing fails, send without markdown
+            await update.message.reply_text(message)
+            print(f"Subscribe command markdown error: {e}")
 
     async def referral_command(self, update: Update, context: CallbackContext):
         """Handle /referral command"""
