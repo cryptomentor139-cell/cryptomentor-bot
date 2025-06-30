@@ -727,7 +727,6 @@ Use proper risk management and don't FOMO!"""
             if not signals_data:
                 if language == 'id':
                     return "❌ **Data Tidak Tersedia** - Gagal mengambil data untuk semua symbol."
-                ```python
                 else:
                     return "❌ **Data Unavailable** - Failed to fetch data for all symbols."
 
