@@ -171,7 +171,7 @@ Use `/price btc` to check current price!"""
                 return "💰 To check crypto prices, use `/price <symbol>`. Example: `/price btc`\n\nFor comprehensive analysis: `/analyze <symbol>`"
 
             elif any(keyword in text_lower for keyword in ['analysis', 'analyze', 'signal']):
-                return "📊 For deep analysis, use `/analyze <symbol>` or `/futures_signals` for daily futures signals.\n\nExample: `/analyze btc` or `/futures_signals`"\n💡 **Note**: Analysis includes technical analysis, sentiment, and trading recommendations."
+                return "📊 For deep analysis, use `/analyze <symbol>` or `/futures_signals` for daily futures signals.\n\nExample: `/analyze btc` or `/futures_signals`\n💡 **Note**: Analysis includes technical analysis, sentiment, and trading recommendations."
 
             elif any(keyword in text_lower for keyword in ['market', 'overview']):
                 return "📈 Use `/market` command to see overall crypto market overview.\n\nWant to know about market cap, BTC dominance, or market trends?"
@@ -223,7 +223,7 @@ Ask me anything about crypto! 🚀"""
             # Get major crypto data
             major_symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'ADA']
             multi_prices = {}
-            
+
             for symbol in major_symbols:
                 try:
                     price_data = crypto_api.get_multi_api_price(symbol)
@@ -263,7 +263,7 @@ Ask me anything about crypto! 🚀"""
         if global_data and 'error' not in global_data:
             mcap_change = global_data.get('market_cap_change_percentage_24h_usd', 0)
             btc_dominance = global_data.get('market_cap_percentage', {}).get('btc', 50)
-            
+
             if mcap_change > 2:
                 health_score += 2
                 health_factors.append("🟢 Market cap global naik kuat")
@@ -288,7 +288,7 @@ Ask me anything about crypto! 🚀"""
         if prices_data:
             positive_moves = 0
             total_moves = 0
-            
+
             for symbol, data in prices_data.items():
                 change_24h = data.get('change_24h', 0)
                 if change_24h > 0:
@@ -374,7 +374,7 @@ Ask me anything about crypto! 🚀"""
 
         if prices_data:
             sorted_symbols = sorted(prices_data.items(), key=lambda x: x[1].get('change_24h', 0), reverse=True)
-            
+
             gainers = [s for s in sorted_symbols if s[1].get('change_24h', 0) > 0][:3]
             losers = [s for s in sorted_symbols if s[1].get('change_24h', 0) < 0][-3:]
 
@@ -451,7 +451,7 @@ Ask me anything about crypto! 🚀"""
 
         if prices_data:
             sorted_symbols = sorted(prices_data.items(), key=lambda x: x[1].get('change_24h', 0), reverse=True)
-            
+
             gainers = [s for s in sorted_symbols if s[1].get('change_24h', 0) > 0][:3]
             losers = [s for s in sorted_symbols if s[1].get('change_24h', 0) < 0][-3:]
 
@@ -677,17 +677,17 @@ Use proper risk management and don't FOMO!"""
             # Get global market sentiment first
             global_data = crypto_api.get_coingecko_global_data()
             news_data = crypto_api.get_crypto_news(3)
-            
+
             # Analyze global market sentiment
             global_sentiment = self._analyze_global_market_sentiment(global_data, news_data)
-            
+
             signals_data = []
 
             for symbol in major_symbols:
                 try:
                     # Get comprehensive data for each symbol
                     comprehensive_data = crypto_api.get_comprehensive_analysis_data(symbol)
-                    
+
                     binance_data = comprehensive_data.get('data_sources', {}).get('binance_price', {})
                     binance_futures = comprehensive_data.get('data_sources', {}).get('binance_futures', {})
                     coingecko_market = comprehensive_data.get('data_sources', {}).get('coingecko_market', {})
@@ -695,7 +695,7 @@ Use proper risk management and don't FOMO!"""
                     # Extract key metrics
                     current_price = binance_data.get('price', 0) if 'error' not in binance_data else 0
                     change_24h = binance_data.get('change_24h', 0) if 'error' not in binance_data else 0
-                    
+
                     # Futures metrics
                     long_ratio = 50
                     funding_rate = 0
@@ -727,6 +727,7 @@ Use proper risk management and don't FOMO!"""
             if not signals_data:
                 if language == 'id':
                     return "❌ **Data Tidak Tersedia** - Gagal mengambil data untuk semua symbol."
+                ```python
                 else:
                     return "❌ **Data Unavailable** - Failed to fetch data for all symbols."
 
@@ -812,12 +813,12 @@ Futures trading is high risk!"""
     def _analyze_global_market_sentiment(self, global_data, news_data):
         """Analyze global market sentiment from CoinGecko and news"""
         sentiment_score = 5  # Base neutral
-        
+
         # Global market analysis
         if global_data and 'error' not in global_data:
             mcap_change = global_data.get('market_cap_change_percentage_24h_usd', 0)
             btc_dominance = global_data.get('market_cap_percentage', {}).get('btc', 50)
-            
+
             # Market cap trend
             if mcap_change > 3:
                 sentiment_score += 2
@@ -827,7 +828,7 @@ Futures trading is high risk!"""
                 sentiment_score -= 2
             elif mcap_change < 0:
                 sentiment_score -= 1
-            
+
             # BTC dominance factor
             if btc_dominance > 55:  # High BTC dominance = risk-off
                 sentiment_score -= 0.5
@@ -865,7 +866,7 @@ Futures trading is high risk!"""
     def _generate_multi_factor_signal(self, symbol, price, change_24h, long_ratio, funding_rate, market_rank, ath_change, global_sentiment):
         """Generate trading signal based on multiple factors"""
         signal_score = 5  # Base score
-        
+
         # Price momentum factor
         if change_24h > 5:
             signal_score += 1.5
@@ -919,7 +920,7 @@ Futures trading is high risk!"""
 
         # Determine final signal
         signal_score = min(10, max(1, signal_score))
-        
+
         if signal_score >= 7:
             if contrarian_signal == "LONG":
                 signal_type = "STRONG LONG"
@@ -1146,7 +1147,7 @@ Futures trading is high risk!"""
         try:
             # Get comprehensive data from all APIs
             comprehensive_data = crypto_api.get_comprehensive_analysis_data(symbol)
-            
+
             # Extract data from different sources
             binance_data = comprehensive_data.get('data_sources', {}).get('binance_price', {})
             binance_futures = comprehensive_data.get('data_sources', {}).get('binance_futures', {})
@@ -1203,7 +1204,7 @@ Futures trading is high risk!"""
                     futures_price = binance_futures.get('price_data', {})
                     ls_ratio = binance_futures.get('long_short_ratio_data', {})
                     funding = binance_futures.get('funding_rate_data', {})
-                    
+
                     message += f"""
 
 ⚡ **5. Data Futures Advance (Binance):**
@@ -1266,7 +1267,7 @@ Futures trading is high risk!"""
                 if binance_futures and 'error' not in binance_futures:
                     ls_ratio = binance_futures.get('long_short_ratio_data', {})
                     funding = binance_futures.get('funding_rate_data', {})
-                    
+
                     message += f"""
 
 ⚡ **5. Advanced Futures Data (Binance):**
@@ -1729,7 +1730,7 @@ Silakan coba lagi dalam beberapa menit atau pilih timeframe lain."""
         if binance_data and 'error' not in binance_data:
             change_24h = binance_data.get('change_24h', 0)
             volume = binance_data.get('volume_24h', 0)
-            
+
             if change_24h > 5:
                 sentiment_factors['binance_momentum'] = {'score': 8, 'signal': 'Strong Bullish'}
             elif change_24h > 0:
@@ -1738,7 +1739,7 @@ Silakan coba lagi dalam beberapa menit atau pilih timeframe lain."""
                 sentiment_factors['binance_momentum'] = {'score': 4, 'signal': 'Neutral'}
             else:
                 sentiment_factors['binance_momentum'] = {'score': 2, 'signal': 'Bearish'}
-            
+
             total_score += sentiment_factors['binance_momentum']['score']
             factor_count += 1
 
@@ -1751,7 +1752,7 @@ Silakan coba lagi dalam beberapa menit atau pilih timeframe lain."""
             market_rank = coingecko_data.get('market_cap_rank', 999)
 
             fundamental_score = 5  # Base score
-            
+
             # ATH distance factor
             if ath_change > -20:  # Close to ATH
                 fundamental_score += 2
@@ -1776,7 +1777,7 @@ Silakan coba lagi dalam beberapa menit atau pilih timeframe lain."""
                 'score': min(10, max(1, fundamental_score)),
                 'signal': 'Strong Fundamental' if fundamental_score >= 7 else 'Good Fundamental' if fundamental_score >= 5 else 'Weak Fundamental'
             }
-            
+
             total_score += sentiment_factors['coingecko_fundamental']['score']
             factor_count += 1
 
@@ -1843,11 +1844,11 @@ Silakan coba lagi dalam beberapa menit atau pilih timeframe lain."""
             return "• Data global market tidak tersedia"
 
         health_points = []
-        
+
         # Market cap analysis
         total_mcap = global_data.get('total_market_cap', 0)
         mcap_change = global_data.get('market_cap_change_percentage_24h_usd', 0)
-        
+
         if mcap_change > 3:
             health_points.append("🟢 Market cap global naik signifikan (+3%+)")
         elif mcap_change > 0:
@@ -1869,7 +1870,7 @@ Silakan coba lagi dalam beberapa menit atau pilih timeframe lain."""
         # Market activity
         active_cryptos = global_data.get('active_cryptocurrencies', 0)
         markets = global_data.get('markets', 0)
-        
+
         health_points.append(f"📊 {active_cryptos:,} crypto aktif di {markets:,} market")
 
         return '\n'.join(health_points)
