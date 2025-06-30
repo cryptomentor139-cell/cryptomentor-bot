@@ -171,7 +171,7 @@ Use `/price btc` to check current price!"""
                 return "💰 To check crypto prices, use `/price <symbol>`. Example: `/price btc`\n\nFor comprehensive analysis: `/analyze <symbol>`"
 
             elif any(keyword in text_lower for keyword in ['analysis', 'analyze', 'signal']):
-                return "📊 For deep analysis, use `/analyze <symbol>` or `/futures_signals` for daily futures signals.\n\n💡 **Note**: Analysis includes technical analysis, sentiment, and trading recommendations."
+                return "📊 For deep analysis, use `/analyze <symbol>` or `/futures_signals` for daily futures signals.\n\nExample: `/analyze btc` or `/futures_signals`"\n💡 **Note**: Analysis includes technical analysis, sentiment, and trading recommendations."
 
             elif any(keyword in text_lower for keyword in ['market', 'overview']):
                 return "📈 Use `/market` command to see overall crypto market overview.\n\nWant to know about market cap, BTC dominance, or market trends?"

@@ -585,6 +585,20 @@ class Database:
                 ORDER BY created_at DESC
             """)
             rows = self.cursor.fetchall()
+            
+            users = []
+            for row in rows:
+                users.append({
+                    'user_id': row[0],
+                    'first_name': row[1],
+                    'username': row[2],
+                    'is_premium': row[3],
+                    'created_at': row[4]
+                })
+            return users
+        except Exception as e:
+            print(f"Error getting all users: {e}")
+            return []()
 
             users = []
             for row in rows:

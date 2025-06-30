@@ -732,18 +732,184 @@ Gunakan credit dengan bijak!
         username = update.message.from_user.username or "Tidak ada username"
         first_name = update.message.from_user.first_name or ""
 
-        message = f"""
-⭐ **Upgrade ke Premium**
+        message = f"""⭐ **Upgrade ke Premium**
 
 👤 **Informasi Anda:**
 • **User ID:** `{user_id}` 
 • **Username:** @{username}
 • **Nama:** {first_name}
 
-🚀\n/broadcast 🚀 Update Fitur Baru!\n\n"
+🚀 **Keuntungan Premium:**
+• Unlimited analisis dan sinyal
+• Akses prioritas ke fitur baru
+• Support 24/7
+• No credit limitations
+
+💰 **Harga:**
+• 1 Bulan: $9.99
+• 3 Bulan: $24.99 (Save 17%)
+• 1 Tahun: $79.99 (Save 33%)
+
+📞 **Untuk berlangganan, hubungi admin:**
+• Telegram: @admin_username
+• Email: support@cryptomentor.ai
+
+Kirimkan User ID Anda untuk proses upgrade!"""
+        
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def referral_command(self, update: Update, context: CallbackContext):
+        """Handle /referral command"""
+        user_id = update.message.from_user.id
+        username = update.message.from_user.username or "no_username"
+
+        message = f"""🎁 **Program Referral**
+
+👤 **Link Referral Anda:**
+`https://t.me/YourBotUsername?start=ref_{user_id}`
+
+💰 **Keuntungan:**
+• Dapatkan 10 credit untuk setiap referral berhasil
+• Teman Anda juga mendapat bonus 5 credit
+• Unlimited referrals!
+
+📊 **Status Referral:**
+• Total Referrals: 0
+• Credit Earned: 0
+
+Bagikan link Anda dan mulai earning!"""
+        
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def language_command(self, update: Update, context: CallbackContext):
+        """Handle /language command"""
+        keyboard = [
+            [InlineKeyboardButton("🇮🇩 Bahasa Indonesia", callback_data='lang_id')],
+            [InlineKeyboardButton("🇺🇸 English", callback_data='lang_en')]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "🌍 **Pilih Bahasa / Choose Language**",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+
+    async def grant_premium_command(self, update: Update, context: CallbackContext):
+        """Handle /grant_premium command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            return
+
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Gunakan format: `/grant_premium <user_id> [days]`\nContoh: `/grant_premium 123456789 30`", parse_mode='Markdown')
+            return
+
+        try:
+            target_user_id = int(context.args[0])
+            days = int(context.args[1]) if len(context.args) > 1 else 30
+        except ValueError:
+            await update.message.reply_text("❌ User ID dan days harus berupa angka!")
+            return
+
+        # Grant premium status
+        success = self.db.grant_premium(target_user_id, days)
+        
+        if success:
+            message = f"✅ Berhasil memberikan premium {days} hari kepada user {target_user_id}"
+        else:
+            message = f"❌ Gagal memberikan premium kepada user {target_user_id}"
+
+        await update.message.reply_text(message)
+
+    async def revoke_premium_command(self, update: Update, context: CallbackContext):
+        """Handle /revoke_premium command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            return
+
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Gunakan format: `/revoke_premium <user_id>`", parse_mode='Markdown')
+            return
+
+        try:
+            target_user_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("❌ User ID harus berupa angka!")
+            return
+
+        # Revoke premium status
+        success = self.db.revoke_premium(target_user_id)
+        
+        if success:
+            message = f"✅ Berhasil mencabut premium dari user {target_user_id}"
+        else:
+            message = f"❌ Gagal mencabut premium dari user {target_user_id}"
+
+        await update.message.reply_text(message)
+
+    async def grant_credits_command(self, update: Update, context: CallbackContext):
+        """Handle /grant_credits command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            return
+
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Gunakan format: `/grant_credits <user_id> <amount>`\nContoh: `/grant_credits 123456789 50`", parse_mode='Markdown')
+            return
+
+        try:
+            target_user_id = int(context.args[0])
+            amount = int(context.args[1])
+        except ValueError:
+            await update.message.reply_text("❌ User ID dan amount harus berupa angka!")
+            return
+
+        # Grant credits
+        success = self.db.add_credits(target_user_id, amount)
+        
+        if success:
+            message = f"✅ Berhasil memberikan {amount} credit kepada user {target_user_id}"
+        else:
+            message = f"❌ Gagal memberikan credit kepada user {target_user_id}"
+
+        await update.message.reply_text(message)
+
+    async def fix_all_credits_command(self, update: Update, context: CallbackContext):
+        """Handle /fix_all_credits command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            return
+
+        try:
+            # Fix all users with 0 or negative credits
+            fixed_count = self.db.fix_user_credits()
+            message = f"✅ Berhasil memperbaiki credit untuk {fixed_count} user"
+        except Exception as e:
+            message = f"❌ Gagal memperbaiki credit: {str(e)}"
+
+        await update.message.reply_text(message)
+
+    async def broadcast_command(self, update: Update, context: CallbackContext):
+        """Handle /broadcast command"""
+        user_id = update.message.from_user.id
+
+        if user_id != self.admin_id:
+            return
+
+        if not context.args:
+            await update.message.reply_text(
+                "📢 **Broadcast Command**\n\n"
+                "Gunakan format: `/broadcast <message>`\n\n"
+                "Contoh:\n"
+                "`/broadcast 🚀 Update Fitur Baru!\n\n"
                 "✅ Analisis real-time telah ditingkatkan\n"
                 "📊 Dashboard baru tersedia\n\n"
-                "Terima kasih telah menggunakan CryptoMentor AI!```\n\n"
+                "Terima kasih telah menggunakan CryptoMentor AI!`\n\n"
                 "💡 **Tips:**\n"
                 "• Ketik pesan natural dengan enter untuk baris baru\n"
                 "• Gunakan **text** untuk bold\n"
@@ -790,15 +956,16 @@ Gunakan credit dengan bijak!
 
 **Pesan yang akan dikirim:**
 ```
-{escaped_message}``
+{escaped_message}
+```
 
-**Warning:** Pesan ini akan dikirim ke SEMUA user bot\\!
+**Warning:** Pesan ini akan dikirim ke SEMUA user bot!
 
 Gunakan:
 • `/confirm_broadcast` untuk mengirim
 • `/cancel_broadcast` untuk membatalkan
 
-⏰ **Timeout:** Konfirmasi akan expired dalam 10 menit\\."""
+⏰ **Timeout:** Konfirmasi akan expired dalam 10 menit."""
 
         await update.message.reply_text(confirmation_message, parse_mode='MarkdownV2')
 
@@ -1481,7 +1648,7 @@ Gunakan:
 
             message += f"""
 **Analisis:**
-• Long dominance = {(long_liqtotal_liq*100) if total_liq > 0 else 0:.1f}% liquidation
+• Long dominance = {(long_liq/total_liq*100) if total_liq > 0 else 0:.1f}% liquidation
 • {'Longs getting rekt' if long_liq > short_liq else 'Shorts getting rekt' if short_liq > long_liq else 'Balanced liquidation'}
 • Market stress level: {'High' if total_orders > 50 else 'Medium' if total_orders > 20 else 'Low'}
 
