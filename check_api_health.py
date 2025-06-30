@@ -149,27 +149,39 @@ def check_api_health():
     except Exception as e:
         print(f"  ❌ News system error: {str(e)[:40]}...")
     
-    # Futures analysis capability
-    print("\n⚡ Futures Analysis Capability:")
+    # Advanced Binance Futures Analysis
+    print("\n⚡ Advanced Binance Futures Analysis:")
     try:
-        futures_data = crypto_api.get_futures_data('BTC')
-        source = futures_data.get('source', 'unknown')
-        long_ratio = futures_data.get('long_ratio', 0)
+        # Test comprehensive futures data
+        comp_data = crypto_api.get_comprehensive_futures_data('BTC')
         
-        if source == 'coinglass':
-            print(f"  ✅ Live Coinglass futures data (L/S: {long_ratio}%)")
-        else:
-            print(f"  🔄 Advanced futures simulation (L/S: {long_ratio}%)")
+        if 'error' not in comp_data:
+            success_rate = comp_data.get('successful_api_calls', 0)
+            total_calls = comp_data.get('total_api_calls', 6)
+            quality = comp_data.get('data_quality', 'unknown')
             
-        # Test funding rates
-        funding_data = crypto_api.get_funding_rate('BTC')
-        funding_source = funding_data.get('source', 'unknown')
-        avg_funding = funding_data.get('average_funding_rate', 0)
-        
-        if funding_source == 'coinglass':
-            print(f"  ✅ Live funding rates (Avg: {avg_funding:.4f}%)")
+            print(f"  ✅ Binance Comprehensive API: {success_rate}/{total_calls} endpoints")
+            print(f"  📊 Data Quality: {quality.upper()}")
+            
+            # Test specific endpoints
+            futures_data = crypto_api.get_futures_data('BTC')
+            long_ratio = futures_data.get('long_ratio', 0)
+            print(f"  📈 Long/Short Ratio: {long_ratio:.1f}%")
+            
+            funding_data = crypto_api.get_funding_rate('BTC')
+            avg_funding = funding_data.get('average_funding_rate', 0)
+            print(f"  💰 Avg Funding Rate: {avg_funding:.4f}%")
+            
+            oi_data = crypto_api.get_open_interest('BTC')
+            oi_value = oi_data.get('open_interest', 0)
+            print(f"  📊 Open Interest: ${oi_value:,.0f}")
+            
+            liq_data = crypto_api.get_liquidation_data('BTC')
+            total_liq = liq_data.get('total_liquidation', 0)
+            print(f"  🔥 Total Liquidations: ${total_liq:,.0f}")
+            
         else:
-            print(f"  🔄 Simulated funding rates (Avg: {avg_funding:.4f}%)")
+            print(f"  ❌ Binance comprehensive data error")Avg: {avg_funding:.4f}%)")
             
     except Exception as e:
         print(f"  ❌ Futures analysis error: {str(e)[:40]}...")

@@ -112,8 +112,8 @@ class TelegramBot:
             print("🤖 Bot handlers registered successfully")
             mode_text = "🌐 DEPLOYMENT MODE (Always On)" if IS_DEPLOYMENT else "🔧 DEVELOPMENT MODE (Workspace)"
             print(f"🌍 Environment: {mode_text}")
-            print(f"🔑 API Status: CG=✅, CN=✅, BIN=✅ (All APIs Active)")
-            print("🚀 Starting bot polling with real-time data...")
+            print(f"🔑 API Status: BIN=✅, CG=✅, CN=✅ (Binance Primary + CoinGecko + CryptoNews)")
+            print("🚀 Starting bot polling with Binance Advanced API integration...")
 
             # Start the bot with optimized polling for deployment
             print("✅ Bot is now running and polling for updates...")

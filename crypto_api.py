@@ -430,8 +430,94 @@ class CryptoAPI:
         """Get all available futures symbols"""
         return self.provider.get_tickers()
 
+    def get_advanced_futures_analytics(self, symbol):
+        """Get advanced futures analytics using multiple Binance endpoints"""
+        try:
+            # Get comprehensive data
+            analytics = {}
+            
+            # 1. Get price and volume metrics
+            price_data = self.get_binance_futures_price(symbol)
+            analytics['price_metrics'] = price_data
+            
+            # 2. Get funding rate trends
+            funding_data = self.get_binance_funding_rate(symbol, limit=50)
+            analytics['funding_trends'] = funding_data
+            
+            # 3. Get open interest analytics
+            oi_data = self.get_binance_open_interest(symbol)
+            analytics['open_interest'] = oi_data
+            
+            # 4. Get long/short sentiment over time
+            ls_data = self.get_binance_long_short_ratio(symbol, period='1h', limit=24)
+            analytics['sentiment_trends'] = ls_data
+            
+            # 5. Get recent liquidation patterns
+            liq_data = self.get_binance_liquidation_orders(symbol, limit=200)
+            analytics['liquidation_patterns'] = liq_data
+            
+            # 6. Calculate advanced metrics
+            analytics['advanced_metrics'] = self._calculate_advanced_metrics(
+                price_data, funding_data, oi_data, ls_data, liq_data
+            )
+            
+            return {
+                'symbol': symbol,
+                'analytics': analytics,
+                'timestamp': datetime.now().isoformat(),
+                'source': 'binance_advanced_analytics'
+            }
+            
+        except Exception as e:
+            return {'error': f"Advanced analytics error: {str(e)}"}
+
+    def _calculate_advanced_metrics(self, price_data, funding_data, oi_data, ls_data, liq_data):
+        """Calculate advanced trading metrics"""
+        try:
+            metrics = {}
+            
+            # Price momentum score
+            if 'error' not in price_data:
+                change_24h = price_data.get('change_24h', 0)
+                volume_24h = price_data.get('volume_24h', 0)
+                
+                momentum_score = abs(change_24h) * (volume_24h / 1000000000)  # Weighted by volume
+                metrics['momentum_score'] = min(momentum_score, 100)  # Cap at 100
+            
+            # Funding rate pressure
+            if 'error' not in funding_data:
+                avg_funding = funding_data.get('average_funding_rate', 0)
+                last_funding = funding_data.get('last_funding_rate', 0)
+                
+                funding_pressure = abs(last_funding) * 1000  # Convert to basis points
+                metrics['funding_pressure'] = funding_pressure
+            
+            # Open interest health
+            if 'error' not in oi_data:
+                oi_value = oi_data.get('open_interest', 0)
+                # Normalize OI (this is simplified)
+                oi_health = min(oi_value / 100000000, 10)  # Scale factor
+                metrics['oi_health'] = oi_health
+            
+            # Sentiment extremes
+            if 'error' not in ls_data:
+                long_ratio = ls_data.get('long_ratio', 50)
+                sentiment_extreme = abs(long_ratio - 50)  # Distance from neutral
+                metrics['sentiment_extreme'] = sentiment_extreme
+            
+            # Liquidation risk
+            if 'error' not in liq_data:
+                total_liq = liq_data.get('total_liquidation', 0)
+                liq_risk = min(total_liq / 1000000000, 10)  # Scale factor
+                metrics['liquidation_risk'] = liq_risk
+            
+            return metrics
+            
+        except Exception as e:
+            return {'error': f"Metrics calculation error: {str(e)}"}
+
     def check_api_status(self):
-        """Check API health status"""
+        """Check API health status with enhanced Binance coverage"""
         try:
             # Test Binance Spot
             spot_test = requests.get(f"{self.binance_spot_url}/ping", timeout=5)
@@ -444,16 +530,28 @@ class CryptoAPI:
             # Test CryptoNews
             news_ok = bool(self.cryptonews_key)
 
+            # Test advanced futures endpoints
+            try:
+                test_symbol = 'BTCUSDT'
+                oi_test = self.get_binance_open_interest(test_symbol)
+                funding_test = self.get_binance_funding_rate(test_symbol)
+                advanced_ok = 'error' not in oi_test and 'error' not in funding_test
+            except:
+                advanced_ok = False
+
             return {
                 'binance_spot': binance_spot_ok,
                 'binance_futures': binance_futures_ok,
+                'binance_advanced': advanced_ok,
                 'cryptonews': news_ok,
-                'overall_health': binance_spot_ok and binance_futures_ok
+                'overall_health': binance_spot_ok and binance_futures_ok and advanced_ok,
+                'primary_source': 'binance_comprehensive'
             }
         except Exception as e:
             return {
                 'binance_spot': False,
                 'binance_futures': False,
+                'binance_advanced': False,
                 'cryptonews': False,
                 'overall_health': False,
                 'error': str(e)
@@ -709,23 +807,59 @@ class CryptoAPI:
             'classification': volatility
         }
 
-    def get_market_overview(self):
-        """Get market overview data"""
-        try:
-            # Get BTC and ETH as market indicators
-            btc_data = self.get_binance_price('BTC')
-            eth_data = self.get_binance_price('ETH')
+    def get_multiple_prices(self, symbols):
+        """Get prices for multiple symbols"""
+        prices_data = {}
+        
+        for symbol in symbols:
+            try:
+                price_data = self.get_binance_price(symbol)
+                if 'error' not in price_data:
+                    prices_data[symbol] = {
+                        'price': price_data.get('price', 0),
+                        'change_24h': price_data.get('change_24h', 0),
+                        'volume_24h': price_data.get('volume_24h', 0),
+                        'source': price_data.get('source', 'binance')
+                    }
+            except Exception as e:
+                print(f"Error getting price for {symbol}: {e}")
+                continue
+                
+        return prices_data if prices_data else {'error': 'No price data available'}
 
-            if 'error' not in btc_data and 'error' not in eth_data:
+    def get_market_overview(self):
+        """Get enhanced market overview data using Binance"""
+        try:
+            # Get major cryptocurrencies for market analysis
+            major_symbols = ['BTC', 'ETH', 'BNB', 'ADA', 'SOL']
+            prices_data = self.get_multiple_prices(major_symbols)
+            
+            if 'error' not in prices_data:
+                # Calculate market metrics from available data
+                btc_data = prices_data.get('BTC', {})
+                eth_data = prices_data.get('ETH', {})
+                
+                # Estimate market cap and dominance
+                total_volume = sum(data.get('volume_24h', 0) for data in prices_data.values())
+                btc_volume = btc_data.get('volume_24h', 0)
+                
+                btc_dominance = (btc_volume / total_volume * 100) if total_volume > 0 else 45.0
+                
+                # Calculate average market change
+                changes = [data.get('change_24h', 0) for data in prices_data.values() if 'change_24h' in data]
+                avg_change = sum(changes) / len(changes) if changes else 0
+                
                 return {
-                    'total_market_cap': btc_data.get('quote_volume_24h', 0) * 50,  # Rough estimate
-                    'btc_dominance': 45.0,  # Rough estimate
+                    'total_market_cap': total_volume * 10,  # Rough estimate
+                    'market_cap_change_24h': avg_change,
+                    'btc_dominance': btc_dominance,
                     'eth_dominance': 18.0,  # Rough estimate
                     'btc_price': btc_data.get('price', 0),
                     'eth_price': eth_data.get('price', 0),
                     'btc_change_24h': btc_data.get('change_24h', 0),
                     'eth_change_24h': eth_data.get('change_24h', 0),
-                    'source': 'binance_derived'
+                    'active_cryptocurrencies': len(prices_data),
+                    'source': 'binance_enhanced'
                 }
             else:
                 return {'error': 'Market overview unavailable'}
