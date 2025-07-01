@@ -12,9 +12,8 @@ language = "python3"
 requiredFiles = [".replit", "replit.nix"]
 
 [deployment]
-run = ["sh", "-c", "cd Bismillah && python main.py"]
-deploymentTarget = "gce"
-ignorePorts = true
+run = ["sh", "-c", "cd Bismillah && python weekly_credit_refresh.py"]
+deploymentTarget = "scheduled"
 
 [env]
 PYTHONPATH = "./Bismillah:."
