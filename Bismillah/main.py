@@ -23,9 +23,14 @@ def main():
     """Main function to run the bot"""
     print("🚀 Starting CryptoMentor AI Bot...")
 
-    # Check if running in deployment
-    is_deployment = os.getenv('REPLIT_DEPLOYMENT') == '1' or os.getenv(
-        'REPL_DEPLOYMENT') == '1'
+    # Check if running in deployment - enhanced detection
+    is_deployment = (
+        os.getenv('REPLIT_DEPLOYMENT') == '1' or 
+        os.getenv('REPL_DEPLOYMENT') == '1' or
+        os.getenv('REPLIT_ENVIRONMENT') == 'deployment' or
+        os.path.exists('/tmp/repl_deployment_flag') or
+        'deployment' in os.getcwd().lower()
+    )
     if is_deployment:
         print("📡 Running in Replit Deployment mode (Always On)")
         print("🚀 Real-time API mode: ENABLED (Force refresh for live data)")

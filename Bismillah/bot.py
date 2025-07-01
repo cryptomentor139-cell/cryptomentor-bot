@@ -8,10 +8,13 @@ from dotenv import load_dotenv
 # Load environment variables from .env file (if exists) and system environment
 load_dotenv()
 
-# Check deployment environment (Replit environments) - simplified for consistency
+# Check deployment environment (Replit environments) - enhanced detection
 IS_DEPLOYMENT = (
     os.getenv('REPLIT_DEPLOYMENT') == '1' or 
-    os.getenv('REPL_DEPLOYMENT') == '1'
+    os.getenv('REPL_DEPLOYMENT') == '1' or
+    os.getenv('REPLIT_ENVIRONMENT') == 'deployment' or
+    os.path.exists('/tmp/repl_deployment_flag') or
+    'deployment' in os.getcwd().lower()
 )
 
 # Setup logging
