@@ -118,6 +118,7 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("recovery_stats", self.recovery_stats_command))
             self.application.add_handler(CommandHandler("check_admin", self.check_admin_command))
             self.application.add_handler(CommandHandler("restart", self.restart_command))
+            self.application.add_handler(CommandHandler("refresh_credits", self.refresh_credits_command))
 
             # Add callback query handler
             self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
@@ -2204,6 +2205,80 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
                 parse_mode='Markdown'
             )
 
+        elif data == 'refresh_credits_panel' and user_id == self.admin_id:
+            keyboard = [
+                [InlineKeyboardButton("✅ Confirm Credit Refresh", callback_data='confirm_credit_refresh')],
+                [InlineKeyboardButton("❌ Cancel", callback_data='admin_panel')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Get current statistics
+            try:
+                self.db.cursor.execute("""
+                    SELECT COUNT(*) FROM users 
+                    WHERE (is_premium = 0 OR is_premium IS NULL) 
+                    AND telegram_id IS NOT NULL
+                """)
+                free_users_count = self.db.cursor.fetchone()[0]
+                
+                await query.edit_message_text(
+                    f"💰 **Weekly Credit Refresh**\n\n"
+                    f"**Current free users**: {free_users_count}\n\n"
+                    "**What happens:**\n"
+                    "• All free users get 100 credits\n"
+                    "• Previous credits reset to 100\n"
+                    "• Premium users not affected\n"
+                    "• Activity logged for tracking\n\n"
+                    "**Confirm to proceed:**",
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                await query.edit_message_text(f"❌ Error getting user count: {str(e)}")
+
+        elif data == 'confirm_credit_refresh' and user_id == self.admin_id:
+            await query.edit_message_text("🔄 Processing credit refresh...")
+            
+            try:
+                import subprocess
+                import sys
+                
+                result = subprocess.run([
+                    sys.executable, 
+                    'weekly_credit_refresh.py'
+                ], 
+                cwd='Bismillah',
+                capture_output=True, 
+                text=True, 
+                timeout=300
+                )
+                
+                if result.returncode == 0:
+                    output_lines = result.stdout.strip().split('\n')
+                    users_updated = 0
+                    credits_given = 0
+                    
+                    for line in output_lines:
+                        if "Users updated:" in line:
+                            users_updated = int(line.split(":")[1].split("/")[0].strip())
+                        elif "Total credits distributed:" in line:
+                            credits_given = int(line.split(":")[1].strip().replace(",", ""))
+                    
+                    await query.edit_message_text(
+                        f"✅ **Credit Refresh Completed!**\n\n"
+                        f"📊 **Updated**: {users_updated} free users\n"
+                        f"💰 **Credits given**: {credits_given:,} total\n"
+                        f"🕐 **Time**: {datetime.now().strftime('%H:%M:%S WIB')}",
+                        parse_mode='Markdown'
+                    )
+                    
+                    self.db.log_user_activity(user_id, "admin_panel_credit_refresh", f"Refreshed credits for {users_updated} users via panel")
+                else:
+                    await query.edit_message_text(f"❌ Credit refresh failed: {result.stderr or result.stdout}")
+                    
+            except Exception as e:
+                await query.edit_message_text(f"❌ Error during refresh: {str(e)}")
+
         elif data == 'confirm_restart_users' and user_id == self.admin_id:
             try:
                 restart_count = self.db.mark_all_users_for_restart()
@@ -2224,6 +2299,7 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             keyboard = [
                 [InlineKeyboardButton("👑 Buat User Premium", callback_data='make_premium')],
                 [InlineKeyboardButton("💰 Berikan Credits", callback_data='grant_credits')],
+                [InlineKeyboardButton("🎁 Refresh Credits Mingguan", callback_data='refresh_credits_panel')],
                 [InlineKeyboardButton("📢 Broadcast Message", callback_data='broadcast_help')],
                 [InlineKeyboardButton("📊 Statistik Bot", callback_data='bot_stats')],
                 [InlineKeyboardButton("📝 Log Aktivitas", callback_data='activity_log')],
@@ -2609,6 +2685,7 @@ Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
         keyboard = [
             [InlineKeyboardButton("👑 Buat User Premium", callback_data='make_premium')],
             [InlineKeyboardButton("💰 Berikan Credits", callback_data='grant_credits')],
+            [InlineKeyboardButton("🎁 Refresh Credits Mingguan", callback_data='refresh_credits_panel')],
             [InlineKeyboardButton("📢 Broadcast Message", callback_data='broadcast_help')],
             [InlineKeyboardButton("📊 Statistik Bot", callback_data='bot_stats')],
             [InlineKeyboardButton("📝 Log Aktivitas", callback_data='activity_log')],
@@ -2782,5 +2859,129 @@ System Status: 🟢 Operational"""
 Just ignore this message"""
 
             await update.message.reply_text(confirmation_message, parse_mode='Markdown')
+
+    async def refresh_credits_command(self, update: Update, context: CallbackContext):
+        """Handle /refresh_credits command - Refresh credits for all free users"""
+        user_id = update.message.from_user.id
+
+        # Only admin can use this command
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Access denied. Admin only command.")
+            return
+
+        # Check if confirmation is provided
+        if context.args and context.args[0].lower() == 'confirm':
+            loading_msg = await update.message.reply_text("🔄 Refreshing credits for all free users...")
+            
+            try:
+                # Import and run credit refresh
+                import subprocess
+                import sys
+                
+                # Run the credit refresh script
+                result = subprocess.run([
+                    sys.executable, 
+                    'weekly_credit_refresh.py'
+                ], 
+                cwd='Bismillah',
+                capture_output=True, 
+                text=True, 
+                timeout=300
+                )
+                
+                if result.returncode == 0:
+                    # Parse output for statistics
+                    output_lines = result.stdout.strip().split('\n')
+                    
+                    # Extract key information
+                    users_updated = 0
+                    credits_given = 0
+                    
+                    for line in output_lines:
+                        if "Users updated:" in line:
+                            users_updated = int(line.split(":")[1].split("/")[0].strip())
+                        elif "Total credits distributed:" in line:
+                            credits_given = int(line.split(":")[1].strip().replace(",", ""))
+                    
+                    success_message = f"""✅ **Credit Refresh Completed Successfully!**
+
+📊 **Results:**
+• **Free users updated**: {users_updated}
+• **Credits per user**: 100
+• **Total credits distributed**: {credits_given:,}
+
+💰 **What happened:**
+• All non-premium users now have 100 credits
+• Previous credits were reset to 100
+• Activity logged for tracking
+
+🎯 **Benefits:**
+• Fair access to bot features
+• Encourages continued usage
+• Level playing field for all free users
+
+**Refresh completed at**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S WIB')}"""
+
+                    await loading_msg.edit_text(success_message, parse_mode='Markdown')
+                    
+                    # Log admin action
+                    self.db.log_user_activity(user_id, "admin_manual_credit_refresh", f"Manually refreshed credits for {users_updated} free users")
+                    
+                else:
+                    error_output = result.stderr or result.stdout
+                    await loading_msg.edit_text(f"❌ **Credit refresh failed**\n\nError: {error_output[:500]}")
+                    
+            except subprocess.TimeoutExpired:
+                await loading_msg.edit_text("❌ **Credit refresh timed out**\n\nOperation took too long to complete.")
+            except Exception as e:
+                await loading_msg.edit_text(f"❌ **Error during credit refresh**: {str(e)}")
+        else:
+            # Show confirmation message with current statistics
+            try:
+                # Get current free user count
+                self.db.cursor.execute("""
+                    SELECT COUNT(*) FROM users 
+                    WHERE (is_premium = 0 OR is_premium IS NULL) 
+                    AND telegram_id IS NOT NULL
+                """)
+                free_users_count = self.db.cursor.fetchone()[0]
+                
+                # Get users with low credits
+                self.db.cursor.execute("""
+                    SELECT COUNT(*) FROM users 
+                    WHERE (is_premium = 0 OR is_premium IS NULL) 
+                    AND telegram_id IS NOT NULL
+                    AND credits < 50
+                """)
+                low_credit_users = self.db.cursor.fetchone()[0]
+                
+                confirmation_message = f"""💰 **Weekly Credit Refresh Confirmation**
+
+📊 **Current Status:**
+• **Free users**: {free_users_count}
+• **Users with <50 credits**: {low_credit_users}
+• **Premium users**: Excluded (unlimited access)
+
+🎁 **What will happen:**
+• ALL free users will get **100 credits**
+• Previous credit amounts will be reset
+• Activity will be logged for each user
+• Premium users are not affected
+
+💡 **Benefits:**
+• Equal opportunity for all free users
+• Encourages continued bot usage
+• Fair access to premium features
+
+**Type to confirm:**
+`/refresh_credits confirm`
+
+**To cancel:**
+Just ignore this message"""
+
+                await update.message.reply_text(confirmation_message, parse_mode='Markdown')
+                
+            except Exception as e:
+                await update.message.reply_text(f"❌ Error getting statistics: {str(e)}")
 
 # News command will be integrated in main bot class
