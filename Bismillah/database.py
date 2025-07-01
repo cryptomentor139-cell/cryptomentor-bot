@@ -152,8 +152,8 @@ class Database:
             import string
             referral_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
 
-            # Base credits: 10 for all users
-            base_credits = 10
+            # Base credits: 100 for all users
+            base_credits = 100
 
             # Bonus credits: +5 if referred
             bonus_credits = 5 if referred_by else 0
