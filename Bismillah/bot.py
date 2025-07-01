@@ -2874,41 +2874,66 @@ Just ignore this message"""
             loading_msg = await update.message.reply_text("🔄 Refreshing credits for all free users...")
             
             try:
-                # Import and run credit refresh
-                import subprocess
-                import sys
+                # Direct database approach instead of subprocess
+                print(f"🔄 Starting manual credit refresh by admin {user_id}")
                 
-                # Run the credit refresh script
-                result = subprocess.run([
-                    sys.executable, 
-                    'weekly_credit_refresh.py'
-                ], 
-                cwd='Bismillah',
-                capture_output=True, 
-                text=True, 
-                timeout=300
-                )
+                # Get all non-premium users
+                self.db.cursor.execute("""
+                    SELECT telegram_id, first_name, username, credits, is_premium
+                    FROM users 
+                    WHERE (is_premium = 0 OR is_premium IS NULL) 
+                    AND telegram_id IS NOT NULL 
+                    AND telegram_id != 0
+                """)
                 
-                if result.returncode == 0:
-                    # Parse output for statistics
-                    output_lines = result.stdout.strip().split('\n')
+                free_users = self.db.cursor.fetchall()
+                total_free_users = len(free_users)
+                
+                if total_free_users == 0:
+                    await loading_msg.edit_text("ℹ️ **No free users found in database**")
+                    return
+                
+                # Update credits for all free users
+                updated_count = 0
+                total_credits_given = 0
+                
+                for user in free_users:
+                    telegram_id, first_name, username, current_credits, is_premium = user
                     
-                    # Extract key information
-                    users_updated = 0
-                    credits_given = 0
+                    # Set credits to 100 for free users
+                    new_credits = 100
                     
-                    for line in output_lines:
-                        if "Users updated:" in line:
-                            users_updated = int(line.split(":")[1].split("/")[0].strip())
-                        elif "Total credits distributed:" in line:
-                            credits_given = int(line.split(":")[1].strip().replace(",", ""))
-                    
-                    success_message = f"""✅ **Credit Refresh Completed Successfully!**
+                    try:
+                        self.db.cursor.execute("""
+                            UPDATE users SET credits = ? WHERE telegram_id = ?
+                        """, (new_credits, telegram_id))
+                        
+                        # Log the credit refresh
+                        self.db.cursor.execute("""
+                            INSERT INTO user_activity (telegram_id, action, details)
+                            VALUES (?, ?, ?)
+                        """, (telegram_id, "manual_credit_refresh", f"Credits refreshed to {new_credits} (was {current_credits}) by admin"))
+                        
+                        updated_count += 1
+                        total_credits_given += new_credits
+                        
+                        print(f"✅ {first_name} (@{username or 'no_username'}): {current_credits} → {new_credits} credits")
+                        
+                    except Exception as e:
+                        print(f"❌ Error updating user {telegram_id}: {e}")
+                        continue
+                
+                # Commit all changes
+                self.db.conn.commit()
+                
+                print(f"✅ Manual credit refresh completed: {updated_count}/{total_free_users} users")
+                
+                success_message = f"""✅ **Credit Refresh Completed Successfully!**
 
 📊 **Results:**
-• **Free users updated**: {users_updated}
+• **Free users updated**: {updated_count}/{total_free_users}
 • **Credits per user**: 100
-• **Total credits distributed**: {credits_given:,}
+• **Total credits distributed**: {total_credits_given:,}
 
 💰 **What happened:**
 • All non-premium users now have 100 credits
@@ -2922,19 +2947,17 @@ Just ignore this message"""
 
 **Refresh completed at**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S WIB')}"""
 
-                    await loading_msg.edit_text(success_message, parse_mode='Markdown')
+                await loading_msg.edit_text(success_message, parse_mode='Markdown')
+                
+                # Log admin action
+                self.db.log_user_activity(user_id, "admin_manual_credit_refresh", f"Manually refreshed credits for {updated_count} free users")
                     
-                    # Log admin action
-                    self.db.log_user_activity(user_id, "admin_manual_credit_refresh", f"Manually refreshed credits for {users_updated} free users")
-                    
-                else:
-                    error_output = result.stderr or result.stdout
-                    await loading_msg.edit_text(f"❌ **Credit refresh failed**\n\nError: {error_output[:500]}")
-                    
-            except subprocess.TimeoutExpired:
-                await loading_msg.edit_text("❌ **Credit refresh timed out**\n\nOperation took too long to complete.")
             except Exception as e:
-                await loading_msg.edit_text(f"❌ **Error during credit refresh**: {str(e)}")
+                error_message = f"❌ **Error during credit refresh**: {str(e)}"
+                print(f"❌ Credit refresh error: {e}")
+                import traceback
+                traceback.print_exc()
+                await loading_msg.edit_text(error_message)
         else:
             # Show confirmation message with current statistics
             try:
