@@ -8,28 +8,17 @@ from dotenv import load_dotenv
 # Load environment variables from .env file (if exists) and system environment
 load_dotenv()
 
-# Enhanced deployment detection with verification
-deployment_env_checks = {
-    'REPLIT_DEPLOYMENT': os.getenv('REPLIT_DEPLOYMENT') == '1',
-    'REPL_DEPLOYMENT': os.getenv('REPL_DEPLOYMENT') == '1',
-    'REPLIT_ENVIRONMENT': os.getenv('REPLIT_ENVIRONMENT') == 'deployment',
-    'deployment_flag': os.path.exists('/tmp/repl_deployment_flag'),
-    'replit_slug': bool(os.getenv('REPL_SLUG')),
-    'replit_owner': bool(os.getenv('REPL_OWNER'))
-}
-
-IS_DEPLOYMENT = any(deployment_env_checks.values())
-
-# Log deployment detection for debugging
-print(f"🔍 Bot Deployment Detection:")
-for check, result in deployment_env_checks.items():
-    print(f"  {'✅' if result else '❌'} {check}: {result}")
-print(f"📊 Bot Deployment Status: {'ENABLED' if IS_DEPLOYMENT else 'DISABLED'}")
+# Check deployment environment (Replit environments) - simplified for consistency
+IS_DEPLOYMENT = (
+    os.getenv('REPLIT_DEPLOYMENT') == '1' or 
+    os.getenv('REPL_DEPLOYMENT') == '1'
+)
 
 # Setup logging
 logging.basicConfig(
     level=logging.WARNING,  # Reduced logging to save memory
-    format='%(asctime)s - %(levelname)s - %(message)s')
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -40,9 +29,7 @@ from database import Database
 from crypto_api import CryptoAPI
 from ai_assistant import AIAssistant
 
-
 class TelegramBot:
-
     def __init__(self):
         # Get bot token from environment (Replit Secrets or .env)
         self.token = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -52,8 +39,7 @@ class TelegramBot:
         try:
             self.admin_id = int(admin_id_str)
         except ValueError:
-            logger.warning(
-                f"Invalid ADMIN_USER_ID: {admin_id_str}, using default 0")
+            logger.warning(f"Invalid ADMIN_USER_ID: {admin_id_str}, using default 0")
             self.admin_id = 0
 
         # Initialize components
@@ -86,112 +72,65 @@ class TelegramBot:
             # Force cleanup any pending updates to prevent conflicts
             print("🔄 Clearing pending updates...")
             try:
-                await self.application.bot.delete_webhook(
-                    drop_pending_updates=True)
+                await self.application.bot.delete_webhook(drop_pending_updates=True)
                 await asyncio.sleep(2)
             except Exception as cleanup_error:
                 print(f"⚠️ Cleanup warning: {cleanup_error}")
 
             # Add command handlers
-            self.application.add_handler(
-                CommandHandler("start", self.start_command))
-            self.application.add_handler(
-                CommandHandler("help", self.help_command))
-            self.application.add_handler(
-                CommandHandler("price", self.price_command))
-            self.application.add_handler(
-                CommandHandler("analyze", self.analyze_command))
-            self.application.add_handler(
-                CommandHandler("portfolio", self.portfolio_command))
-            self.application.add_handler(
-                CommandHandler("add_coin", self.add_coin_command))
-            self.application.add_handler(
-                CommandHandler("market", self.market_command))
-            self.application.add_handler(
-                CommandHandler("futures_signals",
-                               self.futures_signals_command))
-            self.application.add_handler(
-                CommandHandler("futures", self.futures_command))
-            self.application.add_handler(
-                CommandHandler("credits", self.credits_command))
-            self.application.add_handler(
-                CommandHandler("subscribe", self.subscribe_command))
-            self.application.add_handler(
-                CommandHandler("referral", self.referral_command))
-            self.application.add_handler(
-                CommandHandler("language", self.language_command))
-            self.application.add_handler(
-                CommandHandler("ask_ai", self.handle_ask_ai))
+            self.application.add_handler(CommandHandler("start", self.start_command))
+            self.application.add_handler(CommandHandler("help", self.help_command))
+            self.application.add_handler(CommandHandler("price", self.price_command))
+            self.application.add_handler(CommandHandler("analyze", self.analyze_command))
+            self.application.add_handler(CommandHandler("portfolio", self.portfolio_command))
+            self.application.add_handler(CommandHandler("add_coin", self.add_coin_command))
+            self.application.add_handler(CommandHandler("market", self.market_command))
+            self.application.add_handler(CommandHandler("futures_signals", self.futures_signals_command))
+            self.application.add_handler(CommandHandler("futures", self.futures_command))
+            self.application.add_handler(CommandHandler("credits", self.credits_command))
+            self.application.add_handler(CommandHandler("subscribe", self.subscribe_command))
+            self.application.add_handler(CommandHandler("referral", self.referral_command))
+            self.application.add_handler(CommandHandler("language", self.language_command))
+            self.application.add_handler(CommandHandler("ask_ai", self.handle_ask_ai))
 
             # Admin commands
-            self.application.add_handler(
-                CommandHandler("admin", self.admin_command))
-            self.application.add_handler(
-                CommandHandler("grant_premium", self.grant_premium_command))
-            self.application.add_handler(
-                CommandHandler("revoke_premium", self.revoke_premium_command))
-            self.application.add_handler(
-                CommandHandler("grant_credits", self.grant_credits_command))
-            self.application.add_handler(
-                CommandHandler("fix_all_credits",
-                               self.fix_all_credits_command))
-            self.application.add_handler(
-                CommandHandler("broadcast", self.broadcast_command))
-            self.application.add_handler(
-                CommandHandler("confirm_broadcast",
-                               self.confirm_broadcast_command))
-            self.application.add_handler(
-                CommandHandler("cancel_broadcast",
-                               self.cancel_broadcast_command))
-            self.application.add_handler(
-                CommandHandler("broadcast_welcome",
-                               self.broadcast_welcome_command))
-            self.application.add_handler(
-                CommandHandler("recovery_stats", self.recovery_stats_command))
-            self.application.add_handler(
-                CommandHandler("check_admin", self.check_admin_command))
-            self.application.add_handler(
-                CommandHandler("restart", self.restart_command))
-            self.application.add_handler(
-                CommandHandler("refresh_credits",
-                               self.refresh_credits_command))
+            self.application.add_handler(CommandHandler("admin", self.admin_command))
+            self.application.add_handler(CommandHandler("grant_premium", self.grant_premium_command))
+            self.application.add_handler(CommandHandler("revoke_premium", self.revoke_premium_command))
+            self.application.add_handler(CommandHandler("grant_credits", self.grant_credits_command))
+            self.application.add_handler(CommandHandler("fix_all_credits", self.fix_all_credits_command))
+            self.application.add_handler(CommandHandler("broadcast", self.broadcast_command))
+            self.application.add_handler(CommandHandler("confirm_broadcast", self.confirm_broadcast_command))
+            self.application.add_handler(CommandHandler("cancel_broadcast", self.cancel_broadcast_command))
+            self.application.add_handler(CommandHandler("check_admin", self.check_admin_command))
 
             # Add callback query handler
-            self.application.add_handler(
-                CallbackQueryHandler(self.handle_callback_query))
+            self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
 
             # Add message handler for regular text (should be last)
-            self.application.add_handler(
-                MessageHandler(filters.TEXT & ~filters.COMMAND,
-                               self.handle_message))
+            self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
             print("🤖 Bot handlers registered successfully")
             mode_text = "🌐 DEPLOYMENT MODE (Always On)" if IS_DEPLOYMENT else "🔧 DEVELOPMENT MODE (Workspace)"
             print(f"🌍 Environment: {mode_text}")
-            print(
-                f"🔑 API Status: BIN=✅, CG=✅, CN=✅ (Binance Primary + CoinGecko + CryptoNews)"
-            )
-            print(
-                "🚀 Starting bot polling with Binance Advanced API integration..."
-            )
+            print(f"🔑 API Status: BIN=✅, CG=✅, CN=✅ (Binance Primary + CoinGecko + CryptoNews)")
+            print("🚀 Starting bot polling with Binance Advanced API integration...")
 
             # Start the bot with optimized polling for deployment
             print("✅ Bot is now running and polling for updates...")
             await self.application.run_polling(
                 drop_pending_updates=True,  # Drop old updates on start
-                pool_timeout=60,  # Longer pool timeout for deployment
-                read_timeout=60,  # Longer read timeout 
-                write_timeout=60,  # Longer write timeout
-                connect_timeout=60,  # Longer connect timeout
-                allowed_updates=['message', 'callback_query'
-                                 ],  # Only handle needed updates
-                close_loop=False  # Don't close event loop
+                pool_timeout=60,           # Longer pool timeout for deployment
+                read_timeout=60,           # Longer read timeout 
+                write_timeout=60,          # Longer write timeout
+                connect_timeout=60,        # Longer connect timeout
+                allowed_updates=['message', 'callback_query'],  # Only handle needed updates
+                close_loop=False           # Don't close event loop
             )
 
         except Exception as e:
             # Handle specific Telegram conflicts
-            if "terminated by other getUpdates request" in str(
-                    e) or "Conflict" in str(e):
+            if "terminated by other getUpdates request" in str(e) or "Conflict" in str(e):
                 logger.error("❌ Bot conflict detected - forcing cleanup")
                 print("⚠️  CONFLICT: Another bot instance detected!")
                 print("🔄 Attempting automatic cleanup...")
@@ -207,21 +146,15 @@ class TelegramBot:
                     import psutil
 
                     # Kill any python processes running main.py
-                    for proc in psutil.process_iter(['pid', 'name',
-                                                     'cmdline']):
+                    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                         try:
-                            if proc.info['name'] == 'python3' or proc.info[
-                                    'name'] == 'python':
+                            if proc.info['name'] == 'python3' or proc.info['name'] == 'python':
                                 cmdline = ' '.join(proc.info['cmdline'] or [])
-                                if 'main.py' in cmdline and proc.pid != os.getpid(
-                                ):
-                                    print(
-                                        f"🛑 Terminating conflicting process: {proc.pid}"
-                                    )
+                                if 'main.py' in cmdline and proc.pid != os.getpid():
+                                    print(f"🛑 Terminating conflicting process: {proc.pid}")
                                     proc.terminate()
                                     proc.wait(timeout=3)
-                        except (psutil.NoSuchProcess, psutil.AccessDenied,
-                                psutil.TimeoutExpired):
+                        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
                             pass
 
                     import time
@@ -272,42 +205,25 @@ class TelegramBot:
 
             if not existing_user:
                 # Create new user with proper error handling
-                success = self.db.create_user(telegram_id=user.id,
-                                              username=user.username
-                                              or 'no_username',
-                                              first_name=user.first_name
-                                              or 'Unknown',
-                                              last_name=user.last_name,
-                                              language_code=user.language_code
-                                              or 'id')
+                success = self.db.create_user(
+                    telegram_id=user.id,
+                    username=user.username or 'no_username',
+                    first_name=user.first_name or 'Unknown',
+                    last_name=user.last_name,
+                    language_code=user.language_code or 'id'
+                )
 
                 if success:
                     print(f"✅ New user created: {user.id} ({user.first_name})")
                     # Log user registration
-                    self.db.log_user_activity(user.id, "user_registered",
-                                              f"New user: {user.first_name}")
+                    self.db.log_user_activity(user.id, "user_registered", f"New user: {user.first_name}")
                 else:
                     print(f"❌ Failed to create user: {user.id}")
 
             else:
-                # Check if user needs restart after admin restart
-                if self.db.user_needs_restart(user.id):
-                    # Clear restart flag and log reactivation
-                    self.db.clear_restart_flag(user.id)
-                    self.db.log_user_activity(
-                        user.id, "user_reactivated",
-                        f"User restarted after admin restart: {user.first_name}"
-                    )
-                    print(
-                        f"🔄 User reactivated after restart: {user.id} ({user.first_name})"
-                    )
-                else:
-                    print(
-                        f"👤 Existing user: {user.id} ({existing_user.get('first_name')})"
-                    )
-                    # Log user return
-                    self.db.log_user_activity(user.id, "user_returned",
-                                              "User started bot again")
+                print(f"👤 Existing user: {user.id} ({existing_user.get('first_name')})")
+                # Log user return
+                self.db.log_user_activity(user.id, "user_returned", "User started bot again")
 
         except Exception as e:
             print(f"❌ Error in start command: {e}")
@@ -382,8 +298,7 @@ class TelegramBot:
 
 🚀 **All analysis uses real-time data from multiple APIs!**"""
 
-        await update.message.reply_text(welcome_text,
-                                        parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(welcome_text, parse_mode=ParseMode.MARKDOWN)
 
     async def help_command(self, update: Update, context: CallbackContext):
         """Handle /help command"""
@@ -419,32 +334,23 @@ class TelegramBot:
 
     async def price_command(self, update: Update, context: CallbackContext):
         """Handle /price command with enhanced real-time data"""
-        # Check if user needs restart
-        if await self._check_user_restart_required(update):
-            return
-
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/price <symbol>`\nContoh: `/price btc`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/price <symbol>`\nContoh: `/price btc`", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
 
         # Show loading with consistent status
         mode_text = "🌐 DEPLOYMENT" if IS_DEPLOYMENT else "🔧 DEVELOPMENT"
-        loading_msg = await update.message.reply_text(
-            f"⏳ Mengambil data real-time {symbol}... ({mode_text})")
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data real-time {symbol}... ({mode_text})")
 
         # Get comprehensive real-time data with API priority
-        print(
-            f"🔄 Fetching real-time data for {symbol} from multiple sources...")
+        print(f"🔄 Fetching real-time data for {symbol} from multiple sources...")
 
         # Primary: Binance API for most accurate real-time prices
         # Force refresh in deployment to ensure real-time data
         if IS_DEPLOYMENT:
-            price_data = self.crypto_api.get_multi_api_price(
-                symbol, force_refresh=True)
+            price_data = self.crypto_api.get_multi_api_price(symbol, force_refresh=True)
         else:
             price_data = self.crypto_api.get_binance_price(symbol)
         coingecko_data = None
@@ -452,8 +358,7 @@ class TelegramBot:
 
         # Secondary: CoinGecko for additional market data
         try:
-            coingecko_data = self.crypto_api.get_price(symbol,
-                                                       force_refresh=True)
+            coingecko_data = self.crypto_api.get_price(symbol, force_refresh=True)
         except:
             pass
 
@@ -463,25 +368,21 @@ class TelegramBot:
         except:
             pass
 
-        if price_data and 'error' not in price_data and price_data.get(
-                'price', 0) > 0:
+        if price_data and 'error' not in price_data and price_data.get('price', 0) > 0:
             source = price_data.get('source', 'unknown')
 
             # Enhanced source indicators with API health
             source_emoji = {
                 'binance': '🟢 Binance API (Real-Time)',
-                'binance_simple': '🟡 Binance Simple (Real-Time)',
+                'binance_simple': '🟡 Binance Simple (Real-Time)', 
                 'coingecko': '🔵 CoinGecko Pro (Real-Time)',
                 'coingecko_free': '🔵 CoinGecko Free (Real-Time)',
                 'coingecko_fallback': '🟡 CoinGecko Backup (Real-Time)',
                 'fallback_simulation': '⚠️ Simulation Data'
             }.get(source, '🔄 Market Data')
 
-            is_real_api = source in [
-                'binance', 'binance_simple', 'coingecko', 'coingecko_free',
-                'coingecko_fallback'
-            ]
-
+            is_real_api = source in ['binance', 'binance_simple', 'coingecko', 'coingecko_free', 'coingecko_fallback']
+            
             # Warning for simulation data in deployment
             if source == 'fallback_simulation' and IS_DEPLOYMENT:
                 source_emoji += ' - API CONNECTION ISSUE'
@@ -513,8 +414,7 @@ class TelegramBot:
                 message += f"📊 **Volume 24j**: {volume_format}\n"
 
             # Add high/low if available
-            if price_data.get('high_24h', 0) > 0 and price_data.get(
-                    'low_24h', 0) > 0:
+            if price_data.get('high_24h', 0) > 0 and price_data.get('low_24h', 0) > 0:
                 high_24h = price_data.get('high_24h', 0)
                 low_24h = price_data.get('low_24h', 0)
                 if high_24h < 100:
@@ -539,9 +439,7 @@ class TelegramBot:
             else:
                 api_status.append("🔄 Real-time Simulation")
 
-            if coingecko_data and coingecko_data.get('source') in [
-                    'coingecko', 'coingecko_free'
-            ]:
+            if coingecko_data and coingecko_data.get('source') in ['coingecko', 'coingecko_free']:
                 api_status.append("✅ CoinGecko")
 
             if news_data and len(news_data) > 0:
@@ -552,9 +450,7 @@ class TelegramBot:
             # Add latest crypto news context if available
             if news_data and len(news_data) > 0:
                 latest_news = news_data[0]
-                news_title = latest_news.get('title', '')[:60] + '...' if len(
-                    latest_news.get('title', '')) > 60 else latest_news.get(
-                        'title', '')
+                news_title = latest_news.get('title', '')[:60] + '...' if len(latest_news.get('title', '')) > 60 else latest_news.get('title', '')
                 message += f"📰 **Crypto News**: {news_title}\n"
 
             message += f"🔗 **Mode**: {'🌐 Always On (Deployment)' if IS_DEPLOYMENT else '🔧 Development Workspace'}"
@@ -565,14 +461,8 @@ class TelegramBot:
 
     async def analyze_command(self, update: Update, context: CallbackContext):
         """Handle /analyze command - comprehensive analysis with news integration"""
-        # Check if user needs restart
-        if await self._check_user_restart_required(update):
-            return
-
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/analyze <symbol>`\nContoh: `/analyze btc`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/analyze <symbol>`\nContoh: `/analyze btc`", parse_mode='Markdown')
             return
 
         user_id = update.message.from_user.id
@@ -582,16 +472,13 @@ class TelegramBot:
 
         # Check credits for non-premium, non-admin users
         if not is_premium and not is_admin and credits < 20:
-            await update.message.reply_text(
-                "❌ Credit tidak cukup! Analisis komprehensif membutuhkan 20 credit. Gunakan `/credits` untuk melihat sisa credit Anda.",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Credit tidak cukup! Analisis komprehensif membutuhkan 20 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
 
         # Show loading message
-        loading_msg = await update.message.reply_text(
-            "⏳ Menganalisis data komprehensif + berita crypto...")
+        loading_msg = await update.message.reply_text("⏳ Menganalisis data komprehensif + berita crypto...")
 
         try:
             # Get price and futures data for comprehensive analysis
@@ -599,8 +486,7 @@ class TelegramBot:
             futures_data = self.crypto_api.get_futures_data(symbol)
 
             # Use comprehensive analysis function with crypto_api for news
-            analysis = self.ai.get_comprehensive_analysis(
-                symbol, futures_data, price_data, 'id', self.crypto_api)
+            analysis = self.ai.get_comprehensive_analysis(symbol, futures_data, price_data, 'id', self.crypto_api)
 
             # Deduct credit only for non-premium, non-admin users (20 credits for comprehensive analysis)
             if not is_premium and not is_admin:
@@ -619,8 +505,7 @@ class TelegramBot:
             await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
             print(f"Error in analyze command: {e}")
 
-    async def portfolio_command(self, update: Update,
-                                context: CallbackContext):
+    async def portfolio_command(self, update: Update, context: CallbackContext):
         """Handle /portfolio command"""
         user_id = update.message.from_user.id
         portfolio = self.db.get_user_portfolio(user_id)
@@ -655,9 +540,7 @@ Contoh: `/add_coin btc 0.5`
     async def add_coin_command(self, update: Update, context: CallbackContext):
         """Handle /add_coin command"""
         if len(context.args) < 2:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/add_coin <symbol> <amount>`\nContoh: `/add_coin btc 0.5`"
-            )
+            await update.message.reply_text("❌ Gunakan format: `/add_coin <symbol> <amount>`\nContoh: `/add_coin btc 0.5`")
             return
 
         user_id = update.message.from_user.id
@@ -676,11 +559,7 @@ Contoh: `/add_coin btc 0.5`
         await update.message.reply_text(message)
 
     async def market_command(self, update: Update, context: CallbackContext):
-        """Handle /market command with enhanced error handling"""
-        # Check if user needs restart
-        if await self._check_user_restart_required(update):
-            return
-
+        """Handle /market command"""
         user_id = update.message.from_user.id
         credits = self.db.get_user_credits(user_id)
         is_premium = self.db.is_user_premium(user_id)
@@ -688,42 +567,15 @@ Contoh: `/add_coin btc 0.5`
 
         # Check credits for non-premium, non-admin users
         if not is_premium and not is_admin and credits < 20:
-            await update.message.reply_text(
-                "❌ Credit tidak cukup! Overview pasar membutuhkan 20 credit. Gunakan `/credits` untuk melihat sisa credit Anda.",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Credit tidak cukup! Overview pasar membutuhkan 20 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
             return
 
-        # Show enhanced loading message
-        loading_msg = await update.message.reply_text(
-            "⏳ Menganalisis overview pasar crypto real-time dari multiple API..."
-        )
+        # Show loading message for comprehensive analysis
+        loading_msg = await update.message.reply_text("⏳ Menganalisis overview pasar crypto real-time...")
 
         try:
-            print(f"🔄 Market command initiated by user {user_id}")
-
-            # Verify API availability first
-            if not self.crypto_api:
-                await loading_msg.edit_text(
-                    "❌ API tidak tersedia. Silakan coba lagi dalam beberapa menit.",
-                    parse_mode='Markdown')
-                return
-
             # Get comprehensive market overview with real-time data
-            print("📊 Calling AI market sentiment analysis...")
             market_data = self.ai.get_market_sentiment('id', self.crypto_api)
-
-            if not market_data or len(market_data.strip()) < 50:
-                # Fallback if data is too short
-                market_data = """🌍 **OVERVIEW PASAR CRYPTO**
-
-⚠️ **Data sementara tidak lengkap**
-
-💡 **Alternatif yang bisa dicoba:**
-• `/price btc` - Cek harga Bitcoin
-• `/price eth` - Cek harga Ethereum  
-• `/analyze btc` - Analisis mendalam Bitcoin
-
-🔄 Coba command `/market` lagi dalam beberapa menit untuk data lengkap."""
 
             # Deduct credit only for non-premium, non-admin users (20 credits for market overview)
             if not is_premium and not is_admin:
@@ -735,35 +587,14 @@ Contoh: `/add_coin btc 0.5`
             elif is_admin:
                 market_data += f"\n\n👑 **Admin Access** - Unlimited"
 
-            print(
-                f"✅ Market analysis completed, sending response ({len(market_data)} chars)"
-            )
-
-            # Handle long messages
-            if len(market_data) > 4000:
-                # Split into chunks
-                chunks = [
-                    market_data[i:i + 4000]
-                    for i in range(0, len(market_data), 4000)
-                ]
-                await loading_msg.edit_text(chunks[0], parse_mode='Markdown')
-
-                for chunk in chunks[1:]:
-                    await update.message.reply_text(chunk,
-                                                    parse_mode='Markdown')
-            else:
-                # Edit loading message with the comprehensive overview
-                await loading_msg.edit_text(market_data, parse_mode='Markdown')
+            # Edit loading message with the comprehensive overview
+            await loading_msg.edit_text(market_data, parse_mode='Markdown')
 
         except Exception as e:
-            error_msg = f"❌ Terjadi kesalahan saat menganalisis pasar.\n\n**Error**: {str(e)[:100]}...\n\n💡 **Coba alternatif:**\n• `/price btc`\n• `/analyze ethereum`\n• `/futures_signals`"
-            await loading_msg.edit_text(error_msg, parse_mode='Markdown')
-            print(f"❌ Error in market command: {e}")
-            import traceback
-            traceback.print_exc()
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan saat menganalisis pasar: {str(e)}")
+            print(f"Error in market command: {e}")
 
-    async def futures_signals_command(self, update: Update,
-                                      context: CallbackContext):
+    async def futures_signals_command(self, update: Update, context: CallbackContext):
         """Handle /futures_signals command with real-time data"""
         user_id = update.message.from_user.id
         credits = self.db.get_user_credits(user_id)
@@ -772,20 +603,16 @@ Contoh: `/add_coin btc 0.5`
 
         # Check credits for non-premium, non-admin users
         if not is_premium and not is_admin and credits < 30:
-            await update.message.reply_text(
-                "❌ Credit tidak cukup! Sinyal futures membutuhkan 30 credit. Gunakan `/credits` untuk melihat sisa credit Anda.",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Credit tidak cukup! Sinyal futures membutuhkan 30 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
             return
 
         # Show loading message
-        loading_msg = await update.message.reply_text(
-            "⏳ Menganalisis sinyal futures real-time...")
+        loading_msg = await update.message.reply_text("⏳ Menganalisis sinyal futures real-time...")
 
         try:
             # Verify API connection first
             if not self.crypto_api:
-                await loading_msg.edit_text(
-                    "❌ API tidak tersedia. Silakan coba lagi nanti.")
+                await loading_msg.edit_text("❌ API tidak tersedia. Silakan coba lagi nanti.")
                 return
 
             print(f"🔄 Generating futures signals for user {user_id}")
@@ -794,9 +621,7 @@ Contoh: `/add_coin btc 0.5`
             signals = self.ai.generate_futures_signals('id', self.crypto_api)
 
             if not signals or len(signals.strip()) < 50:
-                await loading_msg.edit_text(
-                    "❌ Gagal mengambil data sinyal futures. Silakan coba lagi dalam beberapa menit."
-                )
+                await loading_msg.edit_text("❌ Gagal mengambil data sinyal futures. Silakan coba lagi dalam beberapa menit.")
                 return
 
             # Deduct credit only for non-premium, non-admin users (30 credits for futures signals)
@@ -809,20 +634,16 @@ Contoh: `/add_coin btc 0.5`
             elif is_admin:
                 signals += f"\n\n👑 **Admin Access** - Unlimited"
 
-            print(
-                f"✅ Futures signals generated successfully for user {user_id}")
+            print(f"✅ Futures signals generated successfully for user {user_id}")
 
             # Split long messages if needed
             if len(signals) > 4000:
                 # Split into chunks
-                chunks = [
-                    signals[i:i + 4000] for i in range(0, len(signals), 4000)
-                ]
+                chunks = [signals[i:i+4000] for i in range(0, len(signals), 4000)]
                 await loading_msg.edit_text(chunks[0], parse_mode='Markdown')
 
                 for chunk in chunks[1:]:
-                    await update.message.reply_text(chunk,
-                                                    parse_mode='Markdown')
+                    await update.message.reply_text(chunk, parse_mode='Markdown')
             else:
                 # Edit the loading message with the signals
                 await loading_msg.edit_text(signals, parse_mode='Markdown')
@@ -837,9 +658,7 @@ Contoh: `/add_coin btc 0.5`
     async def futures_command(self, update: Update, context: CallbackContext):
         """Handle /futures command with timeframe selection"""
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/futures <symbol>`\nContoh: `/futures btc`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/futures <symbol>`\nContoh: `/futures btc`", parse_mode='Markdown')
             return
 
         user_id = update.message.from_user.id
@@ -849,27 +668,19 @@ Contoh: `/add_coin btc 0.5`
 
         # Check credits for non-premium, non-admin users (20 credits for futures analysis)
         if not is_premium and not is_admin and credits < 20:
-            await update.message.reply_text(
-                "❌ Credit tidak cukup! Analisis futures membutuhkan 20 credit. Gunakan `/credits` untuk melihat sisa credit Anda.",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Credit tidak cukup! Analisis futures membutuhkan 20 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
 
         # Show timeframe selection with inline keyboard
         keyboard = [
-            [
-                InlineKeyboardButton("⚡ 15m", callback_data=f'futures_analysis_{symbol}_15m'),
-                InlineKeyboardButton("🔥 30m", callback_data=f'futures_analysis_{symbol}_30m')
-            ],
-            [
-                InlineKeyboardButton("📈 1h", callback_data=f'futures_analysis_{symbol}_1h'),
-                InlineKeyboardButton("🚀 4h", callback_data=f'futures_analysis_{symbol}_4h')
-            ],
-            [
-                InlineKeyboardButton("💎 1d", callback_data=f'futures_analysis_{symbol}_1d'),
-                InlineKeyboardButton("🌟 1w", callback_data=f'futures_analysis_{symbol}_1w')
-            ]
+            [InlineKeyboardButton("⚡ 15m", callback_data=f'futures_analysis_{symbol}_15m'),
+             InlineKeyboardButton("🔥 30m", callback_data=f'futures_analysis_{symbol}_30m')],
+            [InlineKeyboardButton("📈 1h", callback_data=f'futures_analysis_{symbol}_1h'),
+             InlineKeyboardButton("🚀 4h", callback_data=f'futures_analysis_{symbol}_4h')],
+            [InlineKeyboardButton("💎 1d", callback_data=f'futures_analysis_{symbol}_1d'),
+             InlineKeyboardButton("🌟 1w", callback_data=f'futures_analysis_{symbol}_1w')]
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -878,7 +689,8 @@ Contoh: `/add_coin btc 0.5`
             f"📊 **Analisis Futures {symbol}**\n\n"
             "Pilih timeframe untuk analisis teknikal advance:",
             reply_markup=reply_markup,
-            parse_mode='Markdown')
+            parse_mode='Markdown'
+        )
 
     async def credits_command(self, update: Update, context: CallbackContext):
         """Handle /credits command"""
@@ -931,17 +743,16 @@ Terima kasih telah menjadi member premium!"""
 **Gunakan credit dengan bijak!**"""
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def subscribe_command(self, update: Update,
-                                context: CallbackContext):
+    async def subscribe_command(self, update: Update, context: CallbackContext):
         """Handle /subscribe command"""
         user_id = update.message.from_user.id
         username = update.message.from_user.username or "Tidak ada username"
         first_name = update.message.from_user.first_name or ""
-
+        
         # Check current status
         is_premium = self.db.is_user_premium(user_id)
         current_credits = self.db.get_user_credits(user_id)
-
+        
         if is_premium:
             message = f"""⭐ **Status Premium Aktif**
 
@@ -998,7 +809,7 @@ Nikmati semua fitur tanpa batasan credit."""
 
 ℹ️ **Catatan Penting:**
 Pastikan menyertakan User ID (`{user_id}`) dalam pesan ke admin untuk mempercepat proses aktivasi premium."""
-
+        
         await update.message.reply_text(message, parse_mode='Markdown')
 
     async def referral_command(self, update: Update, context: CallbackContext):
@@ -1021,29 +832,30 @@ Pastikan menyertakan User ID (`{user_id}`) dalam pesan ke admin untuk mempercepa
 • Credit Earned: 0
 
 Bagikan link Anda dan mulai earning!"""
-
+        
         await update.message.reply_text(message, parse_mode='Markdown')
 
     async def language_command(self, update: Update, context: CallbackContext):
         """Handle /language command"""
-        keyboard = [[
-            InlineKeyboardButton("🇮🇩 Bahasa Indonesia", callback_data='lang_id')
-        ], [InlineKeyboardButton("🇺🇸 English", callback_data='lang_en')]]
-
+        keyboard = [
+            [InlineKeyboardButton("🇮🇩 Bahasa Indonesia", callback_data='lang_id')],
+            [InlineKeyboardButton("🇺🇸 English", callback_data='lang_en')]
+        ]
+        
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("🌍 **Pilih Bahasa / Choose Language**",
-                                        reply_markup=reply_markup,
-                                        parse_mode='Markdown')
+        await update.message.reply_text(
+            "🌍 **Pilih Bahasa / Choose Language**",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
 
-    async def grant_premium_command(self, update: Update,
-                                    context: CallbackContext):
+    async def grant_premium_command(self, update: Update, context: CallbackContext):
         """Handle /grant_premium command"""
         user_id = update.message.from_user.id
 
         # Enhanced admin check
         if user_id != self.admin_id:
-            await update.message.reply_text(
-                "❌ Access denied. Admin only command.")
+            await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
         if len(context.args) < 1:
@@ -1054,16 +866,15 @@ Bagikan link Anda dan mulai earning!"""
                 "• `/grant_premium 123456789 30` - Premium 30 hari\n"
                 "• `/grant_premium 123456789 0` - Premium permanent\n"
                 "• `/grant_premium 123456789` - Premium 30 hari (default)",
-                parse_mode='Markdown')
+                parse_mode='Markdown'
+            )
             return
 
         try:
             target_user_id = int(context.args[0])
             days = int(context.args[1]) if len(context.args) > 1 else 30
         except ValueError:
-            await update.message.reply_text(
-                "❌ User ID dan days harus berupa angka!\n\nContoh: `/grant_premium 123456789 30`"
-            )
+            await update.message.reply_text("❌ User ID dan days harus berupa angka!\n\nContoh: `/grant_premium 123456789 30`")
             return
 
         # Validate user ID
@@ -1096,21 +907,15 @@ Bagikan link Anda dan mulai earning!"""
             if success:
                 # Get user info for confirmation
                 user_info = self.db.get_user(target_user_id)
-                username = user_info.get('username') or 'no_username'
-                first_name = user_info.get('first_name') or 'Unknown'
-
-                # Escape special characters to prevent markdown parsing errors
-                safe_username = username.replace('_', '\\_').replace(
-                    '*', '\\*').replace('[', '\\[').replace(']', '\\]')
-                safe_first_name = first_name.replace('_', '\\_').replace(
-                    '*', '\\*').replace('[', '\\[').replace(']', '\\]')
+                username = user_info.get('username', 'No username')
+                first_name = user_info.get('first_name', 'Unknown')
 
                 message = f"""✅ **Premium berhasil diberikan!**
 
 👤 **User Info:**
-• **ID**: `{target_user_id}`
-• **Name**: {safe_first_name}
-• **Username**: @{safe_username}
+• **ID**: {target_user_id}
+• **Name**: {first_name}
+• **Username**: @{username}
 
 ⭐ **Premium Status:**
 • **Type**: {premium_type}
@@ -1121,14 +926,16 @@ Bagikan link Anda dan mulai earning!"""
 
                 # Log admin action
                 self.db.log_user_activity(
-                    user_id, "admin_grant_premium",
-                    f"Granted {premium_type} premium to user {target_user_id}")
+                    user_id, 
+                    "admin_grant_premium", 
+                    f"Granted {premium_type} premium to user {target_user_id}"
+                )
 
             else:
                 message = f"""❌ **Gagal memberikan premium!**
 
 🔍 **Troubleshooting:**
-• Pastikan User ID benar: `{target_user_id}`
+• Pastikan User ID benar: {target_user_id}
 • User harus sudah menggunakan `/start` di bot
 • Cek koneksi database
 
@@ -1137,32 +944,15 @@ Bagikan link Anda dan mulai earning!"""
         except Exception as e:
             message = f"""❌ **Error sistem saat memberikan premium!**
 
-**Error**: `{str(e)[:100]}`
-**User ID**: `{target_user_id}`
+**Error**: {str(e)}
+**User ID**: {target_user_id}
 
 🔧 Silakan coba lagi atau restart bot."""
             print(f"Error in grant_premium_command: {e}")
 
-        # Send message with error handling
-        try:
-            await update.message.reply_text(message, parse_mode='Markdown')
-        except Exception as send_error:
-            print(
-                f"Failed to send grant_premium message with Markdown: {send_error}"
-            )
-            # Fallback to plain text if Markdown fails
-            try:
-                plain_message = message.replace('**',
-                                                '').replace('`', '').replace(
-                                                    '*', '').replace('_', '')
-                await update.message.reply_text(plain_message)
-            except Exception as plain_error:
-                print(f"Failed to send plain text message: {plain_error}")
-                await update.message.reply_text(
-                    "✅ Premium berhasil diberikan! (Message formatting error)")
+        await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def revoke_premium_command(self, update: Update,
-                                     context: CallbackContext):
+    async def revoke_premium_command(self, update: Update, context: CallbackContext):
         """Handle /revoke_premium command"""
         user_id = update.message.from_user.id
 
@@ -1170,9 +960,7 @@ Bagikan link Anda dan mulai earning!"""
             return
 
         if len(context.args) < 1:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/revoke_premium <user_id>`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/revoke_premium <user_id>`", parse_mode='Markdown')
             return
 
         try:
@@ -1183,7 +971,7 @@ Bagikan link Anda dan mulai earning!"""
 
         # Revoke premium status
         success = self.db.revoke_premium(target_user_id)
-
+        
         if success:
             message = f"✅ Berhasil mencabut premium dari user {target_user_id}"
         else:
@@ -1191,14 +979,12 @@ Bagikan link Anda dan mulai earning!"""
 
         await update.message.reply_text(message)
 
-    async def grant_credits_command(self, update: Update,
-                                    context: CallbackContext):
+    async def grant_credits_command(self, update: Update, context: CallbackContext):
         """Handle /grant_credits command"""
         user_id = update.message.from_user.id
 
         if user_id != self.admin_id:
-            await update.message.reply_text(
-                "❌ Access denied. Admin only command.")
+            await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
         if len(context.args) < 2:
@@ -1208,15 +994,15 @@ Bagikan link Anda dan mulai earning!"""
                 "**Contoh:**\n"
                 "• `/grant_credits 123456789 50`\n"
                 "• `/grant_credits 123456789 100`",
-                parse_mode='Markdown')
+                parse_mode='Markdown'
+            )
             return
 
         try:
             target_user_id = int(context.args[0])
             amount = int(context.args[1])
         except ValueError:
-            await update.message.reply_text(
-                "❌ User ID dan amount harus berupa angka!")
+            await update.message.reply_text("❌ User ID dan amount harus berupa angka!")
             return
 
         # Validate inputs
@@ -1242,7 +1028,7 @@ Bagikan link Anda dan mulai earning!"""
 
         # Grant credits
         success = self.db.add_credits(target_user_id, amount)
-
+        
         if success:
             new_credits = self.db.get_user_credits(target_user_id)
             user_info = self.db.get_user(target_user_id)
@@ -1263,8 +1049,10 @@ Bagikan link Anda dan mulai earning!"""
 
             # Log admin action
             self.db.log_user_activity(
-                user_id, "admin_grant_credits",
-                f"Granted {amount} credits to user {target_user_id}")
+                user_id, 
+                "admin_grant_credits", 
+                f"Granted {amount} credits to user {target_user_id}"
+            )
         else:
             message = f"""❌ **Gagal memberikan credits!**
 
@@ -1277,8 +1065,7 @@ Bagikan link Anda dan mulai earning!"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def fix_all_credits_command(self, update: Update,
-                                      context: CallbackContext):
+    async def fix_all_credits_command(self, update: Update, context: CallbackContext):
         """Handle /fix_all_credits command"""
         user_id = update.message.from_user.id
 
@@ -1294,8 +1081,7 @@ Bagikan link Anda dan mulai earning!"""
 
         await update.message.reply_text(message)
 
-    async def broadcast_command(self, update: Update,
-                                context: CallbackContext):
+    async def broadcast_command(self, update: Update, context: CallbackContext):
         """Handle /broadcast command"""
         user_id = update.message.from_user.id
 
@@ -1316,7 +1102,8 @@ Bagikan link Anda dan mulai earning!"""
                 "• Gunakan **text** untuk bold\n"
                 "• Format akan dipertahankan seperti yang Anda ketik\n"
                 "• Gunakan emoji untuk menarik perhatian",
-                parse_mode='Markdown')
+                parse_mode='Markdown'
+            )
             return
 
         # Get the original message text after "/broadcast "
@@ -1328,13 +1115,11 @@ Bagikan link Anda dan mulai earning!"""
 
         # Validate message length
         if len(message.strip()) == 0:
-            await update.message.reply_text(
-                "❌ Pesan broadcast tidak boleh kosong!")
+            await update.message.reply_text("❌ Pesan broadcast tidak boleh kosong!")
             return
 
         if len(message) > 4000:
-            await update.message.reply_text(
-                "❌ Pesan terlalu panjang! Maksimal 4000 karakter.")
+            await update.message.reply_text("❌ Pesan terlalu panjang! Maksimal 4000 karakter.")
             return
 
         # Store broadcast message temporarily with admin ID
@@ -1347,10 +1132,7 @@ Bagikan link Anda dan mulai earning!"""
         # Escape markdown characters in user message to prevent parsing errors
         def escape_markdown(text):
             """Escape markdown special characters"""
-            escape_chars = [
-                '*', '_', '`', '[', ']', '(', ')', '~', '>', '#', '+', '-',
-                '=', '|', '{', '}', '.', '!'
-            ]
+            escape_chars = ['*', '_', '`', '[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
             for char in escape_chars:
                 text = text.replace(char, f'\\{char}')
             return text
@@ -1372,38 +1154,30 @@ Gunakan:
 
 ⏰ **Timeout:** Konfirmasi akan expired dalam 10 menit."""
 
-        await update.message.reply_text(confirmation_message,
-                                        parse_mode='Markdown')
+        await update.message.reply_text(confirmation_message, parse_mode='MarkdownV2')
 
-    async def confirm_broadcast_command(self, update: Update,
-                                        context: CallbackContext):
+    async def confirm_broadcast_command(self, update: Update, context: CallbackContext):
         """Handle /confirm_broadcast command"""
         user_id = update.message.from_user.id
 
         if user_id != self.admin_id:
-            await update.message.reply_text("❌ Perintah ini hanya untuk admin!"
-                                            )
+            await update.message.reply_text("❌ Perintah ini hanya untuk admin!")
             return
 
         if not self.pending_broadcast:
-            await update.message.reply_text(
-                "❌ Tidak ada broadcast yang tertunda!")
+            await update.message.reply_text("❌ Tidak ada broadcast yang tertunda!")
             return
 
         # Check if the admin who created the broadcast is the same as confirming
         if self.pending_broadcast.get('admin_id') != user_id:
-            await update.message.reply_text(
-                "❌ Hanya admin yang membuat broadcast yang bisa mengkonfirmasi!"
-            )
+            await update.message.reply_text("❌ Hanya admin yang membuat broadcast yang bisa mengkonfirmasi!")
             return
 
         # Check timeout (10 minutes)
         broadcast_time = self.pending_broadcast.get('timestamp')
-        if broadcast_time and (datetime.now() -
-                               broadcast_time).total_seconds() > 600:
+        if broadcast_time and (datetime.now() - broadcast_time).total_seconds() > 600:
             self.pending_broadcast = None
-            await update.message.reply_text(
-                "❌ Broadcast expired! Silakan buat broadcast baru.")
+            await update.message.reply_text("❌ Broadcast expired! Silakan buat broadcast baru.")
             return
 
         # Set broadcast in progress
@@ -1417,8 +1191,7 @@ Gunakan:
             if not all_users:
                 self.pending_broadcast = None
                 self.broadcast_in_progress = False
-                await update.message.reply_text(
-                    "❌ Tidak ada user yang ditemukan di database!")
+                await update.message.reply_text("❌ Tidak ada user yang ditemukan di database!")
                 return
 
             success_count = 0
@@ -1426,8 +1199,7 @@ Gunakan:
             blocked_count = 0
             total_users = len(all_users)
 
-            status_msg = await update.message.reply_text(
-                f"📢 Memulai broadcast ke {total_users} user...")
+            status_msg = await update.message.reply_text(f"📢 Memulai broadcast ke {total_users} user...")
             print(f"🔄 Starting broadcast to {total_users} users")
             print(f"📝 Broadcast message: {broadcast_message[:100]}...")
 
@@ -1452,14 +1224,12 @@ Gunakan:
                         parse_mode=None,  # No markdown to avoid parsing errors
                         disable_web_page_preview=True,
                         disable_notification=False,
-                        read_timeout=60,  # Increased timeout
-                        write_timeout=60,  # Increased timeout
-                        connect_timeout=60  # Increased timeout
+                        read_timeout=60,     # Increased timeout
+                        write_timeout=60,    # Increased timeout
+                        connect_timeout=60   # Increased timeout
                     )
                     success_count += 1
-                    print(
-                        f"✅ Sent to user {user_id_target} ({success_count}/{total_users})"
-                    )
+                    print(f"✅ Sent to user {user_id_target} ({success_count}/{total_users})")
 
                     # Update progress every 20 users or at key milestones
                     if (i + 1) % 20 == 0 or (i + 1) in [5, 10, 25, 50, 100]:
@@ -1470,8 +1240,7 @@ Gunakan:
                             print(f"Progress update failed: {edit_error}")
 
                     # Improved rate limiting - slower but more reliable
-                    await asyncio.sleep(
-                        0.5)  # 500ms delay for better Telegram compliance
+                    await asyncio.sleep(0.5)  # 500ms delay for better Telegram compliance
 
                 except Exception as e:
                     error_str = str(e).lower()
@@ -1479,22 +1248,18 @@ Gunakan:
 
                     # Enhanced error categorization
                     if any(keyword in error_str for keyword in [
-                            'blocked', 'forbidden', 'chat not found',
-                            'user is deactivated', 'bot was kicked',
-                            'user has deleted their account',
-                            'user_deactivated', 'chat_not_found'
+                        'blocked', 'forbidden', 'chat not found', 
+                        'user is deactivated', 'bot was kicked',
+                        'user has deleted their account',
+                        'user_deactivated', 'chat_not_found'
                     ]):
                         blocked_count += 1
-                        print(
-                            f"🚫 User {user_id_target} blocked/deleted/deactivated"
-                        )
+                        print(f"🚫 User {user_id_target} blocked/deleted/deactivated")
                     elif any(keyword in error_str for keyword in [
-                            'flood control', 'too many requests',
-                            'retry after', 'rate limit'
+                        'flood control', 'too many requests', 'retry after', 'rate limit'
                     ]):
                         print(f"⏳ Rate limited, waiting longer...")
-                        await asyncio.sleep(5
-                                            )  # Wait 5 seconds for rate limits
+                        await asyncio.sleep(5)  # Wait 5 seconds for rate limits
                         # Retry once with longer delay
                         try:
                             await context.bot.send_message(
@@ -1504,27 +1269,21 @@ Gunakan:
                                 disable_web_page_preview=True,
                                 read_timeout=60,
                                 write_timeout=60,
-                                connect_timeout=60)
-                            success_count += 1
-                            print(
-                                f"✅ Retry successful for user {user_id_target}"
+                                connect_timeout=60
                             )
+                            success_count += 1
+                            print(f"✅ Retry successful for user {user_id_target}")
                             await asyncio.sleep(1)  # Extra delay after retry
                         except Exception as retry_error:
                             fail_count += 1
-                            print(
-                                f"❌ Retry failed for user {user_id_target}: {retry_error}"
-                            )
+                            print(f"❌ Retry failed for user {user_id_target}: {retry_error}")
                     else:
                         fail_count += 1
-                        print(
-                            f"❌ Unknown error for user {user_id_target}: {error_str}"
-                        )
+                        print(f"❌ Unknown error for user {user_id_target}: {error_str}")
 
             # Calculate final statistics
             total_attempted = success_count + fail_count + blocked_count
-            success_rate = (success_count / total_attempted *
-                            100) if total_attempted > 0 else 0
+            success_rate = (success_count / total_attempted * 100) if total_attempted > 0 else 0
 
             result_message = f"""✅ **Broadcast Selesai!**
 
@@ -1539,25 +1298,19 @@ Gunakan:
 
 💡 **Catatan**: Success rate 60%+ adalah normal karena banyak user inactive/blocked bot."""
 
-            print(
-                f"📊 Broadcast completed: {success_count}/{total_users} successful ({success_rate:.1f}%)"
-            )
+            print(f"📊 Broadcast completed: {success_count}/{total_users} successful ({success_rate:.1f}%)")
 
             try:
-                await status_msg.edit_text(result_message,
-                                           parse_mode='Markdown')
+                await status_msg.edit_text(result_message, parse_mode='Markdown')
             except Exception as e:
                 print(f"Failed to edit status message: {e}")
                 # Send new message if edit fails
                 try:
-                    await update.message.reply_text(result_message,
-                                                    parse_mode='Markdown')
+                    await update.message.reply_text(result_message, parse_mode='Markdown')
                 except Exception as e2:
                     print(f"Failed to send result message: {e2}")
                     # Final fallback - plain text
-                    await update.message.reply_text(
-                        f"Broadcast selesai: {success_count}/{total_users} berhasil"
-                    )
+                    await update.message.reply_text(f"Broadcast selesai: {success_count}/{total_users} berhasil")
 
         except Exception as e:
             error_message = f"❌ Critical error during broadcast: {str(e)}"
@@ -1574,153 +1327,31 @@ Gunakan:
             self.broadcast_in_progress = False
             print("🔄 Broadcast state cleared")
 
-    async def cancel_broadcast_command(self, update: Update,
-                                       context: CallbackContext):
+    async def cancel_broadcast_command(self, update: Update, context: CallbackContext):
         """Handle /cancel_broadcast command"""
         user_id = update.message.from_user.id
 
         if user_id != self.admin_id:
-            await update.message.reply_text("❌ Perintah ini hanya untuk admin!"
-                                            )
+            await update.message.reply_text("❌ Perintah ini hanya untuk admin!")
             return
 
         if not self.pending_broadcast:
-            await update.message.reply_text(
-                "❌ Tidak ada broadcast yang tertunda!")
+            await update.message.reply_text("❌ Tidak ada broadcast yang tertunda!")
             return
 
         # Check if the admin who created the broadcast is the same as canceling
         if self.pending_broadcast.get('admin_id') != user_id:
-            await update.message.reply_text(
-                "❌ Hanya admin yang membuat broadcast yang bisa membatalkan!")
+            await update.message.reply_text("❌ Hanya admin yang membuat broadcast yang bisa membatalkan!")
             return
 
         # Clear broadcast
         self.pending_broadcast = None
         await update.message.reply_text("✅ Broadcast dibatalkan!")
 
-    async def broadcast_welcome_command(self, update: Update,
-                                        context: CallbackContext):
-        """Handle /broadcast_welcome command - Send welcome back message to all users"""
-        user_id = update.message.from_user.id
-
-        if user_id != self.admin_id:
-            await update.message.reply_text("❌ Perintah ini hanya untuk admin!"
-                                            )
-            return
-
-        welcome_message = """🎉 **Selamat datang kembali di CryptoMentor AI!**
-
-🔄 **Bot telah diperbarui dengan fitur-fitur terbaru:**
-• 📊 Data real-time yang lebih akurat
-• 🚀 Analisis AI yang ditingkatkan
-• ⚡ Performa yang lebih cepat
-
-💡 **Untuk melanjutkan penggunaan:**
-Silakan gunakan `/start` untuk mengaktifkan kembali akses Anda.
-
-💾 **Jangan khawatir!** 
-Semua data Anda (credits, premium, portfolio) tetap aman dan tidak hilang.
-
-🎯 **Fitur unggulan:**
-• `/price <symbol>` - Harga real-time
-• `/analyze <symbol>` - Analisis mendalam
-• `/market` - Overview pasar
-• `/futures_signals` - Sinyal futures
-
-Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
-
-        # Store the welcome broadcast message
-        self.pending_broadcast = {
-            'message': welcome_message,
-            'admin_id': user_id,
-            'timestamp': datetime.now()
-        }
-
-        await update.message.reply_text(
-            "📢 **Welcome Back Broadcast Ready!**\n\n"
-            "Pesan welcome back telah disiapkan untuk semua user.\n\n"
-            "Gunakan `/confirm_broadcast` untuk mengirim ke semua user\n"
-            "atau `/cancel_broadcast` untuk membatalkan.",
-            parse_mode='Markdown')
-
-    async def recovery_stats_command(self, update: Update,
-                                     context: CallbackContext):
-        """Handle /recovery_stats command - Show user recovery statistics"""
-        user_id = update.message.from_user.id
-
-        if user_id != self.admin_id:
-            await update.message.reply_text("❌ Perintah ini hanya untuk admin!"
-                                            )
-            return
-
-        try:
-            # Get total users
-            self.db.cursor.execute(
-                "SELECT COUNT(*) FROM users WHERE telegram_id IS NOT NULL")
-            total_users = self.db.cursor.fetchone()[0]
-
-            # Get users who need restart
-            self.db.cursor.execute("""
-                SELECT COUNT(*) FROM users 
-                WHERE restart_required = 1 AND telegram_id IS NOT NULL
-            """)
-            users_need_restart = self.db.cursor.fetchone()[0]
-
-            # Get users who have reactivated today
-            self.db.cursor.execute("""
-                SELECT COUNT(*) FROM user_activity 
-                WHERE action = 'user_reactivated' 
-                AND timestamp >= datetime('now', '-1 day')
-            """)
-            reactivated_today = self.db.cursor.fetchone()[0]
-
-            # Get users who have returned today
-            self.db.cursor.execute("""
-                SELECT COUNT(*) FROM user_activity 
-                WHERE action = 'user_returned' 
-                AND timestamp >= datetime('now', '-1 day')
-            """)
-            returned_today = self.db.cursor.fetchone()[0]
-
-            # Calculate recovery rate
-            users_recovered = total_users - users_need_restart
-            recovery_rate = (users_recovered / total_users *
-                             100) if total_users > 0 else 0
-
-            message = f"""📊 **User Recovery Statistics**
-
-👥 **Overall Stats:**
-• **Total Users**: {total_users}
-• **Users Recovered**: {users_recovered}
-• **Still Need /start**: {users_need_restart}
-• **Recovery Rate**: {recovery_rate:.1f}%
-
-📈 **Today's Activity:**
-• **Reactivated Today**: {reactivated_today} users
-• **Returned Today**: {returned_today} users
-• **Total Engagement**: {reactivated_today + returned_today} users
-
-💡 **Recovery Actions:**
-• Use `/broadcast_welcome` to send welcome back message
-• Monitor reactivation through user logs
-• Users who `/start` will be tracked as reactivated
-
-**Last Updated**: {datetime.now().strftime('%H:%M:%S WIB')}"""
-
-            await update.message.reply_text(message, parse_mode='Markdown')
-
-        except Exception as e:
-            await update.message.reply_text(
-                f"❌ Error getting recovery stats: {str(e)}")
-            print(f"Recovery stats error: {e}")
-
     async def handle_ask_ai(self, update: Update, context: CallbackContext):
         """Handle /ask_ai command"""
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/ask_ai <pertanyaan>`\nContoh: `/ask_ai apa itu bitcoin`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/ask_ai <pertanyaan>`\nContoh: `/ask_ai apa itu bitcoin`", parse_mode='Markdown')
             return
 
         user_id = update.message.from_user.id
@@ -1734,13 +1365,10 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
 
         await update.message.reply_text(response, parse_mode='Markdown')
 
-    async def binance_data_command(self, update: Update,
-                                   context: CallbackContext):
+    async def binance_data_command(self, update: Update, context: CallbackContext):
         """Handle /binance_data command - comprehensive Binance API data"""
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/binance_data <symbol>`\nContoh: `/binance_data btc`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/binance_data <symbol>`\nContoh: `/binance_data btc`", parse_mode='Markdown')
             return
 
         user_id = update.message.from_user.id
@@ -1750,25 +1378,20 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
 
         # Check credits for non-premium, non-admin users
         if not is_premium and not is_admin and credits < 25:
-            await update.message.reply_text(
-                "❌ Credit tidak cukup! Data comprehensive Binance membutuhkan 25 credit. Gunakan `/credits` untuk melihat sisa credit Anda.",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Credit tidak cukup! Data comprehensive Binance membutuhkan 25 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
 
         # Show loading message
-        loading_msg = await update.message.reply_text(
-            f"⏳ Mengambil data comprehensive Binance untuk {symbol}...")
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data comprehensive Binance untuk {symbol}...")
 
         try:
             # Get comprehensive Binance data
             comp_data = self.crypto_api.get_comprehensive_futures_data(symbol)
 
             if comp_data.get('error'):
-                await loading_msg.edit_text(
-                    f"❌ Gagal mengambil data untuk {symbol}: {comp_data.get('error')}"
-                )
+                await loading_msg.edit_text(f"❌ Gagal mengambil data untuk {symbol}: {comp_data.get('error')}")
                 return
 
             success_calls = comp_data.get('successful_api_calls', 0)
@@ -1787,8 +1410,7 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             price_data = comp_data.get('price_data', {})
             if price_data and 'error' not in price_data:
                 current_price = price_data.get('price', 0)
-                price_format = self.crypto_api._format_price_display(
-                    current_price)
+                price_format = self.crypto_api._format_price_display(current_price)
                 change_24h = price_data.get('change_24h', 0)
                 change_emoji = "📈" if change_24h >= 0 else "📉"
 
@@ -1885,38 +1507,30 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
     async def candles_command(self, update: Update, context: CallbackContext):
         """Handle /candles command - candlestick data"""
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/candles <symbol> [interval] [limit]`\nContoh: `/candles btc 1h 12`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/candles <symbol> [interval] [limit]`\nContoh: `/candles btc 1h 12`", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
         interval = context.args[1] if len(context.args) > 1 else '1h'
-        limit = int(context.args[2]) if len(
-            context.args) > 2 and context.args[2].isdigit() else 12
+        limit = int(context.args[2]) if len(context.args) > 2 and context.args[2].isdigit() else 12
 
         # Validate interval
         valid_intervals = ['1m', '5m', '15m', '30m', '1h', '4h', '1d']
         if interval not in valid_intervals:
-            await update.message.reply_text(
-                f"❌ Interval tidak valid! Gunakan: {', '.join(valid_intervals)}"
-            )
+            await update.message.reply_text(f"❌ Interval tidak valid! Gunakan: {', '.join(valid_intervals)}")
             return
 
         # Limit the limit
         if limit > 50:
             limit = 50
 
-        loading_msg = await update.message.reply_text(
-            f"⏳ Mengambil data candlestick {symbol} ({interval})...")
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data candlestick {symbol} ({interval})...")
 
         try:
-            candles_data = self.crypto_api.get_binance_candlestick(
-                symbol, interval, limit)
+            candles_data = self.crypto_api.get_binance_candlestick(symbol, interval, limit)
 
             if not candles_data or 'error' in candles_data:
-                await loading_msg.edit_text(
-                    f"❌ Gagal mengambil data candlestick untuk {symbol}")
+                await loading_msg.edit_text(f"❌ Gagal mengambil data candlestick untuk {symbol}")
                 return
 
             candlesticks = candles_data.get('candlesticks', [])
@@ -1924,8 +1538,7 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             source_emoji = "🟢" if source == 'binance' else "🔄"
 
             if not candlesticks:
-                await loading_msg.edit_text(
-                    f"❌ Tidak ada data candlestick untuk {symbol}")
+                await loading_msg.edit_text(f"❌ Tidak ada data candlestick untuk {symbol}")
                 return
 
             message = f"""📈 **Candlestick Data - {symbol}** {source_emoji}
@@ -1938,20 +1551,14 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             # Show last 6 candles
             recent_candles = candlesticks[-6:]
             for i, candle in enumerate(recent_candles):
-                time_str = candle.get('close_time_iso',
-                                      '')[:16].replace('T', ' ')
-                open_p = self.crypto_api._format_price_display(
-                    candle.get('open', 0))
-                close_p = self.crypto_api._format_price_display(
-                    candle.get('close', 0))
-                high_p = self.crypto_api._format_price_display(
-                    candle.get('high', 0))
-                low_p = self.crypto_api._format_price_display(
-                    candle.get('low', 0))
+                time_str = candle.get('close_time_iso', '')[:16].replace('T', ' ')
+                open_p = self.crypto_api._format_price_display(candle.get('open', 0))
+                close_p = self.crypto_api._format_price_display(candle.get('close', 0))
+                high_p = self.crypto_api._format_price_display(candle.get('high', 0))
+                low_p = self.crypto_api._format_price_display(candle.get('low', 0))
                 volume = candle.get('volume', 0)
 
-                change = ((candle.get('close', 0) - candle.get('open', 0)) /
-                          candle.get('open', 1)) * 100
+                change = ((candle.get('close', 0) - candle.get('open', 0)) / candle.get('open', 1)) * 100
                 change_emoji = "🟢" if change >= 0 else "🔴"
 
                 message += f"\n**{time_str}** {change_emoji}\n"
@@ -1969,21 +1576,17 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
     async def funding_command(self, update: Update, context: CallbackContext):
         """Handle /funding command - funding rate data"""
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/funding <symbol>`\nContoh: `/funding btc`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/funding <symbol>`\nContoh: `/funding btc`", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
-        loading_msg = await update.message.reply_text(
-            f"⏳ Mengambil data funding rate {symbol}...")
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data funding rate {symbol}...")
 
         try:
             funding_data = self.crypto_api.get_binance_funding_rate(symbol)
 
             if not funding_data or 'error' in funding_data:
-                await loading_msg.edit_text(
-                    f"❌ Gagal mengambil data funding rate untuk {symbol}")
+                await loading_msg.edit_text(f"❌ Gagal mengambil data funding rate untuk {symbol}")
                 return
 
             source = funding_data.get('source', 'unknown')
@@ -2031,25 +1634,20 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
         except Exception as e:
             await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
 
-    async def open_interest_command(self, update: Update,
-                                    context: CallbackContext):
+    async def open_interest_command(self, update: Update, context: CallbackContext):
         """Handle /oi command - open interest data"""
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/oi <symbol>`\nContoh: `/oi btc`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/oi <symbol>`\nContoh: `/oi btc`", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
-        loading_msg = await update.message.reply_text(
-            f"⏳ Mengambil data open interest {symbol}...")
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data open interest {symbol}...")
 
         try:
             oi_data = self.crypto_api.get_binance_open_interest(symbol)
 
             if not oi_data or 'error' in oi_data:
-                await loading_msg.edit_text(
-                    f"❌ Gagal mengambil data open interest untuk {symbol}")
+                await loading_msg.edit_text(f"❌ Gagal mengambil data open interest untuk {symbol}")
                 return
 
             source = oi_data.get('source', 'unknown')
@@ -2071,9 +1669,9 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             # OI analysis
             if oi_value > 100000000:  # 100M+
                 oi_status = "🔴 Sangat Tinggi - High Leverage Risk"
-            elif oi_value > 50000000:  # 50M+
+            elif oi_value > 50000000:   # 50M+
                 oi_status = "🟡 Tinggi - Moderate Risk"
-            elif oi_value > 10000000:  # 10M+
+            elif oi_value > 10000000:   # 10M+
                 oi_status = "🟢 Normal - Healthy Activity"
             else:
                 oi_status = "🔵 Rendah - Low Activity"
@@ -2105,25 +1703,20 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
         except Exception as e:
             await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
 
-    async def mark_price_command(self, update: Update,
-                                 context: CallbackContext):
+    async def mark_price_command(self, update: Update, context: CallbackContext):
         """Handle /mark_price command - mark price and premium index"""
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/mark_price <symbol>`\nContoh: `/mark_price btc`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/mark_price <symbol>`\nContoh: `/mark_price btc`", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
-        loading_msg = await update.message.reply_text(
-            f"⏳ Mengambil data mark price {symbol}...")
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data mark price {symbol}...")
 
         try:
             mark_data = self.crypto_api.get_binance_mark_price(symbol)
 
             if not mark_data or 'error' in mark_data:
-                await loading_msg.edit_text(
-                    f"❌ Gagal mengambil data mark price untuk {symbol}")
+                await loading_msg.edit_text(f"❌ Gagal mengambil data mark price untuk {symbol}")
                 return
 
             mark_price = mark_data.get('mark_price', 0)
@@ -2133,8 +1726,7 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             next_funding = mark_data.get('next_funding_time_iso', '')
 
             # Calculate premium
-            premium = ((mark_price - index_price) / index_price *
-                       100) if index_price > 0 else 0
+            premium = ((mark_price - index_price) / index_price * 100) if index_price > 0 else 0
 
             message = f"""⚡ **Mark Price & Premium Index - {symbol}** 🟢
 
@@ -2164,18 +1756,15 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
         except Exception as e:
             await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
 
-    async def server_time_command(self, update: Update,
-                                  context: CallbackContext):
+    async def server_time_command(self, update: Update, context: CallbackContext):
         """Handle /server_time command - Binance server time"""
-        loading_msg = await update.message.reply_text(
-            "⏳ Mengambil waktu server Binance...")
+        loading_msg = await update.message.reply_text("⏳ Mengambil waktu server Binance...")
 
         try:
             time_data = self.crypto_api.get_binance_server_time()
 
             if not time_data or 'error' in time_data:
-                await loading_msg.edit_text(
-                    "❌ Gagal mengambil waktu server Binance")
+                await loading_msg.edit_text("❌ Gagal mengambil waktu server Binance")
                 return
 
             server_time = time_data.get('server_time_readable', '')
@@ -2205,25 +1794,20 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
         except Exception as e:
             await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
 
-    async def liquidations_command(self, update: Update,
-                                   context: CallbackContext):
+    async def liquidations_command(self, update: Update, context: CallbackContext):
         """Handle /liquidations command - recent liquidation orders"""
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/liquidations <symbol>`\nContoh: `/liquidations btc`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/liquidations <symbol>`\nContoh: `/liquidations btc`", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
-        loading_msg = await update.message.reply_text(
-            f"⏳ Mengambil data liquidation {symbol}...")
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data liquidation {symbol}...")
 
         try:
             liq_data = self.crypto_api.get_binance_liquidation_orders(symbol)
 
             if not liq_data or 'error' in liq_data:
-                await loading_msg.edit_text(
-                    f"❌ Gagal mengambil data liquidation untuk {symbol}")
+                await loading_msg.edit_text(f"❌ Gagal mengambil data liquidation untuk {symbol}")
                 return
 
             total_liq = liq_data.get('total_liquidation', 0)
@@ -2263,25 +1847,20 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
         except Exception as e:
             await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
 
-    async def long_short_command(self, update: Update,
-                                 context: CallbackContext):
+    async def long_short_command(self, update: Update, context: CallbackContext):
         """Handle /long_short command - long/short ratio analysis"""
         if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/long_short <symbol>`\nContoh: `/long_short btc`",
-                parse_mode='Markdown')
+            await update.message.reply_text("❌ Gunakan format: `/long_short <symbol>`\nContoh: `/long_short btc`", parse_mode='Markdown')
             return
 
         symbol = context.args[0].upper()
-        loading_msg = await update.message.reply_text(
-            f"⏳ Mengambil data long/short ratio {symbol}...")
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data long/short ratio {symbol}...")
 
         try:
             ls_data = self.crypto_api.get_binance_long_short_ratio(symbol)
 
             if not ls_data or 'error' in ls_data:
-                await loading_msg.edit_text(
-                    f"❌ Gagal mengambil data long/short ratio untuk {symbol}")
+                await loading_msg.edit_text(f"❌ Gagal mengambil data long/short ratio untuk {symbol}")
                 return
 
             long_ratio = ls_data.get('long_ratio', 0)
@@ -2339,8 +1918,7 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
         except Exception as e:
             await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
 
-    async def handle_callback_query(self, update: Update,
-                                    context: CallbackContext):
+    async def handle_callback_query(self, update: Update, context: CallbackContext):
         """Handle callback queries from inline keyboards"""
         query = update.callback_query
         await query.answer()
@@ -2354,32 +1932,33 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             self.db.set_user_language(user_id, language)
 
             if language == 'id':
-                await query.edit_message_text(
-                    "✅ Bahasa berhasil diubah ke Bahasa Indonesia!")
+                await query.edit_message_text("✅ Bahasa berhasil diubah ke Bahasa Indonesia!")
             else:
-                await query.edit_message_text(
-                    "✅ Language successfully changed to English!")
+                await query.edit_message_text("✅ Language successfully changed to English!")
 
         elif data == 'make_premium' and user_id == self.admin_id:
             await query.edit_message_text(
                 "👑 **Grant Premium Access**\n\n"
                 "Gunakan command: `/grant_premium <user_id> [days]`\n"
                 "Contoh: `/grant_premium 123456789 30`",
-                parse_mode='Markdown')
+                parse_mode='Markdown'
+            )
 
         elif data == 'grant_credits' and user_id == self.admin_id:
             await query.edit_message_text(
                 "💰 **Grant Credits**\n\n"
                 "Gunakan command: `/grant_credits <user_id> <amount>`\n"
                 "Contoh: `/grant_credits 123456789 50`",
-                parse_mode='Markdown')
+                parse_mode='Markdown'
+            )
 
         elif data == 'broadcast_help' and user_id == self.admin_id:
             await query.edit_message_text(
                 "📢 **Broadcast Message**\n\n"
                 "Gunakan command: `/broadcast <message>`\n"
                 "Contoh: `/broadcast Update fitur baru!`",
-                parse_mode='Markdown')
+                parse_mode='Markdown'
+            )
 
         elif data == 'bot_stats' and user_id == self.admin_id:
             # Get bot statistics
@@ -2410,8 +1989,7 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             for activity in recent_activity:
                 activity_message += f"• {activity['action']}: User {activity['user_id']}\n"
 
-            await query.edit_message_text(activity_message,
-                                          parse_mode='Markdown')
+            await query.edit_message_text(activity_message, parse_mode='Markdown')
 
         elif data == 'api_health' and user_id == self.admin_id:
             # Check API health
@@ -2425,205 +2003,37 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
 
 🔄 **Last Check:** {datetime.now().strftime('%H:%M:%S')}
             """
-            await query.edit_message_text(health_message,
-                                          parse_mode='Markdown')
+            await query.edit_message_text(health_message, parse_mode='Markdown')
 
         elif data == 'restart_bot' and user_id == self.admin_id:
-            keyboard = [[
-                InlineKeyboardButton("✅ Confirm Restart All Users",
-                                     callback_data='confirm_restart_users')
-            ], [InlineKeyboardButton("❌ Cancel", callback_data='admin_panel')]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            await query.edit_message_text(
-                "🔄 **Restart All Users**\n\n"
-                "⚠️ **This will reset ALL users' start status**\n\n"
-                "**What happens:**\n"
-                "• All users must use `/start` again\n"
-                "• Other commands blocked until restart\n"
-                "• **NO DATA LOSS** (credits, premium preserved)\n"
-                "• Perfect for engagement tracking\n\n"
-                "**Confirm to proceed:**",
-                reply_markup=reply_markup,
-                parse_mode='Markdown')
-
-        elif data == 'refresh_credits_panel' and user_id == self.admin_id:
-            keyboard = [[
-                InlineKeyboardButton("✅ Confirm Credit Refresh",
-                                     callback_data='confirm_credit_refresh')
-            ], [InlineKeyboardButton("❌ Cancel", callback_data='admin_panel')]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            # Get current statistics
-            try:
-                self.db.cursor.execute("""
-                    SELECT COUNT(*) FROM users 
-                    WHERE (is_premium = 0 OR is_premium IS NULL) 
-                    AND telegram_id IS NOT NULL
-                """)
-                free_users_count = self.db.cursor.fetchone()[0]
-
-                await query.edit_message_text(
-                    f"💰 **Weekly Credit Refresh**\n\n"
-                    f"**Current free users**: {free_users_count}\n\n"
-                    "**What happens:**\n"
-                    "• All free users get 100 credits\n"
-                    "• Previous credits reset to 100\n"
-                    "• Premium users not affected\n"
-                    "• Activity logged for tracking\n\n"
-                    "**Confirm to proceed:**",
-                    reply_markup=reply_markup,
-                    parse_mode='Markdown')
-            except Exception as e:
-                await query.edit_message_text(
-                    f"❌ Error getting user count: {str(e)}")
-
-        elif data == 'confirm_credit_refresh' and user_id == self.admin_id:
-            await query.edit_message_text("🔄 Processing credit refresh...")
-
-            try:
-                import subprocess
-                import sys
-
-                result = subprocess.run(
-                    [sys.executable, 'weekly_credit_refresh.py'],
-                    cwd='Bismillah',
-                    capture_output=True,
-                    text=True,
-                    timeout=300)
-
-                if result.returncode == 0:
-                    output_lines = result.stdout.strip().split('\n')
-                    users_updated = 0
-                    credits_given = 0
-
-                    for line in output_lines:
-                        if "Users updated:" in line:
-                            users_updated = int(
-                                line.split(":")[1].split("/")[0].strip())
-                        elif "Total credits distributed:" in line:
-                            credits_given = int(
-                                line.split(":")[1].strip().replace(",", ""))
-
-                    await query.edit_message_text(
-                        f"✅ **Credit Refresh Completed!**\n\n"
-                        f"📊 **Updated**: {users_updated} free users\n"
-                        f"💰 **Credits given**: {credits_given:,} total\n"
-                        f"🕐 **Time**: {datetime.now().strftime('%H:%M:%S WIB')}",
-                        parse_mode='Markdown')
-
-                    self.db.log_user_activity(
-                        user_id, "admin_panel_credit_refresh",
-                        f"Refreshed credits for {users_updated} users via panel"
-                    )
-                else:
-                    await query.edit_message_text(
-                        f"❌ Credit refresh failed: {result.stderr or result.stdout}"
-                    )
-
-            except Exception as e:
-                await query.edit_message_text(
-                    f"❌ Error during refresh: {str(e)}")
-
-        elif data == 'confirm_restart_users' and user_id == self.admin_id:
-            try:
-                restart_count = self.db.mark_all_users_for_restart()
-                await query.edit_message_text(
-                    f"✅ **Restart Completed!**\n\n"
-                    f"📊 **{restart_count} users** marked for restart\n"
-                    f"🔄 All users must use `/start` to continue\n"
-                    f"💾 All data preserved safely\n\n"
-                    f"**Completed**: {datetime.now().strftime('%H:%M:%S WIB')}",
-                    parse_mode='Markdown')
-                self.db.log_user_activity(
-                    user_id, "admin_restart_all",
-                    f"Restarted {restart_count} users via panel")
-            except Exception as e:
-                await query.edit_message_text(
-                    f"❌ Error during restart: {str(e)}")
-
-        elif data == 'admin_panel' and user_id == self.admin_id:
-            # Return to main admin panel
-            keyboard = [
-                [
-                    InlineKeyboardButton("👑 Buat User Premium",
-                                         callback_data='make_premium')
-                ],
-                [
-                    InlineKeyboardButton("💰 Berikan Credits",
-                                         callback_data='grant_credits')
-                ],
-                [
-                    InlineKeyboardButton("🎁 Refresh Credits Mingguan",
-                                         callback_data='refresh_credits_panel')
-                ],
-                [
-                    InlineKeyboardButton("📢 Broadcast Message",
-                                         callback_data='broadcast_help')
-                ],
-                [
-                    InlineKeyboardButton("📊 Statistik Bot",
-                                         callback_data='bot_stats')
-                ],
-                [
-                    InlineKeyboardButton("📝 Log Aktivitas",
-                                         callback_data='activity_log')
-                ],
-                [
-                    InlineKeyboardButton("🔍 API Health Report",
-                                         callback_data='api_health')
-                ],
-                [
-                    InlineKeyboardButton("🔄 Restart All Users",
-                                         callback_data='restart_bot')
-                ]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
-                "🛠 **Panel Admin CryptoMentor**\n\n"
-                "Pilih opsi yang tersedia:",
-                reply_markup=reply_markup,
-                parse_mode='Markdown')
+            await query.edit_message_text("🔄 Bot restart initiated... Please wait.")
+            # Note: Actual restart would need to be implemented based on deployment environment
 
         # Handle futures analysis callbacks (direct AI analysis)
         elif data.startswith('futures_analysis_'):
             parts = data.split('_')
             symbol = parts[2]
             timeframe = parts[3]
-            await self._handle_direct_futures_analysis(query, symbol,
-                                                       timeframe)
+            await self._handle_direct_futures_analysis(query, symbol, timeframe)
 
         # Handle futures menu callback (return to timeframe selection)
         elif data.startswith('futures_menu_'):
             symbol = data.split('_')[-1]
-            keyboard = [[
-                InlineKeyboardButton(
-                    "⚡ 15m", callback_data=f'futures_analysis_{symbol}_15m'),
-                InlineKeyboardButton(
-                    "🔥 30m", callback_data=f'futures_analysis_{symbol}_30m')
-            ],
-                        [
-                            InlineKeyboardButton(
-                                "📈 1h",
-                                callback_data=f'futures_analysis_{symbol}_1h'),
-                            InlineKeyboardButton(
-                                "🚀 4h",
-                                callback_data=f'futures_analysis_{symbol}_4h')
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "💎 1d",
-                                callback_data=f'futures_analysis_{symbol}_1d'),
-                            InlineKeyboardButton(
-                                "🌟 1w",
-                                callback_data=f'futures_analysis_{symbol}_1w')
-                        ]]
+            keyboard = [
+                [InlineKeyboardButton("⚡ 15m", callback_data=f'futures_analysis_{symbol}_15m'),
+                 InlineKeyboardButton("🔥 30m", callback_data=f'futures_analysis_{symbol}_30m')],
+                [InlineKeyboardButton("📈 1h", callback_data=f'futures_analysis_{symbol}_1h'),
+                 InlineKeyboardButton("🚀 4h", callback_data=f'futures_analysis_{symbol}_4h')],
+                [InlineKeyboardButton("💎 1d", callback_data=f'futures_analysis_{symbol}_1d'),
+                 InlineKeyboardButton("🌟 1w", callback_data=f'futures_analysis_{symbol}_1w')]
+            ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
                 f"📊 **Analisis Futures {symbol}**\n\n"
                 "Pilih timeframe untuk analisis teknikal advance:",
                 reply_markup=reply_markup,
-                parse_mode='Markdown')
+                parse_mode='Markdown'
+            )
 
         # Handle additional futures analysis callbacks
         elif data.startswith('deep_technical_'):
@@ -2646,35 +2056,8 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             symbol = data.split('_')[-1]
             await self._handle_funding_history(query, symbol)
 
-    async def _check_user_restart_required(self, update: Update) -> bool:
-        """Check if user needs to restart before using commands"""
-        user_id = update.effective_user.id
-
-        # Skip check for admin
-        if user_id == self.admin_id:
-            return False
-
-        # Skip check for start command (handled separately)
-        if update.message and update.message.text and update.message.text.startswith(
-                '/start'):
-            return False
-
-        # Check if user needs restart
-        if self.db.user_needs_restart(user_id):
-            await update.message.reply_text(
-                "🔄 **Bot telah direstart oleh admin**\n\n"
-                "Silakan gunakan `/start` untuk melanjutkan penggunaan bot.\n\n"
-                "💡 Data Anda (credits, premium, portfolio) tetap aman!",
-                parse_mode='Markdown')
-            return True
-        return False
-
     async def handle_message(self, update: Update, context: CallbackContext):
         """Handle regular text messages (not commands)"""
-        # Check if user needs restart
-        if await self._check_user_restart_required(update):
-            return
-
         user_id = update.message.from_user.id
         text = update.message.text.lower()
 
@@ -2683,25 +2066,14 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
         language = user_data.get('language', 'id') if user_data else 'id'
 
         # Check if message contains crypto-related queries
-        crypto_keywords = [
-            'harga', 'price', 'bitcoin', 'btc', 'ethereum', 'eth', 'bnb',
-            'ada', 'sol', 'doge', 'analisis', 'analyze', 'futures', 'trading',
-            'crypto', 'coin', 'pasar', 'market', 'bagaimana', 'how about',
-            'gimana', 'berapa', 'how much'
-        ]
+        crypto_keywords = ['harga', 'price', 'bitcoin', 'btc', 'ethereum', 'eth', 'bnb', 'ada', 'sol', 'doge', 
+                          'analisis', 'analyze', 'futures', 'trading', 'crypto', 'coin', 'pasar', 'market',
+                          'bagaimana', 'how about', 'gimana', 'berapa', 'how much']
 
-        crypto_symbols = [
-            'btc', 'eth', 'bnb', 'ada', 'sol', 'doge', 'xrp', 'dot', 'matic',
-            'avax', 'link', 'ltc', 'ondo', 'sei', 'pepe', 'moodeng', 'shib',
-            'floki', 'wif', 'bonk', 'jup', 'pyth', 'render', 'inj', 'sui',
-            'apt', 'op', 'arb', 'tia', 'hyperliquid', 'popcat', 'pendle',
-            'eigen'
-        ]
+        crypto_symbols = ['btc', 'eth', 'bnb', 'ada', 'sol', 'doge', 'xrp', 'dot', 'matic', 'avax', 'link', 'ltc', 'ondo', 'sei', 'pepe', 'moodeng', 'shib', 'floki', 'wif', 'bonk', 'jup', 'pyth', 'render', 'inj', 'sui', 'apt', 'op', 'arb', 'tia', 'hyperliquid', 'popcat', 'pendle', 'eigen']
 
         # Check if text contains crypto keywords or symbols
-        is_crypto_query = any(keyword in text
-                              for keyword in crypto_keywords) or any(
-                                  symbol in text for symbol in crypto_symbols)
+        is_crypto_query = any(keyword in text for keyword in crypto_keywords) or any(symbol in text for symbol in crypto_symbols)
 
         if is_crypto_query:
             # Try to extract crypto symbol from text
@@ -2715,19 +2087,14 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             if any(word in text for word in ['harga', 'price', 'berapa']):
                 if detected_symbol:
                     # Show loading message
-                    loading_msg = await update.message.reply_text(
-                        f"⏳ Mengecek harga {detected_symbol}...")
+                    loading_msg = await update.message.reply_text(f"⏳ Mengecek harga {detected_symbol}...")
 
                     # Get price data
-                    price_data = self.crypto_api.get_price(detected_symbol,
-                                                           force_refresh=True)
+                    price_data = self.crypto_api.get_price(detected_symbol, force_refresh=True)
 
                     if price_data and 'error' not in price_data:
                         source = price_data.get('source', 'unknown')
-                        is_real_data = source in [
-                            'binance', 'binance_simple', 'coingecko',
-                            'coingecko_free'
-                        ]
+                        is_real_data = source in ['binance', 'binance_simple', 'coingecko', 'coingecko_free']
 
                         response = f"""💰 **Harga {detected_symbol} saat ini**: ${price_data.get('price', 0):,.2f}
 
@@ -2738,15 +2105,13 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
                     else:
                         response = f"❌ Maaf, tidak dapat menemukan data harga untuk {detected_symbol}"
 
-                    await loading_msg.edit_text(response,
-                                                parse_mode='Markdown')
+                    await loading_msg.edit_text(response, parse_mode='Markdown')
                     return
                 else:
                     response = "💡 Untuk cek harga, sebutkan nama crypto seperti: 'harga bitcoin' atau 'berapa harga eth'"
 
             # If asking for analysis
-            elif any(word in text for word in
-                     ['analisis', 'analyze', 'gimana', 'bagaimana']):
+            elif any(word in text for word in ['analisis', 'analyze', 'gimana', 'bagaimana']):
                 if detected_symbol:
                     # Check credits first
                     credits = self.db.get_user_credits(user_id)
@@ -2756,32 +2121,24 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
                     if not is_premium and not is_admin and credits < 20:
                         response = "❌ Credit tidak cukup untuk analisis mendalam. Gunakan `/credits` untuk melihat sisa credit Anda."
                     else:
-                        loading_msg = await update.message.reply_text(
-                            f"⏳ Menganalisis {detected_symbol}...")
+                        loading_msg = await update.message.reply_text(f"⏳ Menganalisis {detected_symbol}...")
 
                         try:
-                            price_data = self.crypto_api.get_price(
-                                detected_symbol)
-                            futures_data = self.crypto_api.get_futures_data(
-                                detected_symbol)
+                            price_data = self.crypto_api.get_price(detected_symbol)
+                            futures_data = self.crypto_api.get_futures_data(detected_symbol)
 
-                            analysis = self.ai.get_comprehensive_analysis(
-                                detected_symbol, futures_data, price_data,
-                                'id', self.crypto_api)
+                            analysis = self.ai.get_comprehensive_analysis(detected_symbol, futures_data, price_data, 'id', self.crypto_api)
 
                             # Deduct credit if needed
                             if not is_premium and not is_admin:
                                 self.db.deduct_credit(user_id, 20)
-                                remaining_credits = self.db.get_user_credits(
-                                    user_id)
+                                remaining_credits = self.db.get_user_credits(user_id)
                                 analysis += f"\n\n💳 Credit tersisa: {remaining_credits}"
 
-                            await loading_msg.edit_text(analysis,
-                                                        parse_mode='Markdown')
+                            await loading_msg.edit_text(analysis, parse_mode='Markdown')
                             return
                         except Exception as e:
-                            await loading_msg.edit_text(
-                                f"❌ Terjadi kesalahan saat analisis: {str(e)}")
+                            await loading_msg.edit_text(f"❌ Terjadi kesalahan saat analisis: {str(e)}")
                             return
                 else:
                     response = "💡 Untuk analisis, sebutkan crypto seperti: 'analisis bitcoin' atau 'gimana eth'"
@@ -2797,26 +2154,21 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
                     if not is_premium and not is_admin and credits < 20:
                         response = "❌ Credit tidak cukup untuk analisis futures. Gunakan `/credits` untuk melihat sisa credit Anda."
                     else:
-                        loading_msg = await update.message.reply_text(
-                            f"⏳ Menganalisis futures {detected_symbol}...")
+                        loading_msg = await update.message.reply_text(f"⏳ Menganalisis futures {detected_symbol}...")
 
                         try:
-                            signals = self.ai.generate_single_futures_signal(
-                                detected_symbol, 'id', self.crypto_api)
+                            signals = self.ai.generate_single_futures_signal(detected_symbol, 'id', self.crypto_api)
 
                             # Deduct credit if needed
                             if not is_premium and not is_admin:
                                 self.db.deduct_credit(user_id, 20)
-                                remaining_credits = self.db.get_user_credits(
-                                    user_id)
+                                remaining_credits = self.db.get_user_credits(user_id)
                                 signals += f"\n\n💳 Credit tersisa: {remaining_credits}"
 
-                            await loading_msg.edit_text(signals,
-                                                        parse_mode='Markdown')
+                            await loading_msg.edit_text(signals, parse_mode='Markdown')
                             return
                         except Exception as e:
-                            await loading_msg.edit_text(
-                                f"❌ Terjadi kesalahan: {str(e)}")
+                            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
                             return
                 else:
                     response = "💡 Untuk analisis futures, sebutkan crypto seperti: 'futures bitcoin' atau 'sinyal eth'"
@@ -2831,26 +2183,21 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
                 if not is_premium and not is_admin and credits < 20:
                     response = "❌ Credit tidak cukup untuk overview pasar. Gunakan `/credits` untuk melihat sisa credit Anda."
                 else:
-                    loading_msg = await update.message.reply_text(
-                        "⏳ Menganalisis kondisi pasar...")
+                    loading_msg = await update.message.reply_text("⏳ Menganalisis kondisi pasar...")
 
                     try:
-                        market_data = self.ai.get_market_sentiment(
-                            'id', self.crypto_api)
+                        market_data = self.ai.get_market_sentiment('id', self.crypto_api)
 
                         # Deduct credit if needed
                         if not is_premium and not is_admin:
                             self.db.deduct_credit(user_id, 20)
-                            remaining_credits = self.db.get_user_credits(
-                                user_id)
+                            remaining_credits = self.db.get_user_credits(user_id)
                             market_data += f"\n\n💳 Credit tersisa: {remaining_credits}"
 
-                        await loading_msg.edit_text(market_data,
-                                                    parse_mode='Markdown')
+                        await loading_msg.edit_text(market_data, parse_mode='Markdown')
                         return
                     except Exception as e:
-                        await loading_msg.edit_text(
-                            f"❌ Terjadi kesalahan: {str(e)}")
+                        await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
                         return
             else:
                 # General crypto response
@@ -2877,18 +2224,15 @@ Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
 
         # Check credits again for non-premium users
         if not is_premium and not is_admin and credits < 20:
-            await query.edit_message_text(
-                "❌ Credit tidak cukup untuk analisis futures!")
+            await query.edit_message_text("❌ Credit tidak cukup untuk analisis futures!")
             return
 
         # Show loading message
-        await query.edit_message_text(
-            f"⏳ AI sedang menganalisis {symbol} pada timeframe {timeframe}...")
+        await query.edit_message_text(f"⏳ AI sedang menganalisis {symbol} pada timeframe {timeframe}...")
 
         try:
             # Get AI recommendation for best trading setup
-            analysis = self.ai.get_ai_futures_recommendation(
-                symbol, timeframe, self.crypto_api)
+            analysis = self.ai.get_ai_futures_recommendation(symbol, timeframe, self.crypto_api)
 
             # Deduct credits for non-premium users
             if not is_premium and not is_admin:
@@ -2901,42 +2245,29 @@ Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
                 analysis += f"\n\n👑 **Admin Access** - Unlimited"
 
             # Add navigation keyboard
-            keyboard = [[
-                InlineKeyboardButton("🔄 Ganti Timeframe",
-                                     callback_data=f'futures_menu_{symbol}')
-            ]]
+            keyboard = [
+                [InlineKeyboardButton("🔄 Ganti Timeframe", callback_data=f'futures_menu_{symbol}')]
+            ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             # Split long messages if needed
             if len(analysis) > 4000:
-                chunks = [
-                    analysis[i:i + 4000]
-                    for i in range(0, len(analysis), 4000)
-                ]
+                chunks = [analysis[i:i+4000] for i in range(0, len(analysis), 4000)]
                 await query.edit_message_text(chunks[0], parse_mode='Markdown')
 
                 # Send additional chunks
                 for chunk in chunks[1:]:
-                    await query.message.reply_text(chunk,
-                                                   parse_mode='Markdown')
+                    await query.message.reply_text(chunk, parse_mode='Markdown')
 
                 # Add keyboard to last message
-                await query.message.reply_text("📈 **Navigasi:**",
-                                               reply_markup=reply_markup)
+                await query.message.reply_text("📈 **Navigasi:**", reply_markup=reply_markup)
             else:
-                await query.edit_message_text(analysis,
-                                              reply_markup=reply_markup,
-                                              parse_mode='Markdown')
+                await query.edit_message_text(analysis, reply_markup=reply_markup, parse_mode='Markdown')
 
         except Exception as e:
-            await query.edit_message_text(
-                f"❌ Terjadi kesalahan: {str(e)[:100]}")
+            await query.edit_message_text(f"❌ Terjadi kesalahan: {str(e)[:100]}")
 
-    async def _handle_futures_timeframe_analysis(self,
-                                                 query,
-                                                 symbol,
-                                                 timeframe,
-                                                 position='long'):
+    async def _handle_futures_timeframe_analysis(self, query, symbol, timeframe, position='long'):
         """Handle futures timeframe analysis callback with position"""
         user_id = query.from_user.id
         credits = self.db.get_user_credits(user_id)
@@ -2945,20 +2276,16 @@ Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
 
         # Check credits again for non-premium users
         if not is_premium and not is_admin and credits < 20:
-            await query.edit_message_text(
-                "❌ Credit tidak cukup untuk analisis futures!")
+            await query.edit_message_text("❌ Credit tidak cukup untuk analisis futures!")
             return
 
         # Show loading message
         position_emoji = "📈" if position == 'long' else "📉"
-        await query.edit_message_text(
-            f"⏳ Menganalisis {symbol} {position_emoji} {position.upper()} pada {timeframe}..."
-        )
+        await query.edit_message_text(f"⏳ Menganalisis {symbol} {position_emoji} {position.upper()} pada {timeframe}...")
 
         try:
             # Get comprehensive timeframe analysis with position
-            analysis = self.ai.get_advanced_technical_analysis_with_position(
-                symbol, timeframe, position, self.crypto_api)
+            analysis = self.ai.get_advanced_technical_analysis_with_position(symbol, timeframe, position, self.crypto_api)
 
             # Deduct credits for non-premium users
             if not is_premium and not is_admin:
@@ -2971,64 +2298,48 @@ Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
                 analysis += f"\n\n👑 **Admin Access** - Unlimited"
 
             # Add navigation keyboard
-            keyboard = [[
-                InlineKeyboardButton(
-                    "🔄 Ganti Position",
-                    callback_data=f'futures_tf_{symbol}_{timeframe}'),
-                InlineKeyboardButton("📊 Ganti Timeframe",
-                                     callback_data=f'futures_menu_{symbol}')
-            ]]
+            keyboard = [
+                [InlineKeyboardButton("🔄 Ganti Position", callback_data=f'futures_tf_{symbol}_{timeframe}'),
+                 InlineKeyboardButton("📊 Ganti Timeframe", callback_data=f'futures_menu_{symbol}')]
+            ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             # Split long messages if needed
             if len(analysis) > 4000:
-                chunks = [
-                    analysis[i:i + 4000]
-                    for i in range(0, len(analysis), 4000)
-                ]
+                chunks = [analysis[i:i+4000] for i in range(0, len(analysis), 4000)]
                 await query.edit_message_text(chunks[0], parse_mode='Markdown')
 
                 # Send additional chunks
                 for chunk in chunks[1:]:
-                    await query.message.reply_text(chunk,
-                                                   parse_mode='Markdown')
+                    await query.message.reply_text(chunk, parse_mode='Markdown')
 
                 # Add keyboard to last message
-                await query.message.reply_text("📈 **Navigasi:**",
-                                               reply_markup=reply_markup)
+                await query.message.reply_text("📈 **Navigasi:**", reply_markup=reply_markup)
             else:
-                await query.edit_message_text(analysis,
-                                              reply_markup=reply_markup,
-                                              parse_mode='Markdown')
+                await query.edit_message_text(analysis, reply_markup=reply_markup, parse_mode='Markdown')
 
         except Exception as e:
-            await query.edit_message_text(
-                f"❌ Terjadi kesalahan: {str(e)[:100]}")
+            await query.edit_message_text(f"❌ Terjadi kesalahan: {str(e)[:100]}")
 
     async def _handle_deep_technical_analysis(self, query, symbol):
         """Handle deep technical analysis callback"""
-        await query.edit_message_text(
-            f"📚 Analisis teknikal mendalam untuk {symbol} akan segera hadir!")
+        await query.edit_message_text(f"📚 Analisis teknikal mendalam untuk {symbol} akan segera hadir!")
 
     async def _handle_binance_data_callback(self, query, symbol):
         """Handle Binance data callback"""
-        await query.edit_message_text(
-            f"📊 Data Binance untuk {symbol} akan segera hadir!")
+        await query.edit_message_text(f"📊 Data Binance untuk {symbol} akan segera hadir!")
 
     async def _handle_liquidation_analysis(self, query, symbol):
         """Handle liquidation analysis callback"""
-        await query.edit_message_text(
-            f"🔥 Analisis likuidasi untuk {symbol} akan segera hadir!")
+        await query.edit_message_text(f"🔥 Analisis likuidasi untuk {symbol} akan segera hadir!")
 
     async def _handle_long_short_analysis(self, query, symbol):
         """Handle long/short ratio analysis callback"""
-        await query.edit_message_text(
-            f"🐂 Analisis long/short ratio untuk {symbol} akan segera hadir!")
+        await query.edit_message_text(f"🐂 Analisis long/short ratio untuk {symbol} akan segera hadir!")
 
     async def _handle_funding_history(self, query, symbol):
         """Handle funding rate history callback"""
-        await query.edit_message_text(
-            f"💰 Histori funding rate untuk {symbol} akan segera hadir!")
+        await query.edit_message_text(f"💰 Histori funding rate untuk {symbol} akan segera hadir!")
 
     async def admin_command(self, update: Update, context: CallbackContext):
         """Admin panel command"""
@@ -3039,54 +2350,30 @@ Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
             # Don't send any response to non-admin users
             return
 
-        keyboard = [[
-            InlineKeyboardButton("👑 Buat User Premium",
-                                 callback_data='make_premium')
-        ],
-                    [
-                        InlineKeyboardButton("💰 Berikan Credits",
-                                             callback_data='grant_credits')
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🎁 Refresh Credits Mingguan",
-                            callback_data='refresh_credits_panel')
-                    ],
-                    [
-                        InlineKeyboardButton("📢 Broadcast Message",
-                                             callback_data='broadcast_help')
-                    ],
-                    [
-                        InlineKeyboardButton("📊 Statistik Bot",
-                                             callback_data='bot_stats')
-                    ],
-                    [
-                        InlineKeyboardButton("📝 Log Aktivitas",
-                                             callback_data='activity_log')
-                    ],
-                    [
-                        InlineKeyboardButton("🔍 API Health Report",
-                                             callback_data='api_health')
-                    ],
-                    [
-                        InlineKeyboardButton("🔄 Restart Bot",
-                                             callback_data='restart_bot')
-                    ]]
+        keyboard = [
+            [InlineKeyboardButton("👑 Buat User Premium", callback_data='make_premium')],
+            [InlineKeyboardButton("💰 Berikan Credits", callback_data='grant_credits')],
+            [InlineKeyboardButton("📢 Broadcast Message", callback_data='broadcast_help')],
+            [InlineKeyboardButton("📊 Statistik Bot", callback_data='bot_stats')],
+            [InlineKeyboardButton("📝 Log Aktivitas", callback_data='activity_log')],
+            [InlineKeyboardButton("🔍 API Health Report", callback_data='api_health')],
+            [InlineKeyboardButton("🔄 Restart Bot", callback_data='restart_bot')]
+        ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
             "🛠 **Panel Admin CryptoMentor**\n\n"
             "Pilih opsi yang tersedia:",
             reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN)
-
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
     async def admin_stats(self, update: Update, context: CallbackContext):
         """Admin command to view bot statistics"""
         user_id = update.effective_user.id
 
         if user_id != self.admin_id:
-            await update.message.reply_text(
-                "❌ Access denied. Admin only command.")
+            await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
         try:
@@ -3095,18 +2382,14 @@ Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
 
             # Check API health
             api_status = self.crypto_api.check_api_status()
-            api_health = "✅ All Connected" if api_status.get(
-                'overall_health', False) else "⚠️ Partial"
+            api_health = "✅ All Connected" if api_status.get('overall_health', False) else "⚠️ Partial"
 
             # Additional database checks
             try:
-                self.db.cursor.execute(
-                    "SELECT COUNT(*) FROM users WHERE telegram_id IS NULL OR telegram_id = 0"
-                )
+                self.db.cursor.execute("SELECT COUNT(*) FROM users WHERE telegram_id IS NULL OR telegram_id = 0")
                 invalid_users = self.db.cursor.fetchone()[0]
 
-                self.db.cursor.execute(
-                    "SELECT COUNT(*) FROM users WHERE credits < 0")
+                self.db.cursor.execute("SELECT COUNT(*) FROM users WHERE credits < 0")
                 negative_credits = self.db.cursor.fetchone()[0]
             except:
                 invalid_users = 0
@@ -3141,16 +2424,13 @@ Atau gunakan command seperti `/price btc`, `/analyze eth`, `/futures sol`"""
 
 System Status: 🟢 Operational"""
 
-            await update.message.reply_text(message,
-                                            parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
         except Exception as e:
-            await update.message.reply_text(f"❌ Error fetching stats: {str(e)}"
-                                            )
+            await update.message.reply_text(f"❌ Error fetching stats: {str(e)}")
             print(f"Admin stats error: {e}")
 
-    async def check_admin_command(self, update: Update,
-                                  context: CallbackContext):
+    async def check_admin_command(self, update: Update, context: CallbackContext):
         """Check admin status - debugging command"""
         user_id = update.effective_user.id
         username = update.effective_user.username or "No username"
@@ -3178,247 +2458,5 @@ System Status: 🟢 Operational"""
 • `/admin` - Admin panel"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
-
-    async def restart_command(self, update: Update, context: CallbackContext):
-        """Handle /restart command - Reset all users to require /start again"""
-        user_id = update.message.from_user.id
-
-        # Only admin can use restart command
-        if user_id != self.admin_id:
-            await update.message.reply_text(
-                "❌ Access denied. Admin only command.")
-            return
-
-        # Check if confirmation is provided
-        if context.args and context.args[0].lower() == 'confirm':
-            try:
-                # Mark all users for restart
-                restart_count = self.db.mark_all_users_for_restart()
-
-                success_message = f"""✅ **Bot Restart Executed Successfully!**
-
-📊 **Results:**
-• **Users marked for restart**: {restart_count}
-• **Status**: All users must use `/start` again
-• **Data preserved**: Credits, premium, portfolio intact
-
-🔄 **What happens next:**
-1. All users will be asked to use `/start` command
-2. Other commands blocked until they restart
-3. Users who `/start` will be logged as "user_reactivated"
-4. Perfect for tracking active vs inactive users
-
-💡 **Benefits:**
-• Fresh engagement tracking
-• Clean statistics reset
-• No data loss for users
-
-**Restart completed at**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S WIB')}"""
-
-                await update.message.reply_text(success_message,
-                                                parse_mode='Markdown')
-
-                # Log admin action
-                self.db.log_user_activity(
-                    user_id, "admin_restart_all",
-                    f"Marked {restart_count} users for restart")
-
-            except Exception as e:
-                await update.message.reply_text(
-                    f"❌ **Error during restart**: {str(e)}",
-                    parse_mode='Markdown')
-        else:
-            # Show confirmation message
-            confirmation_message = f"""🔄 **Bot Restart Confirmation**
-
-⚠️ **WARNING**: This will reset ALL users' start status!
-
-**What will happen:**
-• All {self.db.get_bot_statistics().get('total_users', 0)} users must use `/start` again
-• **NO DATA LOSS**: Credits, premium, portfolio preserved
-• Commands blocked until users restart with `/start`
-• Perfect for engagement tracking
-
-**Benefits:**
-• Track active vs inactive users
-• Fresh statistics
-• Clean user re-engagement
-• Identify truly active community
-
-**Type to confirm:**
-`/restart confirm`
-
-**To cancel:**
-Just ignore this message"""
-
-            await update.message.reply_text(confirmation_message,
-                                            parse_mode='Markdown')
-
-    async def refresh_credits_command(self, update: Update,
-                                      context: CallbackContext):
-        """Handle /refresh_credits command - Refresh credits for all free users"""
-        user_id = update.message.from_user.id
-
-        # Only admin can use this command
-        if user_id != self.admin_id:
-            await update.message.reply_text(
-                "❌ Access denied. Admin only command.")
-            return
-
-        # Check if confirmation is provided
-        if context.args and context.args[0].lower() == 'confirm':
-            loading_msg = await update.message.reply_text(
-                "🔄 Refreshing credits for all free users...")
-
-            try:
-                # Direct database approach instead of subprocess
-                print(f"🔄 Starting manual credit refresh by admin {user_id}")
-
-                # Get all non-premium users
-                self.db.cursor.execute("""
-                    SELECT telegram_id, first_name, username, credits, is_premium
-                    FROM users 
-                    WHERE (is_premium = 0 OR is_premium IS NULL) 
-                    AND telegram_id IS NOT NULL 
-                    AND telegram_id != 0
-                """)
-
-                free_users = self.db.cursor.fetchall()
-                total_free_users = len(free_users)
-
-                if total_free_users == 0:
-                    await loading_msg.edit_text(
-                        "ℹ️ **No free users found in database**")
-                    return
-
-                # Update credits for all free users
-                updated_count = 0
-                total_credits_given = 0
-
-                for user in free_users:
-                    telegram_id, first_name, username, current_credits, is_premium = user
-
-                    # Set credits to 100 for free users
-                    new_credits = 100
-
-                    try:
-                        self.db.cursor.execute(
-                            """
-                            UPDATE users SET credits = ? WHERE telegram_id = ?
-                        """, (new_credits, telegram_id))
-
-                        # Log the credit refresh
-                        self.db.cursor.execute(
-                            """
-                            INSERT INTO user_activity (telegram_id, action, details)
-                            VALUES (?, ?, ?)
-                        """,
-                            (telegram_id, "manual_credit_refresh",
-                             f"Credits refreshed to {new_credits} (was {current_credits}) by admin"
-                             ))
-
-                        updated_count += 1
-                        total_credits_given += new_credits
-
-                        print(
-                            f"✅ {first_name} (@{username or 'no_username'}): {current_credits} → {new_credits} credits"
-                        )
-
-                    except Exception as e:
-                        print(f"❌ Error updating user {telegram_id}: {e}")
-                        continue
-
-                # Commit all changes
-                self.db.conn.commit()
-
-                print(
-                    f"✅ Manual credit refresh completed: {updated_count}/{total_free_users} users"
-                )
-
-                success_message = f"""✅ **Credit Refresh Completed Successfully!**
-
-📊 **Results:**
-• **Free users updated**: {updated_count}/{total_free_users}
-• **Credits per user**: 100
-• **Total credits distributed**: {total_credits_given:,}
-
-💰 **What happened:**
-• All non-premium users now have 100 credits
-• Previous credits were reset to 100
-• Activity logged for tracking
-
-🎯 **Benefits:**
-• Fair access to bot features
-• Encourages continued usage
-• Level playing field for all free users
-
-**Refresh completed at**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S WIB')}"""
-
-                await loading_msg.edit_text(success_message,
-                                            parse_mode='Markdown')
-
-                # Log admin action
-                self.db.log_user_activity(
-                    user_id, "admin_manual_credit_refresh",
-                    f"Manually refreshed credits for {updated_count} free users"
-                )
-
-            except Exception as e:
-                error_message = f"❌ **Error during credit refresh**: {str(e)}"
-                print(f"❌ Credit refresh error: {e}")
-                import traceback
-                traceback.print_exc()
-                await loading_msg.edit_text(error_message)
-        else:
-            # Show confirmation message with current statistics
-            try:
-                # Get current free user count
-                self.db.cursor.execute("""
-                    SELECT COUNT(*) FROM users 
-                    WHERE (is_premium = 0 OR is_premium IS NULL) 
-                    AND telegram_id IS NOT NULL
-                """)
-                free_users_count = self.db.cursor.fetchone()[0]
-
-                # Get users with low credits
-                self.db.cursor.execute("""
-                    SELECT COUNT(*) FROM users 
-                    WHERE (is_premium = 0 OR is_premium IS NULL) 
-                    AND telegram_id IS NOT NULL
-                    AND credits < 50
-                """)
-                low_credit_users = self.db.cursor.fetchone()[0]
-
-                confirmation_message = f"""💰 **Weekly Credit Refresh Confirmation**
-
-📊 **Current Status:**
-• **Free users**: {free_users_count}
-• **Users with <50 credits**: {low_credit_users}
-• **Premium users**: Excluded (unlimited access)
-
-🎁 **What will happen:**
-• ALL free users will get **100 credits**
-• Previous credit amounts will be reset
-• Activity will be logged for each user
-• Premium users are not affected
-
-💡 **Benefits:**
-• Equal opportunity for all free users
-• Encourages continued bot usage
-• Fair access to premium features
-
-**Type to confirm:**
-`/refresh_credits confirm`
-
-**To cancel:**
-Just ignore this message"""
-
-                await update.message.reply_text(confirmation_message,
-                                                parse_mode='Markdown')
-
-            except Exception as e:
-                await update.message.reply_text(
-                    f"❌ Error getting statistics: {str(e)}")
-
 
 # News command will be integrated in main bot class
