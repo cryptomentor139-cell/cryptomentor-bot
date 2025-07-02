@@ -1035,8 +1035,7 @@ Bagikan link Anda dan mulai earning!"""
     async def language_command(self, update: Update, context: CallbackContext):
         """Handle /language command"""
         keyboard = [[
-            InlineKeyboardButton("🇮🇩 Bahasa Indonesia"),
-                                 callback_data='lang_id')
+            InlineKeyboardButton("🇮🇩 Bahasa Indonesia", callback_data='lang_id')
         ], [InlineKeyboardButton("🇺🇸 English", callback_data='lang_en')]]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
