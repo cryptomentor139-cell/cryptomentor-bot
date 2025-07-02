@@ -1,7 +1,12 @@
 
-#!/usr/bin/env python3
-from database import Database
 import os
+import sys
+from dotenv import load_dotenv
+
+# Add the parent directory to sys.path so we can import from Bismillah
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from database import Database
 
 def test_premium_functionality():
     """Test premium functionality"""

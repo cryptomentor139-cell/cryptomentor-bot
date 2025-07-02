@@ -110,6 +110,11 @@ def fix_database_users():
         import traceback
         traceback.print_exc()
 
+if __name__ == "__main__":
+    fix_database_users()
+        import traceback
+        traceback.print_exc()
+
 def create_test_user():
     """Create a test user to verify database functionality"""
     print("\n🧪 Creating test user...")
