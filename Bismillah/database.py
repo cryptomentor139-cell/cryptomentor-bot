@@ -306,6 +306,24 @@ class Database:
                 WHERE telegram_id = ? AND status = 'active'
             """, (telegram_id,))
 
+            # Log the revocation
+            self.cursor.execute("""
+                INSERT INTO user_activity (telegram_id, action, details)
+                VALUES (?, ?, ?)
+            """, (telegram_id, "premium_revoked", f"Premium revoked by admin {revoked_by_id}"))
+
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"DB Error (revoke_premium_access): {e}")
+            return False))
+
+            # Update subscription status
+            self.cursor.execute("""
+                UPDATE subscriptions SET status = 'revoked' 
+                WHERE telegram_id = ? AND status = 'active'
+            """, (telegram_id,))
+
             self.conn.commit()
             return True
         except Exception as e:
