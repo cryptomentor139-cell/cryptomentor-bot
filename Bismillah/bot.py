@@ -223,14 +223,49 @@ class TelegramBot:
 
             print(f"🔍 Processing /start for user {user.id} ({user.first_name})")
 
-            # Ensure user persistence (create if new, update if existing)
-            success = self.db.ensure_user_persistence(
-                telegram_id=user.id,
-                username=user.username or 'no_username',
-                first_name=user.first_name or 'Unknown',
-                last_name=user.last_name,
-                language_code=user.language_code or 'id'
-            )
+            # Check for referral parameter
+            referred_by = None
+            if context.args and len(context.args) > 0:
+                arg = context.args[0]
+                if arg.startswith('ref_'):
+                    try:
+                        referred_by = int(arg[4:])  # Extract user ID from ref_USERID
+                        print(f"🎁 User {user.id} was referred by {referred_by}")
+                    except ValueError:
+                        print(f"❌ Invalid referral code: {arg}")
+
+            # Check if user already exists
+            existing_user = self.db.get_user(user.id)
+            
+            if not existing_user:
+                # New user - create with referral
+                success = self.db.create_user(
+                    telegram_id=user.id,
+                    username=user.username or 'no_username',
+                    first_name=user.first_name or 'Unknown',
+                    last_name=user.last_name,
+                    language_code=user.language_code or 'id',
+                    referred_by=referred_by
+                )
+                
+                # Give referral bonus to referrer if applicable
+                if referred_by and success:
+                    try:
+                        # Add 10 credits to referrer
+                        self.db.add_credits(referred_by, 10)
+                        self.db.log_user_activity(referred_by, "referral_bonus", f"Got 10 credits for referring user {user.id}")
+                        print(f"✅ Gave 10 credits to referrer {referred_by}")
+                    except Exception as e:
+                        print(f"❌ Error giving referral bonus: {e}")
+            else:
+                # Existing user - ensure persistence
+                success = self.db.ensure_user_persistence(
+                    telegram_id=user.id,
+                    username=user.username or 'no_username',
+                    first_name=user.first_name or 'Unknown',
+                    last_name=user.last_name,
+                    language_code=user.language_code or 'id'
+                )
 
             if not success:
                 print(f"❌ Failed to ensure user persistence: {user.id}")
@@ -930,10 +965,32 @@ Pastikan menyertakan User ID (`{user_id}`) dalam pesan ke admin untuk mempercepa
         user_id = update.message.from_user.id
         username = update.message.from_user.username or "no_username"
 
+        # Get bot username dynamically
+        try:
+            bot_info = await self.application.bot.get_me()
+            bot_username = bot_info.username
+        except Exception as e:
+            print(f"Error getting bot info: {e}")
+            bot_username = "CryptoMentorAI_bot"  # Fallback username
+
+        # Get referral statistics
+        try:
+            self.db.cursor.execute("""
+                SELECT COUNT(*) FROM users WHERE referred_by = ?
+            """, (user_id,))
+            total_referrals = self.db.cursor.fetchone()[0]
+            
+            # Calculate credits earned from referrals (10 credits per referral)
+            credits_earned = total_referrals * 10
+        except Exception as e:
+            print(f"Error getting referral stats: {e}")
+            total_referrals = 0
+            credits_earned = 0
+
         message = f"""🎁 **Program Referral**
 
 👤 **Link Referral Anda:**
-`https://t.me/YourBotUsername?start=ref_{user_id}`
+`https://t.me/{bot_username}?start=ref_{user_id}`
 
 💰 **Keuntungan:**
 • Dapatkan 10 credit untuk setiap referral berhasil
@@ -941,8 +998,14 @@ Pastikan menyertakan User ID (`{user_id}`) dalam pesan ke admin untuk mempercepa
 • Unlimited referrals!
 
 📊 **Status Referral:**
-• Total Referrals: 0
-• Credit Earned: 0
+• Total Referrals: {total_referrals}
+• Credit Earned: {credits_earned}
+
+🔗 **Cara Menggunakan:**
+1. Bagikan link di atas ke teman-teman
+2. Mereka harus klik link dan /start
+3. Anda otomatis dapat 10 credit per referral
+4. Mereka juga dapat bonus 5 credit
 
 Bagikan link Anda dan mulai earning!"""
         
