@@ -370,101 +370,127 @@ class TelegramBot:
 
 🤖 Saya adalah AI assistant crypto trading terlengkap dengan data real-time dari multiple API.
 
-📊 **Harga & Data Pasar:**
-• `/price <symbol>` - Harga real-time
-• `/market` - Overview pasar komprehensif
+💡 **Untuk memulai:** Gunakan `/help` untuk panduan lengkap semua fitur bot!
 
-📈 **Analisis Trading:**
-• `/analyze <symbol>` - Analisis mendalam (20 credit)
-• `/futures <symbol>` - Analisis futures 1 coin (20 credit)
-• `/futures_signals` - Sinyal futures lengkap (30 credit)
+📊 **Quick Start - Contoh Penggunaan:**
 
-💼 **Portfolio & Credit:**
-• `/portfolio` - Lihat portfolio
-• `/add_coin <symbol> <amount>` - Tambah ke portfolio
-• `/credits` - Cek sisa credit
-• `/subscribe` - Upgrade premium
+**Cek Harga:**
+• `/price btc` - Harga Bitcoin real-time
+• `/price eth` - Harga Ethereum terkini
 
-🎯 **Lainnya:**
-• `/ask_ai <pertanyaan>` - Tanya AI crypto
-• `/referral` - Program referral
-• `/language` - Ubah bahasa
-• `/help` - Panduan lengkap
+**Analisis Mendalam:**
+• `/analyze btc` - Analisis komprehensif Bitcoin (technical analysis, sentiment, prediksi)
+• `/analyze eth` - Analisis Ethereum dengan data real-time
 
-💡 **Tips:**
-- Ketik nama crypto langsung untuk harga cepat
-- Fitur premium = unlimited access
-- Gunakan referral untuk bonus credit
+**Trading Futures:**
+• `/futures btc` - Pilih timeframe untuk analisis futures Bitcoin
+• `/futures sol` - Analisis futures Solana dengan berbagai timeframe
 
-🚀 **Semua analisis menggunakan data real-time dari multiple API!**"""
+💳 **Sistem Credit:**
+- User baru dapat **10 credit gratis**
+- `/analyze` = 20 credit | `/futures` = 20 credit
+- `/futures_signals` = 30 credit | `/market` = 20 credit
+
+🎁 **Cara Dapat Credit Gratis:**
+• `/referral` - Ajak teman dapat 10 credit/referral
+• `/subscribe` - Upgrade premium untuk unlimited access
+
+🚀 **Mulai Sekarang:**
+1. Gunakan `/help` untuk melihat semua command
+2. Coba `/price btc` untuk harga Bitcoin
+3. Test `/analyze eth` untuk analisis Ethereum
+4. Eksplorasi `/futures btc` untuk trading signals
+
+**Semua data real-time dari Binance & CoinGecko API!**"""
 
         else:
             welcome_text = f"""🎉 **Welcome to CryptoMentor AI, {user.first_name}!**
 
 🤖 I'm your comprehensive crypto trading AI assistant with real-time multi-API data.
 
-📊 **Price & Market Data:**
-• `/price <symbol>` - Real-time prices
-• `/market` - Comprehensive market overview
+💡 **To get started:** Use `/help` for complete guide to all bot features!
 
-📈 **Trading Analysis:**
-• `/analyze <symbol>` - In-depth analysis (20 credit)
-• `/futures <symbol>` - Futures analysis 1 coin (20 credit)
-• `/futures_signals` - Complete futures signals (30 credit)
+📊 **Quick Start - Usage Examples:**
 
-💼 **Portfolio & Credit:**
-• `/portfolio` - View portfolio
-• `/add_coin <symbol> <amount>` - Add to portfolio
-• `/credits` - Check remaining credit
-• `/subscribe` - Upgrade premium
+**Check Prices:**
+• `/price btc` - Real-time Bitcoin price
+• `/price eth` - Current Ethereum price
 
-🎯 **Others:**
-• `/ask_ai <question>` - Ask AI crypto
-• `/referral` - Referral program
-• `/language` - Change language
-• `/help` - Complete guide
+**Deep Analysis:**
+• `/analyze btc` - Comprehensive Bitcoin analysis (technical analysis, sentiment, predictions)
+• `/analyze eth` - Ethereum analysis with real-time data
 
-💡 **Tips:**
-- Type crypto name directly for quick price
-- Premium features = unlimited access
-- Use referral for bonus credit
+**Futures Trading:**
+• `/futures btc` - Choose timeframe for Bitcoin futures analysis
+• `/futures sol` - Solana futures analysis with various timeframes
 
-🚀 **All analysis uses real-time data from multiple APIs!**"""
+💳 **Credit System:**
+- New users get **10 free credits**
+- `/analyze` = 20 credits | `/futures` = 20 credits
+- `/futures_signals` = 30 credits | `/market` = 20 credits
+
+🎁 **How to Get Free Credits:**
+• `/referral` - Invite friends get 10 credits/referral
+• `/subscribe` - Upgrade premium for unlimited access
+
+🚀 **Start Now:**
+1. Use `/help` to see all commands
+2. Try `/price btc` for Bitcoin price
+3. Test `/analyze eth` for Ethereum analysis
+4. Explore `/futures btc` for trading signals
+
+**All data real-time from Binance & CoinGecko APIs!**"""
 
         await update.message.reply_text(welcome_text, parse_mode=ParseMode.MARKDOWN)
 
     async def help_command(self, update: Update, context: CallbackContext):
         """Handle /help command"""
-        help_text = """🤖 **CryptoMentor AI Bot - Help**
+        help_text = """🤖 **CryptoMentor AI Bot - Panduan Lengkap**
 
 📊 **Harga & Data Pasar:**
 • `/price <symbol>` - Harga real-time
-• `/market` - Overview pasar komprehensif
+  Contoh: `/price btc`, `/price eth`, `/price sol`
+• `/market` - Overview pasar komprehensif (20 credit)
 
 📈 **Analisis Trading:**
 • `/analyze <symbol>` - Analisis mendalam (20 credit)
-• `/futures <symbol>` - Analisis futures 1 coin (20 credit)
-• `/futures_signals` - Sinyal futures lengkap (30 credit)
+  Contoh: `/analyze btc` → Technical analysis, sentiment, prediksi harga
+  
+• `/futures <symbol>` - Analisis futures dengan timeframe (20 credit)
+  Contoh: `/futures btc` → Pilih 15m, 1h, 4h, 1d
+  Hasil: Support/resistance, entry/exit points, risk management
+  
+• `/futures_signals` - Sinyal futures lengkap semua coin (30 credit)
 
 💼 **Portfolio & Credit:**
 • `/portfolio` - Lihat portfolio
 • `/add_coin <symbol> <amount>` - Tambah ke portfolio
+  Contoh: `/add_coin btc 0.5`
 • `/credits` - Cek sisa credit
 • `/subscribe` - Upgrade premium
 
 🎯 **Lainnya:**
 • `/ask_ai <pertanyaan>` - Tanya AI crypto
+  Contoh: `/ask_ai apa itu DeFi?`
 • `/referral` - Program referral (Credit + Uang)
 • `/premium_earnings` - Dashboard earnings (Premium only)
 • `/language` - Ubah bahasa
 
-💡 **Tips:**
-- Ketik nama crypto langsung untuk harga cepat
-- Fitur premium = unlimited access
-- Referral FREE = bonus credit
-- Referral PREMIUM = uang asli (Rp 10k/referral)
+💳 **Sistem Credit:**
+- User baru: 10 credit gratis
+- `/analyze` = 20 credit
+- `/futures` = 20 credit  
+- `/futures_signals` = 30 credit
+- `/market` = 20 credit
 
-🚀 **Semua analisis menggunakan data real-time dari multiple API!**"""
+💡 **Tips Penggunaan:**
+- Ketik nama crypto langsung untuk harga cepat
+- Gunakan `/futures btc` lalu pilih timeframe sesuai strategy
+- `/analyze eth` untuk analisis fundamental + technical
+- Premium = unlimited access semua fitur
+- Referral FREE = bonus credit, PREMIUM = uang asli
+
+🚀 **Semua analisis menggunakan data real-time dari Binance & CoinGecko API!**"""
         await update.message.reply_text(help_text, parse_mode='Markdown')
 
     async def price_command(self, update: Update, context: CallbackContext):
