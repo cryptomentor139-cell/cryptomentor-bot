@@ -1290,6 +1290,244 @@ Futures trading is high risk!"""
             'sl': sl_price
         }
 
+    def generate_supply_demand_analysis(self, symbol, language='id', crypto_api=None):
+        """Generate comprehensive supply and demand analysis for entry recommendations"""
+        if not crypto_api:
+            if language == 'id':
+                return f"""❌ **Error: API tidak tersedia**
+
+Tidak dapat mengakses data untuk analisis Supply/Demand {symbol}.
+Silakan coba lagi nanti.
+
+⚠️ **Risk Warning:**
+Trading berisiko tinggi! Gunakan proper risk management!"""
+            else:
+                return f"""❌ **Error: API unavailable**
+
+Cannot access data for Supply/Demand analysis of {symbol}.
+Please try again later.
+
+⚠️ **Risk Warning:**
+Trading is high risk! Use proper risk management!"""
+
+        try:
+            # Get comprehensive supply/demand analysis
+            sd_analysis = crypto_api.analyze_supply_demand(symbol)
+            
+            if 'error' in sd_analysis:
+                if language == 'id':
+                    return f"""❌ **Error dalam Analisis Supply/Demand {symbol}**
+
+{sd_analysis.get('error', 'Unknown error')}
+
+Silakan coba lagi atau gunakan analisis lain."""
+                else:
+                    return f"""❌ **Error in Supply/Demand Analysis {symbol}**
+
+{sd_analysis.get('error', 'Unknown error')}
+
+Please try again or use other analysis."""
+
+            # Extract data
+            current_price = sd_analysis.get('current_price', 0)
+            volume_pressure = sd_analysis.get('volume_pressure', {})
+            order_imbalance = sd_analysis.get('order_imbalance', {})
+            supply_demand_zones = sd_analysis.get('supply_demand_zones', {})
+            market_structure = sd_analysis.get('market_structure', {})
+            oi_flow = sd_analysis.get('oi_flow', {})
+            sd_score = sd_analysis.get('supply_demand_score', {})
+            entry_rec = sd_analysis.get('entry_recommendation', {})
+
+            if language == 'id':
+                message = f"""📊 **Analisis Supply & Demand {symbol}**
+
+💰 **Harga Saat Ini:** ${current_price:,.4f}
+
+🔄 **Tekanan Volume (24h):**
+- **Tipe:** {volume_pressure.get('pressure_type', 'Unknown').replace('_', ' ').title()}
+- **Kekuatan:** {volume_pressure.get('pressure_strength', 0):.1f}/100
+- **Level Volume:** {volume_pressure.get('volume_level', 'Unknown').title()}
+- **Analisis:** {volume_pressure.get('analysis', 'N/A')}
+
+⚖️ **Ketidakseimbangan Order:**
+- **Tipe:** {order_imbalance.get('imbalance_type', 'Unknown').replace('_', ' ').title()}
+- **Long/Short Ratio:** {order_imbalance.get('long_ratio', 0):.1f}% / {order_imbalance.get('short_ratio', 0):.1f}%
+- **Analisis:** {order_imbalance.get('analysis', 'N/A')}
+
+🏗️ **Struktur Pasar:**
+- **Struktur:** {market_structure.get('structure', 'Unknown').title()}
+- **Trend:** {market_structure.get('trend', 'Unknown').title()}
+- **Analisis:** {market_structure.get('analysis', 'N/A')}
+
+📍 **Zone Supply & Demand:**"""
+
+                # Add supply/demand zones
+                demand_zones = supply_demand_zones.get('demand_zones', [])
+                supply_zones = supply_demand_zones.get('supply_zones', [])
+                
+                if demand_zones:
+                    nearest_demand = demand_zones[0]
+                    message += f"\n- **Demand Zone Terdekat:** ${nearest_demand.get('price_level', 0):,.4f} (Jarak: {nearest_demand.get('distance_from_current', 0):.1f}%)"
+                
+                if supply_zones:
+                    nearest_supply = supply_zones[0]
+                    message += f"\n- **Supply Zone Terdekat:** ${nearest_supply.get('price_level', 0):,.4f} (Jarak: {nearest_supply.get('distance_from_current', 0):.1f}%)"
+
+                if not demand_zones and not supply_zones:
+                    message += "\n- **Tidak ada zone signifikan terdeteksi**"
+
+                message += f"""
+
+📈 **Aliran Open Interest:**
+- **Trend OI:** {oi_flow.get('oi_trend', 'Unknown').title()}
+- **Arah Aliran:** {oi_flow.get('flow_direction', 'Unknown').replace('_', ' ').title()}
+- **Analisis:** {oi_flow.get('analysis', 'N/A')}
+
+🎯 **Skor Supply/Demand:** {sd_score.get('score', 50)}/100
+- **Bias:** {sd_score.get('bias', 'Balanced')}
+- **Rekomendasi:** {sd_score.get('recommendation', 'HOLD')}
+- **Confidence:** {sd_score.get('confidence', 'Low')}
+
+💡 **Faktor Kunci:**"""
+                
+                for factor in sd_score.get('factors', [])[:4]:
+                    message += f"\n  • {factor}"
+
+                # Entry recommendation
+                primary_rec = entry_rec.get('primary_recommendation')
+                if primary_rec:
+                    message += f"""
+
+🚀 **Rekomendasi Entry:**
+- **Arah:** {primary_rec.get('direction', 'HOLD')}
+- **Tipe Entry:** {primary_rec.get('entry_type', 'N/A')}
+- **Entry Price:** ${primary_rec.get('entry_price', 0):,.4f}"""
+                    
+                    if primary_rec.get('stop_loss'):
+                        message += f"\n- **Stop Loss:** ${primary_rec.get('stop_loss', 0):,.4f}"
+                    if primary_rec.get('take_profit'):
+                        message += f"\n- **Take Profit:** ${primary_rec.get('take_profit', 0):,.4f}"
+                    if primary_rec.get('risk_reward'):
+                        message += f"\n- **Risk/Reward:** {primary_rec.get('risk_reward', 0):.1f}:1"
+                    
+                    message += f"\n- **Logic:** {primary_rec.get('logic', 'N/A')}"
+                    message += f"\n- **Timing:** {entry_rec.get('entry_timing', 'Wait')}"
+
+                message += f"""
+
+⚠️ **Risk Warning:**
+Supply/Demand analysis membutuhkan konfirmasi price action!
+Gunakan proper risk management dan position sizing!
+
+📡 **Source:** Multi-API Supply/Demand Analysis
+🕐 **Update:** {datetime.now().strftime('%H:%M:%S WIB')}"""
+
+            else:
+                # English version
+                message = f"""📊 **Supply & Demand Analysis {symbol}**
+
+💰 **Current Price:** ${current_price:,.4f}
+
+🔄 **Volume Pressure (24h):**
+- **Type:** {volume_pressure.get('pressure_type', 'Unknown').replace('_', ' ').title()}
+- **Strength:** {volume_pressure.get('pressure_strength', 0):.1f}/100
+- **Volume Level:** {volume_pressure.get('volume_level', 'Unknown').title()}
+- **Analysis:** {volume_pressure.get('analysis', 'N/A')}
+
+⚖️ **Order Imbalance:**
+- **Type:** {order_imbalance.get('imbalance_type', 'Unknown').replace('_', ' ').title()}
+- **Long/Short Ratio:** {order_imbalance.get('long_ratio', 0):.1f}% / {order_imbalance.get('short_ratio', 0):.1f}%
+- **Analysis:** {order_imbalance.get('analysis', 'N/A')}
+
+🏗️ **Market Structure:**
+- **Structure:** {market_structure.get('structure', 'Unknown').title()}
+- **Trend:** {market_structure.get('trend', 'Unknown').title()}
+- **Analysis:** {market_structure.get('analysis', 'N/A')}
+
+📍 **Supply & Demand Zones:**"""
+
+                # Add supply/demand zones
+                demand_zones = supply_demand_zones.get('demand_zones', [])
+                supply_zones = supply_demand_zones.get('supply_zones', [])
+                
+                if demand_zones:
+                    nearest_demand = demand_zones[0]
+                    message += f"\n- **Nearest Demand Zone:** ${nearest_demand.get('price_level', 0):,.4f} (Distance: {nearest_demand.get('distance_from_current', 0):.1f}%)"
+                
+                if supply_zones:
+                    nearest_supply = supply_zones[0]
+                    message += f"\n- **Nearest Supply Zone:** ${nearest_supply.get('price_level', 0):,.4f} (Distance: {nearest_supply.get('distance_from_current', 0):.1f}%)"
+
+                if not demand_zones and not supply_zones:
+                    message += "\n- **No significant zones detected**"
+
+                message += f"""
+
+📈 **Open Interest Flow:**
+- **OI Trend:** {oi_flow.get('oi_trend', 'Unknown').title()}
+- **Flow Direction:** {oi_flow.get('flow_direction', 'Unknown').replace('_', ' ').title()}
+- **Analysis:** {oi_flow.get('analysis', 'N/A')}
+
+🎯 **Supply/Demand Score:** {sd_score.get('score', 50)}/100
+- **Bias:** {sd_score.get('bias', 'Balanced')}
+- **Recommendation:** {sd_score.get('recommendation', 'HOLD')}
+- **Confidence:** {sd_score.get('confidence', 'Low')}
+
+💡 **Key Factors:**"""
+                
+                for factor in sd_score.get('factors', [])[:4]:
+                    message += f"\n  • {factor}"
+
+                # Entry recommendation
+                primary_rec = entry_rec.get('primary_recommendation')
+                if primary_rec:
+                    message += f"""
+
+🚀 **Entry Recommendation:**
+- **Direction:** {primary_rec.get('direction', 'HOLD')}
+- **Entry Type:** {primary_rec.get('entry_type', 'N/A')}
+- **Entry Price:** ${primary_rec.get('entry_price', 0):,.4f}"""
+                    
+                    if primary_rec.get('stop_loss'):
+                        message += f"\n- **Stop Loss:** ${primary_rec.get('stop_loss', 0):,.4f}"
+                    if primary_rec.get('take_profit'):
+                        message += f"\n- **Take Profit:** ${primary_rec.get('take_profit', 0):,.4f}"
+                    if primary_rec.get('risk_reward'):
+                        message += f"\n- **Risk/Reward:** {primary_rec.get('risk_reward', 0):.1f}:1"
+                    
+                    message += f"\n- **Logic:** {primary_rec.get('logic', 'N/A')}"
+                    message += f"\n- **Timing:** {entry_rec.get('entry_timing', 'Wait')}"
+
+                message += f"""
+
+⚠️ **Risk Warning:**
+Supply/Demand analysis requires price action confirmation!
+Use proper risk management and position sizing!
+
+📡 **Source:** Multi-API Supply/Demand Analysis
+🕐 **Update:** {datetime.now().strftime('%H:%M:%S UTC')}"""
+
+            return message
+
+        except Exception as e:
+            print(f"Error in generate_supply_demand_analysis: {e}")
+            if language == 'id':
+                return f"""❌ **Error dalam Analisis Supply/Demand {symbol}**
+
+Terjadi kesalahan saat menganalisis data supply/demand.
+Error: {str(e)}
+
+⚠️ **Risk Warning:**
+Trading berisiko tinggi! Gunakan proper risk management!"""
+            else:
+                return f"""❌ **Error in Supply/Demand Analysis {symbol}**
+
+Error occurred while analyzing supply/demand data.
+Error: {str(e)}
+
+⚠️ **Risk Warning:**
+Trading is high risk! Use proper risk management!"""
+
     def generate_single_futures_signal(self, symbol, language='id', crypto_api=None):
         """Generate futures trading signal for a single coin using Binance API"""
         if not crypto_api:
@@ -1404,6 +1642,9 @@ Use proper risk management and don't FOMO!"""
 
                 message += f"""
 
+💡 **Untuk analisis Supply/Demand yang lebih mendalam, gunakan:**
+`/supply_demand {symbol}` - Analisis entry berdasarkan zone S&D
+
 ⚠️ **Risk Warning:**
 Futures trading berisiko tinggi! 
 Gunakan proper risk management dan jangan FOMO!
@@ -1426,6 +1667,9 @@ Gunakan proper risk management dan jangan FOMO!
 """ + "\n".join(f"  • {factor}" for factor in signal_factors[:4])
 
                 message += f"""
+
+💡 **For deeper Supply/Demand analysis, use:**
+`/supply_demand {symbol}` - Entry analysis based on S&D zones
 
 ⚠️ **Risk Warning:**
 Futures trading is high risk! 
