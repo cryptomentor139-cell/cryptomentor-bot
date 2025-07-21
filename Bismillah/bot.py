@@ -120,6 +120,7 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("restart", self.restart_command))
             self.application.add_handler(CommandHandler("refresh_credits", self.refresh_credits_command))
             self.application.add_handler(CommandHandler("premium_earnings", self.premium_earnings_command))
+            self.application.add_handler(CommandHandler("grant_package", self.grant_package_command))
 
             # Add callback query handler
             self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
@@ -1001,6 +1002,9 @@ Nikmati semua fitur tanpa batasan credit."""
 💰 **Paket Langganan:**
 • **1 Bulan** - Rp 320.000
 • **2 Bulan** - Rp 600.000 🔥 **PROMO!** (Hemat 40k)
+• **6 Bulan** - Rp 1.800.000 💎 **POPULER!** (Hemat 120k)
+• **1 Tahun** - Rp 3.000.000 ⭐ **TERBAIK!** (Hemat 840k)
+• **Lifetime** - Rp 5.000.000 🚀 **ULTIMATE!** (Unlimited Forever)
 
 💳 **Metode Pembayaran:**
 
@@ -1017,17 +1021,24 @@ Nikmati semua fitur tanpa batasan credit."""
 1. Transfer sesuai paket yang dipilih:
    - 1 Bulan: Rp 320.000
    - 2 Bulan: Rp 600.000 (PROMO)
+   - 6 Bulan: Rp 1.800.000 (POPULER)
+   - 1 Tahun: Rp 3.000.000 (TERBAIK)
+   - Lifetime: Rp 5.000.000 (ULTIMATE)
 2. Kirim bukti pembayaran ke admin @Billfarr
 3. Sertakan informasi ini:
    • User ID: `{user_id}`
    • Username: @{username}
    • Nama: {first_name}
-   • Paket: (1 bulan / 2 bulan)
+   • Paket: (1 bulan / 2 bulan / 6 bulan / 1 tahun / lifetime)
 4. Tunggu konfirmasi aktivasi (maks 24 jam)
 
 💬 **Butuh bantuan?** Chat admin @Billfarr
 
-🎯 **Rekomendasi:** Paket 2 bulan lebih hemat dan cocok untuk trading jangka menengah!
+🎯 **Rekomendasi:** 
+• **2 Bulan** - Hemat untuk pemula
+• **6 Bulan** - Paling populer untuk trader aktif
+• **1 Tahun** - Hemat maksimal untuk profesional
+• **Lifetime** - Investasi terbaik untuk long-term trader
 
 ℹ️ **Catatan Penting:**
 Pastikan menyertakan User ID (`{user_id}`) dan paket yang dipilih dalam pesan ke admin untuk mempercepat proses aktivasi premium."""
@@ -2394,8 +2405,29 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
         elif data == 'make_premium' and user_id == self.admin_id:
             await query.edit_message_text(
                 "👑 **Grant Premium Access**\n\n"
-                "Gunakan command: `/grant_premium <user_id> [days]`\n"
-                "Contoh: `/grant_premium 123456789 30`",
+                "**Method 1 - By Package (Recommended):**\n"
+                "`/grant_package <user_id> <package>`\n\n"
+                "**Packages:** 1month, 2months, 6months, 1year, lifetime\n"
+                "**Contoh:** `/grant_package 123456789 6months`\n\n"
+                "**Method 2 - By Days:**\n"
+                "`/grant_premium <user_id> [days]`\n"
+                "**Contoh:** `/grant_premium 123456789 30`",
+                parse_mode='Markdown'
+            )
+
+        elif data == 'grant_package_help' and user_id == self.admin_id:
+            await query.edit_message_text(
+                "💎 **Grant Package Premium**\n\n"
+                "Gunakan command: `/grant_package <user_id> <package>`\n\n"
+                "**Available Packages:**\n"
+                "• `1month` - 1 Bulan (Rp 320k)\n"
+                "• `2months` - 2 Bulan (Rp 600k)\n"
+                "• `6months` - 6 Bulan (Rp 1.8jt)\n"
+                "• `1year` - 1 Tahun (Rp 3jt)\n"
+                "• `lifetime` - Lifetime (Rp 5jt)\n\n"
+                "**Contoh:**\n"
+                "`/grant_package 123456789 6months`\n"
+                "`/grant_package 123456789 lifetime`",
                 parse_mode='Markdown'
             )
 
@@ -2573,6 +2605,7 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             # Return to main admin panel
             keyboard = [
                 [InlineKeyboardButton("👑 Buat User Premium", callback_data='make_premium')],
+                [InlineKeyboardButton("💎 Grant Package Premium", callback_data='grant_package_help')],
                 [InlineKeyboardButton("💰 Berikan Credits", callback_data='grant_credits')],
                 [InlineKeyboardButton("🎁 Refresh Credits Mingguan", callback_data='refresh_credits_panel')],
                 [InlineKeyboardButton("📢 Broadcast Message", callback_data='broadcast_help')],
@@ -3345,6 +3378,107 @@ Just ignore this message"""
 • Post on social media
 • Target serious traders
 • Explain premium benefits"""
+
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def grant_package_command(self, update: Update, context: CallbackContext):
+        """Handle /grant_package command for easier premium granting"""
+        user_id = update.message.from_user.id
+
+        # Enhanced admin check
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Access denied. Admin only command.")
+            return
+
+        if len(context.args) < 2:
+            await update.message.reply_text(
+                "❌ **Format salah!**\n\n"
+                "Gunakan: `/grant_package <user_id> <package>`\n\n"
+                "**Paket tersedia:**\n"
+                "• `1month` - 1 Bulan (30 hari)\n"
+                "• `2months` - 2 Bulan (60 hari)\n"
+                "• `6months` - 6 Bulan (180 hari)\n"
+                "• `1year` - 1 Tahun (365 hari)\n"
+                "• `lifetime` - Lifetime (permanent)\n\n"
+                "**Contoh:**\n"
+                "• `/grant_package 123456789 6months`\n"
+                "• `/grant_package 123456789 lifetime`",
+                parse_mode='Markdown'
+            )
+            return
+
+        try:
+            target_user_id = int(context.args[0])
+            package = context.args[1].lower()
+        except ValueError:
+            await update.message.reply_text("❌ User ID harus berupa angka!")
+            return
+
+        # Package mapping
+        package_mapping = {
+            '1month': ('1_month', '1 Bulan', 'Rp 320.000'),
+            '2months': ('2_months', '2 Bulan', 'Rp 600.000'),
+            '6months': ('6_months', '6 Bulan', 'Rp 1.800.000'),
+            '1year': ('1_year', '1 Tahun', 'Rp 3.000.000'),
+            'lifetime': ('lifetime', 'Lifetime', 'Rp 5.000.000')
+        }
+
+        if package not in package_mapping:
+            await update.message.reply_text(
+                "❌ **Paket tidak valid!**\n\n"
+                "Gunakan salah satu: `1month`, `2months`, `6months`, `1year`, `lifetime`"
+            )
+            return
+
+        # Check if user exists
+        existing_user = self.db.get_user(target_user_id)
+        if not existing_user:
+            await update.message.reply_text(
+                f"⚠️ **User {target_user_id} belum terdaftar!**\n\n"
+                "User harus menggunakan bot terlebih dahulu dengan command `/start`."
+            )
+            return
+
+        package_key, package_name, package_price = package_mapping[package]
+
+        # Grant premium
+        success = self.db.grant_premium_by_package(target_user_id, package_key)
+
+        if success:
+            user_info = self.db.get_user(target_user_id)
+            username = user_info.get('username', 'No username')
+            first_name = user_info.get('first_name', 'Unknown')
+
+            message = f"""✅ **Premium {package_name} berhasil diberikan!**
+
+👤 **User Info:**
+• **ID**: {target_user_id}
+• **Name**: {first_name}
+• **Username**: @{username}
+
+💎 **Premium Package:**
+• **Paket**: {package_name}
+• **Harga**: {package_price}
+• **Status**: {'Permanent' if package_key == 'lifetime' else 'Active'}
+
+🎉 User sekarang memiliki akses unlimited ke semua fitur premium!"""
+
+            # Log admin action
+            self.db.log_user_activity(
+                user_id, 
+                "admin_grant_package_premium", 
+                f"Granted {package_name} premium package to user {target_user_id}"
+            )
+
+        else:
+            message = f"""❌ **Gagal memberikan premium {package_name}!**
+
+🔍 **Troubleshooting:**
+• Pastikan User ID benar: {target_user_id}
+• User harus sudah menggunakan `/start` di bot
+• Cek koneksi database
+
+⚠️ Coba lagi atau hubungi developer."""
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
