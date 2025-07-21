@@ -858,6 +858,585 @@ class CryptoAPI:
         except Exception as e:
             return {'error': f"Metrics calculation error: {str(e)}"}
 
+    def analyze_supply_demand(self, symbol):
+        """Analyze supply and demand levels for entry recommendations"""
+        try:
+            # Get comprehensive market data
+            price_data = self.get_binance_price(symbol)
+            futures_data = self.get_comprehensive_futures_data(symbol)
+            candlestick_data = self.get_binance_candlestick(symbol, '1h', 24)
+            
+            if 'error' in price_data:
+                return {'error': 'Failed to get price data for supply/demand analysis'}
+            
+            current_price = price_data.get('price', 0)
+            volume_24h = price_data.get('volume_24h', 0)
+            change_24h = price_data.get('change_24h', 0)
+            
+            # 1. Volume Analysis (Supply/Demand Pressure)
+            volume_pressure = self._analyze_volume_pressure(volume_24h, change_24h)
+            
+            # 2. Order Book Imbalance (using available data)
+            order_imbalance = self._analyze_order_imbalance(futures_data)
+            
+            # 3. Support/Resistance as Supply/Demand Zones
+            supply_demand_zones = self._identify_supply_demand_zones(candlestick_data, current_price)
+            
+            # 4. Market Structure Analysis
+            market_structure = self._analyze_market_structure(candlestick_data)
+            
+            # 5. Open Interest Flow Analysis
+            oi_flow = self._analyze_oi_flow(futures_data)
+            
+            # 6. Generate Supply/Demand Score
+            sd_score = self._calculate_supply_demand_score(
+                volume_pressure, order_imbalance, supply_demand_zones, 
+                market_structure, oi_flow
+            )
+            
+            # 7. Generate Entry Recommendations
+            entry_recommendation = self._generate_supply_demand_entry(
+                current_price, sd_score, supply_demand_zones, market_structure
+            )
+            
+            return {
+                'symbol': symbol,
+                'current_price': current_price,
+                'volume_pressure': volume_pressure,
+                'order_imbalance': order_imbalance,
+                'supply_demand_zones': supply_demand_zones,
+                'market_structure': market_structure,
+                'oi_flow': oi_flow,
+                'supply_demand_score': sd_score,
+                'entry_recommendation': entry_recommendation,
+                'timestamp': datetime.now().isoformat(),
+                'source': 'binance_supply_demand_analysis'
+            }
+            
+        except Exception as e:
+            return {'error': f"Supply/Demand analysis error: {str(e)}"}
+
+    def _analyze_volume_pressure(self, volume_24h, change_24h):
+        """Analyze volume pressure to determine buying/selling pressure"""
+        try:
+            # Calculate volume-price relationship
+            if volume_24h == 0:
+                return {
+                    'pressure_type': 'neutral',
+                    'pressure_strength': 0,
+                    'analysis': 'Insufficient volume data'
+                }
+            
+            # High volume + positive change = Strong buying pressure (Demand)
+            # High volume + negative change = Strong selling pressure (Supply)
+            # Low volume + any change = Weak pressure
+            
+            volume_threshold_high = 100000000  # 100M USDT
+            volume_threshold_medium = 50000000  # 50M USDT
+            
+            if volume_24h > volume_threshold_high:
+                volume_level = 'high'
+                volume_multiplier = 3
+            elif volume_24h > volume_threshold_medium:
+                volume_level = 'medium'
+                volume_multiplier = 2
+            else:
+                volume_level = 'low'
+                volume_multiplier = 1
+            
+            # Determine pressure direction and strength
+            if change_24h > 2:
+                pressure_type = 'strong_demand'
+                pressure_strength = min(abs(change_24h) * volume_multiplier, 100)
+                analysis = f"Strong buying pressure - High demand with {volume_level} volume"
+            elif change_24h > 0:
+                pressure_type = 'moderate_demand'
+                pressure_strength = min(abs(change_24h) * volume_multiplier * 0.7, 100)
+                analysis = f"Moderate buying pressure - Some demand with {volume_level} volume"
+            elif change_24h < -2:
+                pressure_type = 'strong_supply'
+                pressure_strength = min(abs(change_24h) * volume_multiplier, 100)
+                analysis = f"Strong selling pressure - High supply with {volume_level} volume"
+            elif change_24h < 0:
+                pressure_type = 'moderate_supply'
+                pressure_strength = min(abs(change_24h) * volume_multiplier * 0.7, 100)
+                analysis = f"Moderate selling pressure - Some supply with {volume_level} volume"
+            else:
+                pressure_type = 'equilibrium'
+                pressure_strength = 0
+                analysis = f"Balanced supply/demand - No clear pressure with {volume_level} volume"
+            
+            return {
+                'pressure_type': pressure_type,
+                'pressure_strength': pressure_strength,
+                'volume_level': volume_level,
+                'volume_24h': volume_24h,
+                'price_change_24h': change_24h,
+                'analysis': analysis
+            }
+            
+        except Exception as e:
+            return {'error': f"Volume pressure analysis error: {str(e)}"}
+
+    def _analyze_order_imbalance(self, futures_data):
+        """Analyze order imbalance using long/short ratio as proxy"""
+        try:
+            if 'error' in futures_data:
+                return {
+                    'imbalance_type': 'unknown',
+                    'imbalance_strength': 0,
+                    'analysis': 'Futures data unavailable'
+                }
+            
+            ls_data = futures_data.get('long_short_ratio_data', {})
+            if 'error' in ls_data:
+                return {
+                    'imbalance_type': 'unknown',
+                    'imbalance_strength': 0,
+                    'analysis': 'Long/short ratio data unavailable'
+                }
+            
+            long_ratio = ls_data.get('long_ratio', 50)
+            short_ratio = ls_data.get('short_ratio', 50)
+            
+            # Calculate imbalance (contrarian approach)
+            if long_ratio > 75:
+                imbalance_type = 'oversupplied_longs'  # Too many longs = potential supply
+                imbalance_strength = min((long_ratio - 50) * 2, 100)
+                analysis = f"Extreme long bias ({long_ratio:.1f}%) - Risk of long liquidations creating supply"
+            elif long_ratio > 65:
+                imbalance_type = 'high_long_bias'
+                imbalance_strength = min((long_ratio - 50) * 1.5, 100)
+                analysis = f"High long bias ({long_ratio:.1f}%) - Potential supply pressure from overleverage"
+            elif short_ratio > 75:
+                imbalance_type = 'oversupplied_shorts'  # Too many shorts = potential demand
+                imbalance_strength = min((short_ratio - 50) * 2, 100)
+                analysis = f"Extreme short bias ({short_ratio:.1f}%) - Risk of short squeeze creating demand"
+            elif short_ratio > 65:
+                imbalance_type = 'high_short_bias'
+                imbalance_strength = min((short_ratio - 50) * 1.5, 100)
+                analysis = f"High short bias ({short_ratio:.1f}%) - Potential demand from short covering"
+            else:
+                imbalance_type = 'balanced'
+                imbalance_strength = 0
+                analysis = f"Balanced positioning ({long_ratio:.1f}%/{short_ratio:.1f}%) - No significant imbalance"
+            
+            return {
+                'imbalance_type': imbalance_type,
+                'imbalance_strength': imbalance_strength,
+                'long_ratio': long_ratio,
+                'short_ratio': short_ratio,
+                'analysis': analysis
+            }
+            
+        except Exception as e:
+            return {'error': f"Order imbalance analysis error: {str(e)}"}
+
+    def _identify_supply_demand_zones(self, candlestick_data, current_price):
+        """Identify key supply and demand zones from price action"""
+        try:
+            if 'error' in candlestick_data:
+                return {
+                    'demand_zones': [],
+                    'supply_zones': [],
+                    'analysis': 'Candlestick data unavailable'
+                }
+            
+            candlesticks = candlestick_data.get('candlesticks', [])
+            if len(candlesticks) < 10:
+                return {
+                    'demand_zones': [],
+                    'supply_zones': [],
+                    'analysis': 'Insufficient price history'
+                }
+            
+            demand_zones = []
+            supply_zones = []
+            
+            # Look for strong reactions (supply/demand zones)
+            for i in range(2, len(candlesticks) - 2):
+                candle = candlesticks[i]
+                prev_candle = candlesticks[i-1]
+                next_candle = candlesticks[i+1]
+                
+                high = float(candle['high'])
+                low = float(candle['low'])
+                close = float(candle['close'])
+                open_price = float(candle['open'])
+                volume = float(candle['volume'])
+                
+                # Identify demand zones (strong buying reactions from low)
+                if (low < float(prev_candle['low']) and 
+                    close > open_price and  # Bullish candle
+                    float(next_candle['close']) > close):  # Follow-through
+                    
+                    zone_strength = self._calculate_zone_strength(volume, close - open_price, current_price, low)
+                    demand_zones.append({
+                        'price_level': low,
+                        'zone_high': min(open_price, close),
+                        'zone_low': low,
+                        'strength': zone_strength,
+                        'distance_from_current': abs(current_price - low) / current_price * 100,
+                        'type': 'demand'
+                    })
+                
+                # Identify supply zones (strong selling reactions from high)
+                if (high > float(prev_candle['high']) and 
+                    close < open_price and  # Bearish candle
+                    float(next_candle['close']) < close):  # Follow-through
+                    
+                    zone_strength = self._calculate_zone_strength(volume, open_price - close, current_price, high)
+                    supply_zones.append({
+                        'price_level': high,
+                        'zone_high': high,
+                        'zone_low': max(open_price, close),
+                        'strength': zone_strength,
+                        'distance_from_current': abs(current_price - high) / current_price * 100,
+                        'type': 'supply'
+                    })
+            
+            # Sort by strength and proximity
+            demand_zones = sorted(demand_zones, key=lambda x: (x['strength'], -x['distance_from_current']), reverse=True)[:3]
+            supply_zones = sorted(supply_zones, key=lambda x: (x['strength'], -x['distance_from_current']), reverse=True)[:3]
+            
+            return {
+                'demand_zones': demand_zones,
+                'supply_zones': supply_zones,
+                'nearest_demand': demand_zones[0] if demand_zones else None,
+                'nearest_supply': supply_zones[0] if supply_zones else None,
+                'analysis': f"Found {len(demand_zones)} demand zones and {len(supply_zones)} supply zones"
+            }
+            
+        except Exception as e:
+            return {'error': f"Supply/Demand zones error: {str(e)}"}
+
+    def _calculate_zone_strength(self, volume, body_size, current_price, zone_price):
+        """Calculate the strength of a supply/demand zone"""
+        try:
+            # Factors: Volume, reaction size, freshness (proximity to current price)
+            volume_score = min(volume / 1000000, 10)  # Normalize volume
+            reaction_score = min(abs(body_size) / current_price * 100 * 10, 10)  # Reaction percentage
+            freshness_score = max(10 - abs(current_price - zone_price) / current_price * 100, 1)  # Proximity bonus
+            
+            # Weighted combination
+            strength = (volume_score * 0.4 + reaction_score * 0.4 + freshness_score * 0.2)
+            return min(strength, 10)
+            
+        except Exception as e:
+            return 5  # Default moderate strength
+
+    def _analyze_market_structure(self, candlestick_data):
+        """Analyze market structure for supply/demand context"""
+        try:
+            if 'error' in candlestick_data:
+                return {
+                    'structure': 'unknown',
+                    'trend': 'unknown',
+                    'analysis': 'Candlestick data unavailable'
+                }
+            
+            candlesticks = candlestick_data.get('candlesticks', [])
+            if len(candlesticks) < 10:
+                return {
+                    'structure': 'unknown',
+                    'trend': 'unknown',
+                    'analysis': 'Insufficient data for structure analysis'
+                }
+            
+            # Analyze recent price action for structure
+            recent_closes = [float(c['close']) for c in candlesticks[-10:]]
+            recent_highs = [float(c['high']) for c in candlesticks[-10:]]
+            recent_lows = [float(c['low']) for c in candlesticks[-10:]]
+            
+            # Higher highs and higher lows = Uptrend (Demand controlling)
+            # Lower highs and lower lows = Downtrend (Supply controlling)
+            # Mixed = Sideways (Balanced supply/demand)
+            
+            hh_count = 0  # Higher highs
+            hl_count = 0  # Higher lows
+            lh_count = 0  # Lower highs
+            ll_count = 0  # Lower lows
+            
+            for i in range(1, len(recent_closes)):
+                if recent_highs[i] > recent_highs[i-1]:
+                    hh_count += 1
+                elif recent_highs[i] < recent_highs[i-1]:
+                    lh_count += 1
+                    
+                if recent_lows[i] > recent_lows[i-1]:
+                    hl_count += 1
+                elif recent_lows[i] < recent_lows[i-1]:
+                    ll_count += 1
+            
+            # Determine structure
+            if hh_count >= 3 and hl_count >= 2:
+                structure = 'uptrend'
+                trend = 'bullish'
+                analysis = "Higher highs and higher lows - Demand in control, look for demand zone entries"
+            elif lh_count >= 3 and ll_count >= 2:
+                structure = 'downtrend'
+                trend = 'bearish'
+                analysis = "Lower highs and lower lows - Supply in control, look for supply zone entries"
+            else:
+                structure = 'sideways'
+                trend = 'neutral'
+                analysis = "Mixed structure - Supply and demand balanced, range-bound market"
+            
+            return {
+                'structure': structure,
+                'trend': trend,
+                'higher_highs': hh_count,
+                'higher_lows': hl_count,
+                'lower_highs': lh_count,
+                'lower_lows': ll_count,
+                'analysis': analysis
+            }
+            
+        except Exception as e:
+            return {'error': f"Market structure analysis error: {str(e)}"}
+
+    def _analyze_oi_flow(self, futures_data):
+        """Analyze open interest flow for supply/demand insights"""
+        try:
+            if 'error' in futures_data:
+                return {
+                    'oi_trend': 'unknown',
+                    'flow_direction': 'unknown',
+                    'analysis': 'Futures data unavailable'
+                }
+            
+            oi_data = futures_data.get('open_interest_data', {})
+            if 'error' in oi_data:
+                return {
+                    'oi_trend': 'unknown',
+                    'flow_direction': 'unknown',
+                    'analysis': 'Open interest data unavailable'
+                }
+            
+            current_oi = oi_data.get('open_interest', 0)
+            
+            # Get funding rate for context
+            funding_data = futures_data.get('funding_rate_data', {})
+            current_funding = funding_data.get('last_funding_rate', 0) if 'error' not in funding_data else 0
+            
+            # Analyze OI with funding rate context
+            if current_oi > 1000000:  # High OI
+                if current_funding > 0.01:  # Positive funding = longs paying shorts
+                    flow_direction = 'long_pressure'
+                    analysis = "High OI with positive funding - Long demand but expensive to hold"
+                elif current_funding < -0.01:  # Negative funding = shorts paying longs
+                    flow_direction = 'short_pressure'
+                    analysis = "High OI with negative funding - Short pressure but expensive to maintain"
+                else:
+                    flow_direction = 'balanced'
+                    analysis = "High OI with neutral funding - Balanced supply/demand"
+            else:
+                flow_direction = 'low_interest'
+                analysis = "Low open interest - Limited futures activity"
+            
+            oi_trend = 'increasing' if current_oi > 500000 else 'decreasing'
+            
+            return {
+                'oi_trend': oi_trend,
+                'flow_direction': flow_direction,
+                'current_oi': current_oi,
+                'funding_rate': current_funding,
+                'analysis': analysis
+            }
+            
+        except Exception as e:
+            return {'error': f"OI flow analysis error: {str(e)}"}
+
+    def _calculate_supply_demand_score(self, volume_pressure, order_imbalance, supply_demand_zones, market_structure, oi_flow):
+        """Calculate overall supply/demand score for trading recommendation"""
+        try:
+            score = 50  # Start neutral (50/100)
+            factors = []
+            
+            # Volume pressure analysis (30% weight)
+            if volume_pressure.get('pressure_type') == 'strong_demand':
+                score += 15
+                factors.append("Strong volume demand pressure (+15)")
+            elif volume_pressure.get('pressure_type') == 'moderate_demand':
+                score += 8
+                factors.append("Moderate volume demand pressure (+8)")
+            elif volume_pressure.get('pressure_type') == 'strong_supply':
+                score -= 15
+                factors.append("Strong volume supply pressure (-15)")
+            elif volume_pressure.get('pressure_type') == 'moderate_supply':
+                score -= 8
+                factors.append("Moderate volume supply pressure (-8)")
+            
+            # Order imbalance analysis (25% weight)
+            imbalance_type = order_imbalance.get('imbalance_type')
+            if imbalance_type == 'oversupplied_shorts':
+                score += 12
+                factors.append("Oversupplied shorts - demand potential (+12)")
+            elif imbalance_type == 'high_short_bias':
+                score += 6
+                factors.append("High short bias - some demand potential (+6)")
+            elif imbalance_type == 'oversupplied_longs':
+                score -= 12
+                factors.append("Oversupplied longs - supply risk (-12)")
+            elif imbalance_type == 'high_long_bias':
+                score -= 6
+                factors.append("High long bias - some supply risk (-6)")
+            
+            # Market structure analysis (25% weight)
+            structure = market_structure.get('structure')
+            if structure == 'uptrend':
+                score += 10
+                factors.append("Uptrend structure - demand favored (+10)")
+            elif structure == 'downtrend':
+                score -= 10
+                factors.append("Downtrend structure - supply favored (-10)")
+            
+            # Supply/demand zones proximity (20% weight)
+            nearest_demand = supply_demand_zones.get('nearest_demand')
+            nearest_supply = supply_demand_zones.get('nearest_supply')
+            
+            if nearest_demand and nearest_demand.get('distance_from_current', 100) < 5:
+                score += 8
+                factors.append("Near strong demand zone (+8)")
+            if nearest_supply and nearest_supply.get('distance_from_current', 100) < 5:
+                score -= 8
+                factors.append("Near strong supply zone (-8)")
+            
+            # Ensure score stays within bounds
+            score = max(0, min(100, score))
+            
+            # Determine overall bias
+            if score >= 70:
+                bias = "Strong Demand"
+                recommendation = "LONG"
+            elif score >= 60:
+                bias = "Moderate Demand"
+                recommendation = "WEAK LONG"
+            elif score <= 30:
+                bias = "Strong Supply"
+                recommendation = "SHORT"
+            elif score <= 40:
+                bias = "Moderate Supply"
+                recommendation = "WEAK SHORT"
+            else:
+                bias = "Balanced"
+                recommendation = "HOLD"
+            
+            return {
+                'score': score,
+                'bias': bias,
+                'recommendation': recommendation,
+                'factors': factors,
+                'confidence': 'High' if abs(score - 50) >= 20 else 'Medium' if abs(score - 50) >= 10 else 'Low'
+            }
+            
+        except Exception as e:
+            return {'error': f"Score calculation error: {str(e)}"}
+
+    def _generate_supply_demand_entry(self, current_price, sd_score, supply_demand_zones, market_structure):
+        """Generate specific entry recommendations based on supply/demand analysis"""
+        try:
+            recommendations = []
+            
+            score = sd_score.get('score', 50)
+            bias = sd_score.get('bias', 'Balanced')
+            
+            # Get zones
+            demand_zones = supply_demand_zones.get('demand_zones', [])
+            supply_zones = supply_demand_zones.get('supply_zones', [])
+            
+            if score >= 60:  # Demand favored
+                # Look for demand zone entries
+                if demand_zones:
+                    best_demand = demand_zones[0]
+                    entry_price = best_demand['zone_high']
+                    stop_loss = best_demand['zone_low'] * 0.998  # Just below demand zone
+                    take_profit = current_price * 1.02  # 2% target
+                    
+                    recommendations.append({
+                        'direction': 'LONG',
+                        'entry_type': 'Demand Zone Entry',
+                        'entry_price': entry_price,
+                        'stop_loss': stop_loss,
+                        'take_profit': take_profit,
+                        'risk_reward': abs(take_profit - entry_price) / abs(entry_price - stop_loss),
+                        'confidence': sd_score.get('confidence', 'Medium'),
+                        'logic': f"Enter long at demand zone ${entry_price:,.4f} with SL below zone"
+                    })
+                else:
+                    # Market entry with tight SL
+                    entry_price = current_price
+                    stop_loss = current_price * 0.98
+                    take_profit = current_price * 1.03
+                    
+                    recommendations.append({
+                        'direction': 'LONG',
+                        'entry_type': 'Market Entry',
+                        'entry_price': entry_price,
+                        'stop_loss': stop_loss,
+                        'take_profit': take_profit,
+                        'risk_reward': abs(take_profit - entry_price) / abs(entry_price - stop_loss),
+                        'confidence': sd_score.get('confidence', 'Medium'),
+                        'logic': f"Market long entry with demand bias"
+                    })
+            
+            elif score <= 40:  # Supply favored
+                # Look for supply zone entries
+                if supply_zones:
+                    best_supply = supply_zones[0]
+                    entry_price = best_supply['zone_low']
+                    stop_loss = best_supply['zone_high'] * 1.002  # Just above supply zone
+                    take_profit = current_price * 0.98  # 2% target
+                    
+                    recommendations.append({
+                        'direction': 'SHORT',
+                        'entry_type': 'Supply Zone Entry',
+                        'entry_price': entry_price,
+                        'stop_loss': stop_loss,
+                        'take_profit': take_profit,
+                        'risk_reward': abs(entry_price - take_profit) / abs(stop_loss - entry_price),
+                        'confidence': sd_score.get('confidence', 'Medium'),
+                        'logic': f"Enter short at supply zone ${entry_price:,.4f} with SL above zone"
+                    })
+                else:
+                    # Market entry with tight SL
+                    entry_price = current_price
+                    stop_loss = current_price * 1.02
+                    take_profit = current_price * 0.97
+                    
+                    recommendations.append({
+                        'direction': 'SHORT',
+                        'entry_type': 'Market Entry',
+                        'entry_price': entry_price,
+                        'stop_loss': stop_loss,
+                        'take_profit': take_profit,
+                        'risk_reward': abs(entry_price - take_profit) / abs(stop_loss - entry_price),
+                        'confidence': sd_score.get('confidence', 'Medium'),
+                        'logic': f"Market short entry with supply bias"
+                    })
+            
+            else:  # Balanced market
+                recommendations.append({
+                    'direction': 'HOLD',
+                    'entry_type': 'Wait for Clear Signal',
+                    'entry_price': current_price,
+                    'stop_loss': None,
+                    'take_profit': None,
+                    'risk_reward': 0,
+                    'confidence': 'Low',
+                    'logic': "Balanced supply/demand - wait for clearer directional bias"
+                })
+            
+            return {
+                'primary_recommendation': recommendations[0] if recommendations else None,
+                'alternative_setups': recommendations[1:] if len(recommendations) > 1 else [],
+                'market_bias': bias,
+                'entry_timing': 'Immediate' if score >= 70 or score <= 30 else 'Wait for confirmation'
+            }
+            
+        except Exception as e:
+            return {'error': f"Entry recommendation error: {str(e)}"}
+
     def check_api_status(self):
         """Check API health status with enhanced Binance coverage"""
         try:
