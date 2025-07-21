@@ -559,6 +559,24 @@ class Database:
         """Grant permanent premium access to a user"""
         return self.grant_premium_access(telegram_id, None, None)
 
+    def grant_premium_by_package(self, telegram_id, package_type):
+        """Grant premium based on package type"""
+        package_days = {
+            '1_month': 30,
+            '2_months': 60,
+            '6_months': 180,
+            '1_year': 365,
+            'lifetime': None  # None means permanent
+        }
+        
+        days = package_days.get(package_type)
+        if days is None and package_type == 'lifetime':
+            return self.grant_permanent_premium(telegram_id)
+        elif days is not None:
+            return self.grant_premium(telegram_id, days)
+        else:
+            return False
+
     def revoke_premium(self, telegram_id):
         """Revoke premium access from a user"""
         return self.revoke_premium_access(telegram_id, None)
