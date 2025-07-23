@@ -1,16 +1,10 @@
 
 #!/usr/bin/env python3
-"""Kill conflicting bot instances"""
-
 import os
+import sys
+import signal
+import psutil
 import time
-
-try:
-    import psutil
-except ImportError:
-    print("❌ psutil not installed. Install with: pip install psutil")
-    exit(1)
-
 
 def kill_bot_instances():
     """Kill all conflicting bot instances"""
@@ -53,7 +47,6 @@ def kill_bot_instances():
         print("✅ Tidak ada instance bot lain yang berjalan")
     
     print("🚀 Siap untuk menjalankan bot baru!")
-
 
 if __name__ == "__main__":
     kill_bot_instances()
