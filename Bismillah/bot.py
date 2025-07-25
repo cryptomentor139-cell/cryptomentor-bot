@@ -456,20 +456,25 @@ class TelegramBot:
         """Handle /help command"""
         help_text = """🤖 **CryptoMentor AI Bot - Panduan Lengkap**
 
+⭐ **BEST COMMANDS untuk Pemula:**
+• `/price btc` - **GRATIS** - Cek harga Bitcoin (mulai dari sini!)
+• `/analyze btc` - **20 credit** - Analisis Bitcoin lengkap (recommended!)
+• `/futures btc` - **20 credit** - Trading signals Bitcoin dengan timeframe
+
 📊 **Harga & Data Pasar:**
-• `/price <symbol>` - Harga real-time
+• `/price <symbol>` - Harga real-time **[GRATIS]**
   Contoh: `/price btc`, `/price eth`, `/price sol`
 • `/market` - Overview pasar komprehensif (20 credit)
 
 📈 **Analisis Trading:**
-• `/analyze <symbol>` - Analisis mendalam (20 credit)
+• `/analyze <symbol>` - Analisis mendalam (20 credit) ⭐ **RECOMMENDED**
   Contoh: `/analyze btc` → Technical analysis, sentiment, prediksi harga
   
 • `/futures <symbol>` - Analisis futures dengan timeframe (20 credit)
   Contoh: `/futures btc` → Pilih 15m, 1h, 4h, 1d
   Hasil: Support/resistance, entry/exit points, risk management
   
-• `/futures_signals` - Sinyal futures lengkap semua coin (30 credit)
+• `/futures_signals` - Sinyal futures lengkap semua coin (60 credit)
 
 💼 **Portfolio & Credit:**
 • `/portfolio` - Lihat portfolio
@@ -479,7 +484,7 @@ class TelegramBot:
 • `/subscribe` - Upgrade premium
 
 🎯 **Lainnya:**
-• `/ask_ai <pertanyaan>` - Tanya AI crypto
+• `/ask_ai <pertanyaan>` - Tanya AI crypto **[GRATIS]**
   Contoh: `/ask_ai apa itu DeFi?`
 • `/referral` - Program referral (Credit + Uang)
 • `/premium_earnings` - Dashboard earnings (Premium only)
@@ -487,15 +492,20 @@ class TelegramBot:
 
 💳 **Sistem Credit:**
 - User baru: 10 credit gratis
-- `/analyze` = 20 credit
-- `/futures` = 20 credit  
-- `/futures_signals` = 30 credit
+- `/analyze` = 20 credit ⭐
+- `/futures` = 20 credit ⭐
+- `/futures_signals` = 60 credit
 - `/market` = 20 credit
 
-💡 **Tips Penggunaan:**
-- Ketik nama crypto langsung untuk harga cepat
-- Gunakan `/futures btc` lalu pilih timeframe sesuai strategy
-- `/analyze eth` untuk analisis fundamental + technical
+🎯 **Langkah untuk Pemula:**
+1. **Mulai dengan `/price btc`** (gratis) - pelajari harga crypto
+2. **Coba `/analyze btc`** (20 credit) - pahami analisis mendalam
+3. **Test `/futures btc`** (20 credit) - belajar trading signals
+4. **Upgrade premium** untuk unlimited access semua fitur
+
+💡 **Tips Hemat Credit:**
+- Ketik nama crypto langsung untuk harga cepat (GRATIS)
+- Focus pada 1-2 crypto favorit untuk analisis
 - Premium = unlimited access semua fitur
 - Referral FREE = bonus credit, PREMIUM = uang asli
 
@@ -819,8 +829,8 @@ Contoh: `/add_coin btc 0.5`
         is_admin = user_id == self.admin_id
 
         # Check credits for non-premium, non-admin users
-        if not is_premium and not is_admin and credits < 30:
-            await update.message.reply_text("❌ Credit tidak cukup! Sinyal futures membutuhkan 30 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
+        if not is_premium and not is_admin and credits < 60:
+            await update.message.reply_text("❌ Credit tidak cukup! Sinyal futures membutuhkan 60 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
             return
 
         # Show loading message
@@ -841,11 +851,11 @@ Contoh: `/add_coin btc 0.5`
                 await loading_msg.edit_text("❌ Gagal mengambil data sinyal futures. Silakan coba lagi dalam beberapa menit.")
                 return
 
-            # Deduct credit only for non-premium, non-admin users (30 credits for futures signals)
+            # Deduct credit only for non-premium, non-admin users (60 credits for futures signals)
             if not is_premium and not is_admin:
-                self.db.deduct_credit(user_id, 30)
+                self.db.deduct_credit(user_id, 60)
                 remaining_credits = self.db.get_user_credits(user_id)
-                signals += f"\n\n💳 Credit tersisa: {remaining_credits} (Sinyal futures: -30 credit)"
+                signals += f"\n\n💳 Credit tersisa: {remaining_credits} (Sinyal futures: -60 credit)"
             elif is_premium:
                 signals += f"\n\n⭐ **Status Premium** - Unlimited Access"
             elif is_admin:
@@ -946,11 +956,16 @@ Terima kasih telah menjadi member premium!"""
 💰 **Credit tersisa**: **{credits}**
 
 📊 **Biaya per Fitur:**
-• `/analyze <symbol>` - 20 credit (analisis komprehensif)
-• `/futures <symbol>` - 20 credit (analisis futures 1 coin)
-• `/futures_signals` - 30 credit (sinyal futures lengkap)
+• `/analyze <symbol>` - 20 credit (analisis komprehensif) ⭐
+• `/futures <symbol>` - 20 credit (analisis futures 1 coin) ⭐
+• `/futures_signals` - 60 credit (sinyal futures lengkap)
 • `/market` - 20 credit (overview pasar)
 • Fitur lainnya - **Gratis**
+
+🎯 **Rekomendasi untuk Pemula:**
+• Mulai dengan `/price btc` (GRATIS)
+• Coba `/analyze btc` (20 credit) - best value!
+• Test `/futures btc` (20 credit) - learn trading
 
 💡 **Cara Mendapat Credit:**
 • `/referral` - Ajak teman (10 credit/referral)
