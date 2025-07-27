@@ -8,10 +8,14 @@ class CryptoAPI:
     def __init__(self):
         self.provider = BinanceFuturesProvider()
         self.cryptonews_key = os.getenv("CRYPTONEWS_API_KEY")
-        self.coingecko_key = os.getenv("COINGECKO_API_KEY")
         self.binance_spot_url = "https://api.binance.com/api/v3"
         self.binance_futures_url = "https://fapi.binance.com/fapi/v1"
-        self.coingecko_base_url = "https://pro-api.coingecko.com/api/v3" if self.coingecko_key else "https://api.coingecko.com/api/v3"
+        
+        # Binance-focused configuration
+        print("🚀 CryptoAPI initialized with Binance-exclusive mode")
+        print(f"📊 Binance Spot API: {self.binance_spot_url}")
+        print(f"📈 Binance Futures API: {self.binance_futures_url}")
+        print(f"📰 CryptoNews API: {'✅ Enabled' if self.cryptonews_key else '❌ Disabled'}")
 
     # === BINANCE SPOT API METHODS ===
 
@@ -592,7 +596,7 @@ class CryptoAPI:
     # === MULTI-API INTEGRATION METHODS ===
 
     def get_multi_api_price(self, symbol, force_refresh=False):
-        """Get price from multiple APIs and combine the best data"""
+        """Get price from Binance APIs only - centralized to Binance"""
         price_sources = {}
 
         # Enhanced deployment environment check
@@ -602,7 +606,7 @@ class CryptoAPI:
             os.getenv('REPLIT_ENVIRONMENT') == 'deployment' or
             os.path.exists('/tmp/repl_deployment_flag') or
             bool(os.getenv('REPL_SLUG')) or
-            bool(os.getenv('REPLIT_DB_URL')) or
+            bool(os.getenv('REPL_DB_URL')) or
             bool(os.getenv('REPL_OWNER'))  # Additional deployment check
         )
         
@@ -612,14 +616,14 @@ class CryptoAPI:
 
         # Enhanced logging for deployment mode
         mode = "DEPLOYMENT REAL-TIME" if is_deployment else "STANDARD"
-        print(f"🔄 {mode} MODE: Fetching price data for {symbol} (Force: {force_refresh})")
+        print(f"🔄 {mode} MODE: Fetching price data for {symbol} from Binance (Force: {force_refresh})")
 
         # Multiple attempts for real-time data in deployment
         max_attempts = 3 if is_deployment else 1
         
         for attempt in range(max_attempts):
             if attempt > 0:
-                print(f"🔄 Deployment retry attempt {attempt + 1}/{max_attempts} for {symbol}")
+                print(f"🔄 Binance retry attempt {attempt + 1}/{max_attempts} for {symbol}")
                 import time
                 time.sleep(1)  # Brief delay between attempts
             
@@ -629,8 +633,8 @@ class CryptoAPI:
                 if 'error' not in binance_data and binance_data.get('price', 0) > 0:
                     price_sources['binance'] = binance_data
                     price_str = f"${binance_data.get('price', 0):,.4f}"
-                    print(f"🚀 DEPLOYMENT REAL-TIME: {symbol} = {price_str} ✅ (Binance Spot)")
-                    return self._combine_price_data(symbol, price_sources)
+                    print(f"🚀 BINANCE REAL-TIME: {symbol} = {price_str} ✅ (Binance Spot)")
+                    return self._combine_binance_price_data(symbol, price_sources)
             except Exception as e:
                 print(f"⚠️ Binance Spot API error for {symbol}: {e}")
             
@@ -640,52 +644,30 @@ class CryptoAPI:
                 if 'error' not in futures_data and futures_data.get('price', 0) > 0:
                     price_sources['binance_futures'] = futures_data
                     price_str = f"${futures_data.get('price', 0):,.4f}"
-                    print(f"🚀 DEPLOYMENT REAL-TIME: {symbol} = {price_str} ✅ (Binance Futures)")
-                    return self._combine_price_data(symbol, price_sources)
+                    print(f"🚀 BINANCE REAL-TIME: {symbol} = {price_str} ✅ (Binance Futures)")
+                    return self._combine_binance_price_data(symbol, price_sources)
             except Exception as e:
                 print(f"⚠️ Binance Futures API error for {symbol}: {e}")
 
-            # 3. Try CoinGecko Pro/Free
-            try:
-                coingecko_data = self.get_coingecko_price(symbol)
-                if 'error' not in coingecko_data and coingecko_data.get('price', 0) > 0:
-                    price_sources['coingecko'] = coingecko_data
-                    price_str = f"${coingecko_data.get('price', 0):,.4f}"
-                    print(f"🚀 DEPLOYMENT REAL-TIME: {symbol} = {price_str} ✅ (CoinGecko)")
-                    return self._combine_price_data(symbol, price_sources)
-            except Exception as e:
-                print(f"⚠️ CoinGecko API error for {symbol}: {e}")
-
-            # 4. Try CoinGecko market data
-            try:
-                market_data = self.get_coingecko_market_data(symbol)
-                if 'error' not in market_data and market_data.get('current_price', 0) > 0:
-                    price_sources['coingecko_market'] = market_data
-                    price_str = f"${market_data.get('current_price', 0):,.4f}"
-                    print(f"🚀 DEPLOYMENT REAL-TIME: {symbol} = {price_str} ✅ (CoinGecko Market)")
-                    return self._combine_price_data(symbol, price_sources)
-            except Exception as e:
-                print(f"⚠️ CoinGecko Market API error for {symbol}: {e}")
-
-        # Only use fallback if ALL attempts failed AND not in deployment
+        # Only use fallback if ALL Binance attempts failed AND not in deployment
         if price_sources:
-            return self._combine_price_data(symbol, price_sources)
+            return self._combine_binance_price_data(symbol, price_sources)
         elif is_deployment:
             # In deployment, return error instead of mock data
-            print(f"❌ DEPLOYMENT: All real APIs failed for {symbol} - returning error")
-            return {'error': f'Real-time data unavailable for {symbol} in deployment mode'}
+            print(f"❌ DEPLOYMENT: All Binance APIs failed for {symbol} - returning error")
+            return {'error': f'Binance real-time data unavailable for {symbol} in deployment mode'}
         else:
-            return self._fallback_price(symbol, "All APIs unavailable")
+            return self._fallback_price(symbol, "All Binance APIs unavailable")
 
-    def _combine_price_data(self, symbol, price_sources):
-        """Combine price data from multiple sources intelligently"""
+    def _combine_binance_price_data(self, symbol, price_sources):
+        """Combine price data from Binance sources only"""
         combined_data = {
             'symbol': symbol.upper(),
             'sources_used': list(price_sources.keys()),
-            'data_quality': 'excellent' if len(price_sources) >= 2 else 'good'
+            'data_quality': 'excellent'  # Always excellent with Binance data
         }
 
-        # Priority: Binance (Spot/Futures) for real-time price, CoinGecko for market data
+        # Priority: Binance Spot, then Binance Futures
         if 'binance' in price_sources:
             binance = price_sources['binance']
             combined_data.update({
@@ -694,7 +676,12 @@ class CryptoAPI:
                 'volume_24h': binance.get('volume_24h', 0),
                 'high_24h': binance.get('high_24h', 0),
                 'low_24h': binance.get('low_24h', 0),
-                'primary_source': 'binance'
+                'open_price': binance.get('open_price', 0),
+                'close_price': binance.get('close_price', 0),
+                'price_change': binance.get('price_change', 0),
+                'quote_volume_24h': binance.get('quote_volume_24h', 0),
+                'count': binance.get('count', 0),
+                'primary_source': 'binance_spot'
             })
         elif 'binance_futures' in price_sources:
             binance_futures = price_sources['binance_futures']
@@ -704,46 +691,26 @@ class CryptoAPI:
                 'volume_24h': binance_futures.get('volume_24h', 0),
                 'high_24h': binance_futures.get('high_24h', 0),
                 'low_24h': binance_futures.get('low_24h', 0),
+                'open_price': binance_futures.get('open_price', 0),
+                'weighted_avg_price': binance_futures.get('weighted_avg_price', 0),
+                'price_change': binance_futures.get('price_change', 0),
+                'quote_volume_24h': binance_futures.get('quote_volume_24h', 0),
+                'count': binance_futures.get('count', 0),
                 'primary_source': 'binance_futures'
             })
 
-        # Add CoinGecko market insights
-        if 'coingecko_market' in price_sources:
-            cg_market = price_sources['coingecko_market']
-            combined_data.update({
-                'market_cap': cg_market.get('market_cap', 0),
-                'market_cap_rank': cg_market.get('market_cap_rank', 0),
-                'circulating_supply': cg_market.get('circulating_supply', 0),
-                'max_supply': cg_market.get('max_supply', 0),
-                'ath': cg_market.get('ath', 0),
-                'ath_change_percentage': cg_market.get('ath_change_percentage', 0),
-                'price_change_7d': cg_market.get('price_change_percentage_7d', 0),
-                'price_change_30d': cg_market.get('price_change_percentage_30d', 0),
-                'market_data_source': 'coingecko'
-            })
-
-            # Use CoinGecko price if Binance not available
-            if 'price' not in combined_data:
-                combined_data.update({
-                    'price': cg_market.get('current_price', 0),
-                    'change_24h': cg_market.get('price_change_percentage_24h', 0),
-                    'primary_source': 'coingecko'
-                })
-
-        # Add simple CoinGecko data if available
-        if 'coingecko' in price_sources and 'price' not in combined_data:
-            cg_simple = price_sources['coingecko']
-            combined_data.update({
-                'price': cg_simple.get('price', 0),
-                'change_24h': cg_simple.get('change_24h', 0),
-                'volume_24h': cg_simple.get('volume_24h', 0),
-                'primary_source': 'coingecko'
-            })
+        # Add additional Binance-specific data if both sources available
+        if 'binance' in price_sources and 'binance_futures' in price_sources:
+            combined_data['dual_source'] = True
+            combined_data['spot_futures_spread'] = abs(
+                price_sources['binance'].get('price', 0) - 
+                price_sources['binance_futures'].get('price', 0)
+            )
 
         return combined_data
 
     def get_comprehensive_analysis_data(self, symbol):
-        """Get comprehensive data from all APIs for analysis"""
+        """Get comprehensive data from Binance APIs only for analysis"""
         analysis_data = {
             'symbol': symbol.upper(),
             'timestamp': datetime.now().isoformat(),
@@ -752,7 +719,7 @@ class CryptoAPI:
             'total_calls': 0
         }
 
-        # 1. Binance price data
+        # 1. Binance spot price data
         try:
             binance_price = self.get_binance_price(symbol)
             analysis_data['data_sources']['binance_price'] = binance_price
@@ -762,7 +729,7 @@ class CryptoAPI:
         except:
             pass
 
-        # 2. Binance futures data
+        # 2. Binance futures comprehensive data
         try:
             binance_futures = self.get_comprehensive_futures_data(symbol)
             analysis_data['data_sources']['binance_futures'] = binance_futures
@@ -772,27 +739,27 @@ class CryptoAPI:
         except:
             pass
 
-        # 3. CoinGecko market data
+        # 3. Binance candlestick data for technical analysis
         try:
-            coingecko_market = self.get_coingecko_market_data(symbol)
-            analysis_data['data_sources']['coingecko_market'] = coingecko_market
+            candlestick_data = self.get_binance_candlestick(symbol, '1h', 50)
+            analysis_data['data_sources']['binance_candlesticks'] = candlestick_data
             analysis_data['total_calls'] += 1
-            if 'error' not in coingecko_market:
+            if 'error' not in candlestick_data:
                 analysis_data['successful_calls'] += 1
         except:
             pass
 
-        # 4. CoinGecko global data
+        # 4. Binance server time for synchronization
         try:
-            global_data = self.get_coingecko_global_data()
-            analysis_data['data_sources']['coingecko_global'] = global_data
+            server_time = self.get_binance_server_time()
+            analysis_data['data_sources']['binance_server_time'] = server_time
             analysis_data['total_calls'] += 1
-            if 'error' not in global_data:
+            if 'error' not in server_time:
                 analysis_data['successful_calls'] += 1
         except:
             pass
 
-        # 5. Crypto news
+        # 5. Crypto news (keep for market sentiment)
         try:
             news_data = self.get_crypto_news(5)
             analysis_data['data_sources']['crypto_news'] = news_data
@@ -802,7 +769,7 @@ class CryptoAPI:
         except:
             pass
 
-        # Calculate data quality score
+        # Calculate data quality score (more strict for Binance-only)
         success_rate = (analysis_data['successful_calls'] / analysis_data['total_calls']) if analysis_data['total_calls'] > 0 else 0
         
         if success_rate >= 0.8:
@@ -814,6 +781,7 @@ class CryptoAPI:
         else:
             analysis_data['data_quality'] = 'poor'
 
+        analysis_data['primary_source'] = 'binance_comprehensive'
         return analysis_data
 
     # === LEGACY METHOD REPLACEMENTS ===
@@ -1529,43 +1497,100 @@ class CryptoAPI:
             return {'error': f"Entry recommendation error: {str(e)}"}
 
     def check_api_status(self):
-        """Check API health status with enhanced Binance coverage"""
+        """Check Binance API health status comprehensively"""
         try:
-            # Test Binance Spot
+            # Test Binance Spot API
             spot_test = requests.get(f"{self.binance_spot_url}/ping", timeout=5)
             binance_spot_ok = spot_test.status_code == 200
 
-            # Test Binance Futures
+            # Test Binance Futures API
             futures_test = requests.get(f"{self.binance_futures_url}/ping", timeout=5)
             binance_futures_ok = futures_test.status_code == 200
 
-            # Test CryptoNews
-            news_ok = bool(self.cryptonews_key)
+            # Test Binance Spot price endpoint
+            spot_price_ok = False
+            try:
+                btc_spot = self.get_binance_price('BTC')
+                spot_price_ok = 'error' not in btc_spot and btc_spot.get('price', 0) > 0
+            except:
+                spot_price_ok = False
 
-            # Test advanced futures endpoints
+            # Test Binance Futures price endpoint
+            futures_price_ok = False
+            try:
+                btc_futures = self.get_binance_futures_price('BTC')
+                futures_price_ok = 'error' not in btc_futures and btc_futures.get('price', 0) > 0
+            except:
+                futures_price_ok = False
+
+            # Test advanced Binance futures endpoints
+            advanced_endpoints_ok = 0
+            total_advanced = 6
+            
             try:
                 test_symbol = 'BTCUSDT'
+                
+                # Test each advanced endpoint
                 oi_test = self.get_binance_open_interest(test_symbol)
+                if 'error' not in oi_test:
+                    advanced_endpoints_ok += 1
+                    
                 funding_test = self.get_binance_funding_rate(test_symbol)
-                advanced_ok = 'error' not in oi_test and 'error' not in funding_test
+                if 'error' not in funding_test:
+                    advanced_endpoints_ok += 1
+                    
+                mark_test = self.get_binance_mark_price(test_symbol)
+                if 'error' not in mark_test:
+                    advanced_endpoints_ok += 1
+                    
+                ls_test = self.get_binance_long_short_ratio(test_symbol)
+                if 'error' not in ls_test:
+                    advanced_endpoints_ok += 1
+                    
+                liq_test = self.get_binance_liquidation_orders(test_symbol)
+                if 'error' not in liq_test:
+                    advanced_endpoints_ok += 1
+                    
+                candle_test = self.get_binance_candlestick(test_symbol, '1h', 5)
+                if 'error' not in candle_test:
+                    advanced_endpoints_ok += 1
+                    
             except:
-                advanced_ok = False
+                pass
+
+            # Test CryptoNews (secondary)
+            news_ok = bool(self.cryptonews_key)
+
+            # Calculate overall health
+            core_binance_ok = binance_spot_ok and binance_futures_ok
+            price_endpoints_ok = spot_price_ok or futures_price_ok
+            advanced_ok = advanced_endpoints_ok >= 4  # At least 4 out of 6 working
+            
+            overall_health = core_binance_ok and price_endpoints_ok and advanced_ok
 
             return {
-                'binance_spot': binance_spot_ok,
-                'binance_futures': binance_futures_ok,
-                'binance_advanced': advanced_ok,
+                'binance_spot_ping': binance_spot_ok,
+                'binance_futures_ping': binance_futures_ok,
+                'binance_spot_price': spot_price_ok,
+                'binance_futures_price': futures_price_ok,
+                'binance_advanced_endpoints': f"{advanced_endpoints_ok}/{total_advanced}",
+                'binance_advanced_ok': advanced_ok,
                 'cryptonews': news_ok,
-                'overall_health': binance_spot_ok and binance_futures_ok and advanced_ok,
-                'primary_source': 'binance_comprehensive'
+                'overall_health': overall_health,
+                'primary_source': 'binance_exclusive',
+                'api_coverage': 'complete' if overall_health else 'partial'
             }
         except Exception as e:
             return {
-                'binance_spot': False,
-                'binance_futures': False,
-                'binance_advanced': False,
+                'binance_spot_ping': False,
+                'binance_futures_ping': False,
+                'binance_spot_price': False,
+                'binance_futures_price': False,
+                'binance_advanced_endpoints': '0/6',
+                'binance_advanced_ok': False,
                 'cryptonews': False,
                 'overall_health': False,
+                'primary_source': 'binance_exclusive',
                 'error': str(e)
             }
 
@@ -1581,25 +1606,30 @@ class CryptoAPI:
             return f"${price:.8f}"
 
     def _fallback_price(self, symbol, error_msg):
-        """Fallback price data when Binance fails"""
-        # Try CoinGecko as backup before using mock data
-        try:
-            coingecko_data = self.get_coingecko_price(symbol)
-            if 'error' not in coingecko_data and coingecko_data.get('price', 0) > 0:
-                print(f"✅ Using CoinGecko fallback for {symbol}")
-                return {
-                    'symbol': symbol.upper() + 'USDT' if not symbol.upper().endswith('USDT') else symbol.upper(),
-                    'price': coingecko_data.get('price', 0),
-                    'change_24h': coingecko_data.get('change_24h', 0),
-                    'volume_24h': coingecko_data.get('volume_24h', 0),
-                    'source': 'coingecko_fallback',
-                    'error_reason': f"Binance failed: {error_msg}"
-                }
-        except Exception as e:
-            print(f"⚠️ CoinGecko fallback also failed: {e}")
+        """Fallback price data when all Binance endpoints fail"""
+        # In deployment mode, never use mock data - return error instead
+        is_deployment = (
+            os.getenv('REPLIT_DEPLOYMENT') == '1' or 
+            os.getenv('REPL_DEPLOYMENT') == '1' or
+            os.getenv('REPLIT_ENVIRONMENT') == 'deployment' or
+            os.path.exists('/tmp/repl_deployment_flag') or
+            bool(os.getenv('REPL_SLUG')) or
+            bool(os.getenv('REPL_OWNER'))
+        )
+        
+        if is_deployment:
+            print(f"❌ DEPLOYMENT: No fallback data for {symbol} - Binance-only mode")
+            return {
+                'error': f'Binance API unavailable for {symbol} in deployment mode',
+                'symbol': symbol.upper(),
+                'error_reason': error_msg,
+                'deployment_mode': True
+            }
 
-        # Only use mock data as last resort
+        # Only use simulation data in development as last resort
         import random
+        print(f"⚠️ Using simulation data for {symbol} - Binance APIs unavailable")
+        
         mock_prices = {
             'BTCUSDT': random.uniform(65000, 75000),
             'ETHUSDT': random.uniform(3000, 4000),
@@ -1607,7 +1637,10 @@ class CryptoAPI:
             'ADAUSDT': random.uniform(0.4, 0.6),
             'SOLUSDT': random.uniform(150, 250),
             'XRPUSDT': random.uniform(0.5, 0.7),
-            'DOGEUSDT': random.uniform(0.08, 0.12)
+            'DOGEUSDT': random.uniform(0.08, 0.12),
+            'MATICUSDT': random.uniform(0.8, 1.2),
+            'DOTUSDT': random.uniform(5, 8),
+            'AVAXUSDT': random.uniform(25, 40)
         }
 
         normalized_symbol = symbol.upper() + 'USDT' if not symbol.upper().endswith('USDT') else symbol.upper()
@@ -1620,9 +1653,9 @@ class CryptoAPI:
             'high_24h': base_price * random.uniform(1.01, 1.05),
             'low_24h': base_price * random.uniform(0.95, 0.99),
             'volume_24h': random.uniform(10000000, 100000000),
-            'source': 'fallback_simulation',
+            'source': 'binance_simulation',
             'error_reason': error_msg,
-            'warning': 'SIMULATION DATA - Check API connection'
+            'warning': 'SIMULATION DATA - Binance APIs unavailable (Development Only)'
         }
 
     def _fallback_futures_data(self, symbol):
@@ -1836,78 +1869,114 @@ class CryptoAPI:
             'classification': volatility
         }
 
-    def get_multiple_prices(self, symbols):
-        """Get prices for multiple symbols"""
+    def get_multiple_binance_prices(self, symbols):
+        """Get prices for multiple symbols from Binance only"""
         prices_data = {}
         
         for symbol in symbols:
             try:
+                # Try Binance Spot first
                 price_data = self.get_binance_price(symbol)
-                if 'error' not in price_data:
+                if 'error' not in price_data and price_data.get('price', 0) > 0:
                     prices_data[symbol] = {
                         'price': price_data.get('price', 0),
                         'change_24h': price_data.get('change_24h', 0),
                         'volume_24h': price_data.get('volume_24h', 0),
-                        'source': price_data.get('source', 'binance')
+                        'high_24h': price_data.get('high_24h', 0),
+                        'low_24h': price_data.get('low_24h', 0),
+                        'source': 'binance_spot'
                     }
+                    continue
+                
+                # Fallback to Binance Futures
+                futures_data = self.get_binance_futures_price(symbol)
+                if 'error' not in futures_data and futures_data.get('price', 0) > 0:
+                    prices_data[symbol] = {
+                        'price': futures_data.get('price', 0),
+                        'change_24h': futures_data.get('change_24h', 0),
+                        'volume_24h': futures_data.get('volume_24h', 0),
+                        'high_24h': futures_data.get('high_24h', 0),
+                        'low_24h': futures_data.get('low_24h', 0),
+                        'source': 'binance_futures'
+                    }
+                    
             except Exception as e:
-                print(f"Error getting price for {symbol}: {e}")
+                print(f"Error getting Binance price for {symbol}: {e}")
                 continue
                 
-        return prices_data if prices_data else {'error': 'No price data available'}
+        return prices_data if prices_data else {'error': 'No Binance price data available'}
+    
+    def get_multiple_prices(self, symbols):
+        """Legacy method - now uses Binance only"""
+        return self.get_multiple_binance_prices(symbols)
 
     def get_market_overview(self):
-        """Get enhanced market overview data using multiple APIs"""
+        """Get market overview data using Binance data exclusively"""
         try:
-            # Try CoinGecko global data first (most comprehensive)
-            global_data = self.get_coingecko_global_data()
+            # Get data from top cryptocurrencies via Binance
+            major_symbols = ['BTC', 'ETH', 'BNB', 'ADA', 'SOL', 'XRP', 'DOGE', 'MATIC', 'DOT', 'AVAX']
+            prices_data = self.get_multiple_binance_prices(major_symbols)
             
-            if 'error' not in global_data:
-                # Use real CoinGecko global data
+            if 'error' not in prices_data and len(prices_data) > 0:
+                # Calculate market metrics from Binance data
+                btc_data = prices_data.get('BTC', {})
+                eth_data = prices_data.get('ETH', {})
+                bnb_data = prices_data.get('BNB', {})
+                
+                # Calculate total volume and dominance estimates
+                total_volume = sum(data.get('volume_24h', 0) for data in prices_data.values())
+                btc_volume = btc_data.get('volume_24h', 0)
+                eth_volume = eth_data.get('volume_24h', 0)
+                
+                btc_dominance = (btc_volume / total_volume * 100) if total_volume > 0 else 45.0
+                eth_dominance = (eth_volume / total_volume * 100) if total_volume > 0 else 18.0
+                
+                # Calculate weighted average market change
+                changes = []
+                volumes = []
+                for data in prices_data.values():
+                    if 'change_24h' in data and 'volume_24h' in data:
+                        changes.append(data['change_24h'])
+                        volumes.append(data['volume_24h'])
+                
+                if changes and volumes:
+                    weighted_change = sum(c * v for c, v in zip(changes, volumes)) / sum(volumes)
+                else:
+                    weighted_change = 0
+                
+                # Estimate total market cap (rough calculation)
+                btc_price = btc_data.get('price', 0)
+                estimated_market_cap = btc_price * 19500000 / (btc_dominance / 100) if btc_dominance > 0 else total_volume * 20
+                
+                # Get BTC futures data for additional insights
+                btc_futures = self.get_comprehensive_futures_data('BTC')
+                funding_rate = 0
+                open_interest = 0
+                if 'error' not in btc_futures:
+                    funding_data = btc_futures.get('funding_rate_data', {})
+                    oi_data = btc_futures.get('open_interest_data', {})
+                    funding_rate = funding_data.get('last_funding_rate', 0) if 'error' not in funding_data else 0
+                    open_interest = oi_data.get('open_interest', 0) if 'error' not in oi_data else 0
+                
                 return {
-                    'total_market_cap': global_data.get('total_market_cap', 0),
-                    'market_cap_change_24h': global_data.get('market_cap_change_percentage_24h_usd', 0),
-                    'btc_dominance': global_data.get('market_cap_percentage', {}).get('btc', 0),
-                    'eth_dominance': global_data.get('market_cap_percentage', {}).get('eth', 0),
-                    'active_cryptocurrencies': global_data.get('active_cryptocurrencies', 0),
-                    'total_volume': global_data.get('total_volume', 0),
-                    'markets': global_data.get('markets', 0),
-                    'source': 'coingecko_global',
-                    'last_updated': global_data.get('updated_at', 0)
+                    'total_market_cap': estimated_market_cap,
+                    'market_cap_change_24h': weighted_change,
+                    'btc_dominance': btc_dominance,
+                    'eth_dominance': eth_dominance,
+                    'btc_price': btc_data.get('price', 0),
+                    'eth_price': eth_data.get('price', 0),
+                    'bnb_price': bnb_data.get('price', 0),
+                    'btc_change_24h': btc_data.get('change_24h', 0),
+                    'eth_change_24h': eth_data.get('change_24h', 0),
+                    'bnb_change_24h': bnb_data.get('change_24h', 0),
+                    'total_volume_24h': total_volume,
+                    'active_cryptocurrencies': len(prices_data),
+                    'btc_funding_rate': funding_rate,
+                    'btc_open_interest': open_interest,
+                    'source': 'binance_comprehensive',
+                    'last_updated': datetime.now().isoformat()
                 }
             else:
-                # Fallback to Binance-based estimation
-                major_symbols = ['BTC', 'ETH', 'BNB', 'ADA', 'SOL']
-                prices_data = self.get_multiple_prices(major_symbols)
-                
-                if 'error' not in prices_data:
-                    # Calculate market metrics from available data
-                    btc_data = prices_data.get('BTC', {})
-                    eth_data = prices_data.get('ETH', {})
-                    
-                    # Estimate market cap and dominance
-                    total_volume = sum(data.get('volume_24h', 0) for data in prices_data.values())
-                    btc_volume = btc_data.get('volume_24h', 0)
-                    
-                    btc_dominance = (btc_volume / total_volume * 100) if total_volume > 0 else 45.0
-                    
-                    # Calculate average market change
-                    changes = [data.get('change_24h', 0) for data in prices_data.values() if 'change_24h' in data]
-                    avg_change = sum(changes) / len(changes) if changes else 0
-                    
-                    return {
-                        'total_market_cap': total_volume * 15,  # Better estimate
-                        'market_cap_change_24h': avg_change,
-                        'btc_dominance': btc_dominance,
-                        'eth_dominance': 18.0,
-                        'btc_price': btc_data.get('price', 0),
-                        'eth_price': eth_data.get('price', 0),
-                        'btc_change_24h': btc_data.get('change_24h', 0),
-                        'eth_change_24h': eth_data.get('change_24h', 0),
-                        'active_cryptocurrencies': len(prices_data),
-                        'source': 'binance_fallback'
-                    }
-                else:
-                    return {'error': 'Market overview unavailable'}
+                return {'error': 'Binance market data unavailable'}
         except Exception as e:
             return {'error': f"Market overview error: {str(e)}"}
