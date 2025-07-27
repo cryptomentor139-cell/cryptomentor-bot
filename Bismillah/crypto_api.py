@@ -41,7 +41,7 @@ class CryptoAPI:
             return {'error': f"Server time error: {str(e)}"}
 
     def get_binance_price(self, symbol, force_refresh=False):
-        """Get real-time price from Binance Spot API"""
+        """Get real-time price from Binance Spot API with enhanced error handling"""
         try:
             # Normalize symbol format
             if not symbol.endswith('USDT'):
@@ -54,31 +54,32 @@ class CryptoAPI:
                 bool(os.getenv('REPL_SLUG'))
             )
 
-            # Simpler headers for deployment stability
-            if is_deployment:
-                headers = {
-                    'User-Agent': 'CryptoMentorAI/1.0'
-                }
-                params = {'symbol': symbol}
-            else:
-                # Enhanced headers for development
-                headers = {
+            print(f"🔄 Fetching Binance price for {symbol} (Deployment: {is_deployment})")
+
+            # Enhanced headers for better API compatibility
+            headers = {
+                'User-Agent': 'CryptoMentorAI/1.0',
+                'Accept': 'application/json',
+                'Connection': 'keep-alive'
+            }
+
+            if not is_deployment:
+                headers.update({
                     'Cache-Control': 'no-cache, no-store, must-revalidate',
                     'Pragma': 'no-cache',
-                    'Expires': '0',
-                    'User-Agent': 'CryptoMentorAI/1.0'
-                }
-                # Add timestamp parameter to prevent caching
-                params = {'symbol': symbol}
-                if force_refresh:
-                    import time
-                    params['_t'] = int(time.time() * 1000)  # Cache buster
+                    'Expires': '0'
+                })
+
+            params = {'symbol': symbol}
+            if force_refresh and not is_deployment:
+                import time
+                params['_t'] = int(time.time() * 1000)  # Cache buster
 
             # Priority endpoints for deployment vs development
             if is_deployment:
                 endpoints_to_try = [
-                    f"{self.binance_spot_url}/ticker/price",  # Simpler endpoint first in deployment
-                    f"{self.binance_spot_url}/ticker/24hr"
+                    f"{self.binance_spot_url}/ticker/24hr",  # Full data first in deployment
+                    f"{self.binance_spot_url}/ticker/price"  # Simple price as backup
                 ]
             else:
                 endpoints_to_try = [
@@ -86,22 +87,63 @@ class CryptoAPI:
                     f"{self.binance_spot_url}/ticker/price"
                 ]
 
-            for endpoint in endpoints_to_try:
+            last_error = None
+            for attempt, endpoint in enumerate(endpoints_to_try, 1):
                 try:
+                    print(f"📡 Attempting Binance API call {attempt}/{len(endpoints_to_try)}: {endpoint}")
+                    
                     response = requests.get(
                         endpoint,
                         params=params,
-                        timeout=15 if is_deployment else 10,  # Longer timeout in deployment
+                        timeout=20 if is_deployment else 10,  # Longer timeout in deployment
                         headers=headers
                     )
+                    
+                    print(f"📊 Binance API Response Status: {response.status_code}")
+                    
+                    # Check response status
+                    if response.status_code != 200:
+                        error_msg = f"HTTP {response.status_code}"
+                        try:
+                            error_data = response.json()
+                            error_msg = f"HTTP {response.status_code}: {error_data.get('msg', 'Unknown error')}"
+                        except:
+                            pass
+                        print(f"❌ Binance API Error: {error_msg}")
+                        last_error = error_msg
+                        continue
+
                     response.raise_for_status()
                     data = response.json()
+                    
+                    # Validate response data
+                    if not data or not isinstance(data, dict):
+                        print(f"❌ Invalid Binance API response format for {symbol}")
+                        last_error = "Invalid response format"
+                        continue
 
-                    # Handle different endpoint responses
+                    # Handle different endpoint responses with validation
                     if endpoint.endswith('/ticker/24hr'):
-                        return {
+                        # Validate required fields
+                        required_fields = ['lastPrice', 'priceChangePercent', 'highPrice', 'lowPrice', 'volume', 'quoteVolume']
+                        missing_fields = [field for field in required_fields if field not in data]
+                        
+                        if missing_fields:
+                            print(f"❌ Missing fields in 24hr ticker response: {missing_fields}")
+                            last_error = f"Missing required fields: {missing_fields}"
+                            continue
+
+                        price = float(data['lastPrice'])
+                        
+                        # Validate price is not zero or negative
+                        if price <= 0:
+                            print(f"❌ Invalid price received from Binance: {price}")
+                            last_error = f"Invalid price: {price}"
+                            continue
+
+                        result = {
                             'symbol': symbol,
-                            'price': float(data['lastPrice']),
+                            'price': price,
                             'change_24h': float(data['priceChangePercent']),
                             'high_24h': float(data['highPrice']),
                             'low_24h': float(data['lowPrice']),
@@ -115,27 +157,80 @@ class CryptoAPI:
                             'last_id': data['lastId'],
                             'open_time': data['openTime'],
                             'close_time': data['closeTime'],
-                            'source': 'binance_spot'
+                            'source': 'binance_spot_24hr',
+                            'api_call_successful': True
                         }
+                        
+                        print(f"✅ Binance 24hr ticker success for {symbol}: ${price:,.4f}")
+                        return result
+
                     else:  # ticker/price endpoint
-                        return {
+                        # Validate price field exists
+                        if 'price' not in data:
+                            print(f"❌ Price field missing in simple ticker response")
+                            last_error = "Price field missing"
+                            continue
+
+                        price = float(data['price'])
+                        
+                        # Validate price is not zero or negative
+                        if price <= 0:
+                            print(f"❌ Invalid price received from Binance: {price}")
+                            last_error = f"Invalid price: {price}"
+                            continue
+
+                        result = {
                             'symbol': symbol,
-                            'price': float(data['price']),
+                            'price': price,
                             'change_24h': 0,  # Not available in price endpoint
                             'volume_24h': 0,
-                            'source': 'binance_spot_simple'
+                            'source': 'binance_spot_simple',
+                            'api_call_successful': True
                         }
+                        
+                        print(f"✅ Binance simple ticker success for {symbol}: ${price:,.4f}")
+                        return result
 
+                except requests.exceptions.Timeout as e:
+                    error_msg = f"Timeout error for {endpoint}: {str(e)}"
+                    print(f"⏰ {error_msg}")
+                    last_error = error_msg
+                    continue
+                except requests.exceptions.ConnectionError as e:
+                    error_msg = f"Connection error for {endpoint}: {str(e)}"
+                    print(f"🔌 {error_msg}")
+                    last_error = error_msg
+                    continue
                 except requests.exceptions.RequestException as e:
-                    print(f"⚠️ Binance endpoint {endpoint} failed: {e}")
+                    error_msg = f"Request error for {endpoint}: {str(e)}"
+                    print(f"⚠️ {error_msg}")
+                    last_error = error_msg
+                    continue
+                except ValueError as e:
+                    error_msg = f"Data parsing error for {endpoint}: {str(e)}"
+                    print(f"🔢 {error_msg}")
+                    last_error = error_msg
+                    continue
+                except Exception as e:
+                    error_msg = f"Unexpected error for {endpoint}: {str(e)}"
+                    print(f"❌ {error_msg}")
+                    last_error = error_msg
                     continue
 
             # If all endpoints failed
-            raise Exception("All Binance Spot endpoints failed")
+            final_error = f"All Binance Spot endpoints failed. Last error: {last_error}"
+            print(f"❌ {final_error}")
+            raise Exception(final_error)
 
         except Exception as e:
-            print(f"❌ Binance Spot API completely failed for {symbol}: {e}")
-            return {'error': f"Binance API error: {str(e)}"}
+            error_msg = f"Binance Spot API completely failed for {symbol}: {str(e)}"
+            print(f"❌ {error_msg}")
+            return {
+                'error': error_msg,
+                'symbol': symbol,
+                'api_call_successful': False,
+                'error_type': 'binance_spot_failure'
+            }
 
     def get_binance_candlestick(self, symbol, interval='1h', limit=100):
         """Get candlestick/kline data from Binance"""
@@ -187,22 +282,74 @@ class CryptoAPI:
     # === BINANCE FUTURES API METHODS ===
 
     def get_binance_futures_price(self, symbol):
-        """Get futures price ticker from Binance Futures"""
+        """Get futures price ticker from Binance Futures with enhanced validation"""
         try:
             if not symbol.endswith('USDT'):
                 symbol = symbol.upper() + 'USDT'
 
+            # Check deployment mode
+            is_deployment = (
+                os.getenv('REPLIT_DEPLOYMENT') == '1' or 
+                os.getenv('REPL_DEPLOYMENT') == '1' or
+                bool(os.getenv('REPL_SLUG'))
+            )
+
+            print(f"🔄 Fetching Binance Futures price for {symbol} (Deployment: {is_deployment})")
+
+            headers = {
+                'User-Agent': 'CryptoMentorAI/1.0',
+                'Accept': 'application/json',
+                'Connection': 'keep-alive'
+            }
+
+            timeout = 20 if is_deployment else 10
+
             response = requests.get(
                 f"{self.binance_futures_url}/ticker/24hr",
                 params={'symbol': symbol},
-                timeout=10
+                timeout=timeout,
+                headers=headers
             )
+            
+            print(f"📊 Binance Futures API Response Status: {response.status_code}")
+
+            # Check response status
+            if response.status_code != 200:
+                error_msg = f"HTTP {response.status_code}"
+                try:
+                    error_data = response.json()
+                    error_msg = f"HTTP {response.status_code}: {error_data.get('msg', 'Unknown error')}"
+                except:
+                    pass
+                print(f"❌ Binance Futures API Error: {error_msg}")
+                return {'error': f"Futures API error: {error_msg}"}
+
             response.raise_for_status()
             data = response.json()
 
-            return {
+            # Validate response data
+            if not data or not isinstance(data, dict):
+                print(f"❌ Invalid Binance Futures API response format for {symbol}")
+                return {'error': 'Invalid response format'}
+
+            # Validate required fields
+            required_fields = ['lastPrice', 'priceChangePercent', 'highPrice', 'lowPrice', 'volume', 'quoteVolume']
+            missing_fields = [field for field in required_fields if field not in data]
+            
+            if missing_fields:
+                print(f"❌ Missing fields in Futures ticker response: {missing_fields}")
+                return {'error': f'Missing required fields: {missing_fields}'}
+
+            price = float(data['lastPrice'])
+            
+            # Validate price is not zero or negative
+            if price <= 0:
+                print(f"❌ Invalid futures price received from Binance: {price}")
+                return {'error': f'Invalid price: {price}'}
+
+            result = {
                 'symbol': symbol,
-                'price': float(data['lastPrice']),
+                'price': price,
                 'change_24h': float(data['priceChangePercent']),
                 'high_24h': float(data['highPrice']),
                 'low_24h': float(data['lowPrice']),
@@ -214,10 +361,33 @@ class CryptoAPI:
                 'count': int(data['count']),
                 'open_time': data['openTime'],
                 'close_time': data['closeTime'],
-                'source': 'binance_futures'
+                'source': 'binance_futures',
+                'api_call_successful': True
             }
+
+            print(f"✅ Binance Futures success for {symbol}: ${price:,.4f}")
+            return result
+
+        except requests.exceptions.Timeout as e:
+            error_msg = f"Futures API timeout: {str(e)}"
+            print(f"⏰ {error_msg}")
+            return {'error': error_msg, 'api_call_successful': False}
+        except requests.exceptions.ConnectionError as e:
+            error_msg = f"Futures API connection error: {str(e)}"
+            print(f"🔌 {error_msg}")
+            return {'error': error_msg, 'api_call_successful': False}
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Futures API request error: {str(e)}"
+            print(f"⚠️ {error_msg}")
+            return {'error': error_msg, 'api_call_successful': False}
+        except ValueError as e:
+            error_msg = f"Futures API data parsing error: {str(e)}"
+            print(f"🔢 {error_msg}")
+            return {'error': error_msg, 'api_call_successful': False}
         except Exception as e:
-            return {'error': f"Futures price error: {str(e)}"}
+            error_msg = f"Futures price error: {str(e)}"
+            print(f"❌ {error_msg}")
+            return {'error': error_msg, 'api_call_successful': False}
 
     def get_binance_mark_price(self, symbol):
         """Get mark price and funding rate from Binance Futures"""
@@ -585,7 +755,7 @@ class CryptoAPI:
         return self.get_multi_api_price(symbol, force_refresh)
 
     def get_multi_api_price(self, symbol, force_refresh=False):
-        """Get price from Binance APIs only - centralized to Binance"""
+        """Get price from Binance APIs only - centralized to Binance with enhanced validation"""
         price_sources = {}
 
         # Enhanced deployment environment check
@@ -607,71 +777,111 @@ class CryptoAPI:
         mode = "DEPLOYMENT REAL-TIME" if is_deployment else "STANDARD"
         print(f"🔄 {mode} MODE: Fetching price data for {symbol} from Binance (Force: {force_refresh})")
 
+        def validate_price_data(data, source_name):
+            """Validate price data to ensure it's valid"""
+            if 'error' in data:
+                print(f"❌ {source_name} returned error: {data['error']}")
+                return False
+            
+            price = data.get('price', 0)
+            if not isinstance(price, (int, float)) or price <= 0:
+                print(f"❌ {source_name} returned invalid price: {price}")
+                return False
+            
+            if not data.get('api_call_successful', True):
+                print(f"❌ {source_name} API call was not successful")
+                return False
+                
+            print(f"✅ {source_name} price validation passed: ${price:,.4f}")
+            return True
+
         # In deployment mode, prioritize Futures API first due to stability
         if is_deployment:
+            print("🚀 DEPLOYMENT MODE: Trying Binance APIs in priority order...")
+            
             # 1. Try Binance Futures API first in deployment (more stable)
             try:
+                print("📡 Trying Binance Futures API...")
                 futures_data = self.get_binance_futures_price(symbol)
-                if 'error' not in futures_data and futures_data.get('price', 0) > 0:
+                if validate_price_data(futures_data, "Binance Futures"):
                     price_sources['binance_futures'] = futures_data
                     price_str = f"${futures_data.get('price', 0):,.4f}"
-                    print(f"🚀 BINANCE DEPLOYMENT: {symbol} = {price_str} ✅ (Binance Futures)")
+                    print(f"🎯 DEPLOYMENT SUCCESS: {symbol} = {price_str} ✅ (Binance Futures)")
                     return self._combine_binance_price_data(symbol, price_sources)
+                else:
+                    print("❌ Binance Futures validation failed, trying next...")
             except Exception as e:
-                print(f"⚠️ Binance Futures API error for {symbol}: {e}")
+                print(f"💥 Binance Futures API exception for {symbol}: {e}")
 
             # 2. Try Binance Spot API as backup in deployment
             try:
-                binance_data = self.get_binance_price(symbol, force_refresh=False)  # Less aggressive in deployment
-                if 'error' not in binance_data and binance_data.get('price', 0) > 0:
+                print("📡 Trying Binance Spot API...")
+                binance_data = self.get_binance_price(symbol, force_refresh=True)
+                if validate_price_data(binance_data, "Binance Spot"):
                     price_sources['binance'] = binance_data
                     price_str = f"${binance_data.get('price', 0):,.4f}"
-                    print(f"🚀 BINANCE DEPLOYMENT: {symbol} = {price_str} ✅ (Binance Spot)")
+                    print(f"🎯 DEPLOYMENT SUCCESS: {symbol} = {price_str} ✅ (Binance Spot)")
                     return self._combine_binance_price_data(symbol, price_sources)
+                else:
+                    print("❌ Binance Spot validation failed")
             except Exception as e:
-                print(f"⚠️ Binance Spot API error for {symbol}: {e}")
+                print(f"💥 Binance Spot API exception for {symbol}: {e}")
 
-            # In deployment, return error if all Binance APIs fail
-            print(f"❌ DEPLOYMENT: All Binance APIs failed for {symbol} - returning error")
-            return {'error': f'Binance real-time data unavailable for {symbol} in deployment mode'}
+            # In deployment, return detailed error if all Binance APIs fail
+            error_msg = f'All Binance APIs failed for {symbol} in deployment mode - no valid price data available'
+            print(f"🚨 DEPLOYMENT FAILURE: {error_msg}")
+            return {
+                'error': error_msg,
+                'symbol': symbol,
+                'deployment_mode': True,
+                'all_apis_failed': True,
+                'api_call_successful': False
+            }
 
         else:
-            # Development mode - multiple attempts with spot first
-            max_attempts = 2
+            # Development mode - multiple attempts with enhanced validation
+            max_attempts = 3  # Increased attempts for development
+            
+            print(f"🔧 DEVELOPMENT MODE: Will try {max_attempts} attempts...")
 
             for attempt in range(max_attempts):
                 if attempt > 0:
                     print(f"🔄 Binance retry attempt {attempt + 1}/{max_attempts} for {symbol}")
                     import time
-                    time.sleep(1)  # Brief delay between attempts
+                    time.sleep(2)  # Longer delay between attempts
 
                 # 1. Try Binance Spot API first in development
                 try:
+                    print(f"📡 Development attempt {attempt + 1}: Trying Binance Spot API...")
                     binance_data = self.get_binance_price(symbol, force_refresh=True)
-                    if 'error' not in binance_data and binance_data.get('price', 0) > 0:
+                    if validate_price_data(binance_data, "Binance Spot"):
                         price_sources['binance'] = binance_data
                         price_str = f"${binance_data.get('price', 0):,.4f}"
-                        print(f"🚀 BINANCE DEV: {symbol} = {price_str} ✅ (Binance Spot)")
+                        print(f"🎯 DEV SUCCESS: {symbol} = {price_str} ✅ (Binance Spot)")
                         return self._combine_binance_price_data(symbol, price_sources)
                 except Exception as e:
-                    print(f"⚠️ Binance Spot API error for {symbol}: {e}")
+                    print(f"💥 Binance Spot API exception for {symbol}: {e}")
 
                 # 2. Try Binance Futures API as backup in development
                 try:
+                    print(f"📡 Development attempt {attempt + 1}: Trying Binance Futures API...")
                     futures_data = self.get_binance_futures_price(symbol)
-                    if 'error' not in futures_data and futures_data.get('price', 0) > 0:
+                    if validate_price_data(futures_data, "Binance Futures"):
                         price_sources['binance_futures'] = futures_data
                         price_str = f"${futures_data.get('price', 0):,.4f}"
-                        print(f"🚀 BINANCE DEV: {symbol} = {price_str} ✅ (Binance Futures)")
+                        print(f"🎯 DEV SUCCESS: {symbol} = {price_str} ✅ (Binance Futures)")
                         return self._combine_binance_price_data(symbol, price_sources)
                 except Exception as e:
-                    print(f"⚠️ Binance Futures API error for {symbol}: {e}")
+                    print(f"💥 Binance Futures API exception for {symbol}: {e}")
 
             # Development mode fallback
             if price_sources:
+                print(f"⚠️ Using partial data from {len(price_sources)} source(s)")
                 return self._combine_binance_price_data(symbol, price_sources)
             else:
-                return self._fallback_price(symbol, "All Binance APIs unavailable")
+                error_msg = f"All Binance APIs failed after {max_attempts} attempts"
+                print(f"🚨 DEVELOPMENT FAILURE: {error_msg}")
+                return self._fallback_price(symbol, error_msg)
 
     def _combine_binance_price_data(self, symbol, price_sources):
         """Combine price data from Binance sources only"""
