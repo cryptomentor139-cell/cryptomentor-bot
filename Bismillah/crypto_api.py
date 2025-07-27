@@ -47,32 +47,51 @@ class CryptoAPI:
             if not symbol.endswith('USDT'):
                 symbol = symbol.upper() + 'USDT'
 
-            # Enhanced headers for real-time data
-            headers = {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0',
-                'User-Agent': 'CryptoMentorAI/1.0'
-            }
+            # Check deployment mode for different approach
+            is_deployment = (
+                os.getenv('REPLIT_DEPLOYMENT') == '1' or 
+                os.getenv('REPL_DEPLOYMENT') == '1' or
+                bool(os.getenv('REPL_SLUG'))
+            )
 
-            # Add timestamp parameter to prevent caching in deployment
-            params = {'symbol': symbol}
-            if force_refresh:
-                import time
-                params['_t'] = int(time.time() * 1000)  # Cache buster
+            # Simpler headers for deployment stability
+            if is_deployment:
+                headers = {
+                    'User-Agent': 'CryptoMentorAI/1.0'
+                }
+                params = {'symbol': symbol}
+            else:
+                # Enhanced headers for development
+                headers = {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0',
+                    'User-Agent': 'CryptoMentorAI/1.0'
+                }
+                # Add timestamp parameter to prevent caching
+                params = {'symbol': symbol}
+                if force_refresh:
+                    import time
+                    params['_t'] = int(time.time() * 1000)  # Cache buster
 
-            # Multiple endpoint attempts for better reliability
-            endpoints_to_try = [
-                f"{self.binance_spot_url}/ticker/24hr",
-                f"{self.binance_spot_url}/ticker/price"
-            ]
+            # Priority endpoints for deployment vs development
+            if is_deployment:
+                endpoints_to_try = [
+                    f"{self.binance_spot_url}/ticker/price",  # Simpler endpoint first in deployment
+                    f"{self.binance_spot_url}/ticker/24hr"
+                ]
+            else:
+                endpoints_to_try = [
+                    f"{self.binance_spot_url}/ticker/24hr",   # Full data first in development
+                    f"{self.binance_spot_url}/ticker/price"
+                ]
 
             for endpoint in endpoints_to_try:
                 try:
                     response = requests.get(
                         endpoint,
                         params=params,
-                        timeout=10,
+                        timeout=15 if is_deployment else 10,  # Longer timeout in deployment
                         headers=headers
                     )
                     response.raise_for_status()
@@ -588,46 +607,71 @@ class CryptoAPI:
         mode = "DEPLOYMENT REAL-TIME" if is_deployment else "STANDARD"
         print(f"🔄 {mode} MODE: Fetching price data for {symbol} from Binance (Force: {force_refresh})")
 
-        # Multiple attempts for real-time data in deployment
-        max_attempts = 3 if is_deployment else 1
-
-        for attempt in range(max_attempts):
-            if attempt > 0:
-                print(f"🔄 Binance retry attempt {attempt + 1}/{max_attempts} for {symbol}")
-                import time
-                time.sleep(1)  # Brief delay between attempts
-
-            # 1. Try Binance Spot API first (most reliable for real-time)
-            try:
-                binance_data = self.get_binance_price(symbol, force_refresh=True)
-                if 'error' not in binance_data and binance_data.get('price', 0) > 0:
-                    price_sources['binance'] = binance_data
-                    price_str = f"${binance_data.get('price', 0):,.4f}"
-                    print(f"🚀 BINANCE REAL-TIME: {symbol} = {price_str} ✅ (Binance Spot)")
-                    return self._combine_binance_price_data(symbol, price_sources)
-            except Exception as e:
-                print(f"⚠️ Binance Spot API error for {symbol}: {e}")
-
-            # 2. Try Binance Futures API as backup
+        # In deployment mode, prioritize Futures API first due to stability
+        if is_deployment:
+            # 1. Try Binance Futures API first in deployment (more stable)
             try:
                 futures_data = self.get_binance_futures_price(symbol)
                 if 'error' not in futures_data and futures_data.get('price', 0) > 0:
                     price_sources['binance_futures'] = futures_data
                     price_str = f"${futures_data.get('price', 0):,.4f}"
-                    print(f"🚀 BINANCE REAL-TIME: {symbol} = {price_str} ✅ (Binance Futures)")
+                    print(f"🚀 BINANCE DEPLOYMENT: {symbol} = {price_str} ✅ (Binance Futures)")
                     return self._combine_binance_price_data(symbol, price_sources)
             except Exception as e:
                 print(f"⚠️ Binance Futures API error for {symbol}: {e}")
 
-        # Only use fallback if ALL Binance attempts failed AND not in deployment
-        if price_sources:
-            return self._combine_binance_price_data(symbol, price_sources)
-        elif is_deployment:
-            # In deployment, return error instead of mock data
+            # 2. Try Binance Spot API as backup in deployment
+            try:
+                binance_data = self.get_binance_price(symbol, force_refresh=False)  # Less aggressive in deployment
+                if 'error' not in binance_data and binance_data.get('price', 0) > 0:
+                    price_sources['binance'] = binance_data
+                    price_str = f"${binance_data.get('price', 0):,.4f}"
+                    print(f"🚀 BINANCE DEPLOYMENT: {symbol} = {price_str} ✅ (Binance Spot)")
+                    return self._combine_binance_price_data(symbol, price_sources)
+            except Exception as e:
+                print(f"⚠️ Binance Spot API error for {symbol}: {e}")
+
+            # In deployment, return error if all Binance APIs fail
             print(f"❌ DEPLOYMENT: All Binance APIs failed for {symbol} - returning error")
             return {'error': f'Binance real-time data unavailable for {symbol} in deployment mode'}
+
         else:
-            return self._fallback_price(symbol, "All Binance APIs unavailable")
+            # Development mode - multiple attempts with spot first
+            max_attempts = 2
+
+            for attempt in range(max_attempts):
+                if attempt > 0:
+                    print(f"🔄 Binance retry attempt {attempt + 1}/{max_attempts} for {symbol}")
+                    import time
+                    time.sleep(1)  # Brief delay between attempts
+
+                # 1. Try Binance Spot API first in development
+                try:
+                    binance_data = self.get_binance_price(symbol, force_refresh=True)
+                    if 'error' not in binance_data and binance_data.get('price', 0) > 0:
+                        price_sources['binance'] = binance_data
+                        price_str = f"${binance_data.get('price', 0):,.4f}"
+                        print(f"🚀 BINANCE DEV: {symbol} = {price_str} ✅ (Binance Spot)")
+                        return self._combine_binance_price_data(symbol, price_sources)
+                except Exception as e:
+                    print(f"⚠️ Binance Spot API error for {symbol}: {e}")
+
+                # 2. Try Binance Futures API as backup in development
+                try:
+                    futures_data = self.get_binance_futures_price(symbol)
+                    if 'error' not in futures_data and futures_data.get('price', 0) > 0:
+                        price_sources['binance_futures'] = futures_data
+                        price_str = f"${futures_data.get('price', 0):,.4f}"
+                        print(f"🚀 BINANCE DEV: {symbol} = {price_str} ✅ (Binance Futures)")
+                        return self._combine_binance_price_data(symbol, price_sources)
+                except Exception as e:
+                    print(f"⚠️ Binance Futures API error for {symbol}: {e}")
+
+            # Development mode fallback
+            if price_sources:
+                return self._combine_binance_price_data(symbol, price_sources)
+            else:
+                return self._fallback_price(symbol, "All Binance APIs unavailable")
 
     def _combine_binance_price_data(self, symbol, price_sources):
         """Combine price data from Binance sources only"""

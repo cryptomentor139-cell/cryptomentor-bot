@@ -991,8 +991,15 @@ Use proper risk management and don't FOMO!"""
 
         try:
             # Get global market sentiment first using Binance data
+            print("📊 Getting global market data from Binance...")
             global_data = crypto_api.get_binance_global_data()
-            news_data = crypto_api.get_crypto_news(3)
+            
+            print("📰 Getting crypto news...")
+            try:
+                news_data = crypto_api.get_crypto_news(3)
+            except Exception as e:
+                print(f"⚠️ News API error: {e}")
+                news_data = []
 
             # Analyze global market sentiment
             global_sentiment = self._analyze_global_market_sentiment(global_data, news_data)
@@ -1001,12 +1008,22 @@ Use proper risk management and don't FOMO!"""
 
             for symbol in major_symbols:
                 try:
-                    # Get comprehensive data for each symbol
-                    comprehensive_data = crypto_api.get_comprehensive_analysis_data(symbol)
-
-                    binance_data = comprehensive_data.get('data_sources', {}).get('binance_price', {})
-                    binance_futures = comprehensive_data.get('data_sources', {}).get('binance_futures', {})
-                    coingecko_market = comprehensive_data.get('data_sources', {}).get('coingecko_market', {})
+                    print(f"📈 Analyzing {symbol}...")
+                    
+                    # Get price data directly for better reliability in deployment
+                    binance_data = crypto_api.get_multi_api_price(symbol, force_refresh=True)
+                    
+                    # Get futures data
+                    binance_futures = {}
+                    try:
+                        futures_comprehensive = crypto_api.get_comprehensive_futures_data(symbol)
+                        if 'error' not in futures_comprehensive:
+                            binance_futures = futures_comprehensive
+                    except Exception as e:
+                        print(f"⚠️ Futures data error for {symbol}: {e}")
+                    
+                    # Skip CoinGecko in deployment mode for stability
+                    coingecko_market = {}
 
                     # Extract key metrics
                     current_price = binance_data.get('price', 0) if 'error' not in binance_data else 0
