@@ -40,6 +40,7 @@ from telegram.constants import ParseMode
 from database import Database
 from crypto_api import CryptoAPI
 from ai_assistant import AIAssistant
+from snd_auto_signals import initialize_auto_signals
 
 class TelegramBot:
     def __init__(self):
@@ -62,6 +63,9 @@ class TelegramBot:
         # Initialize broadcast system
         self.pending_broadcast = None
         self.broadcast_in_progress = False
+
+        # Initialize auto signals system
+        self.auto_signals = None
 
         # Validate token before creating application
         if not self.token:
@@ -121,6 +125,9 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("refresh_credits", self.refresh_credits_command))
             self.application.add_handler(CommandHandler("premium_earnings", self.premium_earnings_command))
             self.application.add_handler(CommandHandler("grant_package", self.grant_package_command))
+            self.application.add_handler(CommandHandler("auto_signals_status", self.auto_signals_status_command))
+            self.application.add_handler(CommandHandler("start_auto_signals", self.start_auto_signals_command))
+            self.application.add_handler(CommandHandler("stop_auto_signals", self.stop_auto_signals_command))
 
             # Add callback query handler
             self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
@@ -133,6 +140,18 @@ class TelegramBot:
             print(f"🌍 Environment: {mode_text}")
             print(f"🔑 API Status: BIN=✅, CG=✅, CN=✅ (Binance Primary + CoinGecko + CryptoNews)")
             print("🚀 Starting bot polling with Binance Advanced API integration...")
+
+            # Initialize and start auto signals system
+            try:
+                self.auto_signals = initialize_auto_signals(self)
+                if self.auto_signals and IS_DEPLOYMENT:
+                    # Start auto signals in deployment mode only
+                    asyncio.create_task(self.auto_signals.start_auto_scanner())
+                    print("🎯 Auto S&D signals scanner started")
+                else:
+                    print("🔧 Auto signals available but not started (development mode)")
+            except Exception as e:
+                print(f"⚠️ Auto signals initialization failed: {e}")
 
             # Start the bot with optimized polling for deployment
             print("✅ Bot is now running and polling for updates...")
@@ -3379,6 +3398,86 @@ Just ignore this message"""
                 await update.message.reply_text(f"❌ Error getting statistics: {str(e)}")
 
 # News command will be integrated in main bot class
+    async def auto_signals_status_command(self, update: Update, context: CallbackContext):
+        """Handle /auto_signals_status command - Admin only"""
+        user_id = update.message.from_user.id
+        
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Admin only command.")
+            return
+            
+        if not self.auto_signals:
+            await update.message.reply_text("❌ Auto signals system not initialized.")
+            return
+            
+        status = "🟢 RUNNING" if self.auto_signals.is_running else "🔴 STOPPED"
+        message = f"""🎯 **Auto S&D Signals Status**
+
+📊 **Status**: {status}
+🔄 **Scan Interval**: {self.auto_signals.scan_interval}s ({self.auto_signals.scan_interval//60} minutes)
+📈 **Target Symbols**: {len(self.auto_signals.target_symbols)} altcoins
+📍 **Min Confidence**: {self.auto_signals.min_confidence}%
+
+🎯 **Symbols Monitored**:
+{', '.join(self.auto_signals.target_symbols[:10])}{'...' if len(self.auto_signals.target_symbols) > 10 else ''}
+
+**Commands**:
+• `/start_auto_signals` - Start scanner
+• `/stop_auto_signals` - Stop scanner"""
+        
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def start_auto_signals_command(self, update: Update, context: CallbackContext):
+        """Handle /start_auto_signals command - Admin only"""
+        user_id = update.message.from_user.id
+        
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Admin only command.")
+            return
+            
+        if not self.auto_signals:
+            await update.message.reply_text("❌ Auto signals system not initialized.")
+            return
+            
+        if self.auto_signals.is_running:
+            await update.message.reply_text("⚠️ Auto signals already running!")
+            return
+            
+        try:
+            asyncio.create_task(self.auto_signals.start_auto_scanner())
+            await update.message.reply_text(
+                "✅ **Auto S&D Scanner Started!**\n\n"
+                f"🎯 Monitoring {len(self.auto_signals.target_symbols)} altcoins\n"
+                f"⏰ Scan every {self.auto_signals.scan_interval//60} minutes\n"
+                f"📊 Min confidence: {self.auto_signals.min_confidence}%\n"
+                "🎁 Signals sent to admin & lifetime users only",
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            await update.message.reply_text(f"❌ Failed to start auto signals: {str(e)}")
+
+    async def stop_auto_signals_command(self, update: Update, context: CallbackContext):
+        """Handle /stop_auto_signals command - Admin only"""
+        user_id = update.message.from_user.id
+        
+        if user_id != self.admin_id:
+            await update.message.reply_text("❌ Admin only command.")
+            return
+            
+        if not self.auto_signals:
+            await update.message.reply_text("❌ Auto signals system not initialized.")
+            return
+            
+        if not self.auto_signals.is_running:
+            await update.message.reply_text("⚠️ Auto signals not running!")
+            return
+            
+        try:
+            await self.auto_signals.stop_auto_scanner()
+            await update.message.reply_text("✅ **Auto S&D Scanner Stopped!**")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Failed to stop auto signals: {str(e)}")
+
     async def premium_earnings_command(self, update: Update, context: CallbackContext):
         """Handle /premium_earnings command"""
         user_id = update.message.from_user.id
