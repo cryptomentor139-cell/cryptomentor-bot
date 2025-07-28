@@ -8,15 +8,17 @@ class CryptoAPI:
     def __init__(self):
         self.provider = BinanceFuturesProvider()
         self.cryptonews_key = os.getenv("CRYPTONEWS_API_KEY")
-        self.binance_spot_url = "https://api.binance.com/api/v3"
+        self.coinapi_key = os.getenv("COINAPI_KEY")
+        self.coinapi_url = "https://rest.coinapi.io/v1"
         self.binance_futures_url = "https://fapi.binance.com/fapi/v1"
 
-        # Binance-exclusive configuration
-        print("🚀 CryptoAPI initialized with Binance-exclusive mode")
-        print(f"📊 Binance Spot API: {self.binance_spot_url}")
-        print(f"📈 Binance Futures API: {self.binance_futures_url}")
+        # CoinAPI-exclusive configuration for price data
+        print("🚀 CryptoAPI initialized with CoinAPI-exclusive mode")
+        print(f"📊 CoinAPI Base URL: {self.coinapi_url}")
+        print(f"🔑 CoinAPI Key: {'✅ Enabled' if self.coinapi_key else '❌ Disabled'}")
+        print(f"📈 Binance Futures API: {self.binance_futures_url} (for advanced data)")
         print(f"📰 CryptoNews API: {'✅ Enabled' if self.cryptonews_key else '❌ Disabled'}")
-        print("🎯 All price data centralized to Binance APIs only")
+        print("🎯 All price data centralized to CoinAPI only")
 
     # === BINANCE SPOT API METHODS ===
 
@@ -40,48 +42,32 @@ class CryptoAPI:
         except Exception as e:
             return {'error': f"Server time error: {str(e)}"}
 
-    def get_binance_price(self, symbol, force_refresh=False):
-        """Get real-time price from Binance Spot API with enhanced error handling and comprehensive USDT validation"""
+    def get_coinapi_price(self, symbol, force_refresh=False):
+        """Get real-time price from CoinAPI with enhanced error handling and USDT validation"""
         try:
-            # Strict USDT-only validation - reject non-USDT symbols immediately
+            if not self.coinapi_key:
+                return {
+                    'error': 'CoinAPI key not found in secrets',
+                    'symbol': symbol,
+                    'api_call_successful': False,
+                    'error_type': 'missing_api_key'
+                }
+
+            # Symbol validation and normalization
             original_symbol = symbol.upper().strip()
             
-            # Enhanced USDT validation with strict checking
-            if not original_symbol.endswith('USDT'):
-                # Only add USDT if symbol doesn't already contain it
-                if 'USDT' not in original_symbol:
-                    normalized_symbol = original_symbol + 'USDT'
-                else:
-                    normalized_symbol = original_symbol
+            # Remove USDT suffix if present for CoinAPI format
+            if original_symbol.endswith('USDT'):
+                base_symbol = original_symbol[:-4]  # Remove 'USDT'
             else:
-                normalized_symbol = original_symbol
+                base_symbol = original_symbol
             
-            # Strict USDT requirement - must contain USDT
-            if 'USDT' not in normalized_symbol:
-                print(f"❌ STRICT VALIDATION: Symbol {original_symbol} rejected - USDT pairs only")
-                return {
-                    'error': f'Symbol {original_symbol} not supported - USDT pairs required',
-                    'symbol': original_symbol,
-                    'api_call_successful': False,
-                    'error_type': 'non_usdt_symbol',
-                    'validation_failed': True
-                }
+            # For CoinAPI, we use BASE/USDT format
+            coinapi_symbol = f"{base_symbol}/USDT"
+            
+            print(f"✅ Symbol validation: {original_symbol} → {coinapi_symbol}")
 
-            # Additional validation - symbol should end with USDT
-            if not normalized_symbol.endswith('USDT'):
-                print(f"❌ SYMBOL FORMAT: Symbol {normalized_symbol} must end with USDT")
-                return {
-                    'error': f'Invalid symbol format: {normalized_symbol} - must end with USDT',
-                    'symbol': original_symbol,
-                    'api_call_successful': False,
-                    'error_type': 'invalid_symbol_format',
-                    'validation_failed': True
-                }
-
-            symbol = normalized_symbol
-            print(f"✅ USDT Validation passed: {original_symbol} → {symbol}")
-
-            # Enhanced deployment detection with comprehensive logging
+            # Enhanced deployment detection
             deployment_indicators = {
                 'REPLIT_DEPLOYMENT': os.getenv('REPLIT_DEPLOYMENT') == '1',
                 'REPL_DEPLOYMENT': os.getenv('REPL_DEPLOYMENT') == '1',
@@ -89,9 +75,7 @@ class CryptoAPI:
                 'REPL_SLUG': bool(os.getenv('REPL_SLUG')),
                 'REPL_OWNER': bool(os.getenv('REPL_OWNER')),
                 'REPL_DB_URL': bool(os.getenv('REPL_DB_URL')),
-                'deployment_flag_file': os.path.exists('/tmp/repl_deployment_flag'),
-                'replit_dev_domain': bool(os.getenv('REPLIT_DEV_DOMAIN')),
-                'always_on_check': os.path.exists('/etc/replit_deployment')
+                'deployment_flag_file': os.path.exists('/tmp/repl_deployment_flag')
             }
             
             is_deployment = any(deployment_indicators.values())
@@ -101,11 +85,10 @@ class CryptoAPI:
                 print(f"  {status} {key}: {value}")
             print(f"📊 Result: {'🚀 DEPLOYMENT MODE' if is_deployment else '🔧 DEVELOPMENT MODE'}")
 
-            # ALWAYS force refresh in deployment for real-time data - critical for avoiding 0.0000 prices
+            # ALWAYS force refresh in deployment for real-time data
             if is_deployment:
                 force_refresh = True
                 print(f"🚀 DEPLOYMENT: Force refresh ENABLED - ensuring real-time price data")
-                # Create deployment flag for consistency
                 try:
                     with open('/tmp/repl_deployment_flag', 'w') as f:
                         f.write(f"deployment_active_{int(time.time())}")
@@ -114,12 +97,12 @@ class CryptoAPI:
             else:
                 print(f"🔧 DEVELOPMENT: Force refresh = {force_refresh}")
 
-            # Enhanced headers with better error handling
+            # CoinAPI headers with API key
             headers = {
+                'X-CoinAPI-Key': self.coinapi_key,
                 'User-Agent': 'CryptoMentorAI/1.0',
                 'Accept': 'application/json',
-                'Connection': 'keep-alive',
-                'Accept-Encoding': 'gzip, deflate'
+                'Connection': 'keep-alive'
             }
 
             # Cache control for development
@@ -130,271 +113,170 @@ class CryptoAPI:
                     'Expires': '0'
                 })
 
-            # Request parameters with cache busting
-            params = {'symbol': symbol}
-            if force_refresh:
-                import time
-                params['_t'] = int(time.time() * 1000)
-                print(f"🔄 Cache buster added: {params['_t']}")
-
-            # Prioritize endpoints based on deployment mode
-            endpoints_to_try = [
-                f"{self.binance_spot_url}/ticker/24hr",   # Comprehensive data
-                f"{self.binance_spot_url}/ticker/price"   # Simple price fallback
-            ]
-
-            print(f"📡 Will try {len(endpoints_to_try)} Binance endpoints for {symbol}")
-
-            last_error = None
-            for attempt, endpoint in enumerate(endpoints_to_try, 1):
-                try:
-                    print(f"📡 Binance API Call {attempt}/{len(endpoints_to_try)}: {endpoint}")
-                    print(f"📊 Request params: {params}")
-                    
-                    # Make request with enhanced timeout handling
-                    response = requests.get(
-                        endpoint,
-                        params=params,
-                        timeout=30 if is_deployment else 15,  # Generous timeout for deployment
-                        headers=headers,
-                        allow_redirects=True
-                    )
-                    
-                    print(f"📊 Response Status: {response.status_code}")
-                    print(f"📊 Response Size: {len(response.content)} bytes")
-                    print(f"📊 Response Headers: {dict(list(response.headers.items())[:5])}")  # First 5 headers
-                    
-                    # Enhanced status code handling
-                    if response.status_code == 429:
-                        print(f"⏳ Rate limited by Binance, waiting...")
-                        import time
-                        time.sleep(2)
-                        last_error = "Rate limited"
-                        continue
-                    elif response.status_code == 418:
-                        print(f"🔒 IP banned by Binance temporarily")
-                        last_error = "IP banned"
-                        continue
-                    elif response.status_code != 200:
-                        error_msg = f"HTTP {response.status_code}"
-                        try:
-                            error_data = response.json()
-                            error_msg = f"HTTP {response.status_code}: {error_data.get('msg', 'Unknown error')}"
-                            print(f"❌ Binance API Error: {error_data}")
-                        except:
-                            print(f"❌ Non-JSON error response: {response.text[:100]}")
-                        last_error = error_msg
-                        continue
-
-                    response.raise_for_status()
-                    
-                    # Enhanced JSON parsing with better error messages
-                    try:
-                        data = response.json()
-                        print(f"📊 JSON parsing successful, data type: {type(data)}")
-                        
-                        # Log essential parts of response for debugging
-                        if isinstance(data, dict):
-                            debug_fields = ['symbol', 'lastPrice', 'price']
-                            debug_data = {k: data.get(k) for k in debug_fields if k in data}
-                            print(f"📊 Key response fields: {debug_data}")
-                        else:
-                            print(f"📊 Raw response preview: {str(data)[:200]}")
-                            
-                    except ValueError as json_error:
-                        print(f"❌ JSON parsing failed: {json_error}")
-                        print(f"📊 Raw response (first 300 chars): {response.text[:300]}")
-                        last_error = f"JSON parsing error: {json_error}"
-                        continue
-                    
-                    # Validate response structure
-                    if not data or not isinstance(data, dict):
-                        print(f"❌ Invalid response structure for {symbol}")
-                        print(f"📊 Response type: {type(data)}, Data: {data}")
-                        last_error = "Invalid response structure"
-                        continue
-
-                    # Process different endpoint types with robust price extraction
-                    if endpoint.endswith('/ticker/24hr'):
-                        print(f"📊 Processing 24hr ticker data...")
-                        
-                        # Enhanced field validation for 24hr ticker
-                        essential_fields = ['lastPrice']
-                        optional_fields = ['priceChangePercent', 'highPrice', 'lowPrice', 'volume', 'quoteVolume']
-                        
-                        missing_essential = [field for field in essential_fields if field not in data]
-                        if missing_essential:
-                            print(f"❌ Missing essential fields: {missing_essential}")
-                            last_error = f"Missing essential fields: {missing_essential}"
-                            continue
-
-                        # COMPREHENSIVE PRICE PARSING AND VALIDATION
-                        price_result = self._extract_and_validate_price(data, 'lastPrice', symbol, '24hr ticker')
-                        if price_result['error']:
-                            print(f"❌ Price validation failed: {price_result['error']}")
-                            last_error = price_result['error']
-                            continue
-                        
-                        price = price_result['price']
-                        print(f"✅ Price validation successful: {symbol} = ${price:,.8f}")
-
-                        # Parse additional fields with safe defaults
-                        try:
-                            change_24h = self._safe_float_parse(data.get('priceChangePercent'), 0)
-                            high_24h = self._safe_float_parse(data.get('highPrice'), 0)
-                            low_24h = self._safe_float_parse(data.get('lowPrice'), 0)
-                            volume_24h = self._safe_float_parse(data.get('volume'), 0)
-                            quote_volume_24h = self._safe_float_parse(data.get('quoteVolume'), 0)
-                            open_price = self._safe_float_parse(data.get('openPrice'), 0)
-                            price_change = self._safe_float_parse(data.get('priceChange'), 0)
-                            count = self._safe_int_parse(data.get('count'), 0)
-                            
-                            print(f"📊 Additional fields parsed - Volume: {volume_24h:,.0f}, Change: {change_24h:.2f}%")
-                            
-                        except Exception as parse_error:
-                            print(f"⚠️ Warning: Error parsing additional fields: {parse_error}")
-                            # Use safe defaults
-                            change_24h = high_24h = low_24h = volume_24h = quote_volume_24h = 0
-                            open_price = price_change = count = 0
-
-                        # Build comprehensive result
-                        result = {
-                            'symbol': symbol,
-                            'price': price,
-                            'change_24h': change_24h,
-                            'high_24h': high_24h,
-                            'low_24h': low_24h,
-                            'volume_24h': volume_24h,
-                            'quote_volume_24h': quote_volume_24h,
-                            'open_price': open_price,
-                            'close_price': price,
-                            'price_change': price_change,
-                            'count': count,
-                            'first_id': data.get('firstId', 0),
-                            'last_id': data.get('lastId', 0),
-                            'open_time': data.get('openTime', 0),
-                            'close_time': data.get('closeTime', 0),
-                            'source': 'binance_spot_24hr',
-                            'api_call_successful': True,
-                            'price_validation_passed': True,
-                            'raw_last_price': data.get('lastPrice'),
-                            'deployment_mode': is_deployment,
-                            'usdt_validated': True
-                        }
-                        
-                        print(f"✅ 24hr ticker SUCCESS: {symbol} = ${price:,.6f} (Change: {change_24h:+.2f}%)")
-                        return result
-
-                    else:  # Simple price endpoint
-                        print(f"📊 Processing simple price data...")
-                        
-                        # Validate price field exists
-                        if 'price' not in data:
-                            print(f"❌ Price field missing in simple response")
-                            last_error = "Price field missing in simple response"
-                            continue
-
-                        # COMPREHENSIVE PRICE PARSING FOR SIMPLE ENDPOINT
-                        price_result = self._extract_and_validate_price(data, 'price', symbol, 'simple price')
-                        if price_result['error']:
-                            print(f"❌ Simple price validation failed: {price_result['error']}")
-                            last_error = price_result['error']
-                            continue
-                        
-                        price = price_result['price']
-                        print(f"✅ Simple price validation successful: {symbol} = ${price:,.8f}")
-
-                        # Build simple result
-                        result = {
-                            'symbol': symbol,
-                            'price': price,
-                            'change_24h': 0,  # Not available
-                            'volume_24h': 0,  # Not available
-                            'source': 'binance_spot_simple',
-                            'api_call_successful': True,
-                            'price_validation_passed': True,
-                            'raw_price': data.get('price'),
-                            'deployment_mode': is_deployment,
-                            'usdt_validated': True
-                        }
-                        
-                        print(f"✅ Simple price SUCCESS: {symbol} = ${price:,.6f}")
-                        return result
-
-                except requests.exceptions.Timeout as e:
-                    error_msg = f"Timeout ({endpoint}): {str(e)}"
-                    print(f"⏰ {error_msg}")
-                    last_error = error_msg
-                    continue
-                except requests.exceptions.ConnectionError as e:
-                    error_msg = f"Connection error ({endpoint}): {str(e)}"
-                    print(f"🔌 {error_msg}")
-                    last_error = error_msg
-                    continue
-                except requests.exceptions.HTTPError as e:
-                    error_msg = f"HTTP error ({endpoint}): {str(e)}"
-                    print(f"🌐 {error_msg}")
-                    last_error = error_msg
-                    continue
-                except Exception as e:
-                    error_msg = f"Unexpected error ({endpoint}): {str(e)}"
-                    print(f"❌ {error_msg}")
-                    last_error = error_msg
-                    continue
-
-            # All endpoints failed - try one more time with different approach
-            print(f"🔄 ALL ENDPOINTS FAILED - attempting emergency fallback for {symbol}")
+            # CoinAPI endpoint
+            endpoint = f"{self.coinapi_url}/exchangerate/{base_symbol}/USDT"
             
-            # Emergency fallback: try simple price endpoint with minimal params
+            print(f"📡 CoinAPI Request: {endpoint}")
+            print(f"📊 Headers: API Key present = {bool(self.coinapi_key)}")
+
             try:
-                simple_url = f"{self.binance_spot_url}/ticker/price"
-                emergency_response = requests.get(
-                    simple_url,
-                    params={'symbol': symbol},
-                    timeout=45 if is_deployment else 20,  # Very generous timeout
-                    headers={'User-Agent': 'CryptoBot/1.0'}  # Simplified headers
+                # Make request with enhanced timeout handling
+                response = requests.get(
+                    endpoint,
+                    timeout=30 if is_deployment else 15,
+                    headers=headers,
+                    allow_redirects=True
                 )
                 
-                if emergency_response.status_code == 200:
-                    emergency_data = emergency_response.json()
-                    emergency_price_result = self._extract_and_validate_price(emergency_data, 'price', symbol, 'emergency_fallback')
-                    
-                    if not emergency_price_result['error']:
-                        price = emergency_price_result['price']
-                        print(f"🆘 EMERGENCY SUCCESS: {symbol} = ${price:,.6f}")
-                        
-                        return {
-                            'symbol': symbol,
-                            'price': price,
-                            'change_24h': 0,  # Not available in emergency mode
-                            'volume_24h': 0,  # Not available
-                            'source': 'binance_emergency_fallback',
-                            'api_call_successful': True,
-                            'price_validation_passed': True,
-                            'emergency_mode': True,
-                            'deployment_mode': is_deployment,
-                            'usdt_validated': True,
-                            'warning': 'Emergency fallback mode - limited data available'
-                        }
-            except Exception as emergency_error:
-                print(f"❌ Emergency fallback also failed: {emergency_error}")
+                print(f"📊 Response Status: {response.status_code}")
+                print(f"📊 Response Size: {len(response.content)} bytes")
+                
+                # Enhanced status code handling
+                if response.status_code == 429:
+                    print(f"⏳ Rate limited by CoinAPI")
+                    return {
+                        'error': 'CoinAPI rate limit exceeded',
+                        'symbol': original_symbol,
+                        'api_call_successful': False,
+                        'error_type': 'rate_limit'
+                    }
+                elif response.status_code == 401:
+                    print(f"🔒 Unauthorized - Invalid CoinAPI key")
+                    return {
+                        'error': 'Invalid CoinAPI key',
+                        'symbol': original_symbol,
+                        'api_call_successful': False,
+                        'error_type': 'invalid_api_key'
+                    }
+                elif response.status_code != 200:
+                    error_msg = f"HTTP {response.status_code}"
+                    try:
+                        error_data = response.json()
+                        error_msg = f"HTTP {response.status_code}: {error_data.get('error', 'Unknown error')}"
+                        print(f"❌ CoinAPI Error: {error_data}")
+                    except:
+                        print(f"❌ Non-JSON error response: {response.text[:100]}")
+                    return {
+                        'error': f"CoinAPI error: {error_msg}",
+                        'symbol': original_symbol,
+                        'api_call_successful': False,
+                        'error_type': 'api_error'
+                    }
 
-            final_error = f"All Binance endpoints (including emergency fallback) failed for {symbol}. Last error: {last_error}"
-            print(f"🚨 COMPLETE FAILURE: {final_error}")
-            raise Exception(final_error)
+                response.raise_for_status()
+                
+                # Parse JSON response
+                try:
+                    data = response.json()
+                    print(f"📊 JSON parsing successful, data type: {type(data)}")
+                    print(f"📊 CoinAPI Response: {data}")
+                        
+                except ValueError as json_error:
+                    print(f"❌ JSON parsing failed: {json_error}")
+                    print(f"📊 Raw response (first 300 chars): {response.text[:300]}")
+                    return {
+                        'error': f"JSON parsing error: {json_error}",
+                        'symbol': original_symbol,
+                        'api_call_successful': False,
+                        'error_type': 'json_error'
+                    }
+                
+                # Validate response structure
+                if not data or not isinstance(data, dict):
+                    print(f"❌ Invalid response structure for {coinapi_symbol}")
+                    return {
+                        'error': 'Invalid CoinAPI response format',
+                        'symbol': original_symbol,
+                        'api_call_successful': False,
+                        'error_type': 'invalid_response'
+                    }
+
+                # Extract rate (price) from CoinAPI response
+                if 'rate' not in data:
+                    print(f"❌ Rate field missing in CoinAPI response")
+                    return {
+                        'error': 'Rate field missing in CoinAPI response',
+                        'symbol': original_symbol,
+                        'api_call_successful': False,
+                        'error_type': 'missing_rate_field'
+                    }
+
+                # Price validation
+                price_result = self._extract_and_validate_coinapi_price(data, coinapi_symbol)
+                if price_result['error']:
+                    print(f"❌ Price validation failed: {price_result['error']}")
+                    return {
+                        'error': price_result['error'],
+                        'symbol': original_symbol,
+                        'api_call_successful': False,
+                        'error_type': 'price_validation_failed'
+                    }
+                
+                price = price_result['price']
+                print(f"✅ Price validation successful: {coinapi_symbol} = ${price:,.8f}")
+
+                # Get timestamp from response
+                last_updated = data.get('time', datetime.now().isoformat())
+
+                # Build result
+                result = {
+                    'symbol': original_symbol,
+                    'price': price,
+                    'change_24h': 0,  # CoinAPI exchange rate doesn't include 24h change
+                    'high_24h': 0,    # Not available in exchange rate endpoint
+                    'low_24h': 0,     # Not available in exchange rate endpoint
+                    'volume_24h': 0,  # Not available in exchange rate endpoint
+                    'source': 'coinapi_exchange_rate',
+                    'api_call_successful': True,
+                    'price_validation_passed': True,
+                    'raw_rate': data.get('rate'),
+                    'deployment_mode': is_deployment,
+                    'last_updated': last_updated,
+                    'coinapi_symbol': coinapi_symbol
+                }
+                
+                print(f"✅ CoinAPI SUCCESS: {coinapi_symbol} = ${price:,.6f}")
+                return result
+
+            except requests.exceptions.Timeout as e:
+                error_msg = f"CoinAPI timeout: {str(e)}"
+                print(f"⏰ {error_msg}")
+                return {
+                    'error': error_msg,
+                    'symbol': original_symbol,
+                    'api_call_successful': False,
+                    'error_type': 'timeout'
+                }
+            except requests.exceptions.ConnectionError as e:
+                error_msg = f"CoinAPI connection error: {str(e)}"
+                print(f"🔌 {error_msg}")
+                return {
+                    'error': error_msg,
+                    'symbol': original_symbol,
+                    'api_call_successful': False,
+                    'error_type': 'connection_error'
+                }
+            except Exception as e:
+                error_msg = f"CoinAPI unexpected error: {str(e)}"
+                print(f"❌ {error_msg}")
+                return {
+                    'error': error_msg,
+                    'symbol': original_symbol,
+                    'api_call_successful': False,
+                    'error_type': 'unexpected_error'
+                }
 
         except Exception as e:
-            error_msg = f"Binance price retrieval completely failed for {symbol}: {str(e)}"
+            error_msg = f"CoinAPI price retrieval completely failed for {symbol}: {str(e)}"
             print(f"💥 COMPLETE FAILURE: {error_msg}")
             
-            # In deployment, never return 0.0000 - always return error instead
             return {
                 'error': error_msg,
                 'symbol': symbol,
                 'api_call_successful': False,
-                'error_type': 'complete_binance_failure',
+                'error_type': 'complete_coinapi_failure',
                 'deployment_mode': is_deployment,
-                'price': None,  # Explicitly set to None to prevent 0.0000 display
+                'price': None,
                 'zero_price_prevention': True
             }
     
@@ -422,6 +304,62 @@ class CryptoAPI:
         except Exception as e:
             print(f"❌ Error in zero price prevention: {e}")
             return price_data
+
+    def _extract_and_validate_coinapi_price(self, data, symbol):
+        """Extract and validate price from CoinAPI response"""
+        try:
+            raw_rate = data.get('rate')
+            
+            print(f"🔍 Extracting rate from CoinAPI for {symbol}: {raw_rate} (type: {type(raw_rate)})")
+            
+            # Null/None check
+            if raw_rate is None:
+                return {'error': f'Rate field is None in CoinAPI response for {symbol}', 'price': None}
+            
+            # Empty string check
+            if isinstance(raw_rate, str):
+                raw_rate = raw_rate.strip()
+                if raw_rate == '':
+                    return {'error': f'Rate field is empty string for {symbol}', 'price': None}
+                
+                # Check for invalid strings
+                if raw_rate.lower() in ['null', 'none', 'undefined', 'nan', 'inf', '-inf']:
+                    return {'error': f'Rate field contains invalid value: {raw_rate}', 'price': None}
+            
+            # Convert to float
+            try:
+                price = float(raw_rate)
+                print(f"🔢 Successfully converted rate to float: {price}")
+            except (ValueError, TypeError, OverflowError) as conversion_error:
+                print(f"❌ Rate conversion failed: {conversion_error}")
+                return {'error': f'Cannot convert rate to float: {raw_rate} ({conversion_error})', 'price': None}
+            
+            # Comprehensive validation checks
+            validation_checks = [
+                (price <= 0, f"❌ ZERO/NEGATIVE: Rate is {price} - must be positive"),
+                (price != price, f"❌ NaN: Rate is NaN"),
+                (price == float('inf'), f"❌ INFINITY: Rate is positive infinity"),
+                (price == float('-inf'), f"❌ NEG_INFINITY: Rate is negative infinity"),
+                (price > 50000000, f"❌ TOO_HIGH: Rate {price} exceeds reasonable limit ($50M)"),
+                (price < 0.00000001, f"❌ TOO_LOW: Rate {price} below minimum threshold (0.00000001)")
+            ]
+            
+            for check_condition, error_message in validation_checks:
+                if check_condition:
+                    print(error_message)
+                    return {'error': error_message, 'price': None}
+            
+            # Final validation
+            if not isinstance(price, (int, float)) or abs(price) == float('inf'):
+                return {'error': f'Rate validation failed - invalid number type: {type(price)}', 'price': None}
+            
+            print(f"✅ CoinAPI rate validation PASSED: {symbol} = ${price:,.8f}")
+            return {'error': None, 'price': price}
+            
+        except Exception as e:
+            error_msg = f"Unexpected error in CoinAPI rate validation: {str(e)}"
+            print(f"💥 CRITICAL: {error_msg}")
+            return {'error': error_msg, 'price': None}
 
     def _extract_and_validate_price(self, data, price_field, symbol, source_type):
         """Extract and validate price with comprehensive checks and multiple fallback methods"""
@@ -1110,80 +1048,55 @@ class CryptoAPI:
         except Exception as e:
             return {'error': f"Binance global data error: {str(e)}"}
 
-    def test_binance_connectivity(self, symbol='BTCUSDT'):
-        """Test Binance API connectivity with detailed logging"""
-        print(f"🔧 Testing Binance API connectivity for {symbol}...")
+    def test_coinapi_connectivity(self, symbol='BTC'):
+        """Test CoinAPI connectivity with detailed logging"""
+        print(f"🔧 Testing CoinAPI connectivity for {symbol}/USDT...")
         
         test_results = {
-            'spot_ping': False,
-            'futures_ping': False,
-            'spot_price': False,
-            'futures_price': False,
-            'spot_price_value': None,
-            'futures_price_value': None,
+            'api_key_present': bool(self.coinapi_key),
+            'exchange_rate_test': False,
+            'price_value': None,
             'deployment_mode': self.is_deployment_mode(),
             'timestamp': datetime.now().isoformat()
         }
         
-        # Test Spot API ping
-        try:
-            spot_ping = requests.get(f"{self.binance_spot_url}/ping", timeout=5)
-            test_results['spot_ping'] = spot_ping.status_code == 200
-            print(f"📡 Spot API ping: {'✅ OK' if test_results['spot_ping'] else '❌ FAIL'}")
-        except Exception as e:
-            print(f"❌ Spot API ping failed: {e}")
+        # Test API key presence
+        if not self.coinapi_key:
+            print(f"❌ CoinAPI key not found in secrets")
+            test_results['overall_health'] = False
+            return test_results
+        else:
+            print(f"✅ CoinAPI key present")
         
-        # Test Futures API ping
+        # Test price retrieval
         try:
-            futures_ping = requests.get(f"{self.binance_futures_url}/ping", timeout=5)
-            test_results['futures_ping'] = futures_ping.status_code == 200
-            print(f"📡 Futures API ping: {'✅ OK' if test_results['futures_ping'] else '❌ FAIL'}")
-        except Exception as e:
-            print(f"❌ Futures API ping failed: {e}")
-        
-        # Test Spot price retrieval
-        try:
-            spot_data = self.get_binance_price('BTC')
-            if 'error' not in spot_data and spot_data.get('price', 0) > 0:
-                test_results['spot_price'] = True
-                test_results['spot_price_value'] = spot_data.get('price')
-                print(f"💰 Spot price: ✅ ${spot_data.get('price'):,.2f}")
+            price_data = self.get_coinapi_price(symbol)
+            if 'error' not in price_data and price_data.get('price', 0) > 0:
+                test_results['exchange_rate_test'] = True
+                test_results['price_value'] = price_data.get('price')
+                print(f"💰 {symbol}/USDT price: ✅ ${price_data.get('price'):,.2f}")
             else:
-                print(f"❌ Spot price failed: {spot_data.get('error', 'Unknown error')}")
+                print(f"❌ CoinAPI price failed: {price_data.get('error', 'Unknown error')}")
         except Exception as e:
-            print(f"❌ Spot price exception: {e}")
-        
-        # Test Futures price retrieval
-        try:
-            futures_data = self.get_binance_futures_price('BTC')
-            if 'error' not in futures_data and futures_data.get('price', 0) > 0:
-                test_results['futures_price'] = True
-                test_results['futures_price_value'] = futures_data.get('price')
-                print(f"🚀 Futures price: ✅ ${futures_data.get('price'):,.2f}")
-            else:
-                print(f"❌ Futures price failed: {futures_data.get('error', 'Unknown error')}")
-        except Exception as e:
-            print(f"❌ Futures price exception: {e}")
+            print(f"❌ CoinAPI price exception: {e}")
         
         # Overall assessment
         working_endpoints = sum([
-            test_results['spot_ping'],
-            test_results['futures_ping'], 
-            test_results['spot_price'],
-            test_results['futures_price']
+            test_results['api_key_present'],
+            test_results['exchange_rate_test']
         ])
         
         test_results['overall_health'] = working_endpoints >= 2
-        test_results['working_endpoints'] = f"{working_endpoints}/4"
+        test_results['working_endpoints'] = f"{working_endpoints}/2"
         
-        print(f"📊 Overall Binance API Health: {'✅ GOOD' if test_results['overall_health'] else '❌ POOR'} ({working_endpoints}/4 endpoints working)")
+        print(f"📊 Overall CoinAPI Health: {'✅ GOOD' if test_results['overall_health'] else '❌ POOR'} ({working_endpoints}/2 checks passed)")
         
         return test_results
 
     # === PRICE METHODS (BINANCE ONLY) ===
 
     def get_price(self, symbol, force_refresh=False):
-        """Get price from Binance APIs only with enhanced deployment detection"""
+        """Get price from CoinAPI with enhanced deployment detection"""
         # Check if in deployment mode using comprehensive method
         is_deployment = self.is_deployment_mode()
 
@@ -1192,12 +1105,10 @@ class CryptoAPI:
             force_refresh = True
             print(f"🚀 DEPLOYMENT MODE: Force refresh enabled for {symbol}")
 
-        return self.get_multi_api_price(symbol, force_refresh)
+        return self.get_coinapi_price(symbol, force_refresh)
 
     def get_multi_api_price(self, symbol, force_refresh=False):
-        """Get price from Binance APIs only - centralized to Binance with enhanced validation"""
-        price_sources = {}
-
+        """Get price from CoinAPI - centralized to CoinAPI with enhanced validation"""
         # Enhanced deployment environment check with comprehensive logging
         deployment_indicators = {
             'REPLIT_DEPLOYMENT': os.getenv('REPLIT_DEPLOYMENT'),
@@ -1218,7 +1129,7 @@ class CryptoAPI:
             os.path.exists('/tmp/repl_deployment_flag') or
             bool(os.getenv('REPL_SLUG')) or
             bool(os.getenv('REPL_DB_URL')) or
-            bool(os.getenv('REPL_OWNER'))  # Additional deployment check
+            bool(os.getenv('REPL_OWNER'))
         )
 
         # ALWAYS force refresh in deployment for real-time data
@@ -1227,149 +1138,31 @@ class CryptoAPI:
 
         # Enhanced logging for deployment mode
         mode = "DEPLOYMENT REAL-TIME" if is_deployment else "STANDARD"
-        print(f"🔄 {mode} MODE: Fetching price data for {symbol} from Binance (Force: {force_refresh})")
+        print(f"🔄 {mode} MODE: Fetching price data for {symbol} from CoinAPI (Force: {force_refresh})")
 
-        def validate_price_data(data, source_name):
-            """Validate price data to ensure it's valid with comprehensive checks"""
-            print(f"🔍 Validating {source_name} data: {data}")
+        # Use CoinAPI as primary source
+        try:
+            print("📡 Trying CoinAPI...")
+            coinapi_data = self.get_coinapi_price(symbol, force_refresh)
             
-            if 'error' in data:
-                print(f"❌ {source_name} returned error: {data['error']}")
-                return False
-            
-            price = data.get('price', 0)
-            print(f"🔍 Raw price from {source_name}: {price} (type: {type(price)})")
-            
-            # Enhanced price validation
-            if price is None:
-                print(f"❌ {source_name} price is None")
-                return False
+            if 'error' not in coinapi_data and coinapi_data.get('price', 0) > 0:
+                price_str = f"${coinapi_data.get('price', 0):,.4f}"
+                print(f"🎯 SUCCESS: {symbol} = {price_str} ✅ (CoinAPI)")
+                return coinapi_data
+            else:
+                print(f"❌ CoinAPI failed: {coinapi_data.get('error', 'Unknown error')}")
+                return coinapi_data
                 
-            if not isinstance(price, (int, float)):
-                try:
-                    price = float(price)
-                    print(f"🔄 Converted {source_name} price to float: {price}")
-                except (ValueError, TypeError) as e:
-                    print(f"❌ {source_name} price conversion failed: {e}")
-                    return False
-            
-            # Check for zero, negative, or unreasonable prices
-            if price <= 0:
-                print(f"❌ {source_name} returned zero or negative price: {price}")
-                return False
-                
-            if price != price:  # NaN check
-                print(f"❌ {source_name} returned NaN price")
-                return False
-                
-            if price > 10000000:  # Unreasonably high price
-                print(f"❌ {source_name} returned suspiciously high price: {price}")
-                return False
-                
-            if price < 0.00000001:  # Unreasonably low price
-                print(f"❌ {source_name} returned suspiciously low price: {price}")
-                return False
-            
-            # Check API call success indicator
-            if not data.get('api_call_successful', True):
-                print(f"❌ {source_name} API call was marked as unsuccessful")
-                return False
-            
-            # Check price validation flag if exists
-            if 'price_validation_passed' in data and not data['price_validation_passed']:
-                print(f"❌ {source_name} failed internal price validation")
-                return False
-                
-            print(f"✅ {source_name} price validation passed: ${price:,.8f}")
-            return True
-
-        # In deployment mode, prioritize Futures API first due to stability
-        if is_deployment:
-            print("🚀 DEPLOYMENT MODE: Trying Binance APIs in priority order...")
-            
-            # 1. Try Binance Futures API first in deployment (more stable)
-            try:
-                print("📡 Trying Binance Futures API...")
-                futures_data = self.get_binance_futures_price(symbol)
-                if validate_price_data(futures_data, "Binance Futures"):
-                    price_sources['binance_futures'] = futures_data
-                    price_str = f"${futures_data.get('price', 0):,.4f}"
-                    print(f"🎯 DEPLOYMENT SUCCESS: {symbol} = {price_str} ✅ (Binance Futures)")
-                    return self._combine_binance_price_data(symbol, price_sources)
-                else:
-                    print("❌ Binance Futures validation failed, trying next...")
-            except Exception as e:
-                print(f"💥 Binance Futures API exception for {symbol}: {e}")
-
-            # 2. Try Binance Spot API as backup in deployment
-            try:
-                print("📡 Trying Binance Spot API...")
-                binance_data = self.get_binance_price(symbol, force_refresh=True)
-                if validate_price_data(binance_data, "Binance Spot"):
-                    price_sources['binance'] = binance_data
-                    price_str = f"${binance_data.get('price', 0):,.4f}"
-                    print(f"🎯 DEPLOYMENT SUCCESS: {symbol} = {price_str} ✅ (Binance Spot)")
-                    return self._combine_binance_price_data(symbol, price_sources)
-                else:
-                    print("❌ Binance Spot validation failed")
-            except Exception as e:
-                print(f"💥 Binance Spot API exception for {symbol}: {e}")
-
-            # In deployment, return detailed error if all Binance APIs fail
-            error_msg = f'All Binance APIs failed for {symbol} in deployment mode - no valid price data available'
-            print(f"🚨 DEPLOYMENT FAILURE: {error_msg}")
+        except Exception as e:
+            print(f"💥 CoinAPI exception for {symbol}: {e}")
+            error_msg = f"CoinAPI failed for {symbol}: {str(e)}"
             return {
                 'error': error_msg,
                 'symbol': symbol,
-                'deployment_mode': True,
+                'deployment_mode': is_deployment,
                 'all_apis_failed': True,
                 'api_call_successful': False
             }
-
-        else:
-            # Development mode - multiple attempts with enhanced validation
-            max_attempts = 3  # Increased attempts for development
-            
-            print(f"🔧 DEVELOPMENT MODE: Will try {max_attempts} attempts...")
-
-            for attempt in range(max_attempts):
-                if attempt > 0:
-                    print(f"🔄 Binance retry attempt {attempt + 1}/{max_attempts} for {symbol}")
-                    import time
-                    time.sleep(2)  # Longer delay between attempts
-
-                # 1. Try Binance Spot API first in development
-                try:
-                    print(f"📡 Development attempt {attempt + 1}: Trying Binance Spot API...")
-                    binance_data = self.get_binance_price(symbol, force_refresh=True)
-                    if validate_price_data(binance_data, "Binance Spot"):
-                        price_sources['binance'] = binance_data
-                        price_str = f"${binance_data.get('price', 0):,.4f}"
-                        print(f"🎯 DEV SUCCESS: {symbol} = {price_str} ✅ (Binance Spot)")
-                        return self._combine_binance_price_data(symbol, price_sources)
-                except Exception as e:
-                    print(f"💥 Binance Spot API exception for {symbol}: {e}")
-
-                # 2. Try Binance Futures API as backup in development
-                try:
-                    print(f"📡 Development attempt {attempt + 1}: Trying Binance Futures API...")
-                    futures_data = self.get_binance_futures_price(symbol)
-                    if validate_price_data(futures_data, "Binance Futures"):
-                        price_sources['binance_futures'] = futures_data
-                        price_str = f"${futures_data.get('price', 0):,.4f}"
-                        print(f"🎯 DEV SUCCESS: {symbol} = {price_str} ✅ (Binance Futures)")
-                        return self._combine_binance_price_data(symbol, price_sources)
-                except Exception as e:
-                    print(f"💥 Binance Futures API exception for {symbol}: {e}")
-
-            # Development mode fallback
-            if price_sources:
-                print(f"⚠️ Using partial data from {len(price_sources)} source(s)")
-                return self._combine_binance_price_data(symbol, price_sources)
-            else:
-                error_msg = f"All Binance APIs failed after {max_attempts} attempts"
-                print(f"🚨 DEVELOPMENT FAILURE: {error_msg}")
-                return self._fallback_price(symbol, error_msg)
 
     def _combine_binance_price_data(self, symbol, price_sources):
         """Combine price data from Binance sources only"""
@@ -1523,14 +1316,13 @@ class CryptoAPI:
         """Get all available futures symbols"""
         return self.provider.get_tickers()
 
-    def get_multiple_binance_prices(self, symbols):
-        """Get prices for multiple symbols from Binance only"""
+    def get_multiple_coinapi_prices(self, symbols):
+        """Get prices for multiple symbols from CoinAPI"""
         prices_data = {}
 
         for symbol in symbols:
             try:
-                # Try Binance Spot first
-                price_data = self.get_binance_price(symbol)
+                price_data = self.get_coinapi_price(symbol)
                 if 'error' not in price_data and price_data.get('price', 0) > 0:
                     prices_data[symbol] = {
                         'price': price_data.get('price', 0),
@@ -1538,31 +1330,18 @@ class CryptoAPI:
                         'volume_24h': price_data.get('volume_24h', 0),
                         'high_24h': price_data.get('high_24h', 0),
                         'low_24h': price_data.get('low_24h', 0),
-                        'source': 'binance_spot'
-                    }
-                    continue
-
-                # Fallback to Binance Futures
-                futures_data = self.get_binance_futures_price(symbol)
-                if 'error' not in futures_data and futures_data.get('price', 0) > 0:
-                    prices_data[symbol] = {
-                        'price': futures_data.get('price', 0),
-                        'change_24h': futures_data.get('change_24h', 0),
-                        'volume_24h': futures_data.get('volume_24h', 0),
-                        'high_24h': futures_data.get('high_24h', 0),
-                        'low_24h': futures_data.get('low_24h', 0),
-                        'source': 'binance_futures'
+                        'source': 'coinapi_exchange_rate'
                     }
 
             except Exception as e:
-                print(f"Error getting Binance price for {symbol}: {e}")
+                print(f"Error getting CoinAPI price for {symbol}: {e}")
                 continue
 
-        return prices_data if prices_data else {'error': 'No Binance price data available'}
+        return prices_data if prices_data else {'error': 'No CoinAPI price data available'}
 
     def get_multiple_prices(self, symbols):
-        """Legacy method - now uses Binance only"""
-        return self.get_multiple_binance_prices(symbols)
+        """Get multiple prices using CoinAPI"""
+        return self.get_multiple_coinapi_prices(symbols)
 
     def get_market_overview(self):
         """Get market overview data using Binance data exclusively"""
@@ -1664,31 +1443,26 @@ class CryptoAPI:
         return is_deployment
 
     def check_api_status(self):
-        """Check Binance API health status comprehensively"""
+        """Check CoinAPI health status comprehensively"""
         try:
-            # Test Binance Spot API
-            spot_test = requests.get(f"{self.binance_spot_url}/ping", timeout=5)
-            binance_spot_ok = spot_test.status_code == 200
-
-            # Test Binance Futures API
-            futures_test = requests.get(f"{self.binance_futures_url}/ping", timeout=5)
-            binance_futures_ok = futures_test.status_code == 200
-
-            # Test Binance Spot price endpoint
-            spot_price_ok = False
+            # Test CoinAPI price endpoint
+            coinapi_price_ok = False
+            coinapi_price_value = None
             try:
-                btc_spot = self.get_binance_price('BTC')
-                spot_price_ok = 'error' not in btc_spot and btc_spot.get('price', 0) > 0
+                btc_coinapi = self.get_coinapi_price('BTC')
+                coinapi_price_ok = 'error' not in btc_coinapi and btc_coinapi.get('price', 0) > 0
+                if coinapi_price_ok:
+                    coinapi_price_value = btc_coinapi.get('price')
             except:
-                spot_price_ok = False
+                coinapi_price_ok = False
 
-            # Test Binance Futures price endpoint
-            futures_price_ok = False
+            # Test Binance Futures API for advanced data
+            futures_ping = False
             try:
-                btc_futures = self.get_binance_futures_price('BTC')
-                futures_price_ok = 'error' not in btc_futures and btc_futures.get('price', 0) > 0
+                futures_test = requests.get(f"{self.binance_futures_url}/ping", timeout=5)
+                futures_ping = futures_test.status_code == 200
             except:
-                futures_price_ok = False
+                futures_ping = False
 
             # Test advanced Binance futures endpoints
             advanced_endpoints_ok = 0
@@ -1728,36 +1502,38 @@ class CryptoAPI:
             # Test CryptoNews (secondary)
             news_ok = bool(self.cryptonews_key)
 
+            # Test CoinAPI key presence
+            coinapi_key_ok = bool(self.coinapi_key)
+
             # Calculate overall health
-            core_binance_ok = binance_spot_ok and binance_futures_ok
-            price_endpoints_ok = spot_price_ok or futures_price_ok
+            core_coinapi_ok = coinapi_key_ok and coinapi_price_ok
             advanced_ok = advanced_endpoints_ok >= 4  # At least 4 out of 6 working
 
-            overall_health = core_binance_ok and price_endpoints_ok and advanced_ok
+            overall_health = core_coinapi_ok
 
             return {
-                'binance_spot_ping': binance_spot_ok,
-                'binance_futures_ping': binance_futures_ok,
-                'binance_spot_price': spot_price_ok,
-                'binance_futures_price': futures_price_ok,
+                'coinapi_key_present': coinapi_key_ok,
+                'coinapi_price_test': coinapi_price_ok,
+                'coinapi_price_value': coinapi_price_value,
+                'binance_futures_ping': futures_ping,
                 'binance_advanced_endpoints': f"{advanced_endpoints_ok}/{total_advanced}",
                 'binance_advanced_ok': advanced_ok,
                 'cryptonews': news_ok,
                 'overall_health': overall_health,
-                'primary_source': 'binance_exclusive',
+                'primary_source': 'coinapi_exclusive',
                 'api_coverage': 'complete' if overall_health else 'partial'
             }
         except Exception as e:
             return {
-                'binance_spot_ping': False,
+                'coinapi_key_present': False,
+                'coinapi_price_test': False,
+                'coinapi_price_value': None,
                 'binance_futures_ping': False,
-                'binance_spot_price': False,
-                'binance_futures_price': False,
                 'binance_advanced_endpoints': '0/6',
                 'binance_advanced_ok': False,
                 'cryptonews': False,
                 'overall_health': False,
-                'primary_source': 'binance_exclusive',
+                'primary_source': 'coinapi_exclusive',
                 'error': str(e)
             }
 
@@ -1773,7 +1549,7 @@ class CryptoAPI:
             return f"${price:.8f}"
 
     def _fallback_price(self, symbol, error_msg):
-        """Fallback price data when all Binance endpoints fail"""
+        """Fallback price data when CoinAPI fails"""
         # In deployment mode, never use mock data - return error instead
         is_deployment = (
             os.getenv('REPLIT_DEPLOYMENT') == '1' or 
@@ -1785,9 +1561,9 @@ class CryptoAPI:
         )
 
         if is_deployment:
-            print(f"❌ DEPLOYMENT: No fallback data for {symbol} - Binance-only mode")
+            print(f"❌ DEPLOYMENT: No fallback data for {symbol} - CoinAPI-only mode")
             return {
-                'error': f'Binance API unavailable for {symbol} in deployment mode',
+                'error': f'CoinAPI unavailable for {symbol} in deployment mode',
                 'symbol': symbol.upper(),
                 'error_reason': error_msg,
                 'deployment_mode': True
@@ -1795,34 +1571,34 @@ class CryptoAPI:
 
         # Only use simulation data in development as last resort
         import random
-        print(f"⚠️ Using simulation data for {symbol} - Binance APIs unavailable")
+        print(f"⚠️ Using simulation data for {symbol} - CoinAPI unavailable")
 
         mock_prices = {
-            'BTCUSDT': random.uniform(65000, 75000),
-            'ETHUSDT': random.uniform(3000, 4000),
-            'BNBUSDT': random.uniform(500, 700),
-            'ADAUSDT': random.uniform(0.4, 0.6),
-            'SOLUSDT': random.uniform(150, 250),
-            'XRPUSDT': random.uniform(0.5, 0.7),
-            'DOGEUSDT': random.uniform(0.08, 0.12),
-            'MATICUSDT': random.uniform(0.8, 1.2),
-            'DOTUSDT': random.uniform(5, 8),
-            'AVAXUSDT': random.uniform(25, 40)
+            'BTC': random.uniform(65000, 75000),
+            'ETH': random.uniform(3000, 4000),
+            'BNB': random.uniform(500, 700),
+            'ADA': random.uniform(0.4, 0.6),
+            'SOL': random.uniform(150, 250),
+            'XRP': random.uniform(0.5, 0.7),
+            'DOGE': random.uniform(0.08, 0.12),
+            'MATIC': random.uniform(0.8, 1.2),
+            'DOT': random.uniform(5, 8),
+            'AVAX': random.uniform(25, 40)
         }
 
-        normalized_symbol = symbol.upper() + 'USDT' if not symbol.upper().endswith('USDT') else symbol.upper()
-        base_price = mock_prices.get(normalized_symbol, random.uniform(1, 100))
+        base_symbol = symbol.upper().replace('USDT', '')
+        base_price = mock_prices.get(base_symbol, random.uniform(1, 100))
 
         return {
-            'symbol': normalized_symbol,
+            'symbol': symbol.upper(),
             'price': base_price,
             'change_24h': random.uniform(-5, 5),
             'high_24h': base_price * random.uniform(1.01, 1.05),
             'low_24h': base_price * random.uniform(0.95, 0.99),
             'volume_24h': random.uniform(10000000, 100000000),
-            'source': 'binance_simulation',
+            'source': 'coinapi_simulation',
             'error_reason': error_msg,
-            'warning': 'SIMULATION DATA - Binance APIs unavailable (Development Only)'
+            'warning': 'SIMULATION DATA - CoinAPI unavailable (Development Only)'
         }
 
     def _fallback_futures_data(self, symbol):
