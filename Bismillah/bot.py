@@ -123,6 +123,16 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("grant_package", self.grant_package_command))
             self.application.add_handler(CommandHandler("test_binance", self.test_binance_command))
 
+            # Add Binance API command handlers
+            self.application.add_handler(CommandHandler("binance_data", self.binance_data_command))
+            self.application.add_handler(CommandHandler("candles", self.candles_command))
+            self.application.add_handler(CommandHandler("funding", self.funding_command))
+            self.application.add_handler(CommandHandler("oi", self.open_interest_command))
+            self.application.add_handler(CommandHandler("mark_price", self.mark_price_command))
+            self.application.add_handler(CommandHandler("server_time", self.server_time_command))
+            self.application.add_handler(CommandHandler("liquidations", self.liquidations_command))
+            self.application.add_handler(CommandHandler("long_short", self.long_short_command))
+
             # Add callback query handler
             self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
 
@@ -2397,6 +2407,56 @@ Terima kasih telah setia menggunakan CryptoMentor AI! 🚀"""
             short_ratio = ls_data.get('short_ratio', 0)
             ls_ratio = ls_data.get('long_short_ratio', 0)
             long_account = ls_data.get('long_account', 0)
+            short_account = ls_data.get('short_account', 0)
+
+            # Determine sentiment
+            if long_ratio > 70:
+                sentiment = "🔴 Extremely Bullish (Overleveraged)"
+                risk_level = "High Risk - Potential Long Squeeze"
+            elif long_ratio > 60:
+                sentiment = "🟡 Bullish"
+                risk_level = "Medium Risk"
+            elif long_ratio < 30:
+                sentiment = "🔴 Extremely Bearish (Oversold)"
+                risk_level = "High Risk - Potential Short Squeeze"
+            elif long_ratio < 40:
+                sentiment = "🟡 Bearish"
+                risk_level = "Medium Risk"
+            else:
+                sentiment = "🟢 Neutral/Balanced"
+                risk_level = "Low Risk"
+
+            message = f"""📊 **Long/Short Ratio - {symbol}** 🟢
+
+**Position Ratio:**
+• **Long Ratio**: {long_ratio:.1f}%
+• **Short Ratio**: {short_ratio:.1f}%
+• **L/S Ratio**: {ls_ratio:.2f}
+
+**Account Distribution:**
+• **Long Accounts**: {long_account:.1f}%
+• **Short Accounts**: {short_account:.1f}%
+
+**Market Sentiment**: {sentiment}
+**Risk Level**: {risk_level}
+
+**Analisis:**
+• Ratio tinggi (>60%) = Bullish bias, watch for long squeeze
+• Ratio rendah (<40%) = Bearish bias, watch for short squeeze
+• Ratio seimbang (40-60%) = Healthy market structure
+
+**Trading Insight:**
+• Extreme ratios often signal reversals
+• Use as contrarian indicator
+• Combine with price action for confirmation
+
+🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}
+🔄 **Source**: Binance Futures API (Top Traders)"""
+
+            await loading_msg.edit_text(message, parse_mode='Markdown')
+
+        except Exception as e:
+            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
 
 
     async def test_binance_command(self, update: Update, context: CallbackContext):
