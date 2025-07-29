@@ -848,7 +848,7 @@ class Database:
         """Check if user needs to /start again after admin restart"""
         try:
             # Check if restart_required column exists first
-            self.cursor.execute("PRAGMAtable_info(users)")
+            self.cursor.execute("PRAGMA table_info(users)")
             columns = [column[1] for column in self.cursor.fetchall()]
 
             if 'restart_required' not in columns:

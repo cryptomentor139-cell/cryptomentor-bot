@@ -2,6 +2,21 @@
 #!/usr/bin/env python3
 from database import Database
 
+#!/usr/bin/env python3
+"""Check current users in CryptoMentor AI database"""
+
+import os
+import sys
+
+# Add the current directory to Python path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from database import Database
+except ImportError as e:
+    print(f"❌ Cannot import Database: {e}")
+    sys.exit(1)
+
 def check_current_users():
     """Check current users in database"""
     print("🔍 Checking current users in CryptoMentor AI database...")
@@ -37,6 +52,37 @@ def check_current_users():
             telegram_id, first_name, username, credits, is_premium, created_at = user
             premium_badge = "⭐" if is_premium else "🆓"
             print(f"  {premium_badge} {first_name} (@{username or 'no_username'}) - {credits} credits - {created_at}")
+        
+        # Get premium users
+        print("\n⭐ Premium Users:")
+        db.cursor.execute("""
+            SELECT telegram_id, first_name, username, subscription_end 
+            FROM users 
+            WHERE is_premium = 1 
+            ORDER BY created_at DESC
+        """)
+        premium_users = db.cursor.fetchall()
+        
+        if premium_users:
+            for user in premium_users:
+                telegram_id, first_name, username, subscription_end = user
+                if subscription_end:
+                    print(f"  💎 {first_name} (@{username or 'no_username'}) - Expires: {subscription_end}")
+                else:
+                    print(f"  🚀 {first_name} (@{username or 'no_username'}) - LIFETIME")
+        else:
+            print("  No premium users found")
+        
+        db.close()
+        print("\n✅ User check completed!")
+        
+    except Exception as e:
+        print(f"❌ Error checking users: {e}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    check_current_users()
         
         # Check for data issues
         print("\n🔍 Data Quality Check:")

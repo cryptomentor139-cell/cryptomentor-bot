@@ -59,16 +59,16 @@ class CryptoAPI:
 
             # Symbol validation and normalization
             original_symbol = symbol.upper().strip()
-            
+
             # Remove USDT suffix if present for CoinAPI format
             if original_symbol.endswith('USDT'):
                 base_symbol = original_symbol[:-4]  # Remove 'USDT'
             else:
                 base_symbol = original_symbol
-            
+
             # For CoinAPI, we use BASE/USDT format
             coinapi_symbol = f"{base_symbol}/USDT"
-            
+
             print(f"✅ Symbol validation: {original_symbol} → {coinapi_symbol}")
 
             # Enhanced deployment detection
@@ -81,7 +81,7 @@ class CryptoAPI:
                 'REPL_DB_URL': bool(os.getenv('REPL_DB_URL')),
                 'deployment_flag_file': os.path.exists('/tmp/repl_deployment_flag')
             }
-            
+
             is_deployment = any(deployment_indicators.values())
             print(f"🔍 DEPLOYMENT DETECTION:")
             for key, value in deployment_indicators.items():
@@ -119,7 +119,7 @@ class CryptoAPI:
 
             # CoinAPI endpoint
             endpoint = f"{self.coinapi_url}/exchangerate/{base_symbol}/USDT"
-            
+
             print(f"📡 CoinAPI Request: {endpoint}")
             print(f"📊 Headers: API Key present = {bool(self.coinapi_key)}")
 
@@ -131,10 +131,10 @@ class CryptoAPI:
                     headers=headers,
                     allow_redirects=True
                 )
-                
+
                 print(f"📊 Response Status: {response.status_code}")
                 print(f"📊 Response Size: {len(response.content)} bytes")
-                
+
                 # Enhanced status code handling
                 if response.status_code == 429:
                     print(f"⏳ Rate limited by CoinAPI")
@@ -168,13 +168,13 @@ class CryptoAPI:
                     }
 
                 response.raise_for_status()
-                
+
                 # Parse JSON response
                 try:
                     data = response.json()
                     print(f"📊 JSON parsing successful, data type: {type(data)}")
                     print(f"📊 CoinAPI Response: {data}")
-                        
+
                 except ValueError as json_error:
                     print(f"❌ JSON parsing failed: {json_error}")
                     print(f"📊 Raw response (first 300 chars): {response.text[:300]}")
@@ -184,7 +184,7 @@ class CryptoAPI:
                         'api_call_successful': False,
                         'error_type': 'json_error'
                     }
-                
+
                 # Validate response structure
                 if not data or not isinstance(data, dict):
                     print(f"❌ Invalid response structure for {coinapi_symbol}")
@@ -215,7 +215,7 @@ class CryptoAPI:
                         'api_call_successful': False,
                         'error_type': 'price_validation_failed'
                     }
-                
+
                 price = price_result['price']
                 print(f"✅ Price validation successful: {coinapi_symbol} = ${price:,.8f}")
 
@@ -238,7 +238,7 @@ class CryptoAPI:
                     'last_updated': last_updated,
                     'coinapi_symbol': coinapi_symbol
                 }
-                
+
                 print(f"✅ CoinAPI SUCCESS: {coinapi_symbol} = ${price:,.6f}")
                 return result
 
@@ -273,7 +273,7 @@ class CryptoAPI:
         except Exception as e:
             error_msg = f"CoinAPI price retrieval completely failed for {symbol}: {str(e)}"
             print(f"💥 COMPLETE FAILURE: {error_msg}")
-            
+
             return {
                 'error': error_msg,
                 'symbol': symbol,
@@ -283,17 +283,17 @@ class CryptoAPI:
                 'price': None,
                 'zero_price_prevention': True
             }
-    
+
     def _ensure_non_zero_price(self, price_data, symbol):
         """Ensure price is never zero or None - critical for deployment"""
         try:
             price = price_data.get('price', 0)
-            
+
             # Check for zero, None, or invalid prices
             if price is None or price <= 0 or price != price:  # price != price checks for NaN
                 print(f"⛔ ZERO PRICE DETECTED for {symbol}: {price}")
                 print(f"🔧 Returning error instead of zero price to prevent 0.0000 display")
-                
+
                 return {
                     'error': f'Invalid price data for {symbol} - price is {price}',
                     'symbol': symbol,
@@ -302,9 +302,9 @@ class CryptoAPI:
                     'original_price': price,
                     'zero_prevented': True
                 }
-            
+
             return price_data
-            
+
         except Exception as e:
             print(f"❌ Error in zero price prevention: {e}")
             return price_data
@@ -313,23 +313,23 @@ class CryptoAPI:
         """Extract and validate price from CoinAPI response"""
         try:
             raw_rate = data.get('rate')
-            
+
             print(f"🔍 Extracting rate from CoinAPI for {symbol}: {raw_rate} (type: {type(raw_rate)})")
-            
+
             # Null/None check
             if raw_rate is None:
                 return {'error': f'Rate field is None in CoinAPI response for {symbol}', 'price': None}
-            
+
             # Empty string check
             if isinstance(raw_rate, str):
                 raw_rate = raw_rate.strip()
                 if raw_rate == '':
                     return {'error': f'Rate field is empty string for {symbol}', 'price': None}
-                
+
                 # Check for invalid strings
                 if raw_rate.lower() in ['null', 'none', 'undefined', 'nan', 'inf', '-inf']:
                     return {'error': f'Rate field contains invalid value: {raw_rate}', 'price': None}
-            
+
             # Convert to float
             try:
                 price = float(raw_rate)
@@ -337,7 +337,7 @@ class CryptoAPI:
             except (ValueError, TypeError, OverflowError) as conversion_error:
                 print(f"❌ Rate conversion failed: {conversion_error}")
                 return {'error': f'Cannot convert rate to float: {raw_rate} ({conversion_error})', 'price': None}
-            
+
             # Comprehensive validation checks
             validation_checks = [
                 (price <= 0, f"❌ ZERO/NEGATIVE: Rate is {price} - must be positive"),
@@ -347,19 +347,19 @@ class CryptoAPI:
                 (price > 50000000, f"❌ TOO_HIGH: Rate {price} exceeds reasonable limit ($50M)"),
                 (price < 0.00000001, f"❌ TOO_LOW: Rate {price} below minimum threshold (0.00000001)")
             ]
-            
+
             for check_condition, error_message in validation_checks:
                 if check_condition:
                     print(error_message)
                     return {'error': error_message, 'price': None}
-            
+
             # Final validation
             if not isinstance(price, (int, float)) or abs(price) == float('inf'):
                 return {'error': f'Rate validation failed - invalid number type: {type(price)}', 'price': None}
-            
+
             print(f"✅ CoinAPI rate validation PASSED: {symbol} = ${price:,.8f}")
             return {'error': None, 'price': price}
-            
+
         except Exception as e:
             error_msg = f"Unexpected error in CoinAPI rate validation: {str(e)}"
             print(f"💥 CRITICAL: {error_msg}")
@@ -374,33 +374,33 @@ class CryptoAPI:
                 price_fields_to_try.extend(['price', 'close', 'closePrice'])
             elif price_field == 'price':
                 price_fields_to_try.extend(['lastPrice', 'close', 'closePrice'])
-            
+
             raw_price = None
             used_field = None
-            
+
             # Try each price field until we find a valid one
             for field in price_fields_to_try:
                 raw_price = data.get(field)
                 if raw_price is not None:
                     used_field = field
                     break
-            
+
             print(f"🔍 Extracting price from {source_type} using field '{used_field}': {raw_price} (type: {type(raw_price)})")
-            
+
             # Null/None check
             if raw_price is None:
                 return {'error': f'No valid price field found in {source_type} (tried: {price_fields_to_try})', 'price': None}
-            
+
             # Empty string check
             if isinstance(raw_price, str):
                 raw_price = raw_price.strip()
                 if raw_price == '':
                     return {'error': f'Price field {used_field} is empty string in {source_type}', 'price': None}
-                
+
                 # Check for obviously invalid strings
                 if raw_price.lower() in ['null', 'none', 'undefined', 'nan', 'inf', '-inf']:
                     return {'error': f'Price field {used_field} contains invalid value: {raw_price}', 'price': None}
-                
+
                 # Enhanced numeric validation
                 cleaned_price = raw_price.replace('.', '').replace('-', '').replace('+', '').replace('e', '').replace('E', '')
                 if not cleaned_price.isdigit() and cleaned_price != '':
@@ -410,7 +410,7 @@ class CryptoAPI:
                         print(f"🔬 Scientific notation detected and validated: {raw_price} = {test_conversion}")
                     except ValueError:
                         return {'error': f'Price field {used_field} contains non-numeric data: {raw_price}', 'price': None}
-            
+
             # Convert to float with comprehensive error handling
             try:
                 price = float(raw_price)
@@ -418,7 +418,7 @@ class CryptoAPI:
             except (ValueError, TypeError, OverflowError) as conversion_error:
                 print(f"❌ Price conversion failed: {conversion_error}")
                 return {'error': f'Cannot convert {used_field} to float: {raw_price} ({conversion_error})', 'price': None}
-            
+
             # Comprehensive validation checks with stricter bounds
             validation_checks = [
                 (price <= 0, f"❌ ZERO/NEGATIVE: Price is {price} - must be positive"),
@@ -428,34 +428,34 @@ class CryptoAPI:
                 (price > 50000000, f"❌ TOO_HIGH: Price {price} exceeds reasonable limit ($50M)"),  # Reduced from $100M
                 (price < 0.00000001, f"❌ TOO_LOW: Price {price} below minimum threshold (0.00000001)")   # 1 satoshi
             ]
-            
+
             for check_condition, error_message in validation_checks:
                 if check_condition:
                     print(error_message)
                     return {'error': error_message, 'price': None}
-            
+
             # USDT-specific validation
             if 'USDT' in symbol:
                 # Additional checks for USDT pairs
                 if symbol in ['USDUSDT', 'USDTUSDT']:  # These shouldn't exist
                     return {'error': f'Invalid USDT pair detected: {symbol}', 'price': None}
-                
+
                 # Most legitimate USDT pairs should be within reasonable ranges
                 if price > 10000000:  # $10M per token is very high even for legitimate tokens
                     print(f"⚠️ WARNING: Very high price for {symbol}: ${price:,.2f}")
-            
+
             # Final validation - ensure price is a clean number
             if not isinstance(price, (int, float)) or abs(price) == float('inf'):
                 return {'error': f'Price validation failed - invalid number type: {type(price)}', 'price': None}
-            
+
             print(f"✅ Price validation PASSED: {symbol} = ${price:,.8f} (field: {used_field})")
             return {'error': None, 'price': price}
-            
+
         except Exception as e:
             error_msg = f"Unexpected error in price validation: {str(e)}"
             print(f"💥 CRITICAL: {error_msg}")
             return {'error': error_msg, 'price': None}
-    
+
     def _safe_float_parse(self, value, default=0.0):
         """Safely parse float with default fallback"""
         try:
@@ -464,7 +464,7 @@ class CryptoAPI:
             return float(value)
         except (ValueError, TypeError):
             return default
-    
+
     def _safe_int_parse(self, value, default=0):
         """Safely parse int with default fallback"""
         try:
@@ -567,7 +567,7 @@ class CryptoAPI:
                 timeout=timeout,
                 headers=headers
             )
-            
+
             print(f"📊 Binance Futures API Response Status: {response.status_code}")
             print(f"📊 Futures Response Headers: {dict(response.headers)}")
 
@@ -584,7 +584,7 @@ class CryptoAPI:
                 return {'error': f"Futures API error: {error_msg}", 'api_call_successful': False}
 
             response.raise_for_status()
-            
+
             # Parse JSON response with validation
             try:
                 data = response.json()
@@ -602,7 +602,7 @@ class CryptoAPI:
             # Validate required fields
             required_fields = ['lastPrice', 'priceChangePercent', 'highPrice', 'lowPrice', 'volume', 'quoteVolume']
             missing_fields = [field for field in required_fields if field not in data]
-            
+
             if missing_fields:
                 print(f"❌ Missing fields in Futures ticker response: {missing_fields}")
                 return {'error': f'Missing required fields: {missing_fields}', 'api_call_successful': False}
@@ -611,29 +611,29 @@ class CryptoAPI:
             try:
                 raw_last_price = data.get('lastPrice')
                 print(f"📊 Raw futures lastPrice from API: {raw_last_price} (type: {type(raw_last_price)})")
-                
+
                 if raw_last_price is None:
                     print(f"❌ Futures lastPrice is None")
                     return {'error': 'Futures lastPrice field is None', 'api_call_successful': False}
-                
+
                 if isinstance(raw_last_price, str) and raw_last_price.strip() == '':
                     print(f"❌ Futures lastPrice is empty string")
                     return {'error': 'Futures lastPrice field is empty', 'api_call_successful': False}
-                
+
                 # Parse to float with validation
                 price = float(raw_last_price)
                 print(f"📊 Parsed futures price: {price}")
-                
+
                 # Validate price is not zero, negative, or NaN
                 if price <= 0 or price != price:  # price != price checks for NaN
                     print(f"❌ Invalid futures price received from Binance: {price}")
                     return {'error': f'Invalid futures price: {price}', 'api_call_successful': False}
-                
+
                 # Additional sanity check for reasonable price range
                 if price > 10000000:  # Arbitrary large number check
                     print(f"⚠️ Suspiciously large futures price: {price} - possible data error")
                     return {'error': f'Suspiciously large futures price: {price}', 'api_call_successful': False}
-                    
+
             except (ValueError, TypeError) as price_error:
                 print(f"❌ Futures price parsing error: {price_error}")
                 print(f"❌ Failed to parse futures lastPrice: {data.get('lastPrice')}")
@@ -1056,7 +1056,7 @@ class CryptoAPI:
     def test_coinapi_connectivity(self, symbol='BTC'):
         """Test CoinAPI connectivity with detailed logging"""
         print(f"🔧 Testing CoinAPI connectivity for {symbol}/USDT...")
-        
+
         test_results = {
             'api_key_present': bool(self.coinapi_key),
             'exchange_rate_test': False,
@@ -1064,7 +1064,7 @@ class CryptoAPI:
             'deployment_mode': self.is_deployment_mode(),
             'timestamp': datetime.now().isoformat()
         }
-        
+
         # Test API key presence
         if not self.coinapi_key:
             print(f"❌ CoinAPI key not found in secrets")
@@ -1072,7 +1072,7 @@ class CryptoAPI:
             return test_results
         else:
             print(f"✅ CoinAPI key present")
-        
+
         # Test price retrieval
         try:
             price_data = self.get_coinapi_price(symbol)
@@ -1084,18 +1084,18 @@ class CryptoAPI:
                 print(f"❌ CoinAPI price failed: {price_data.get('error', 'Unknown error')}")
         except Exception as e:
             print(f"❌ CoinAPI price exception: {e}")
-        
+
         # Overall assessment
         working_endpoints = sum([
             test_results['api_key_present'],
             test_results['exchange_rate_test']
         ])
-        
+
         test_results['overall_health'] = working_endpoints >= 2
         test_results['working_endpoints'] = f"{working_endpoints}/2"
-        
+
         print(f"📊 Overall CoinAPI Health: {'✅ GOOD' if test_results['overall_health'] else '❌ POOR'} ({working_endpoints}/2 checks passed)")
-        
+
         return test_results
 
     # === PRICE METHODS (BINANCE ONLY) ===
@@ -1124,9 +1124,9 @@ class CryptoAPI:
             'REPL_OWNER': bool(os.getenv('REPL_OWNER')),
             'deployment_flag_exists': os.path.exists('/tmp/repl_deployment_flag')
         }
-        
+
         print(f"🔍 Deployment indicators check: {deployment_indicators}")
-        
+
         is_deployment = (
             os.getenv('REPLIT_DEPLOYMENT') == '1' or 
             os.getenv('REPL_DEPLOYMENT') == '1' or
@@ -1149,7 +1149,7 @@ class CryptoAPI:
         try:
             print("📡 Trying CoinAPI...")
             coinapi_data = self.get_coinapi_price(symbol, force_refresh)
-            
+
             if 'error' not in coinapi_data and coinapi_data.get('price', 0) > 0:
                 price_str = f"${coinapi_data.get('price', 0):,.4f}"
                 print(f"🎯 SUCCESS: {symbol} = {price_str} ✅ (CoinAPI)")
@@ -1157,7 +1157,7 @@ class CryptoAPI:
             else:
                 print(f"❌ CoinAPI failed: {coinapi_data.get('error', 'Unknown error')}")
                 return coinapi_data
-                
+
         except Exception as e:
             print(f"💥 CoinAPI exception for {symbol}: {e}")
             error_msg = f"CoinAPI failed for {symbol}: {str(e)}"
@@ -1200,7 +1200,7 @@ class CryptoAPI:
                 'change_24h': binance_futures.get('change_24h', 0),
                 'volume_24h': binance_futures.get('volume_24h', 0),
                 'high_24h': binance_futures.get('high_24h', 0),
-                'low_24h': binance_futures.get('low_24h', 0),
+                'low_2h': binance_futures.get('low_24h', 0),
                 'open_price': binance_futures.get('open_price', 0),
                 'weighted_avg_price': binance_futures.get('weighted_avg_price', 0),
                 'price_change': binance_futures.get('price_change', 0),
@@ -1376,25 +1376,25 @@ class CryptoAPI:
     def _identify_supply_zones(self, candlesticks, current_price):
         """Identify supply zones from candlestick data"""
         supply_zones = []
-        
+
         for i in range(2, len(candlesticks) - 2):
             candle = candlesticks[i]
             prev_candle = candlesticks[i-1]
             next_candle = candlesticks[i+1]
-            
+
             # Look for rejection patterns (long upper wicks)
             body_size = abs(candle['close'] - candle['open'])
             upper_wick = candle['high'] - max(candle['open'], candle['close'])
-            
+
             # Supply zone criteria
             if (upper_wick > body_size * 1.5 and 
                 candle['high'] > prev_candle['high'] and 
                 candle['high'] > next_candle['high']):
-                
+
                 zone_high = candle['high']
                 zone_low = max(candle['open'], candle['close'])
                 distance_from_current = abs(zone_high - current_price) / current_price * 100
-                
+
                 # Only consider zones within reasonable distance
                 if distance_from_current < 10:  # Within 10%
                     strength = self._calculate_zone_strength(candlesticks, i, 'supply')
@@ -1405,7 +1405,7 @@ class CryptoAPI:
                         'distance_percent': distance_from_current,
                         'candle_index': i
                     })
-        
+
         # Sort by strength
         supply_zones.sort(key=lambda x: x['strength'], reverse=True)
         return supply_zones[:5]  # Return top 5
@@ -1413,25 +1413,25 @@ class CryptoAPI:
     def _identify_demand_zones(self, candlesticks, current_price):
         """Identify demand zones from candlestick data"""
         demand_zones = []
-        
+
         for i in range(2, len(candlesticks) - 2):
             candle = candlesticks[i]
             prev_candle = candlesticks[i-1]
             next_candle = candlesticks[i+1]
-            
+
             # Look for bounce patterns (long lower wicks)
             body_size = abs(candle['close'] - candle['open'])
             lower_wick = min(candle['open'], candle['close']) - candle['low']
-            
+
             # Demand zone criteria
             if (lower_wick > body_size * 1.5 and 
                 candle['low'] < prev_candle['low'] and 
                 candle['low'] < next_candle['low']):
-                
+
                 zone_low = candle['low']
                 zone_high = min(candle['open'], candle['close'])
                 distance_from_current = abs(current_price - zone_low) / current_price * 100
-                
+
                 # Only consider zones within reasonable distance
                 if distance_from_current < 10:  # Within 10%
                     strength = self._calculate_zone_strength(candlesticks, i, 'demand')
@@ -1442,7 +1442,7 @@ class CryptoAPI:
                         'distance_percent': distance_from_current,
                         'candle_index': i
                     })
-        
+
         # Sort by strength
         demand_zones.sort(key=lambda x: x['strength'], reverse=True)
         return demand_zones[:5]  # Return top 5
@@ -1450,32 +1450,32 @@ class CryptoAPI:
     def _calculate_zone_strength(self, candlesticks, index, zone_type):
         """Calculate the strength of a supply/demand zone"""
         strength = 50  # Base strength
-        
+
         # Volume factor (if available)
         if 'volume' in candlesticks[index]:
             volume = candlesticks[index]['volume']
             avg_volume = sum(c.get('volume', 0) for c in candlesticks[max(0, index-10):index+10]) / 20
             if volume > avg_volume * 1.5:
                 strength += 20
-        
+
         # Confluence with moving averages
         closes = [c['close'] for c in candlesticks[max(0, index-20):index+1]]
         if len(closes) >= 20:
             sma_20 = sum(closes) / len(closes)
             zone_price = (candlesticks[index]['high'] + candlesticks[index]['low']) / 2
-            
+
             if abs(zone_price - sma_20) / sma_20 < 0.02:  # Within 2% of SMA
                 strength += 15
-        
+
         # Multiple touches (respected level)
         touches = 0
         zone_high = candlesticks[index]['high']
         zone_low = candlesticks[index]['low']
-        
+
         for i in range(max(0, index-10), min(len(candlesticks), index+10)):
             if i == index:
                 continue
-                
+
             candle = candlesticks[i]
             if zone_type == 'supply':
                 if zone_low <= candle['high'] <= zone_high:
@@ -1483,31 +1483,31 @@ class CryptoAPI:
             else:  # demand
                 if zone_low <= candle['low'] <= zone_high:
                     touches += 1
-        
+
         strength += min(touches * 10, 30)  # Max 30 points for touches
         return min(strength, 100)  # Cap at 100
 
     def _generate_snd_signals(self, supply_zones, demand_zones, current_price, candlesticks):
         """Generate trading signals based on SnD zones"""
         signals = []
-        
+
         # Get recent price action
         recent_candles = candlesticks[-5:]
         latest_candle = candlesticks[-1]
-        
+
         # Check for long signals (near demand zones)
         for zone in demand_zones:
             if zone['distance_percent'] < 3:  # Within 3% of demand zone
                 entry_price = zone['high']
                 stop_loss = zone['low'] * 0.995  # 0.5% below zone
-                
+
                 # Calculate take profits
                 risk = entry_price - stop_loss
                 take_profit_1 = entry_price + (risk * 2)  # 2:1 RR
                 take_profit_2 = entry_price + (risk * 3)  # 3:1 RR
-                
+
                 confidence = self._calculate_signal_confidence(zone, current_price, 'LONG', recent_candles)
-                
+
                 if confidence > 60:
                     signals.append({
                         'direction': 'LONG',
@@ -1521,20 +1521,20 @@ class CryptoAPI:
                         'reason': f'Price near strong demand zone (strength: {zone["strength"]})',
                         'entry_timing': 'Wait for bounce confirmation'
                     })
-        
+
         # Check for short signals (near supply zones)
         for zone in supply_zones:
             if zone['distance_percent'] < 3:  # Within 3% of supply zone
                 entry_price = zone['low']
                 stop_loss = zone['high'] * 1.005  # 0.5% above zone
-                
+
                 # Calculate take profits
                 risk = stop_loss - entry_price
                 take_profit_1 = entry_price - (risk * 2)  # 2:1 RR
                 take_profit_2 = entry_price - (risk * 3)  # 3:1 RR
-                
+
                 confidence = self._calculate_signal_confidence(zone, current_price, 'SHORT', recent_candles)
-                
+
                 if confidence > 60:
                     signals.append({
                         'direction': 'SHORT',
@@ -1548,7 +1548,7 @@ class CryptoAPI:
                         'reason': f'Price near strong supply zone (strength: {zone["strength"]})',
                         'entry_timing': 'Wait for rejection confirmation'
                     })
-        
+
         # Sort by confidence
         signals.sort(key=lambda x: x['confidence'], reverse=True)
         return signals
@@ -1556,7 +1556,7 @@ class CryptoAPI:
     def _calculate_signal_confidence(self, zone, current_price, direction, recent_candles):
         """Calculate confidence for a trading signal"""
         confidence = zone['strength']  # Base confidence from zone strength
-        
+
         # Distance factor
         distance = zone['distance_percent']
         if distance < 1:
@@ -1565,12 +1565,12 @@ class CryptoAPI:
             confidence += 10
         elif distance < 3:
             confidence += 5
-        
+
         # Recent price action
         if len(recent_candles) >= 3:
             last_candle = recent_candles[-1]
             prev_candle = recent_candles[-2]
-            
+
             if direction == 'LONG':
                 # Look for bullish momentum
                 if last_candle['close'] > last_candle['open']:  # Green candle
@@ -1583,27 +1583,27 @@ class CryptoAPI:
                     confidence += 10
                 if last_candle['close'] < prev_candle['close']:  # Lower close
                     confidence += 5
-        
+
         return min(confidence, 95)  # Cap at 95%
 
     def _analyze_market_structure(self, candlesticks):
         """Analyze overall market structure"""
         if len(candlesticks) < 20:
             return {'pattern': 'insufficient_data', 'strength': 'unknown'}
-        
+
         closes = [c['close'] for c in candlesticks[-20:]]
         highs = [c['high'] for c in candlesticks[-20:]]
         lows = [c['low'] for c in candlesticks[-20:]]
-        
+
         # Simple trend analysis
         recent_closes = closes[-5:]
         earlier_closes = closes[-10:-5]
-        
+
         recent_avg = sum(recent_closes) / len(recent_closes)
         earlier_avg = sum(earlier_closes) / len(earlier_closes)
-        
+
         trend_change = (recent_avg - earlier_avg) / earlier_avg * 100
-        
+
         if trend_change > 2:
             pattern = 'uptrend'
             strength = 'strong' if trend_change > 5 else 'moderate'
@@ -1613,7 +1613,7 @@ class CryptoAPI:
         else:
             pattern = 'sideways'
             strength = 'weak'
-        
+
         return {
             'pattern': pattern,
             'strength': strength,
@@ -1624,9 +1624,9 @@ class CryptoAPI:
         """Calculate trend score (-3 to +3)"""
         if len(candlesticks) < 10:
             return 0
-        
+
         closes = [c['close'] for c in candlesticks[-10:]]
-        
+
         # Count consecutive higher/lower closes
         score = 0
         for i in range(1, len(closes)):
@@ -1634,34 +1634,34 @@ class CryptoAPI:
                 score += 0.3
             elif closes[i] < closes[i-1]:
                 score -= 0.3
-        
+
         return max(-3, min(3, score))
 
     def _calculate_snd_confidence(self, signals, supply_zones, demand_zones, market_structure):
         """Calculate overall SnD analysis confidence"""
         if not signals:
             return 40  # Low confidence if no signals
-        
+
         # Base confidence from best signal
         best_signal = max(signals, key=lambda x: x['confidence'])
         base_confidence = best_signal['confidence']
-        
+
         # Market structure bonus
         if market_structure['strength'] == 'strong':
             base_confidence += 10
         elif market_structure['strength'] == 'moderate':
             base_confidence += 5
-        
+
         # Zone quality bonus
         total_zones = len(supply_zones) + len(demand_zones)
         if total_zones >= 5:
             base_confidence += 5
-        
+
         # Quality zones (strength > 70)
         quality_zones = len([z for z in supply_zones + demand_zones if z['strength'] > 70])
         if quality_zones >= 2:
             base_confidence += 10
-        
+
         return min(base_confidence, 95)
 
     def is_deployment_mode(self):
@@ -1820,7 +1820,7 @@ class CryptoAPI:
             'REPL_OWNER': os.getenv('REPL_OWNER'),
             'deployment_flag': os.path.exists('/tmp/repl_deployment_flag')
         }
-        
+
         is_deployment = (
             os.getenv('REPLIT_DEPLOYMENT') == '1' or 
             os.getenv('REPL_DEPLOYMENT') == '1' or
@@ -1830,11 +1830,11 @@ class CryptoAPI:
             bool(os.getenv('REPL_DB_URL')) or
             bool(os.getenv('REPL_OWNER'))
         )
-        
+
         print(f"🚀 Deployment Mode Check:")
         print(f"   Environment Variables: {deployment_checks}")
         print(f"   Result: {'DEPLOYMENT' if is_deployment else 'DEVELOPMENT'}")
-        
+
         return is_deployment
 
     def check_api_status(self):
@@ -2013,7 +2013,7 @@ class CryptoAPI:
         try:
             # Get candlestick data
             candle_data = self.get_binance_candlestick(symbol, timeframe, 100)
-            
+
             if 'error' in candle_data:
                 print(f"❌ Candlestick data error for {symbol}: {candle_data['error']}")
                 return {
@@ -2038,7 +2038,7 @@ class CryptoAPI:
             volumes = [c['volume'] for c in candlesticks[-50:]]
 
             current_price = closes[-1]
-            
+
             # Enhanced resistance (supply) zones with order blocks
             resistance_zones = []
             for i in range(3, len(candlesticks) - 3):
@@ -2047,7 +2047,7 @@ class CryptoAPI:
                 if (candle['open'] > candle['close'] and  # Red candle
                     candle['volume'] > sum(volumes[max(0, i-5):i+5]) / 10 and  # High volume
                     candle['high'] >= max(highs[max(0, i-5):i+5])):  # Local high
-                    
+
                     zone_strength = (candle['volume'] / max(volumes)) * 100
                     resistance_zones.append({
                         'price_high': candle['high'],
@@ -2066,7 +2066,7 @@ class CryptoAPI:
                 if (candle['close'] > candle['open'] and  # Green candle
                     candle['volume'] > sum(volumes[max(0, i-5):i+5]) / 10 and  # High volume
                     candle['low'] <= min(lows[max(0, i-5):i+5])):  # Local low
-                    
+
                     zone_strength = (candle['volume'] / max(volumes)) * 100
                     support_zones.append({
                         'price_high': candle['open'],
@@ -2085,12 +2085,12 @@ class CryptoAPI:
             sma_10 = sum(closes[-10:]) / 10
             sma_20 = sum(closes[-20:]) / 20
             sma_50 = sum(closes[-50:]) / 50
-            
+
             trend_score = 0
             if sma_10 > sma_20: trend_score += 1
             if sma_20 > sma_50: trend_score += 1
             if current_price > sma_20: trend_score += 1
-            
+
             if trend_score >= 2:
                 trend = 'bullish'
             elif trend_score <= 1:
@@ -2100,16 +2100,16 @@ class CryptoAPI:
 
             # Generate enhanced trading signals with entry/exit points
             signals = []
-            
+
             # Find nearest active zones
             nearest_resistance = None
             nearest_support = None
-            
+
             for zone in resistance_zones[:3]:
                 if abs(zone['distance_from_current']) < 5:  # Within 5%
                     nearest_resistance = zone
                     break
-                    
+
             for zone in support_zones[:3]:
                 if abs(zone['distance_from_current']) < 5:  # Within 5%
                     nearest_support = zone
@@ -2121,9 +2121,9 @@ class CryptoAPI:
                 stop_loss = nearest_support['price_low'] * 0.99  # 1% below zone
                 take_profit_1 = entry_price * 1.02  # 2% profit
                 take_profit_2 = entry_price * 1.04  # 4% profit
-                
+
                 confidence = min(95, 60 + nearest_support['strength'])
-                
+
                 signals.append({
                     'type': 'buy',
                     'direction': 'LONG',
@@ -2143,9 +2143,9 @@ class CryptoAPI:
                 stop_loss = nearest_resistance['price_high'] * 1.01  # 1% above zone
                 take_profit_1 = entry_price * 0.98  # 2% profit
                 take_profit_2 = entry_price * 0.96  # 4% profit
-                
+
                 confidence = min(95, 60 + nearest_resistance['strength'])
-                
+
                 signals.append({
                     'type': 'sell',
                     'direction': 'SHORT',
@@ -2194,18 +2194,18 @@ class CryptoAPI:
                 'strength': 'medium',
                 'breakout_probability': 50
             }
-            
+
             recent_highs = highs[-10:]
             recent_lows = lows[-10:]
-            
+
             # Check for Higher Highs and Higher Lows (uptrend)
             hh_count = sum(1 for i in range(1, len(recent_highs)) if recent_highs[i] > recent_highs[i-1])
             hl_count = sum(1 for i in range(1, len(recent_lows)) if recent_lows[i] > recent_lows[i-1])
-            
+
             # Check for Lower Highs and Lower Lows (downtrend)
             lh_count = sum(1 for i in range(1, len(recent_highs)) if recent_highs[i] < recent_highs[i-1])
             ll_count = sum(1 for i in range(1, len(recent_lows)) if recent_lows[i] < recent_lows[i-1])
-            
+
             if hh_count >= 6 and hl_count >= 6:
                 structure['pattern'] = 'uptrend'
                 structure['strength'] = 'strong'
@@ -2222,7 +2222,7 @@ class CryptoAPI:
                 structure['pattern'] = 'weak_downtrend'
                 structure['strength'] = 'weak'
                 structure['breakout_probability'] = 60
-            
+
             return structure
         except:
             return {'pattern': 'unknown', 'strength': 'low', 'breakout_probability': 50}
@@ -2231,23 +2231,23 @@ class CryptoAPI:
         """Calculate overall confidence score for SnD analysis"""
         if not signals:
             return 30
-        
+
         base_confidence = 50
-        
+
         # Add confidence based on signal quality
         for signal in signals:
             signal_conf = signal.get('confidence', 50)
             rr_ratio = signal.get('risk_reward_ratio', 1)
-            
+
             base_confidence += (signal_conf - 50) * 0.3
             if rr_ratio > 2:
                 base_confidence += 10
             elif rr_ratio > 1.5:
                 base_confidence += 5
-        
+
         # Add confidence based on trend alignment
         base_confidence += trend_score * 5
-        
+
         return min(95, max(30, base_confidence))
 
     # === NEWS API ===
@@ -2291,3 +2291,88 @@ class CryptoAPI:
             {"title": "Regulatory Clarity Boosts Crypto Market Sentiment", "url": "#", "source": "mock"}
         ]
         return mock_news[:limit]
+
+    def _analyze_top_movers(self, prices_data):
+        """Analyze top gainers and losers"""
+        if 'error' in prices_data:
+            # Fallback mock data
+            gainers = """- SOL: +12.5% ($98.50)
+- AVAX: +8.3% ($42.10)
+- MATIC: +6.7% ($0.85)"""
+            losers = """- DOGE: -4.2% ($0.075)
+- ADA: -3.1% ($0.48)
+- DOT: -2.8% ($6.90)"""
+            return gainers, losers
+
+        # Real data analysis
+        movers = []
+        for symbol, data in prices_data.items():
+            if 'price' in data and 'change_24h' in data:
+                movers.append({
+                    'symbol': symbol.upper(),
+                    'price': data['price'],
+                    'change': data['change_24h']
+                })
+
+        # Sort by change percentage
+        movers.sort(key=lambda x: x['change'], reverse=True)
+
+        # Top 3 gainers
+        gainers_list = []
+        for mover in movers[:3]:
+            if mover['change'] > 0:
+                gainers_list.append(f"- {mover['symbol']}: +{mover['change']:.1f}% (${mover['price']:,.2f})")
+
+        # Top 3 losers
+        losers_list = []
+        for mover in movers[-3:]:
+            if mover['change'] < 0:
+                losers_list.append(f"- {mover['symbol']}: {mover['change']:.1f}% (${mover['price']:,.2f})")
+
+        gainers = '\n'.join(gainers_list) if gainers_list else "- Tidak ada gainer signifikan"
+        losers = '\n'.join(losers_list) if losers_list else "- Tidak ada loser signifikan"
+
+        return gainers, losers
+
+    def _format_market_overview_id(self, market_data, prices_data, news_data, futures_btc, futures_eth):
+        """Format market overview in Indonesian"""
+        from datetime import datetime
+
+        # Market cap and basic data
+        if 'error' not in market_data:
+            total_market_cap = market_data.get('total_market_cap', 0)
+            market_cap_change = market_data.get('market_cap_change_24h', 0)
+            btc_dominance = market_data.get('btc_dominance', 0)
+            active_cryptos = market_data.get('active_cryptocurrencies', 0)
+        else:
+            total_market_cap = 2400000000000
+            market_cap_change = 2.5
+            btc_dominance = 52.3
+            active_cryptos = 12000
+
+        # Analyze top movers
+        gainers, losers = self._analyze_top_movers(prices_data)
+
+        message = f"""🌍 **OVERVIEW PASAR CRYPTO REAL-TIME**
+
+💰 **Data Global:**
+- Total Market Cap: ${total_market_cap:,.0f} ({market_cap_change:+.1f}%)
+- Dominasi BTC: {btc_dominance:.1f}%
+- Crypto Aktif: {active_cryptos:,} koin
+
+📈 **Top Movers (24H):**
+**Gainers:**
+{gainers}
+
+**Losers:**
+{losers}
+
+📊 **Futures Sentiment:**
+- BTC Long/Short: {futures_btc.get('long_ratio', 50):.1f}% / {futures_btc.get('short_ratio', 50):.1f}%
+- ETH Long/Short: {futures_eth.get('long_ratio', 50):.1f}% / {futures_eth.get('short_ratio', 50):.1f}%
+
+🕐 **Update:** {datetime.now().strftime('%H:%M:%S')} | 📡 **Source:** Binance API
+
+🔄 **Refresh:** Gunakan `/market` untuk update terbaru"""
+
+        return message

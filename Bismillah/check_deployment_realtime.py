@@ -11,10 +11,55 @@ import time
 import requests
 from datetime import datetime
 
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add current directory to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from crypto_api import CryptoAPI
+try:
+    from crypto_api import CryptoAPI
+except ImportError as e:
+    print(f"❌ Cannot import CryptoAPI: {e}")
+    sys.exit(1)
+
+def check_deployment_realtime():
+    """Check if deployment is using real-time data"""
+    print("🚀 Deployment Real-time Data Verification")
+    print("=" * 50)
+    
+    try:
+        # Initialize CryptoAPI
+        crypto_api = CryptoAPI()
+        
+        # Test CoinAPI connectivity
+        print("📡 Testing CoinAPI connectivity...")
+        coinapi_test = crypto_api.test_coinapi_connectivity('BTC')
+        
+        if coinapi_test['overall_health']:
+            print("✅ CoinAPI working properly")
+            print(f"💰 BTC Price: ${coinapi_test['price_value']:,.2f}")
+        else:
+            print("❌ CoinAPI issues detected")
+        
+        # Test multiple symbols
+        test_symbols = ['BTC', 'ETH', 'BNB']
+        print(f"\n📊 Testing multiple symbols: {', '.join(test_symbols)}")
+        
+        for symbol in test_symbols:
+            price_data = crypto_api.get_coinapi_price(symbol, force_refresh=True)
+            if 'error' not in price_data:
+                print(f"✅ {symbol}: ${price_data['price']:,.4f}")
+            else:
+                print(f"❌ {symbol}: {price_data['error']}")
+            time.sleep(1)  # Rate limiting
+        
+        print("\n✅ Real-time verification completed!")
+        
+    except Exception as e:
+        print(f"❌ Error during verification: {e}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    check_deployment_realtime()
 
 def check_deployment_realtime():
     """Check if deployment mode is working with real-time data"""
