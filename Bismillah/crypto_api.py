@@ -120,6 +120,7 @@ class CryptoAPI:
             
             print(f"📡 CoinAPI Request: {endpoint}")
             print(f"📊 Headers: API Key present = {bool(self.coinapi_key)}")
+            print(f"🔄 Force refresh: {force_refresh}, Deployment: {is_deployment}")
 
             try:
                 # Make request with enhanced timeout handling
@@ -1424,11 +1425,15 @@ class CryptoAPI:
         return self.get_multiple_coinapi_prices(symbols)
 
     def get_market_overview(self):
-        """Get market overview data using Binance data exclusively"""
-        try:
-            # Get data from top cryptocurrencies via Binance
-            major_symbols = ['BTC', 'ETH', 'BNB', 'ADA', 'SOL', 'XRP', 'DOGE', 'MATIC', 'DOT', 'AVAX']
-            prices_data = self.get_multiple_binance_prices(major_symbols)
+        """Get market overview using CoinAPI in deployment mode, fallback to Binance"""
+        is_deployment = self.is_deployment_mode()
+        
+        if is_deployment:
+            print("🚀 DEPLOYMENT MODE: Using CoinAPI for market overview")
+            return self._get_coinapi_market_overview()
+        else:
+            print("🔧 DEVELOPMENT MODE: Using Binance for market overview")
+            return self.get_binance_global_data()
 
             if 'error' not in prices_data and len(prices_data) > 0:
                 # Calculate market metrics from Binance data
