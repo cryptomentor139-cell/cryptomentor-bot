@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
 import requests
 import random
 import os
 import asyncio
-from datetime import datetime
 import time
+from datetime import datetime
 
 class AIAssistant:
     def __init__(self, name="CryptoMentor AI"):
@@ -1349,7 +1348,7 @@ Try again in a few minutes for real-time data."""
 
     def _get_comprehensive_analysis_en(self, symbol, futures_data, price_data, crypto_api):
         """English comprehensive analysis"""
-        current_time = datetime.now.strftime('%H:%M:%S UTC')
+        current_time = datetime.now().strftime('%H:%M:%S UTC')
 
         # Get current price from CoinAPI
         if price_data and 'error' not in price_data:
@@ -1657,7 +1656,7 @@ Try again in a few minutes for real-time data."""
     def _format_enhanced_futures_signals_id(self, signals):
         """Format enhanced futures signals in Indonesian"""
         try:
-            current_time = datetime.now.strftime('%H:%M:%S WIB')
+            current_time = datetime.now().strftime('%H:%M:%S WIB')
 
             message = f"""🚨 **FUTURES SIGNALS ENHANCED (CoinAPI + SnD)**
 
@@ -1741,7 +1740,7 @@ Try again in a few minutes for real-time data."""
     def _format_enhanced_futures_signals_en(self, signals):
         """Format enhanced futures signals in English"""
         try:
-            current_time = datetime.now.strftime('%H:%M:%S UTC')
+            current_time = datetime.now().strftime('%H:%M:%S UTC')
 
             message = f"""🚨 **ENHANCED FUTURES SIGNALS (CoinAPI + SnD)**
 
@@ -1890,7 +1889,7 @@ Try again in a few minutes for real-time data."""
             else:
                 price_fmt = f"${current_price:,.2f}"
 
-            current_time = datetime.now.strftime('%H:%M:%S WIB')
+            current_time = datetime.now().strftime('%H:%M:%S WIB')
 
             message = f"""📊 **ANALISIS FUTURES {symbol} - {timeframe.upper()} (SnD Enhanced)**
 
@@ -1998,7 +1997,7 @@ Try again in a few minutes for real-time data."""
             else:
                 price_fmt = f"${current_price:,.2f}"
 
-            current_time = datetime.now.strftime('%H:%M:%S UTC')
+            current_time = datetime.now().strftime('%H:%M:%S UTC')
 
             message = f"""📊 **FUTURES ANALYSIS {symbol} - {timeframe.upper()} (SnD Enhanced)**
 

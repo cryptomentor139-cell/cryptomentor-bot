@@ -10,7 +10,7 @@ load_dotenv()
 
 # Add missing imports
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode
 
 from database import Database
@@ -45,16 +45,16 @@ logger = logging.getLogger(__name__)
 
 class TelegramBot:
     def __init__(self):
-        # Get bot token from environment - try multiple possible keys
-        self.token = os.getenv('TELEGRAM_BOT_TOKEN') or os.getenv('BOT_TOKEN')
-        
+        # Get bot token from environment - try multiple possible keys including 'TOKEN'
+        self.token = os.getenv('TOKEN') or os.getenv('TELEGRAM_BOT_TOKEN') or os.getenv('BOT_TOKEN')
+
         if not self.token:
             # Debug: Show what environment variables are available
             logger.debug("Available environment variables:")
             for key in os.environ.keys():
-                if 'BOT' in key.upper() or 'TELEGRAM' in key.upper():
+                if 'BOT' in key.upper() or 'TELEGRAM' in key.upper() or 'TOKEN' in key.upper():
                     logger.debug(f"  {key} = {'SET' if os.environ[key] else 'EMPTY'}")
-        
+
         logger.debug(f"Bot token found: {'YES' if self.token else 'NO'}")
 
         # Get admin ID with better error handling
@@ -80,7 +80,7 @@ class TelegramBot:
         # Validate token before creating application
         if not self.token:
             logger.error("❌ TELEGRAM_BOT_TOKEN not found!")
-            logger.error("💡 Please set TELEGRAM_BOT_TOKEN in Replit Secrets")
+            logger.error("💡 Please set TOKEN in Replit Secrets")
             logger.error("📝 Go to Secrets tab and add your bot token")
             sys.exit(1)
 
@@ -103,7 +103,7 @@ class TelegramBot:
             except Exception as cleanup_error:
                 print(f"⚠️ Cleanup warning: {cleanup_error}")
 
-            # Add command handlers
+            # Add command handlers with proper async functions
             self.application.add_handler(CommandHandler("start", self.start_command))
             self.application.add_handler(CommandHandler("help", self.help_command))
             self.application.add_handler(CommandHandler("price", self.price_command))
@@ -150,21 +150,21 @@ class TelegramBot:
             print(f"🌍 Environment: {mode_text}")
             print(f"🔑 API Status: CN=✅, BIN=✅, NEWS=✅ (CoinAPI Primary + Binance Futures + CryptoNews)")
             print("🚀 Starting bot polling with CoinAPI integration...")
-            
+
             # Test bot connection before starting with shorter timeout
             try:
                 print("🔄 Testing bot connection...")
-                
+
                 # Use shorter timeout for deployment environment
                 bot_info = await asyncio.wait_for(
                     self.application.bot.get_me(), 
                     timeout=5.0
                 )
-                
+
                 print(f"✅ Bot connected successfully: @{bot_info.username}")
                 print(f"📝 Bot ID: {bot_info.id}")
                 print(f"🤖 Bot can join groups: {bot_info.can_join_groups}")
-                
+
             except asyncio.TimeoutError:
                 print("⚠️ Bot connection test timed out - continuing to polling...")
                 logger.warning("Bot connection test timed out, starting polling anyway")
@@ -188,16 +188,16 @@ class TelegramBot:
             # Start the bot with optimized polling for deployment
             print("✅ Bot is now running and polling for updates...")
             print("🎯 Waiting for Telegram messages...")
-            
+
             try:
                 # Initialize the application
                 await self.application.initialize()
                 print("✅ Application initialized")
-                
+
                 # Start the application
                 await self.application.start()
                 print("✅ Application started")
-                
+
                 # Start polling with optimized settings for deployment
                 await self.application.updater.start_polling(
                     poll_interval=1.0,         # Poll every 1 second
@@ -210,23 +210,23 @@ class TelegramBot:
                     allowed_updates=['message', 'callback_query']  # Only handle these updates
                 )
                 print("🚀 Bot polling started successfully!")
-                
+
                 # Keep the bot running
                 import signal
-                
+
                 def signal_handler(signum, frame):
                     print(f"\n🛑 Received signal {signum}, stopping bot...")
                     raise KeyboardInterrupt
-                
+
                 signal.signal(signal.SIGINT, signal_handler)
                 signal.signal(signal.SIGTERM, signal_handler)
-                
+
                 # Keep running until interrupted
                 try:
                     await self.application.updater.idle()
                 except KeyboardInterrupt:
                     print("🛑 Bot stopped by interrupt signal")
-                    
+
             except Exception as polling_error:
                 print(f"❌ Polling error: {polling_error}")
                 logger.error(f"Polling error: {polling_error}")
@@ -299,7 +299,7 @@ class TelegramBot:
             except Exception as e:
                 logger.error(f"Error during bot shutdown: {e}")
 
-    async def start_command(self, update: Update, context: CallbackContext):
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command with enhanced user persistence"""
         user = update.effective_user
         print(f"🎯 /start command received from user {user.id if user else 'Unknown'}")
@@ -500,7 +500,7 @@ class TelegramBot:
 • Supply & Demand analysis untuk futures trading
 • Data real-time dari CoinAPI (bukan simulasi)
 
-**Semua data real-time dari CoinAPI & Binance API!**"""
+**Semua data real-time dari CoinAPI & Binance APIs!**"""
 
         else:
             welcome_text = f"""🎉 **Welcome to CryptoMentor AI, {user.first_name}!**
@@ -541,7 +541,7 @@ class TelegramBot:
 
         await update.message.reply_text(welcome_text, parse_mode=ParseMode.MARKDOWN)
 
-    async def help_command(self, update: Update, context: CallbackContext):
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command"""
         user_id = update.effective_user.id
         print(f"🎯 /help command received from user {user_id}")
@@ -612,7 +612,7 @@ class TelegramBot:
 - **SnD Analysis**: Internal algorithm + Binance candlesticks"""
         await update.message.reply_text(help_text, parse_mode='Markdown')
 
-    async def price_command(self, update: Update, context: CallbackContext):
+    async def price_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /price command with CoinAPI real-time data"""
         print(f"🎯 /price command received from user {update.effective_user.id}")
         
@@ -703,7 +703,7 @@ class TelegramBot:
 
         await loading_msg.edit_text(message, parse_mode='Markdown')
 
-    async def analyze_command(self, update: Update, context: CallbackContext):
+    async def analyze_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /analyze command - comprehensive analysis with CoinMarketCap integration"""
         # Check if user needs restart
         if await self._check_user_restart_required(update):
@@ -779,7 +779,7 @@ class TelegramBot:
             await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
             print(f"Error in analyze command: {e}")
 
-    async def market_command(self, update: Update, context: CallbackContext):
+    async def market_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /market command with CoinMarketCap integration"""
         # Check if user needs restart
         if await self._check_user_restart_required(update):
@@ -854,7 +854,7 @@ class TelegramBot:
             import traceback
             traceback.print_exc()
 
-    async def futures_signals_command(self, update: Update, context: CallbackContext):
+    async def futures_signals_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /futures_signals command with SnD analysis and enhanced debugging"""
         user_id = update.message.from_user.id
         credits = self.db.get_user_credits(user_id)
@@ -1010,7 +1010,7 @@ class TelegramBot:
             import traceback
             traceback.print_exc()
 
-    async def futures_command(self, update: Update, context: CallbackContext):
+    async def futures_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /futures command with SnD timeframe selection"""
         if not context.args:
             await update.message.reply_text("❌ Gunakan format: `/futures <symbol>`\nContoh: `/futures btc`", parse_mode='Markdown')
@@ -1047,7 +1047,7 @@ class TelegramBot:
             parse_mode='Markdown'
         )
 
-    async def handle_callback_query(self, update: Update, context: CallbackContext):
+    async def handle_callback_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle callback queries from inline keyboards"""
         query = update.callback_query
         try:
@@ -1191,7 +1191,7 @@ class TelegramBot:
         except Exception as e:
             return f"❌ Error formatting SnD analysis: {str(e)}"
 
-    async def credits_command(self, update: Update, context: CallbackContext):
+    async def credits_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /credits command"""
         user_id = update.message.from_user.id
         credits = self.db.get_user_credits(user_id)
@@ -1255,11 +1255,11 @@ Terima kasih telah menjadi member premium!"""
 - Auto SnD signals (Lifetime users only)
 - Priority support
 
-**Gunakan credit dengan bijak!**"""
+Gunakan credit dengan bijak!"""
         await update.message.reply_text(message, parse_mode='Markdown')
 
     # Auto Signals Admin Commands
-    async def auto_signals_status_command(self, update: Update, context: CallbackContext):
+    async def auto_signals_status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /auto_signals_status command - Admin only"""
         user_id = update.message.from_user.id
 
@@ -1291,7 +1291,7 @@ Terima kasih telah menjadi member premium!"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def start_auto_signals_command(self, update: Update, context: CallbackContext):
+    async def start_auto_signals_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start_auto_signals command - Admin only"""
         user_id = update.message.from_user.id
 
@@ -1319,7 +1319,7 @@ Terima kasih telah menjadi member premium!"""
             parse_mode='Markdown'
         )
 
-    async def stop_auto_signals_command(self, update: Update, context: CallbackContext):
+    async def stop_auto_signals_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /stop_auto_signals command - Admin only"""
         user_id = update.message.from_user.id
 
@@ -1343,7 +1343,7 @@ Terima kasih telah menjadi member premium!"""
     # Rest of the existing methods (portfolio, subscribe, referral, admin commands, etc.)
     # I'll include the essential ones for functionality
 
-    async def portfolio_command(self, update: Update, context: CallbackContext):
+    async def portfolio_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /portfolio command"""
         user_id = update.message.from_user.id
         portfolio = self.db.get_user_portfolio(user_id)
@@ -1379,7 +1379,7 @@ Harga akan diambil real-time dari CoinAPI."""
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def add_coin_command(self, update: Update, context: CallbackContext):
+    async def add_coin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /add_coin command"""
         if len(context.args) < 2:
             await update.message.reply_text("❌ Gunakan format: `/add_coin <symbol> <amount>`\nContoh: `/add_coin btc 0.5`")
@@ -1400,7 +1400,7 @@ Harga akan diambil real-time dari CoinAPI."""
         message = f"✅ Berhasil menambahkan {amount} {symbol} ke portfolio Anda!\n\nHarga akan diupdate real-time dari CoinAPI saat Anda cek `/portfolio`."
         await update.message.reply_text(message)
 
-    async def subscribe_command(self, update: Update, context: CallbackContext):
+    async def subscribe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /subscribe command"""
         user_id = update.message.from_user.id
         username = update.message.from_user.username or "Tidak ada username"
@@ -1483,7 +1483,7 @@ Pastikan menyertakan User ID (`{user_id}`) dan paket yang dipilih untuk aktivasi
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def referral_command(self, update: Update, context: CallbackContext):
+    async def referral_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /referral command with dual system"""
         user_id = update.message.from_user.id
         username = update.message.from_user.username or "no_username"
@@ -1591,7 +1591,7 @@ Gunakan `/subscribe` untuk upgrade!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def language_command(self, update: Update, context: CallbackContext):
+    async def language_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /language command"""
         keyboard = [
             [InlineKeyboardButton("🇮🇩 Bahasa Indonesia", callback_data='lang_id')],
@@ -1605,7 +1605,7 @@ Gunakan `/subscribe` untuk upgrade!
             parse_mode='Markdown'
         )
 
-    async def handle_ask_ai(self, update: Update, context: CallbackContext):
+    async def handle_ask_ai(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /ask_ai command - Free AI questions"""
         if not context.args:
             await update.message.reply_text(
@@ -1635,7 +1635,7 @@ Gunakan `/subscribe` untuk upgrade!
             await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
             print(f"Error in ask_ai command: {e}")
 
-    async def handle_message(self, update: Update, context: CallbackContext):
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle regular text messages"""
         text = update.message.text.lower().strip()
         user_id = update.message.from_user.id
@@ -1706,7 +1706,7 @@ Gunakan `/subscribe` untuk upgrade!
         return False
 
     # Essential admin commands
-    async def admin_command(self, update: Update, context: CallbackContext):
+    async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /admin command"""
         user_id = update.message.from_user.id
 
@@ -1752,7 +1752,7 @@ Gunakan `/subscribe` untuk upgrade!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def grant_premium_command(self, update: Update, context: CallbackContext):
+    async def grant_premium_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /grant_premium command"""
         user_id = update.message.from_user.id
 
@@ -1833,7 +1833,7 @@ Gunakan `/subscribe` untuk upgrade!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def grant_credits_command(self, update: Update, context: CallbackContext):
+    async def grant_credits_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /grant_credits command"""
         user_id = update.message.from_user.id
 
@@ -1892,7 +1892,7 @@ Gunakan `/subscribe` untuk upgrade!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def revoke_premium_command(self, update: Update, context: CallbackContext):
+    async def revoke_premium_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /revoke_premium command"""
         user_id = update.message.from_user.id
 
@@ -1952,7 +1952,7 @@ Gunakan `/subscribe` untuk upgrade!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def fix_all_credits_command(self, update: Update, context: CallbackContext):
+    async def fix_all_credits_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /fix_all_credits command"""
         user_id = update.message.from_user.id
 
@@ -1987,7 +1987,7 @@ Gunakan `/subscribe` untuk upgrade!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def broadcast_welcome_command(self, update: Update, context: CallbackContext):
+    async def broadcast_welcome_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /broadcast_welcome command"""
         user_id = update.message.from_user.id
 
@@ -2021,7 +2021,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
             parse_mode='Markdown'
         )
 
-    async def recovery_stats_command(self, update: Update, context: CallbackContext):
+    async def recovery_stats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /recovery_stats command"""
         user_id = update.message.from_user.id
 
@@ -2060,7 +2060,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def check_admin_command(self, update: Update, context: CallbackContext):
+    async def check_admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /check_admin command"""
         user_id = update.message.from_user.id
 
@@ -2077,7 +2077,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def restart_command(self, update: Update, context: CallbackContext):
+    async def restart_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /restart command"""
         user_id = update.message.from_user.id
 
@@ -2102,7 +2102,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
         import sys
         sys.exit(0)
 
-    async def refresh_credits_command(self, update: Update, context: CallbackContext):
+    async def refresh_credits_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /refresh_credits command"""
         user_id = update.message.from_user.id
 
@@ -2138,7 +2138,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def premium_earnings_command(self, update: Update, context: CallbackContext):
+    async def premium_earnings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /premium_earnings command"""
         user_id = update.message.from_user.id
         is_premium = self.db.is_user_premium(user_id)
@@ -2192,7 +2192,7 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def grant_package_command(self, update: Update, context: CallbackContext):
+    async def grant_package_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /grant_package command"""
         user_id = update.message.from_user.id
 
@@ -2288,7 +2288,7 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def broadcast_command(self, update: Update, context: CallbackContext):
+    async def broadcast_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /broadcast command"""
         user_id = update.message.from_user.id
 
@@ -2309,7 +2309,7 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
             parse_mode='Markdown'
         )
 
-    async def confirm_broadcast_command(self, update: Update, context: CallbackContext):
+    async def confirm_broadcast_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /confirm_broadcast command"""
         user_id = update.message.from_user.id
 
@@ -2355,7 +2355,7 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
 
         await update.message.reply_text(f"✅ Broadcast selesai! Berhasil dikirim ke {success_count}/{len(all_users)} users.")
 
-    async def cancel_broadcast_command(self, update: Update, context: CallbackContext):
+    async def cancel_broadcast_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /cancel_broadcast command"""
         user_id = update.message.from_user.id
 
