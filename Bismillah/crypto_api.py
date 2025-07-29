@@ -1321,6 +1321,361 @@ class CryptoAPI:
         """Get all available futures symbols"""
         return self.provider.get_tickers()
 
+    def analyze_supply_demand(self, symbol, timeframe='1h'):
+        """Analyze Supply & Demand zones for trading signals"""
+        try:
+            # Get candlestick data for SnD analysis
+            candlestick_data = self.get_binance_candlestick(symbol, timeframe, 100)
+            if 'error' in candlestick_data:
+                return {'error': f'Failed to get candlestick data: {candlestick_data["error"]}'}
+
+            candlesticks = candlestick_data.get('candlesticks', [])
+            if len(candlesticks) < 20:
+                return {'error': 'Insufficient data for SnD analysis'}
+
+            # Get current price from CoinAPI
+            current_price_data = self.get_coinapi_price(symbol, force_refresh=True)
+            if 'error' in current_price_data:
+                return {'error': f'Failed to get current price: {current_price_data["error"]}'}
+
+            current_price = current_price_data.get('price', 0)
+
+            # Analyze Supply & Demand zones
+            supply_zones = self._identify_supply_zones(candlesticks, current_price)
+            demand_zones = self._identify_demand_zones(candlesticks, current_price)
+
+            # Generate trading signals
+            signals = self._generate_snd_signals(supply_zones, demand_zones, current_price, candlesticks)
+
+            # Calculate market structure
+            market_structure = self._analyze_market_structure(candlesticks)
+
+            # Calculate trend score
+            trend_score = self._calculate_trend_score(candlesticks)
+
+            # Overall confidence assessment
+            confidence_score = self._calculate_snd_confidence(signals, supply_zones, demand_zones, market_structure)
+
+            return {
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'current_price': current_price,
+                'supply_zones': supply_zones,
+                'demand_zones': demand_zones,
+                'signals': signals,
+                'market_structure': market_structure,
+                'trend_score': trend_score,
+                'confidence_score': confidence_score,
+                'analysis_time': datetime.now().isoformat(),
+                'source': 'binance_coinapi_snd'
+            }
+
+        except Exception as e:
+            return {'error': f'SnD analysis failed: {str(e)}'}
+
+    def _identify_supply_zones(self, candlesticks, current_price):
+        """Identify supply zones from candlestick data"""
+        supply_zones = []
+        
+        for i in range(2, len(candlesticks) - 2):
+            candle = candlesticks[i]
+            prev_candle = candlesticks[i-1]
+            next_candle = candlesticks[i+1]
+            
+            # Look for rejection patterns (long upper wicks)
+            body_size = abs(candle['close'] - candle['open'])
+            upper_wick = candle['high'] - max(candle['open'], candle['close'])
+            
+            # Supply zone criteria
+            if (upper_wick > body_size * 1.5 and 
+                candle['high'] > prev_candle['high'] and 
+                candle['high'] > next_candle['high']):
+                
+                zone_high = candle['high']
+                zone_low = max(candle['open'], candle['close'])
+                distance_from_current = abs(zone_high - current_price) / current_price * 100
+                
+                # Only consider zones within reasonable distance
+                if distance_from_current < 10:  # Within 10%
+                    strength = self._calculate_zone_strength(candlesticks, i, 'supply')
+                    supply_zones.append({
+                        'high': zone_high,
+                        'low': zone_low,
+                        'strength': strength,
+                        'distance_percent': distance_from_current,
+                        'candle_index': i
+                    })
+        
+        # Sort by strength
+        supply_zones.sort(key=lambda x: x['strength'], reverse=True)
+        return supply_zones[:5]  # Return top 5
+
+    def _identify_demand_zones(self, candlesticks, current_price):
+        """Identify demand zones from candlestick data"""
+        demand_zones = []
+        
+        for i in range(2, len(candlesticks) - 2):
+            candle = candlesticks[i]
+            prev_candle = candlesticks[i-1]
+            next_candle = candlesticks[i+1]
+            
+            # Look for bounce patterns (long lower wicks)
+            body_size = abs(candle['close'] - candle['open'])
+            lower_wick = min(candle['open'], candle['close']) - candle['low']
+            
+            # Demand zone criteria
+            if (lower_wick > body_size * 1.5 and 
+                candle['low'] < prev_candle['low'] and 
+                candle['low'] < next_candle['low']):
+                
+                zone_low = candle['low']
+                zone_high = min(candle['open'], candle['close'])
+                distance_from_current = abs(current_price - zone_low) / current_price * 100
+                
+                # Only consider zones within reasonable distance
+                if distance_from_current < 10:  # Within 10%
+                    strength = self._calculate_zone_strength(candlesticks, i, 'demand')
+                    demand_zones.append({
+                        'high': zone_high,
+                        'low': zone_low,
+                        'strength': strength,
+                        'distance_percent': distance_from_current,
+                        'candle_index': i
+                    })
+        
+        # Sort by strength
+        demand_zones.sort(key=lambda x: x['strength'], reverse=True)
+        return demand_zones[:5]  # Return top 5
+
+    def _calculate_zone_strength(self, candlesticks, index, zone_type):
+        """Calculate the strength of a supply/demand zone"""
+        strength = 50  # Base strength
+        
+        # Volume factor (if available)
+        if 'volume' in candlesticks[index]:
+            volume = candlesticks[index]['volume']
+            avg_volume = sum(c.get('volume', 0) for c in candlesticks[max(0, index-10):index+10]) / 20
+            if volume > avg_volume * 1.5:
+                strength += 20
+        
+        # Confluence with moving averages
+        closes = [c['close'] for c in candlesticks[max(0, index-20):index+1]]
+        if len(closes) >= 20:
+            sma_20 = sum(closes) / len(closes)
+            zone_price = (candlesticks[index]['high'] + candlesticks[index]['low']) / 2
+            
+            if abs(zone_price - sma_20) / sma_20 < 0.02:  # Within 2% of SMA
+                strength += 15
+        
+        # Multiple touches (respected level)
+        touches = 0
+        zone_high = candlesticks[index]['high']
+        zone_low = candlesticks[index]['low']
+        
+        for i in range(max(0, index-10), min(len(candlesticks), index+10)):
+            if i == index:
+                continue
+                
+            candle = candlesticks[i]
+            if zone_type == 'supply':
+                if zone_low <= candle['high'] <= zone_high:
+                    touches += 1
+            else:  # demand
+                if zone_low <= candle['low'] <= zone_high:
+                    touches += 1
+        
+        strength += min(touches * 10, 30)  # Max 30 points for touches
+        return min(strength, 100)  # Cap at 100
+
+    def _generate_snd_signals(self, supply_zones, demand_zones, current_price, candlesticks):
+        """Generate trading signals based on SnD zones"""
+        signals = []
+        
+        # Get recent price action
+        recent_candles = candlesticks[-5:]
+        latest_candle = candlesticks[-1]
+        
+        # Check for long signals (near demand zones)
+        for zone in demand_zones:
+            if zone['distance_percent'] < 3:  # Within 3% of demand zone
+                entry_price = zone['high']
+                stop_loss = zone['low'] * 0.995  # 0.5% below zone
+                
+                # Calculate take profits
+                risk = entry_price - stop_loss
+                take_profit_1 = entry_price + (risk * 2)  # 2:1 RR
+                take_profit_2 = entry_price + (risk * 3)  # 3:1 RR
+                
+                confidence = self._calculate_signal_confidence(zone, current_price, 'LONG', recent_candles)
+                
+                if confidence > 60:
+                    signals.append({
+                        'direction': 'LONG',
+                        'entry_price': entry_price,
+                        'stop_loss': stop_loss,
+                        'take_profit_1': take_profit_1,
+                        'take_profit_2': take_profit_2,
+                        'confidence': confidence,
+                        'risk_reward_ratio': 2.0,
+                        'zone_strength': zone['strength'],
+                        'reason': f'Price near strong demand zone (strength: {zone["strength"]})',
+                        'entry_timing': 'Wait for bounce confirmation'
+                    })
+        
+        # Check for short signals (near supply zones)
+        for zone in supply_zones:
+            if zone['distance_percent'] < 3:  # Within 3% of supply zone
+                entry_price = zone['low']
+                stop_loss = zone['high'] * 1.005  # 0.5% above zone
+                
+                # Calculate take profits
+                risk = stop_loss - entry_price
+                take_profit_1 = entry_price - (risk * 2)  # 2:1 RR
+                take_profit_2 = entry_price - (risk * 3)  # 3:1 RR
+                
+                confidence = self._calculate_signal_confidence(zone, current_price, 'SHORT', recent_candles)
+                
+                if confidence > 60:
+                    signals.append({
+                        'direction': 'SHORT',
+                        'entry_price': entry_price,
+                        'stop_loss': stop_loss,
+                        'take_profit_1': take_profit_1,
+                        'take_profit_2': take_profit_2,
+                        'confidence': confidence,
+                        'risk_reward_ratio': 2.0,
+                        'zone_strength': zone['strength'],
+                        'reason': f'Price near strong supply zone (strength: {zone["strength"]})',
+                        'entry_timing': 'Wait for rejection confirmation'
+                    })
+        
+        # Sort by confidence
+        signals.sort(key=lambda x: x['confidence'], reverse=True)
+        return signals
+
+    def _calculate_signal_confidence(self, zone, current_price, direction, recent_candles):
+        """Calculate confidence for a trading signal"""
+        confidence = zone['strength']  # Base confidence from zone strength
+        
+        # Distance factor
+        distance = zone['distance_percent']
+        if distance < 1:
+            confidence += 20
+        elif distance < 2:
+            confidence += 10
+        elif distance < 3:
+            confidence += 5
+        
+        # Recent price action
+        if len(recent_candles) >= 3:
+            last_candle = recent_candles[-1]
+            prev_candle = recent_candles[-2]
+            
+            if direction == 'LONG':
+                # Look for bullish momentum
+                if last_candle['close'] > last_candle['open']:  # Green candle
+                    confidence += 10
+                if last_candle['close'] > prev_candle['close']:  # Higher close
+                    confidence += 5
+            else:  # SHORT
+                # Look for bearish momentum
+                if last_candle['close'] < last_candle['open']:  # Red candle
+                    confidence += 10
+                if last_candle['close'] < prev_candle['close']:  # Lower close
+                    confidence += 5
+        
+        return min(confidence, 95)  # Cap at 95%
+
+    def _analyze_market_structure(self, candlesticks):
+        """Analyze overall market structure"""
+        if len(candlesticks) < 20:
+            return {'pattern': 'insufficient_data', 'strength': 'unknown'}
+        
+        closes = [c['close'] for c in candlesticks[-20:]]
+        highs = [c['high'] for c in candlesticks[-20:]]
+        lows = [c['low'] for c in candlesticks[-20:]]
+        
+        # Simple trend analysis
+        recent_closes = closes[-5:]
+        earlier_closes = closes[-10:-5]
+        
+        recent_avg = sum(recent_closes) / len(recent_closes)
+        earlier_avg = sum(earlier_closes) / len(earlier_closes)
+        
+        trend_change = (recent_avg - earlier_avg) / earlier_avg * 100
+        
+        if trend_change > 2:
+            pattern = 'uptrend'
+            strength = 'strong' if trend_change > 5 else 'moderate'
+        elif trend_change < -2:
+            pattern = 'downtrend'
+            strength = 'strong' if trend_change < -5 else 'moderate'
+        else:
+            pattern = 'sideways'
+            strength = 'weak'
+        
+        return {
+            'pattern': pattern,
+            'strength': strength,
+            'trend_change_percent': trend_change
+        }
+
+    def _calculate_trend_score(self, candlesticks):
+        """Calculate trend score (-3 to +3)"""
+        if len(candlesticks) < 10:
+            return 0
+        
+        closes = [c['close'] for c in candlesticks[-10:]]
+        
+        # Count consecutive higher/lower closes
+        score = 0
+        for i in range(1, len(closes)):
+            if closes[i] > closes[i-1]:
+                score += 0.3
+            elif closes[i] < closes[i-1]:
+                score -= 0.3
+        
+        return max(-3, min(3, score))
+
+    def _calculate_snd_confidence(self, signals, supply_zones, demand_zones, market_structure):
+        """Calculate overall SnD analysis confidence"""
+        if not signals:
+            return 40  # Low confidence if no signals
+        
+        # Base confidence from best signal
+        best_signal = max(signals, key=lambda x: x['confidence'])
+        base_confidence = best_signal['confidence']
+        
+        # Market structure bonus
+        if market_structure['strength'] == 'strong':
+            base_confidence += 10
+        elif market_structure['strength'] == 'moderate':
+            base_confidence += 5
+        
+        # Zone quality bonus
+        total_zones = len(supply_zones) + len(demand_zones)
+        if total_zones >= 5:
+            base_confidence += 5
+        
+        # Quality zones (strength > 70)
+        quality_zones = len([z for z in supply_zones + demand_zones if z['strength'] > 70])
+        if quality_zones >= 2:
+            base_confidence += 10
+        
+        return min(base_confidence, 95)
+
+    def is_deployment_mode(self):
+        """Check if running in deployment mode"""
+        return (
+            os.getenv('REPLIT_DEPLOYMENT') == '1' or 
+            os.getenv('REPL_DEPLOYMENT') == '1' or
+            os.getenv('REPLIT_ENVIRONMENT') == 'deployment' or
+            os.path.exists('/tmp/repl_deployment_flag') or
+            bool(os.getenv('REPL_SLUG')) or
+            bool(os.getenv('REPL_DB_URL')) or
+            bool(os.getenv('REPL_OWNER'))
+        )
+
     def get_multiple_coinapi_prices(self, symbols):
         """Get prices for multiple symbols from CoinAPI"""
         prices_data = {}
