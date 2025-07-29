@@ -6,6 +6,20 @@ import signal
 import psutil
 import time
 
+#!/usr/bin/env python3
+"""Kill conflicting bot instances"""
+
+import os
+import sys
+import time
+
+try:
+    import psutil
+except ImportError:
+    print("❌ psutil not installed. Installing...")
+    os.system("pip install psutil")
+    import psutil
+
 def kill_bot_instances():
     """Kill all conflicting bot instances"""
     print("🔍 Mencari instance bot yang berjalan...")
@@ -43,10 +57,12 @@ def kill_bot_instances():
         print(f"✅ Berhasil menghentikan {killed_count} instance bot")
         print("⏳ Menunggu 3 detik untuk cleanup...")
         time.sleep(3)
-    else:
-        print("✅ Tidak ada instance bot lain yang berjalan")
+    elseprint("✅ Tidak ada instance bot lain yang berjalan")
     
-    print("🚀 Siap untuk menjalankan bot baru!")
+    print("🚀 Siap untuk menjalankan bot!")
+
+if __name__ == "__main__":
+    kill_bot_instances()kan bot baru!")
 
 if __name__ == "__main__":
     kill_bot_instances()

@@ -1441,7 +1441,7 @@ Gunakan `/subscribe` untuk upgrade!
         """Handle /language command"""
         keyboard = [
             [InlineKeyboardButton("🇮🇩 Bahasa Indonesia", callback_data='lang_id')],
-            [InlineKeyboardButton("🇺🇸 English", callback_File("en", callback_data='lang_en')]
+            [InlineKeyboardButton("🇺🇸 English", callback_data='lang_en')]
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)

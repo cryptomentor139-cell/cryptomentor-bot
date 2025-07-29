@@ -13,7 +13,7 @@ try:
     from database import Database
 except ImportError as e:
     print(f"❌ Cannot import Database: {e}")
-    sys.exit(1)
+    sys.exit(1)1)
 
 def fix_database_users():
     """Fix common database user issues"""
@@ -53,8 +53,38 @@ def fix_database_users():
         
         # Fix NULL credits
         if null_credits > 0:
-            db.cursor.execute("UPDATE users SET credits = 10 WHERE credits IS NULL")
+            db.cursor.execute("UPDATE users SET credits = 100 WHERE credits IS NULL")
             fixed_null_credits = db.cursor.rowcount
+            db.conn.commit()
+            print(f"✅ Fixed {fixed_null_credits} users with NULL credits")
+        
+        # Fix negative credits
+        if negative_credits > 0:
+            db.cursor.execute("UPDATE users SET credits = 10 WHERE credits < 0")
+            fixed_negative_credits = db.cursor.rowcount
+            db.conn.commit()
+            print(f"✅ Fixed {fixed_negative_credits} users with negative credits")
+        
+        # Delete users with NULL telegram_id
+        if null_telegram_id > 0:
+            db.cursor.execute("DELETE FROM users WHERE telegram_id IS NULL OR telegram_id = 0")
+            deleted_null_users = db.cursor.rowcount
+            db.conn.commit()
+            print(f"✅ Deleted {deleted_null_users} users with NULL telegram_id")
+        
+        print("\n✅ Database fixes completed!")
+        
+        # Show final status
+        db.cursor.execute("SELECT COUNT(*) FROM users")
+        final_total = db.cursor.fetchone()[0]
+        print(f"📊 Final total users: {final_total}")
+        
+        db.close()
+        
+    except Exception as e:
+        print(f"❌ Error fixing database: {e}")
+        import traceback
+        traceback.print_exc()ts = db.cursor.rowcount
             print(f"✅ Fixed NULL credits: {fixed_null_credits} users given 10 credits")
         
         # Fix negative credits
@@ -155,6 +185,6 @@ if __name__ == "__main__":
     # Ask if user wants to create test user
     create_test = input("Create a test user to verify functionality? (y/n): ").lower().strip()
     if create_test == 'y':
-        create_test_user()
+        create_test_user()t_user()
     
     print("\n🎉 Database maintenance completed!")
