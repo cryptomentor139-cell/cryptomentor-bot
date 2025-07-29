@@ -8,6 +8,16 @@ from dotenv import load_dotenv
 # Load environment variables from .env file (if exists) and system environment
 load_dotenv()
 
+# Add missing imports
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+from telegram.constants import ParseMode
+
+from database import Database
+from crypto_api import CryptoAPI
+from ai_assistant import AIAssistant
+from snd_auto_signals import initialize_auto_signals
+
 # Enhanced deployment detection with verification
 deployment_env_checks = {
     'REPLIT_DEPLOYMENT': os.getenv('REPLIT_DEPLOYMENT') == '1',
@@ -32,15 +42,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
-from telegram.constants import ParseMode
-
-from database import Database
-from crypto_api import CryptoAPI
-from ai_assistant import AIAssistant
-from snd_auto_signals import initialize_auto_signals
 
 class TelegramBot:
     def __init__(self):
@@ -140,6 +141,14 @@ class TelegramBot:
             print(f"🌍 Environment: {mode_text}")
             print(f"🔑 API Status: CN=✅, BIN=✅, NEWS=✅ (CoinAPI Primary + Binance Futures + CryptoNews)")
             print("🚀 Starting bot polling with CoinAPI integration...")
+            
+            # Test bot connection before starting
+            try:
+                bot_info = await self.application.bot.get_me()
+                print(f"✅ Bot connected successfully: @{bot_info.username}")
+            except Exception as e:
+                print(f"❌ Bot connection test failed: {e}")
+                raise
 
             # Initialize and start auto signals system
             try:
@@ -155,15 +164,19 @@ class TelegramBot:
 
             # Start the bot with optimized polling for deployment
             print("✅ Bot is now running and polling for updates...")
-            await self.application.run_polling(
-                drop_pending_updates=True,  # Drop old updates on start
-                pool_timeout=60,           # Longer pool timeout for deployment
-                read_timeout=60,           # Longer read timeout 
-                write_timeout=60,          # Longer write timeout
-                connect_timeout=60,        # Longer connect timeout
-                allowed_updates=['message', 'callback_query'],  # Only handle needed updates
-                close_loop=False           # Don't close event loop
-            )
+            try:
+                await self.application.run_polling(
+                    drop_pending_updates=True,  # Drop old updates on start
+                    pool_timeout=60,           # Longer pool timeout for deployment
+                    read_timeout=60,           # Longer read timeout 
+                    write_timeout=60,          # Longer write timeout
+                    connect_timeout=60,        # Longer connect timeout
+                    allowed_updates=['message', 'callback_query'],  # Only handle needed updates
+                    close_loop=False           # Don't close event loop
+                )
+            except Exception as polling_error:
+                print(f"❌ Polling error: {polling_error}")
+                raise
 
         except Exception as e:
             # Handle specific Telegram conflicts
@@ -235,6 +248,7 @@ class TelegramBot:
     async def start_command(self, update: Update, context: CallbackContext):
         """Handle /start command with enhanced user persistence"""
         user = update.effective_user
+        print(f"🎯 /start command received from user {user.id if user else 'Unknown'}")
 
         try:
             # Validate user data
@@ -471,6 +485,7 @@ class TelegramBot:
 
     async def help_command(self, update: Update, context: CallbackContext):
         """Handle /help command"""
+        print(f"🎯 /help command received from user {update.effective_user.id}")
         help_text = """🤖 **CryptoMentor AI Bot - Panduan Lengkap (CoinMarketCap Edition)**
 
 ⭐ **BEST COMMANDS untuk Pemula:**
@@ -539,6 +554,8 @@ class TelegramBot:
 
     async def price_command(self, update: Update, context: CallbackContext):
         """Handle /price command with CoinAPI real-time data"""
+        print(f"🎯 /price command received from user {update.effective_user.id}")
+        
         # Check if user needs restart
         if await self._check_user_restart_required(update):
             return
@@ -970,8 +987,9 @@ class TelegramBot:
             parse_mode='Markdown'
         )
 
-    async def handle_callback_query(self, query: Update):
+    async def handle_callback_query(self, update: Update, context: CallbackContext):
         """Handle callback queries from inline keyboards"""
+        query = update.callback_query
         try:
             await query.answer()
             callback_data = query.data
