@@ -1173,7 +1173,7 @@ class TelegramBot:
 • Exit jika market structure berubah"""
 
                         # Double-check that signal is clear
-                        if not ('LONG' in analysis_text or 'SHORT' in analysis_text'):
+                        if not ('LONG' in analysis_text or 'SHORT' in analysis_text):
                             print(f"⚠️ Still no clear signal, adding MANDATORY recommendation")
                             analysis_text += f"""
 
@@ -1413,7 +1413,7 @@ Gunakan credit dengan bijak!"""
         await update.message.reply_text(message, parse_mode='Markdown')
 
     async def start_auto_signals_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start_auto_signals command - Admin only"""
+        """Handle /start_auto_signals command - Admin only""\"
         user_id = update.message.from_user.id
 
         if user_id != self.admin_id:
