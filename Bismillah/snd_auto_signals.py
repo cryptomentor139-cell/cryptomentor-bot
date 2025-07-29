@@ -22,9 +22,13 @@ class SnDAutoSignals:
         ]
 
         self.scan_interval = 7200  # 2 hours
-        self.min_confidence = 65   # Higher confidence for auto signals
+        self.min_confidence = 80   # High confidence for auto signals (changed from 65 to 80)
         self.is_running = False
         self.last_scan_time = 0
+        
+        # Anti-spam system
+        self.sent_signals = {}  # Track sent signals: {symbol: {direction: timestamp}}
+        self.signal_cooldown = 14400  # 4 hours cooldown per symbol per direction
 
         print(f"🎯 Auto SnD Signals initialized with {len(self.target_symbols)} altcoins")
         print(f"⏰ Scan interval: {self.scan_interval // 60} minutes")
@@ -79,8 +83,19 @@ class SnDAutoSignals:
                     signal = await self._get_enhanced_signal(symbol)
 
                     if signal and signal.get('confidence', 0) >= self.min_confidence:
-                        signals.append(signal)
-                        print(f"✅ Signal generated for {symbol} (confidence: {signal.get('confidence')}%)")
+                        # Check for signal duplication/spam
+                        if self._is_signal_valid_and_new(signal):
+                            signals.append(signal)
+                            print(f"[AUTO-SIGNAL SND] ✅ Valid signal generated for {symbol} (confidence: {signal.get('confidence')}%)")
+                            print(f"[AUTO-SIGNAL SND] Entry Detected on {symbol} - Direction: {signal['direction']} - Confidence: {signal['confidence']:.1f}%")
+                            
+                            # Mark signal as sent to prevent spam
+                            self._mark_signal_as_sent(signal)
+                        else:
+                            print(f"[AUTO-SIGNAL SND] ⚠️ Signal for {symbol} rejected due to cooldown or duplication")
+                    else:
+                        confidence = signal.get('confidence', 0) if signal else 0
+                        print(f"[AUTO-SIGNAL SND] ❌ Signal for {symbol} rejected - confidence: {confidence:.1f}% < required {self.min_confidence}%")
 
                     # Rate limiting
                     await asyncio.sleep(2)
@@ -135,42 +150,110 @@ class SnDAutoSignals:
             return None
 
     async def _send_signals_to_users(self, signals, eligible_users):
-        """Send auto signals to eligible users"""
+        """Send auto signals to eligible users with enhanced logging"""
         try:
+            print(f"[AUTO-SIGNAL SND] Starting signal broadcast to {len(eligible_users)} eligible users")
+            
             # Format the signals message
             message = self._format_auto_signals_message(signals)
 
             # Send to each eligible user
             sent_count = 0
-            for user_id in eligible_users:
+            for user_data in eligible_users:
                 try:
+                    # Handle different user data formats
+                    if isinstance(user_data, dict):
+                        user_id = user_data.get('telegram_id') or user_data.get('user_id')
+                        user_name = user_data.get('first_name', 'User')
+                    elif isinstance(user_data, (list, tuple)) and len(user_data) > 0:
+                        user_id = user_data[0]
+                        user_name = user_data[1] if len(user_data) > 1 else 'User'
+                    elif isinstance(user_data, int):
+                        user_id = user_data
+                        user_name = 'User'
+                    else:
+                        print(f"[AUTO-SIGNAL SND] ❌ Invalid user format: {user_data}")
+                        continue
+
+                    if not user_id:
+                        print(f"[AUTO-SIGNAL SND] ❌ No user_id found for user: {user_data}")
+                        continue
+
                     await self.bot.application.bot.send_message(
                         chat_id=user_id,
                         text=message,
                         parse_mode='Markdown'
                     )
                     sent_count += 1
-                    await asyncio.sleep(1)  # Rate limiting
+                    print(f"[AUTO-SIGNAL SND] ✅ Signal sent to user {user_id} ({user_name})")
+                    
+                    # Log each signal sent
+                    for signal in signals:
+                        print(f"[AUTO-SIGNAL SND] Entry Detected on {signal['symbol']} - Direction: {signal['direction']} - Confidence: {signal['confidence']:.1f}%")
+                    
+                    await asyncio.sleep(0.5)  # Rate limiting
 
                 except Exception as e:
-                    print(f"❌ Failed to send to user {user_id}: {e}")
+                    print(f"[AUTO-SIGNAL SND] ❌ Failed to send to user {user_id}: {e}")
 
-            print(f"✅ Successfully sent auto signals to {sent_count}/{len(eligible_users)} users")
+            print(f"[AUTO-SIGNAL SND] ✅ Successfully sent auto signals to {sent_count}/{len(eligible_users)} users")
 
         except Exception as e:
-            print(f"Error sending signals to users: {e}")
+            print(f"[AUTO-SIGNAL SND] ❌ Error sending signals to users: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _is_signal_valid_and_new(self, signal):
+        """Check if signal is valid and not spam"""
+        try:
+            symbol = signal['symbol']
+            direction = signal['direction']
+            current_time = time.time()
+            
+            # Check if we've sent this signal recently
+            if symbol in self.sent_signals:
+                if direction in self.sent_signals[symbol]:
+                    last_sent = self.sent_signals[symbol][direction]
+                    if current_time - last_sent < self.signal_cooldown:
+                        remaining_time = self.signal_cooldown - (current_time - last_sent)
+                        print(f"[AUTO-SIGNAL SND] ⏰ Cooldown active for {symbol} {direction}: {remaining_time/3600:.1f}h remaining")
+                        return False
+            
+            print(f"[AUTO-SIGNAL SND] ✅ Signal validation passed for {symbol} {direction}")
+            return True
+            
+        except Exception as e:
+            print(f"[AUTO-SIGNAL SND] ❌ Error validating signal: {e}")
+            return False
+    
+    def _mark_signal_as_sent(self, signal):
+        """Mark signal as sent to prevent spam"""
+        try:
+            symbol = signal['symbol']
+            direction = signal['direction']
+            current_time = time.time()
+            
+            if symbol not in self.sent_signals:
+                self.sent_signals[symbol] = {}
+            
+            self.sent_signals[symbol][direction] = current_time
+            print(f"[AUTO-SIGNAL SND] 📝 Marked {symbol} {direction} as sent at {datetime.now().strftime('%H:%M:%S')}")
+            
+        except Exception as e:
+            print(f"[AUTO-SIGNAL SND] ❌ Error marking signal as sent: {e}")
 
     def _format_auto_signals_message(self, signals):
         """Format auto signals message"""
         try:
             current_time = datetime.now().strftime('%H:%M:%S WIB')
 
-            message = f"""🚨 **AUTO SnD SIGNALS ALERT**
+            message = f"""🚨 **AUTO SnD SIGNALS ALERT** (High Confidence Only)
 
 🎯 **Auto-Generated**: {current_time}
-📊 **Signals Found**: {len(signals)} high-confidence setups
+📊 **Signals Found**: {len(signals)} ultra-high confidence setups
 🔍 **Scan**: {len(self.target_symbols)} altcoins analyzed
-⚡ **Min Confidence**: {self.min_confidence}%+
+⚡ **Min Confidence**: {self.min_confidence}%+ (Ultra-High Only)
+🛡️ **Anti-Spam**: Active (4h cooldown per coin/direction)
 
 """
 
@@ -394,8 +477,13 @@ class SnDAutoSignals:
             reward = abs(tp2 - entry_price)
             rr_ratio = reward / risk if risk > 0 else 2.0
 
-            # Final confidence (auto signals need minimum 70%)
-            final_confidence = min(88, max(70, base_confidence))
+            # Final confidence (auto signals need minimum 80% for reduced spam)
+            final_confidence = min(95, max(80, base_confidence))
+            
+            # Only return signal if it meets our strict confidence requirement
+            if final_confidence < self.min_confidence:
+                print(f"[AUTO-SIGNAL SND] ❌ Signal rejected for {symbol}: confidence {final_confidence:.1f}% < required {self.min_confidence}%")
+                return None
 
             return {
                 'symbol': symbol,
