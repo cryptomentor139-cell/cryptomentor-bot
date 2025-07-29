@@ -1158,7 +1158,6 @@ class CryptoAPI:
             import traceback
             traceback.print_exc()
             return {'error': f"CoinAPI market overview error: {str(e)}"}
-</```python
 
     def test_coinapi_connectivity(self, symbol='BTC'):
         """Test CoinAPI connection and response validation"""
@@ -1205,7 +1204,164 @@ class CryptoAPI:
 
         return test_results
 
-    # === PRICE METHODS (BINANCE ONLY) ===
+    def analyze_supply_demand(self, symbol, timeframe='1h'):
+        """Analyze Supply & Demand zones with CoinAPI + Binance integration"""
+        try:
+            # Get price data from CoinAPI
+            price_data = self.get_coinapi_price(symbol, force_refresh=True)
+            if 'error' in price_data:
+                return {'error': f'Cannot get price data for {symbol}'}
+                
+            current_price = price_data['price']
+            
+            # Get Binance futures data for additional context
+            futures_data = self.get_comprehensive_futures_data(symbol)
+            
+            # Simple SnD analysis based on price action and futures data
+            snd_analysis = {
+                'analysis_successful': True,
+                'snd_score': {
+                    'score': 50,  # Default neutral
+                    'bias': 'Balanced',
+                    'confidence': 'Medium'
+                },
+                'signals': [],
+                'support_levels': [],
+                'resistance_levels': []
+            }
+            
+            # Get long/short ratio for sentiment
+            if 'error' not in futures_data:
+                ls_data = futures_data.get('long_short_ratio_data', {})
+                if 'error' not in ls_data:
+                    long_ratio = ls_data.get('long_ratio', 50)
+                    
+                    # Adjust SnD score based on sentiment
+                    if long_ratio > 70:  # Overcrowded longs
+                        snd_analysis['snd_score']['score'] = 30  # Bearish
+                        snd_analysis['snd_score']['bias'] = 'Bearish'
+                        snd_analysis['signals'].append({
+                            'type': 'SELL',
+                            'confidence': 75,
+                            'reason': f'Overcrowded longs ({long_ratio:.1f}%)'
+                        })
+                    elif long_ratio < 30:  # Overcrowded shorts
+                        snd_analysis['snd_score']['score'] = 70  # Bullish
+                        snd_analysis['snd_score']['bias'] = 'Bullish'
+                        snd_analysis['signals'].append({
+                            'type': 'BUY',
+                            'confidence': 75,
+                            'reason': f'Overcrowded shorts ({long_ratio:.1f}%)'
+                        })
+            
+            # Create basic support/resistance levels
+            snd_analysis['support_levels'] = [
+                {'price': current_price * 0.95, 'strength': 60},
+                {'price': current_price * 0.90, 'strength': 80}
+            ]
+            snd_analysis['resistance_levels'] = [
+                {'price': current_price * 1.05, 'strength': 60},
+                {'price': current_price * 1.10, 'strength': 80}
+            ]
+            
+            return snd_analysis
+            
+        except Exception as e:
+            return {'error': f'SnD analysis failed: {str(e)}'}
+
+    def get_crypto_news(self, limit=5):
+        """Get crypto news with fallback to enhanced mock data"""
+        try:
+            if self.cryptonews_key:
+                # Try real CryptoNews API
+                headers = {
+                    'Authorization': f'Bearer {self.cryptonews_key}',
+                    'Accept': 'application/json'
+                }
+                
+                response = requests.get(
+                    'https://api.cryptonews.net/v1/category',
+                    params={'auth_token': self.cryptonews_key, 'items': limit},
+                    headers=headers,
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    news_items = []
+                    
+                    for item in data.get('data', [])[:limit]:
+                        news_items.append({
+                            'title': item.get('title', ''),
+                            'description': item.get('text', ''),
+                            'url': item.get('news_url', ''),
+                            'published_at': item.get('date', ''),
+                            'source': 'cryptonews_api'
+                        })
+                    
+                    return news_items
+            
+            # Fallback to enhanced mock news
+            return self._get_enhanced_mock_news(limit)
+            
+        except Exception as e:
+            print(f"News API error: {e}")
+            return self._get_enhanced_mock_news(limit)
+
+    def _get_enhanced_mock_news(self, limit=5):
+        """Enhanced mock crypto news with realistic market context"""
+        mock_news = [
+            {
+                'title': 'Bitcoin Institutional Adoption Reaches New Heights',
+                'description': 'Major corporations continue adding BTC to treasury reserves as inflation hedge',
+                'url': 'https://example.com/news1',
+                'published_at': datetime.now().isoformat(),
+                'source': 'enhanced_mock'
+            },
+            {
+                'title': 'Ethereum Layer 2 Solutions See Record Activity',
+                'description': 'Polygon, Arbitrum, and Optimism process millions of transactions daily',
+                'url': 'https://example.com/news2',
+                'published_at': datetime.now().isoformat(),
+                'source': 'enhanced_mock'
+            },
+            {
+                'title': 'DeFi TVL Surpasses $100B Milestone Again',
+                'description': 'Decentralized finance protocols attract renewed institutional interest',
+                'url': 'https://example.com/news3',
+                'published_at': datetime.now().isoformat(),
+                'source': 'enhanced_mock'
+            },
+            {
+                'title': 'Central Bank Digital Currencies Gain Momentum',
+                'description': 'Multiple countries advance CBDC development and pilot programs',
+                'url': 'https://example.com/news4',
+                'published_at': datetime.now().isoformat(),
+                'source': 'enhanced_mock'
+            },
+            {
+                'title': 'NFT Market Shows Signs of Recovery',
+                'description': 'Blue-chip collections see increased trading volume and floor prices',
+                'url': 'https://example.com/news5',
+                'published_at': datetime.now().isoformat(),
+                'source': 'enhanced_mock'
+            }
+        ]
+        
+        return mock_news[:limit]
+
+    def _format_price_display(self, price):
+        """Format price for display based on value"""
+        if price >= 10000:
+            return f"${price:,.0f}"
+        elif price >= 1000:
+            return f"${price:,.2f}"
+        elif price >= 1:
+            return f"${price:.4f}"
+        else:
+            return f"${price:.8f}"
+
+    # === PRICE METHODS (COINAPI PRIMARY) ===
 
     def get_price(self, symbol, force_refresh=False):
         """Get price from CoinAPI with enhanced deployment detection"""
