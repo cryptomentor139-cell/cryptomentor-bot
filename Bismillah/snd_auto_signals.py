@@ -1,7 +1,6 @@
-
 import asyncio
-import logging
-from datetime import datetime, timedelta
+import time
+from datetime import datetime
 from crypto_api import CryptoAPI
 from database import Database
 
@@ -11,27 +10,34 @@ class SnDAutoSignals:
         self.crypto_api = CryptoAPI()
         self.db = Database()
         self.is_running = False
-        self.scan_interval = 3600  # 1 hour
-        
-        # Altcoins kecil dengan volume tinggi
+        self.scan_interval = 1800  # 30 minutes
+
+        # Enhanced altcoin list with high volume potential
         self.target_symbols = [
+            # Small/Medium cap with high volatility
             'ONDO', 'SEI', 'PEPE', 'MOODENG', 'SHIB', 'FLOKI', 
             'WIF', 'BONK', 'JUP', 'PYTH', 'RENDER', 'INJ', 
             'SUI', 'APT', 'OP', 'ARB', 'TIA', 'POPCAT', 
-            'PENDLE', 'EIGEN', 'DOGE', 'MATIC'
+            'PENDLE', 'EIGEN', 'DOGE', 'MATIC', 'FET', 'AGIX',
+            'GALA', 'SAND', 'MANA', 'AXS', 'CHZ', 'ENJ',
+            # Additional promising altcoins
+            'RUNE', 'KAVA', 'ALPHA', 'DYDX', 'GMX', 'PERP',
+            'CRV', 'CVX', 'LDO', 'RPL', 'FXS', 'FRAX'
         ]
-        
-        self.min_confidence = 75  # Minimum confidence level
-        
+
+        self.min_confidence = 70  # Minimum confidence level
+        self.last_scan_time = 0
+
     async def start_auto_scanner(self):
         """Start automatic SnD signal scanner"""
         if self.is_running:
             print("⚠️ Auto scanner already running")
             return
-            
+
         self.is_running = True
-        print(f"🚀 Starting SnD auto scanner for {len(self.target_symbols)} altcoins...")
-        
+        print(f"🚀 Starting enhanced SnD auto scanner for {len(self.target_symbols)} altcoins...")
+        print(f"📊 Scan interval: {self.scan_interval} seconds ({self.scan_interval/60:.1f} minutes)")
+
         while self.is_running:
             try:
                 await self.scan_and_send_signals()
@@ -39,314 +45,247 @@ class SnDAutoSignals:
             except Exception as e:
                 print(f"❌ Error in auto scanner: {e}")
                 await asyncio.sleep(300)  # Wait 5 minutes on error
-                
+
     async def stop_auto_scanner(self):
         """Stop automatic scanner"""
         self.is_running = False
-        print("🛑 SnD auto scanner stopped")
-        
+        print("🛑 Enhanced SnD auto scanner stopped")
+
     async def scan_and_send_signals(self):
         """Scan symbols and send high-confidence signals"""
-        print(f"🔍 Scanning {len(self.target_symbols)} altcoins for SnD signals...")
-        
+        scan_start = time.time()
+        print(f"🔍 Scanning {len(self.target_symbols)} altcoins for enhanced SnD signals...")
+
         high_confidence_signals = []
-        
+        total_scanned = 0
+
         for symbol in self.target_symbols:
             try:
-                signal = await self.analyze_snd_signal(symbol)
+                signal = await self.analyze_enhanced_snd_signal(symbol)
+                total_scanned += 1
+
                 if signal and signal['confidence'] >= self.min_confidence:
                     high_confidence_signals.append(signal)
-                    print(f"✅ High confidence signal found: {symbol} - {signal['confidence']}%")
-                    
+                    print(f"✅ High confidence signal found: {symbol} - {signal['confidence']:.1f}% ({signal['direction']})")
+
                 # Rate limiting
-                await asyncio.sleep(2)
-                
+                await asyncio.sleep(1)
+
             except Exception as e:
                 print(f"❌ Error analyzing {symbol}: {e}")
                 continue
-                
+
+        scan_duration = time.time() - scan_start
+        print(f"📊 Scan completed: {total_scanned}/{len(self.target_symbols)} coins analyzed in {scan_duration:.1f}s")
+
         if high_confidence_signals:
+            print(f"🎯 Found {len(high_confidence_signals)} high-confidence signals")
             await self.send_signals_to_eligible_users(high_confidence_signals)
         else:
             print("📊 No high-confidence signals found in this scan")
-            
-    async def analyze_snd_signal(self, symbol):
-        """Analyze SnD for a single symbol"""
+
+        self.last_scan_time = time.time()
+
+    async def analyze_enhanced_snd_signal(self, symbol):
+        """Analyze enhanced SnD for a single symbol"""
         try:
             # Get comprehensive data
-            snd_analysis = self.crypto_api.analyze_supply_demand(symbol)
+            snd_analysis = self.crypto_api.analyze_supply_demand(symbol, '1h')
             price_data = self.crypto_api.get_coinapi_price(symbol, force_refresh=True)
-            futures_data = self.crypto_api.get_binance_futures_price(symbol)
-            
+            futures_data = self.crypto_api.get_binance_long_short_ratio(symbol)
+
             if 'error' in snd_analysis or 'error' in price_data:
                 return None
-                
+
             current_price = price_data.get('price', 0)
-            if current_price <= 0:
-                return None
-                
-            # Extract SnD analysis
-            support_levels = snd_analysis.get('support_levels', [])
-            resistance_levels = snd_analysis.get('resistance_levels', [])
             signals = snd_analysis.get('signals', [])
-            
-            if not signals:
+            confidence_score = snd_analysis.get('confidence_score', 50)
+
+            if not signals or confidence_score < self.min_confidence:
                 return None
-                
-            # Find highest confidence signal
+
+            # Get the best signal
             best_signal = max(signals, key=lambda x: x.get('confidence', 0))
-            confidence = best_signal.get('confidence', 0)
-            
-            if confidence < self.min_confidence:
+
+            # Enhanced confidence calculation
+            enhanced_confidence = self._calculate_enhanced_confidence(
+                best_signal, snd_analysis, futures_data, current_price
+            )
+
+            if enhanced_confidence < self.min_confidence:
                 return None
-                
-            signal_type = best_signal.get('type', '').upper()
-            
-            # Calculate entry, TP, SL based on SnD levels
-            entry_price = current_price
-            
-            if signal_type == 'BUY':
-                # Find nearest support for S&D entry refinement
-                nearest_support = self._find_nearest_level(support_levels, current_price, 'below')
-                nearest_resistance = self._find_nearest_level(resistance_levels, current_price, 'above')
-                
-                if nearest_support and nearest_resistance:
-                    # Precise S&D entry at demand zone
-                    entry_price = nearest_support['price'] * 1.002  # Tight entry above support
-                    stop_loss = nearest_support['price'] * 0.998   # SL below support zone
-                    
-                    # Calculate 1:1 RR based on risk
-                    risk_amount = entry_price - stop_loss
-                    tp1 = entry_price + risk_amount                 # 1:1 RR
-                    tp2 = entry_price + (risk_amount * 1.2)         # 1:1.2 RR bonus
-                    
-                else:
-                    # Default S&D-style calculation with 1:1 RR
-                    entry_price = current_price * 0.998
-                    risk_percentage = 0.015  # 1.5% risk
-                    stop_loss = entry_price * (1 - risk_percentage)
-                    tp1 = entry_price * (1 + risk_percentage)       # 1:1 RR
-                    tp2 = entry_price * (1 + risk_percentage * 1.3) # 1:1.3 RR
-                    
-            elif signal_type == 'SELL':
-                # Find nearest resistance for S&D entry refinement
-                nearest_resistance = self._find_nearest_level(resistance_levels, current_price, 'above')
-                nearest_support = self._find_nearest_level(support_levels, current_price, 'below')
-                
-                if nearest_resistance and nearest_support:
-                    # Precise S&D entry at supply zone
-                    entry_price = nearest_resistance['price'] * 0.998  # Tight entry below resistance
-                    stop_loss = nearest_resistance['price'] * 1.002   # SL above supply zone
-                    
-                    # Calculate 1:1 RR based on risk
-                    risk_amount = stop_loss - entry_price
-                    tp1 = entry_price - risk_amount                   # 1:1 RR
-                    tp2 = entry_price - (risk_amount * 1.2)           # 1:1.2 RR bonus
-                    
-                else:
-                    # Default S&D-style calculation with 1:1 RR
-                    entry_price = current_price * 1.002
-                    risk_percentage = 0.015  # 1.5% risk
-                    stop_loss = entry_price * (1 + risk_percentage)
-                    tp1 = entry_price * (1 - risk_percentage)         # 1:1 RR
-                    tp2 = entry_price * (1 - risk_percentage * 1.3)   # 1:1.3 RR
-            else:
-                return None
-                
-            # Calculate risk/reward ratio
-            if signal_type == 'BUY':
-                risk = abs(entry_price - stop_loss)
-                reward = abs(tp1 - entry_price)
-            else:
-                risk = abs(stop_loss - entry_price)
-                reward = abs(entry_price - tp1)
-                
-            risk_reward = reward / risk if risk > 0 else 0
-            
-            # Only return signals with good R/R ratio
-            if risk_reward < 1.5:
-                return None
-                
+
+            # Get market structure
+            market_structure = snd_analysis.get('market_structure', {})
+
+            # Calculate position sizing recommendation
+            risk_level = self._calculate_risk_level(enhanced_confidence, market_structure)
+
             return {
                 'symbol': symbol,
-                'signal_type': signal_type,
-                'confidence': confidence,
-                'entry_price': entry_price,
-                'tp1': tp1,
-                'tp2': tp2,
-                'stop_loss': stop_loss,
-                'risk_reward': risk_reward,
-                'reasoning': best_signal.get('reason', ''),
+                'direction': best_signal['direction'],
+                'entry_price': best_signal['entry_price'],
+                'stop_loss': best_signal['stop_loss'],
+                'take_profit_1': best_signal['take_profit_1'],
+                'take_profit_2': best_signal['take_profit_2'],
+                'confidence': enhanced_confidence,
+                'risk_reward_ratio': best_signal['risk_reward_ratio'],
                 'current_price': current_price,
-                'volume_24h': price_data.get('volume_24h', 0),
-                'change_24h': price_data.get('change_24h', 0),
-                'timestamp': datetime.now().isoformat()
+                'trend': snd_analysis.get('trend', 'neutral'),
+                'market_structure': market_structure['pattern'],
+                'risk_level': risk_level,
+                'timeframe': '1h',
+                'scan_time': datetime.now().strftime('%H:%M:%S'),
+                'reason': best_signal['reason'],
+                'zone_strength': best_signal.get('zone_strength', 50)
             }
-            
+
         except Exception as e:
-            print(f"Error in SnD analysis for {symbol}: {e}")
+            print(f"❌ Error in enhanced SnD analysis for {symbol}: {e}")
             return None
-            
-    def _find_nearest_level(self, levels, current_price, direction):
-        """Find nearest support/resistance level"""
-        if not levels:
-            return None
-            
-        if direction == 'above':
-            candidates = [level for level in levels if level['price'] > current_price]
-            if candidates:
-                return min(candidates, key=lambda x: abs(x['price'] - current_price))
-        else:  # below
-            candidates = [level for level in levels if level['price'] < current_price]
-            if candidates:
-                return max(candidates, key=lambda x: x['price'])
-                
-        return None
-        
+
+    def _calculate_enhanced_confidence(self, signal, snd_analysis, futures_data, current_price):
+        """Calculate enhanced confidence with multiple factors"""
+        base_confidence = signal.get('confidence', 50)
+
+        # Factor 1: Risk/Reward ratio
+        rr_ratio = signal.get('risk_reward_ratio', 1)
+        if rr_ratio > 3:
+            base_confidence += 15
+        elif rr_ratio > 2:
+            base_confidence += 10
+        elif rr_ratio > 1.5:
+            base_confidence += 5
+
+        # Factor 2: Market structure alignment
+        market_structure = snd_analysis.get('market_structure', {})
+        if market_structure.get('pattern') in ['uptrend', 'downtrend']:
+            base_confidence += 10
+        elif market_structure.get('strength') == 'strong':
+            base_confidence += 5
+
+        # Factor 3: Trend score alignment
+        trend_score = snd_analysis.get('trend_score', 1)
+        if trend_score >= 2:
+            base_confidence += 8
+        elif trend_score >= 1:
+            base_confidence += 4
+
+        # Factor 4: Futures sentiment alignment
+        if 'error' not in futures_data:
+            long_ratio = futures_data.get('long_ratio', 50)
+            direction = signal.get('direction', '')
+
+            if direction == 'LONG' and long_ratio < 40:  # Contrarian bullish
+                base_confidence += 8
+            elif direction == 'SHORT' and long_ratio > 65:  # Contrarian bearish
+                base_confidence += 8
+
+        # Factor 5: Zone strength
+        zone_strength = signal.get('zone_strength', 50)
+        if zone_strength > 80:
+            base_confidence += 10
+        elif zone_strength > 60:
+            base_confidence += 5
+
+        return min(95, max(30, base_confidence))
+
+    def _calculate_risk_level(self, confidence, market_structure):
+        """Calculate risk level for position sizing"""
+        if confidence >= 85 and market_structure.get('strength') == 'strong':
+            return 'low'
+        elif confidence >= 75:
+            return 'medium'
+        else:
+            return 'high'
+
     async def send_signals_to_eligible_users(self, signals):
         """Send signals to admin and lifetime users only"""
         try:
-            # Get eligible users (admin + lifetime premium)
-            eligible_users = self._get_eligible_users()
-            
+            # Get eligible users (admin and lifetime)
+            eligible_users = self.db.get_eligible_auto_signal_users()
+
             if not eligible_users:
-                print("📊 No eligible users found for auto signals")
+                print("❌ No eligible users found for auto signals")
                 return
-                
-            signals_text = self._format_signals_message(signals)
-            
+
+            print(f"📤 Sending {len(signals)} signals to {len(eligible_users)} eligible users")
+
+            # Format signals message
+            signals_message = self._format_signals_message(signals)
+
             success_count = 0
             for user_data in eligible_users:
+                user_id = user_data.get('user_id')
+                if not user_id:
+                    continue
+
                 try:
                     await self.bot.application.bot.send_message(
-                        chat_id=user_data['telegram_id'],
-                        text=signals_text,
+                        chat_id=user_id,
+                        text=signals_message,
                         parse_mode='Markdown',
                         disable_web_page_preview=True
                     )
                     success_count += 1
-                    await asyncio.sleep(0.5)  # Rate limiting
-                    
+                    await asyncio.sleep(0.1)  # Rate limiting
+
                 except Exception as e:
-                    print(f"Failed to send to user {user_data['telegram_id']}: {e}")
+                    print(f"❌ Failed to send signal to user {user_id}: {e}")
                     continue
-                    
-            print(f"✅ Auto signals sent to {success_count}/{len(eligible_users)} eligible users")
-            
+
+            print(f"✅ Auto signals sent to {success_count}/{len(eligible_users)} users")
+
             # Log the broadcast
-            self.db.log_user_activity(0, "auto_snd_signals_sent", 
-                                    f"Sent {len(signals)} signals to {success_count} users")
-            
+            self.db.log_auto_signals_broadcast(len(signals), success_count, len(eligible_users))
+
         except Exception as e:
-            print(f"Error sending auto signals: {e}")
-            
-    def _get_eligible_users(self):
-        """Get users eligible for auto signals (admin + lifetime)"""
-        try:
-            admin_id = int(self.bot.admin_id) if self.bot.admin_id else 0
-            
-            # Get all premium users (including lifetime)
-            self.db.cursor.execute("""
-                SELECT telegram_id, first_name, username, is_premium, subscription_end
-                FROM users 
-                WHERE (
-                    telegram_id = ? OR 
-                    (is_premium = 1 AND (subscription_end IS NULL OR subscription_end = ''))
-                ) 
-                AND telegram_id IS NOT NULL 
-                AND telegram_id != 0
-            """, (admin_id,))
-            
-            rows = self.db.cursor.fetchall()
-            
-            eligible_users = []
-            for row in rows:
-                telegram_id, first_name, username, is_premium, subscription_end = row
-                
-                # Include admin
-                if telegram_id == admin_id:
-                    eligible_users.append({
-                        'telegram_id': telegram_id,
-                        'first_name': first_name,
-                        'username': username,
-                        'type': 'admin'
-                    })
-                # Include lifetime premium (subscription_end is NULL or empty)
-                elif is_premium and (subscription_end is None or subscription_end == ''):
-                    eligible_users.append({
-                        'telegram_id': telegram_id,
-                        'first_name': first_name,
-                        'username': username,
-                        'type': 'lifetime'
-                    })
-                    
-            print(f"📊 Found {len(eligible_users)} eligible users for auto signals")
-            return eligible_users
-            
-        except Exception as e:
-            print(f"Error getting eligible users: {e}")
-            return []
-            
+            print(f"❌ Error sending auto signals: {e}")
+
     def _format_signals_message(self, signals):
-        """Format signals into telegram message"""
-        timestamp = datetime.now().strftime('%H:%M:%S UTC')
-        
-        message = f"""🎯 **AUTO SnD SIGNALS ALERT** 🎯
+        """Format signals into a readable message"""
+        message = f"""🚨 **AUTO SIGNALS - SUPPLY & DEMAND ANALYSIS**
 
-📊 **{len(signals)} High-Confidence Signals Found**
-🕐 **Scan Time:** {timestamp}
+🕐 **Scan Time**: {datetime.now().strftime('%H:%M:%S WIB')}
+📊 **Signals Found**: {len(signals)}
 
 """
 
-        for i, signal in enumerate(signals, 1):
-            symbol = signal['symbol']
-            signal_type = signal['signal_type']
-            confidence = signal['confidence']
-            entry = signal['entry_price']
-            tp1 = signal['tp1']
-            tp2 = signal['tp2']
-            sl = signal['stop_loss']
-            rr = signal['risk_reward']
-            
-            direction_emoji = "🟢" if signal_type == "BUY" else "🔴"
-            
-            message += f"""**{i}. {symbol} {direction_emoji} {signal_type}**
+        for i, signal in enumerate(signals[:5], 1):  # Limit to top 5 signals
+            direction_emoji = "🟢" if signal['direction'] == 'LONG' else "🔴"
+            confidence_emoji = "🔥" if signal['confidence'] >= 85 else "⭐" if signal['confidence'] >= 75 else "💡"
 
-💰 **Entry:** ${entry:.6f} (S&D Zone)
-🎯 **TP1:** ${tp1:.6f} (1:1 RR)
-🚀 **TP2:** ${tp2:.6f} (Bonus)
-🛡️ **SL:** ${sl:.6f} (Zone Protection)
-📊 **R/R:** {rr:.1f}:1
-✅ **Confidence:** {confidence}%
-🔍 **Method:** Supply/Demand Analysis
+            message += f"""**{i}. {signal['symbol']} {direction_emoji}**
+{confidence_emoji} **Confidence**: {signal['confidence']:.1f}%
+📈 **Direction**: {signal['direction']}
+💰 **Entry**: ${signal['entry_price']:.4f}
+🛑 **Stop Loss**: ${signal['stop_loss']:.4f}
+🎯 **TP1**: ${signal['take_profit_1']:.4f}
+🎯 **TP2**: ${signal['take_profit_2']:.4f}
+📊 **R/R**: {signal['risk_reward_ratio']:.1f}:1
+🔄 **Trend**: {signal['trend'].title()}
+⚡ **Structure**: {signal['market_structure'].replace('_', ' ').title()}
 
 """
 
-        message += f"""⚡ **EXCLUSIVE AUTO SIGNALS**
-🎯 Supply & Demand Analysis
-📈 Only High-Confidence Setups
-👑 Admin & Lifetime Users Only
+        message += f"""⚠️ **TRADING DISCLAIMER:**
+• Signals berbasis Supply & Demand analysis
+• Gunakan proper risk management
+• Position sizing sesuai risk level
+• DYOR sebelum trading
 
-⚠️ **Risk Warning:**
-• Use proper position sizing
-• Confirm entry with price action
-• Set stop loss immediately
-• Take partial profits at TP1
-
-📡 **Auto Scanner:** Every 1 Hour
-🔄 **Next Scan:** {(datetime.now() + timedelta(hours=1)).strftime('%H:%M UTC')}"""
+🎯 **Auto Signals hanya untuk Admin & Lifetime users**
+📡 **Next scan in {self.scan_interval/60:.0f} minutes**"""
 
         return message
 
-# Global instance
-snd_auto_signals = None
-
+# Initialize function for the auto signals system
 def initialize_auto_signals(bot_instance):
-    """Initialize auto signals system"""
-    global snd_auto_signals
-    snd_auto_signals = SnDAutoSignals(bot_instance)
-    return snd_auto_signals
-
-def get_auto_signals_instance():
-    """Get auto signals instance"""
-    return snd_auto_signals
+    """Initialize the auto signals system"""
+    try:
+        auto_signals = SnDAutoSignals(bot_instance)
+        print("✅ Enhanced SnD Auto Signals system initialized")
+        return auto_signals
+    except Exception as e:
+        print(f"❌ Failed to initialize auto signals: {e}")
+        return None

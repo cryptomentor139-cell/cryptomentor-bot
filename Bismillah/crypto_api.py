@@ -9,8 +9,12 @@ class CryptoAPI:
         self.provider = BinanceFuturesProvider()
         self.cryptonews_key = os.getenv("CRYPTONEWS_API_KEY")
         self.coinapi_key = os.getenv("COINAPI_KEY")
+        if not self.coinapi_key:
+            print("⚠️ COINAPI_KEY not found in environment variables")
+            print("💡 Please set COINAPI_KEY in Replit Secrets")
         self.coinapi_url = "https://rest.coinapi.io/v1"
         self.binance_futures_url = "https://fapi.binance.com/fapi/v1"
+        self.binance_spot_url = "https://api.binance.com/api/v3"
 
         # CoinAPI-exclusive configuration for price data
         print("🚀 CryptoAPI initialized with CoinAPI-exclusive mode")
@@ -477,8 +481,9 @@ class CryptoAPI:
             if not symbol.endswith('USDT'):
                 symbol = symbol.upper() + 'USDT'
 
+            binance_spot_url = "https://api.binance.com/api/v3"
             response = requests.get(
-                f"{self.binance_spot_url}/klines",
+                f"{binance_spot_url}/klines",
                 params={
                     'symbol': symbol,
                     'interval': interval,
@@ -1343,6 +1348,41 @@ class CryptoAPI:
         """Get multiple prices using CoinAPI"""
         return self.get_multiple_coinapi_prices(symbols)
 
+    def get_multiple_binance_prices(self, symbols):
+        """Get prices for multiple symbols from Binance Futures"""
+        prices_data = {}
+
+        for symbol in symbols:
+            try:
+                price_data = self.get_binance_futures_price(symbol)
+                if 'error' not in price_data and price_data.get('price', 0) > 0:
+                    prices_data[symbol] = {
+                        'price': price_data.get('price', 0),
+                        'change_24h': price_data.get('change_24h', 0),
+                        'volume_24h': price_data.get('volume_24h', 0),
+                        'high_24h': price_data.get('high_24h', 0),
+                        'low_24h': price_data.get('low_24h', 0),
+                        'source': 'binance_futures'
+                    }
+                else:
+                    # Fallback to CoinAPI
+                    coinapi_price = self.get_coinapi_price(symbol)
+                    if 'error' not in coinapi_price and coinapi_price.get('price', 0) > 0:
+                        prices_data[symbol] = {
+                            'price': coinapi_price.get('price', 0),
+                            'change_24h': coinapi_price.get('change_24h', 0),
+                            'volume_24h': coinapi_price.get('volume_24h', 0),
+                            'high_24h': coinapi_price.get('high_24h', 0),
+                            'low_24h': coinapi_price.get('low_24h', 0),
+                            'source': 'coinapi_exchange_rate'
+                        }
+
+            except Exception as e:
+                print(f"Error getting price for {symbol}: {e}")
+                continue
+
+        return prices_data if prices_data else {'error': 'No price data available'}
+
     def get_market_overview(self):
         """Get market overview data using Binance data exclusively"""
         try:
@@ -1614,7 +1654,7 @@ class CryptoAPI:
         }
 
     def analyze_supply_demand(self, symbol, timeframe='1h'):
-        """Analyze supply and demand zones using Binance candlestick data"""
+        """Enhanced Supply and Demand analysis with entry/exit zones"""
         try:
             # Get candlestick data
             candle_data = self.get_binance_candlestick(symbol, timeframe, 100)
@@ -1635,84 +1675,225 @@ class CryptoAPI:
                     'analysis_successful': False
                 }
 
-            # Calculate basic SnD analysis
+            # Calculate enhanced SnD analysis
             highs = [c['high'] for c in candlesticks[-50:]]
             lows = [c['low'] for c in candlesticks[-50:]]
             closes = [c['close'] for c in candlesticks[-50:]]
+            opens = [c['open'] for c in candlesticks[-50:]]
             volumes = [c['volume'] for c in candlesticks[-50:]]
 
             current_price = closes[-1]
             
-            # Find resistance (supply) levels
-            resistance_levels = []
-            for i in range(2, len(highs) - 2):
-                if (highs[i] > highs[i-1] and highs[i] > highs[i-2] and 
-                    highs[i] > highs[i+1] and highs[i] > highs[i+2]):
-                    resistance_levels.append({
-                        'price': highs[i],
-                        'strength': volumes[i],
-                        'type': 'resistance'
+            # Enhanced resistance (supply) zones with order blocks
+            resistance_zones = []
+            for i in range(3, len(candlesticks) - 3):
+                candle = candlesticks[i]
+                # Look for bearish order blocks (large red candles at highs)
+                if (candle['open'] > candle['close'] and  # Red candle
+                    candle['volume'] > sum(volumes[max(0, i-5):i+5]) / 10 and  # High volume
+                    candle['high'] >= max(highs[max(0, i-5):i+5])):  # Local high
+                    
+                    zone_strength = (candle['volume'] / max(volumes)) * 100
+                    resistance_zones.append({
+                        'price_high': candle['high'],
+                        'price_low': candle['close'],
+                        'price_mid': (candle['high'] + candle['close']) / 2,
+                        'strength': zone_strength,
+                        'type': 'supply_zone',
+                        'distance_from_current': ((candle['high'] - current_price) / current_price) * 100
                     })
 
-            # Find support (demand) levels
-            support_levels = []
-            for i in range(2, len(lows) - 2):
-                if (lows[i] < lows[i-1] and lows[i] < lows[i-2] and 
-                    lows[i] < lows[i+1] and lows[i] < lows[i+2]):
-                    support_levels.append({
-                        'price': lows[i],
-                        'strength': volumes[i],
-                        'type': 'support'
+            # Enhanced support (demand) zones with order blocks
+            support_zones = []
+            for i in range(3, len(candlesticks) - 3):
+                candle = candlesticks[i]
+                # Look for bullish order blocks (large green candles at lows)
+                if (candle['close'] > candle['open'] and  # Green candle
+                    candle['volume'] > sum(volumes[max(0, i-5):i+5]) / 10 and  # High volume
+                    candle['low'] <= min(lows[max(0, i-5):i+5])):  # Local low
+                    
+                    zone_strength = (candle['volume'] / max(volumes)) * 100
+                    support_zones.append({
+                        'price_high': candle['open'],
+                        'price_low': candle['low'],
+                        'price_mid': (candle['open'] + candle['low']) / 2,
+                        'strength': zone_strength,
+                        'type': 'demand_zone',
+                        'distance_from_current': ((current_price - candle['low']) / current_price) * 100
                     })
 
-            # Sort and get strongest levels
-            resistance_levels.sort(key=lambda x: x['strength'], reverse=True)
-            support_levels.sort(key=lambda x: x['strength'], reverse=True)
+            # Sort zones by strength
+            resistance_zones.sort(key=lambda x: x['strength'], reverse=True)
+            support_zones.sort(key=lambda x: x['strength'], reverse=True)
 
-            # Calculate trend
+            # Calculate trend using multiple timeframes
+            sma_10 = sum(closes[-10:]) / 10
             sma_20 = sum(closes[-20:]) / 20
             sma_50 = sum(closes[-50:]) / 50
-            trend = 'bullish' if sma_20 > sma_50 else 'bearish'
+            
+            trend_score = 0
+            if sma_10 > sma_20: trend_score += 1
+            if sma_20 > sma_50: trend_score += 1
+            if current_price > sma_20: trend_score += 1
+            
+            if trend_score >= 2:
+                trend = 'bullish'
+            elif trend_score <= 1:
+                trend = 'bearish'
+            else:
+                trend = 'neutral'
 
-            # Generate signals based on proximity to levels
+            # Generate enhanced trading signals with entry/exit points
             signals = []
-            nearest_resistance = min(resistance_levels[:3], key=lambda x: abs(x['price'] - current_price)) if resistance_levels else None
-            nearest_support = min(support_levels[:3], key=lambda x: abs(x['price'] - current_price)) if support_levels else None
+            
+            # Find nearest active zones
+            nearest_resistance = None
+            nearest_support = None
+            
+            for zone in resistance_zones[:3]:
+                if abs(zone['distance_from_current']) < 5:  # Within 5%
+                    nearest_resistance = zone
+                    break
+                    
+            for zone in support_zones[:3]:
+                if abs(zone['distance_from_current']) < 5:  # Within 5%
+                    nearest_support = zone
+                    break
 
-            if nearest_support and current_price - nearest_support['price'] < current_price * 0.02:
+            # Generate buy signals near demand zones
+            if nearest_support and trend in ['bullish', 'neutral']:
+                entry_price = nearest_support['price_mid']
+                stop_loss = nearest_support['price_low'] * 0.99  # 1% below zone
+                take_profit_1 = entry_price * 1.02  # 2% profit
+                take_profit_2 = entry_price * 1.04  # 4% profit
+                
+                confidence = min(95, 60 + nearest_support['strength'])
+                
                 signals.append({
                     'type': 'buy',
-                    'reason': f'Price near strong support at {nearest_support["price"]:.4f}',
-                    'confidence': min(90, 60 + (nearest_support['strength'] / max(volumes)) * 30)
+                    'direction': 'LONG',
+                    'entry_price': entry_price,
+                    'stop_loss': stop_loss,
+                    'take_profit_1': take_profit_1,
+                    'take_profit_2': take_profit_2,
+                    'confidence': confidence,
+                    'reason': f'Strong demand zone at ${entry_price:.4f}',
+                    'risk_reward_ratio': (take_profit_1 - entry_price) / (entry_price - stop_loss),
+                    'zone_strength': nearest_support['strength']
                 })
 
-            if nearest_resistance and nearest_resistance['price'] - current_price < current_price * 0.02:
+            # Generate sell signals near supply zones
+            if nearest_resistance and trend in ['bearish', 'neutral']:
+                entry_price = nearest_resistance['price_mid']
+                stop_loss = nearest_resistance['price_high'] * 1.01  # 1% above zone
+                take_profit_1 = entry_price * 0.98  # 2% profit
+                take_profit_2 = entry_price * 0.96  # 4% profit
+                
+                confidence = min(95, 60 + nearest_resistance['strength'])
+                
                 signals.append({
                     'type': 'sell',
-                    'reason': f'Price near strong resistance at {nearest_resistance["price"]:.4f}',
-                    'confidence': min(90, 60 + (nearest_resistance['strength'] / max(volumes)) * 30)
+                    'direction': 'SHORT',
+                    'entry_price': entry_price,
+                    'stop_loss': stop_loss,
+                    'take_profit_1': take_profit_1,
+                    'take_profit_2': take_profit_2,
+                    'confidence': confidence,
+                    'reason': f'Strong supply zone at ${entry_price:.4f}',
+                    'risk_reward_ratio': (entry_price - take_profit_1) / (stop_loss - entry_price),
+                    'zone_strength': nearest_resistance['strength']
                 })
+
+            # Market structure analysis
+            market_structure = self._analyze_market_structure(closes, highs, lows)
 
             return {
                 'symbol': symbol,
                 'current_price': current_price,
                 'trend': trend,
-                'resistance_levels': resistance_levels[:5],
-                'support_levels': support_levels[:5],
+                'trend_score': trend_score,
+                'supply_zones': resistance_zones[:5],
+                'demand_zones': support_zones[:5],
                 'signals': signals,
+                'market_structure': market_structure,
                 'analysis_successful': True,
                 'timeframe': timeframe,
                 'data_points': len(candlesticks),
-                'source': 'binance_snd_analysis'
+                'source': 'enhanced_snd_analysis',
+                'confidence_score': self._calculate_snd_confidence(signals, trend_score)
             }
 
         except Exception as e:
-            print(f"❌ SnD analysis error for {symbol}: {str(e)}")
+            print(f"❌ Enhanced SnD analysis error for {symbol}: {str(e)}")
             return {
-                'error': f"SnD analysis failed: {str(e)}",
+                'error': f"Enhanced SnD analysis failed: {str(e)}",
                 'symbol': symbol,
                 'analysis_successful': False
             }
+
+    def _analyze_market_structure(self, closes, highs, lows):
+        """Analyze market structure (Higher Highs, Higher Lows, etc.)"""
+        try:
+            structure = {
+                'pattern': 'consolidation',
+                'strength': 'medium',
+                'breakout_probability': 50
+            }
+            
+            recent_highs = highs[-10:]
+            recent_lows = lows[-10:]
+            
+            # Check for Higher Highs and Higher Lows (uptrend)
+            hh_count = sum(1 for i in range(1, len(recent_highs)) if recent_highs[i] > recent_highs[i-1])
+            hl_count = sum(1 for i in range(1, len(recent_lows)) if recent_lows[i] > recent_lows[i-1])
+            
+            # Check for Lower Highs and Lower Lows (downtrend)
+            lh_count = sum(1 for i in range(1, len(recent_highs)) if recent_highs[i] < recent_highs[i-1])
+            ll_count = sum(1 for i in range(1, len(recent_lows)) if recent_lows[i] < recent_lows[i-1])
+            
+            if hh_count >= 6 and hl_count >= 6:
+                structure['pattern'] = 'uptrend'
+                structure['strength'] = 'strong'
+                structure['breakout_probability'] = 75
+            elif lh_count >= 6 and ll_count >= 6:
+                structure['pattern'] = 'downtrend'
+                structure['strength'] = 'strong'
+                structure['breakout_probability'] = 75
+            elif hh_count >= 4 or hl_count >= 4:
+                structure['pattern'] = 'weak_uptrend'
+                structure['strength'] = 'weak'
+                structure['breakout_probability'] = 60
+            elif lh_count >= 4 or ll_count >= 4:
+                structure['pattern'] = 'weak_downtrend'
+                structure['strength'] = 'weak'
+                structure['breakout_probability'] = 60
+            
+            return structure
+        except:
+            return {'pattern': 'unknown', 'strength': 'low', 'breakout_probability': 50}
+
+    def _calculate_snd_confidence(self, signals, trend_score):
+        """Calculate overall confidence score for SnD analysis"""
+        if not signals:
+            return 30
+        
+        base_confidence = 50
+        
+        # Add confidence based on signal quality
+        for signal in signals:
+            signal_conf = signal.get('confidence', 50)
+            rr_ratio = signal.get('risk_reward_ratio', 1)
+            
+            base_confidence += (signal_conf - 50) * 0.3
+            if rr_ratio > 2:
+                base_confidence += 10
+            elif rr_ratio > 1.5:
+                base_confidence += 5
+        
+        # Add confidence based on trend alignment
+        base_confidence += trend_score * 5
+        
+        return min(95, max(30, base_confidence))
 
     # === NEWS API ===
 
