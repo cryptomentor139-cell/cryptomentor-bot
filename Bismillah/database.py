@@ -62,7 +62,7 @@ class Database:
 
             if 'premium_earnings' not in columns:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN premium_earnings INTEGER DEFAULT 0")
-                
+
             if 'premium_referral_code' not in columns:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN premium_referral_code TEXT")
 
@@ -185,7 +185,7 @@ class Database:
             # Generate unique referral codes
             import random
             import string
-            
+
             # Generate free referral code
             referral_code = 'F' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
             while self.get_user_by_referral_code(referral_code):
@@ -211,7 +211,7 @@ class Database:
 
             # Insert new user with transaction safety
             self.cursor.execute("BEGIN TRANSACTION")
-            
+
             self.cursor.execute("""
                 INSERT INTO users 
                 (telegram_id, first_name, last_name, username, language_code, credits, referral_code, premium_referral_code, referred_by, created_at) 
@@ -234,10 +234,10 @@ class Database:
             credit_msg += ")"
             self.log_user_activity(telegram_id, "user_created", credit_msg)
             print(f"✅ New user {telegram_id} ({clean_username}) created with {total_credits} credits")
-            
+
             # Create backup entry in activity log for recovery
             self.log_user_activity(telegram_id, "user_backup_created", f"User: {clean_first_name}, Username: {clean_username}, Credits: {total_credits}")
-            
+
             return True
         except Exception as e:
             try:
@@ -252,23 +252,23 @@ class Database:
         try:
             updates = []
             params = []
-            
+
             if username is not None:
                 updates.append("username = ?")
                 params.append(username[:32] if username else 'no_username')
-            
+
             if first_name is not None:
                 updates.append("first_name = ?")
                 params.append(first_name[:50] if first_name else 'Unknown')
-            
+
             if last_name is not None:
                 updates.append("last_name = ?")
                 params.append(last_name[:50] if last_name else None)
-            
+
             if language_code is not None:
                 updates.append("language_code = ?")
                 params.append(language_code[:5] if language_code else 'id')
-            
+
             if updates:
                 params.append(telegram_id)
                 query = f"UPDATE users SET {', '.join(updates)} WHERE telegram_id = ?"
@@ -568,7 +568,7 @@ class Database:
             '1_year': 365,
             'lifetime': None  # None means permanent
         }
-        
+
         days = package_days.get(package_type)
         if days is None and package_type == 'lifetime':
             return self.grant_permanent_premium(telegram_id)
@@ -676,24 +676,67 @@ class Database:
         """Get recent user activity"""
         try:
             self.cursor.execute("""
-                SELECT user_id, action, details, timestamp 
+                SELECT telegram_id, action, details, timestamp 
                 FROM user_activity 
                 ORDER BY timestamp DESC 
                 LIMIT ?
             """, (limit,))
 
-            activities = []
+            results = []
             for row in self.cursor.fetchall():
-                activities.append({
+                results.append({
                     'user_id': row[0],
                     'action': row[1],
                     'details': row[2],
                     'timestamp': row[3]
                 })
-            return activities
+            return results
         except Exception as e:
             print(f"Error getting recent activity: {e}")
             return []
+
+    def get_eligible_auto_signal_users(self):
+        """Get users eligible for auto signals (admin and lifetime)"""
+        try:
+            admin_id = int(os.getenv('ADMIN_USER_ID', '0'))
+
+            self.cursor.execute("""
+                SELECT telegram_id, username, first_name, is_premium, subscription_end
+                FROM users 
+                WHERE telegram_id = ? OR subscription_end IS NULL
+                ORDER BY telegram_id
+            """, (admin_id,))
+
+            results = []
+            for row in self.cursor.fetchall():
+                results.append({
+                    'user_id': row[0],
+                    'username': row[1],
+                    'first_name': row[2],
+                    'is_premium': row[3],
+                    'premium_expires': row[4]
+                })
+            return results
+        except Exception as e:
+            print(f"Error getting eligible auto signal users: {e}")
+            return []
+
+    def log_auto_signals_broadcast(self, signals_count, success_count, total_eligible):
+        """Log auto signals broadcast for tracking"""
+        try:
+            admin_id = int(os.getenv('ADMIN_USER_ID', '0'))
+            details = f"Sent {signals_count} signals to {success_count}/{total_eligible} eligible users"
+
+            self.cursor.execute("""
+                INSERT INTO user_activity (telegram_id, action, details, timestamp)
+                VALUES (?, ?, ?, ?)
+            """, (admin_id, "auto_signals_broadcast", details, datetime.now().isoformat()))
+
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error logging auto signals broadcast: {e}")
+            return False
 
     def get_all_users(self):
         """Get all users for broadcast functionality"""
@@ -705,7 +748,7 @@ class Database:
                 ORDER BY created_at DESC
             """)
             rows = self.cursor.fetchall()
-            
+
             users = []
             for row in rows:
                 users.append({
@@ -732,7 +775,7 @@ class Database:
             self.cursor.execute("""
                 UPDATE users SET credits = credits + ? WHERE telegram_id = ?
             """, (amount, telegram_id))
-            
+
             if self.cursor.rowcount > 0:
                 self.conn.commit()
                 # Log the credit addition
@@ -754,7 +797,7 @@ class Database:
                 UPDATE users SET credits = 10 
                 WHERE credits <= 0 AND telegram_id IS NOT NULL
             """)
-            
+
             fixed_count = self.cursor.rowcount
             self.conn.commit()
             print(f"✅ Fixed credits for {fixed_count} users")
@@ -781,7 +824,7 @@ class Database:
             # Check if restart_required column exists
             self.cursor.execute("PRAGMA table_info(users)")
             columns = [column[1] for column in self.cursor.fetchall()]
-            
+
             # Add restart_required column if it doesn't exist
             if 'restart_required' not in columns:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN restart_required INTEGER DEFAULT 0")
@@ -792,7 +835,7 @@ class Database:
                 UPDATE users SET restart_required = 1 
                 WHERE telegram_id IS NOT NULL AND telegram_id != 0
             """)
-            
+
             restart_count = self.cursor.rowcount
             self.conn.commit()
             print(f"✅ Marked {restart_count} users for restart")
@@ -805,15 +848,15 @@ class Database:
         """Check if user needs to /start again after admin restart"""
         try:
             # Check if restart_required column exists first
-            self.cursor.execute("PRAGMA table_info(users)")
+            self.cursor.execute("PRAGMAtable_info(users)")
             columns = [column[1] for column in self.cursor.fetchall()]
-            
+
             if 'restart_required' not in columns:
                 # Column doesn't exist, add it
                 self.cursor.execute("ALTER TABLE users ADD COLUMN restart_required INTEGER DEFAULT 0")
                 self.conn.commit()
                 return False  # New column, user doesn't need restart
-            
+
             self.cursor.execute("""
                 SELECT restart_required FROM users WHERE telegram_id = ?
             """, (telegram_id,))
@@ -848,7 +891,7 @@ class Database:
                     'is_premium': user['is_premium'],
                     'created_at': user['created_at']
                 }
-                
+
                 # Store in activity log as backup
                 self.log_user_activity(telegram_id, "user_data_backup", f"Backup: {backup_data}")
                 return True
@@ -864,7 +907,7 @@ class Database:
                 WHERE telegram_id = ? AND action = 'user_data_backup' 
                 ORDER BY timestamp DESC LIMIT 1
             """, (telegram_id,))
-            
+
             backup_row = self.cursor.fetchone()
             if backup_row:
                 print(f"✅ Found backup for user {telegram_id}")
@@ -914,18 +957,18 @@ class Database:
                 self.cursor.execute(f"SELECT COUNT(*) FROM {table}")
                 count = self.cursor.fetchone()[0]
                 print(f"✅ Table {table}: {count} records")
-            
+
             # Check for corrupted data
             self.cursor.execute("SELECT COUNT(*) FROM users WHERE telegram_id IS NULL OR telegram_id = 0")
             invalid_users = self.cursor.fetchone()[0]
-            
+
             if invalid_users > 0:
                 print(f"⚠️ Found {invalid_users} users with invalid telegram_id")
                 # Clean up invalid users
                 self.cursor.execute("DELETE FROM users WHERE telegram_id IS NULL OR telegram_id = 0")
                 self.conn.commit()
                 print(f"✅ Cleaned up {invalid_users} invalid users")
-            
+
             print("✅ Database health check completed")
             return True
         except Exception as e:
@@ -963,26 +1006,26 @@ class Database:
         try:
             # Calculate earnings (10k rupiah for each premium subscription)
             earnings = 10000  # 10k rupiah
-            
+
             self.cursor.execute("""
                 INSERT INTO premium_referrals 
                 (referrer_id, referred_id, subscription_type, subscription_amount, earnings, status)
                 VALUES (?, ?, ?, ?, ?, 'confirmed')
             """, (referrer_id, referred_id, subscription_type, subscription_amount, earnings))
-            
+
             # Update referrer's premium earnings
             self.cursor.execute("""
                 UPDATE users SET premium_earnings = premium_earnings + ? WHERE telegram_id = ?
             """, (earnings, referrer_id))
-            
+
             self.conn.commit()
-            
+
             # Log the premium referral
             self.log_user_activity(referrer_id, "premium_referral_reward", 
                                  f"Earned Rp{earnings:,} from premium referral {referred_id}")
             self.log_user_activity(referred_id, "premium_subscription_via_referral", 
                                  f"Subscribed via premium referral from {referrer_id}")
-            
+
             print(f"✅ Premium referral created: {referrer_id} -> {referred_id}, earnings: Rp{earnings:,}")
             return True
         except Exception as e:
@@ -1009,10 +1052,10 @@ class Database:
                 SELECT COUNT(*) FROM premium_referrals WHERE referrer_id = ?
             """, (telegram_id,))
             total_referrals = self.cursor.fetchone()[0]
-            
+
             # Get total earnings
             earnings = self.get_premium_earnings(telegram_id)
-            
+
             # Get recent referrals
             self.cursor.execute("""
                 SELECT pr.referred_id, u.first_name, pr.subscription_type, pr.earnings, pr.created_at
@@ -1023,7 +1066,7 @@ class Database:
                 LIMIT 5
             """, (telegram_id,))
             recent_referrals = self.cursor.fetchall()
-            
+
             return {
                 'total_referrals': total_referrals,
                 'total_earnings': earnings,
@@ -1043,22 +1086,22 @@ class Database:
             if row:
                 free_code = row[0]
                 premium_code = row[1]
-                
+
                 # Generate codes if they don't exist
                 if not free_code:
                     free_code = self._generate_referral_code('F')
                     self.cursor.execute("""
                         UPDATE users SET referral_code = ? WHERE telegram_id = ?
                     """, (free_code, telegram_id))
-                    
+
                 if not premium_code:
                     premium_code = self._generate_referral_code('P')
                     self.cursor.execute("""
                         UPDATE users SET premium_referral_code = ? WHERE telegram_id = ?
                     """, (premium_code, telegram_id))
-                    
+
                 self.conn.commit()
-                
+
                 return {
                     'free_referral_code': free_code,
                     'premium_referral_code': premium_code
@@ -1072,10 +1115,10 @@ class Database:
         """Generate unique referral code with prefix"""
         import random
         import string
-        
+
         while True:
             code = prefix + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
-            
+
             # Check if code already exists
             if prefix == 'F':
                 if not self.get_user_by_referral_code(code):
@@ -1083,4 +1126,3 @@ class Database:
             else:  # prefix == 'P'
                 if not self.get_user_by_premium_referral_code(code):
                     return code
-

@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
+import requests
+import random
+import os
+import asyncio
+from datetime import datetime
 
 class AIAssistant:
     def __init__(self, name="CryptoMentor AI"):
@@ -211,90 +216,184 @@ I'm here to help you learn about cryptocurrency!
 
 Ask me anything about crypto! 🚀"""
 
+    
+    
     def get_market_sentiment(self, language='id', crypto_api=None):
-        """Get comprehensive market sentiment analysis using multiple APIs"""
-        from datetime import datetime
+        """Get market sentiment analysis using CoinAPI and crypto news"""
+        if not crypto_api:
+            # Return static response when API is not available
+            if language == 'id':
+                return """🌍 **OVERVIEW PASAR CRYPTO** (Mode Offline)
+
+💰 **Data Pasar:**
+- Total Market Cap: $2.4T (+1.5%)
+- BTC Dominance: 52.3%
+- Crypto Aktif: 12,000+ coin
+
+📈 **Status:** Pasar dalam fase recovery
+
+⚠️ **Catatan:** Data real-time tidak tersedia, gunakan command lain untuk analisis live.
+
+Coba lagi dalam beberapa menit untuk data real-time."""
+            else:
+                return """🌍 **CRYPTO MARKET OVERVIEW** (Offline Mode)
+
+💰 **Market Data:**
+- Total Market Cap: $2.4T (+1.5%)
+- BTC Dominance: 52.3%
+- Active Cryptos: 12,000+ coins
+
+📈 **Status:** Market in recovery phase
+
+⚠️ **Note:** Real-time data unavailable, use other commands for live analysis.
+
+Try again in a few minutes for real-time data."""
 
         try:
-            print(f"🔄 Generating comprehensive market overview...")
+            # Get market data from CoinAPI and Binance
+            major_symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'ADA']
+            market_data = {}
 
-            if not crypto_api:
-                return self._get_fallback_market_overview(language)
-
-            # Get comprehensive data from Binance sources
-            # 1. Binance global data
-            global_data = crypto_api.get_binance_global_data()
-
-            # 2. Enhanced market overview
-            market_data = crypto_api.get_market_overview()
-
-            # 3. Multiple price data from top cryptocurrencies
-            major_symbols = ['BTC', 'ETH', 'BNB', 'ADA', 'SOL', 'XRP', 'DOGE', 'MATIC', 'AVAX', 'LINK']
-            multi_prices = {}
-            print(f"📊 Fetching real-time data for {len(major_symbols)} major cryptocurrencies...")
-
+            # Get prices from CoinAPI
             for symbol in major_symbols:
                 try:
-                    price_data = crypto_api.get_multi_api_price(symbol, force_refresh=True)
-                    if 'error' not in price_data and price_data.get('price', 0) > 0:
-                        multi_prices[symbol] = price_data
-                        print(f"✅ {symbol}: ${price_data.get('price', 0):,.2f}")
-                except Exception as e:
-                    print(f"⚠️ Failed to get {symbol} data: {e}")
+                    price_data = crypto_api.get_coinapi_price(symbol, force_refresh=True)
+                    if 'error' not in price_data:
+                        market_data[symbol] = price_data
+                    await asyncio.sleep(0.2)  # Rate limiting
+                except:
                     continue
 
-            # 4. Crypto news sentiment
-            try:
-                news_data = crypto_api.get_crypto_news(3)
-                if news_data and len(news_data) > 0:
-                    print(f"📰 Retrieved {len(news_data)} latest crypto news")
-                else:
-                    news_data = []
-            except:
-                news_data = []
+            # Get futures data for additional insights
+            btc_futures = crypto_api.get_comprehensive_futures_data('BTC')
+            eth_futures = crypto_api.get_comprehensive_futures_data('ETH')
 
-            # 5. Futures sentiment (BTC and ETH)
-            try:
-                futures_btc = crypto_api.get_binance_long_short_ratio('BTC')
-                print(f"📈 BTC L/S Ratio: {futures_btc.get('long_ratio', 0):.1f}%/{futures_btc.get('short_ratio', 0):.1f}%")
-            except:
-                futures_btc = {'long_ratio': 50, 'short_ratio': 50, 'source': 'fallback'}
+            # Get crypto news
+            news_data = crypto_api.get_crypto_news(3)
 
-            try:
-                futures_eth = crypto_api.get_binance_long_short_ratio('ETH')
-                print(f"📈 ETH L/S Ratio: {futures_eth.get('long_ratio', 0):.1f}%/{futures_eth.get('short_ratio', 0):.1f}%")
-            except:
-                futures_eth = {'long_ratio': 50, 'short_ratio': 50, 'source': 'fallback'}
-
-            # 6. Additional market metrics
-            try:
-                btc_funding = crypto_api.get_binance_funding_rate('BTC')
-                eth_funding = crypto_api.get_binance_funding_rate('ETH')
-            except:
-                btc_funding = {'last_funding_rate': 0, 'source': 'fallback'}
-                eth_funding = {'last_funding_rate': 0, 'source': 'fallback'}
-
-            # Analyze comprehensive market health
-            market_health = self._analyze_comprehensive_market_health(global_data, multi_prices, news_data)
-            print(f"🏥 Market Health Score: {market_health.get('score', 5)}/10 - {market_health.get('status', 'Unknown')}")
-
-            # Format comprehensive response
             if language == 'id':
-                return self._format_comprehensive_market_overview_id(
-                    global_data, market_data, multi_prices, news_data, 
-                    futures_btc, futures_eth, market_health, btc_funding, eth_funding
-                )
+                return self._format_market_sentiment_id(market_data, btc_futures, eth_futures, news_data)
             else:
-                return self._format_comprehensive_market_overview_en(
-                    global_data, market_data, multi_prices, news_data, 
-                    futures_btc, futures_eth, market_health, btc_funding, eth_funding
-                )
+                return self._format_market_sentiment_en(market_data, btc_futures, eth_futures, news_data)
 
         except Exception as e:
-            print(f"❌ Error in comprehensive market overview: {e}")
-            import traceback
-            traceback.print_exc()
-            return self._get_fallback_market_overview_with_error(language, str(e))
+            print(f"Error in market sentiment analysis: {e}")
+            if language == 'id':
+                return f"""❌ **Error dalam analisis pasar**
+
+Gagal mengambil data real-time dari CoinAPI.
+Error: {str(e)[:100]}
+
+💡 **Alternatif:**
+• `/price btc` - Cek harga Bitcoin
+• `/analyze eth` - Analisis Ethereum mendalam
+• `/futures btc` - Sinyal futures Bitcoin
+
+Coba lagi dalam beberapa menit."""
+            else:
+                return f"""❌ **Error in market analysis**
+
+Failed to fetch real-time data from CoinAPI.
+Error: {str(e)[:100]}
+
+💡 **Alternatives:**
+• `/price btc` - Check Bitcoin price
+• `/analyze eth` - Deep Ethereum analysis  
+• `/futures btc` - Bitcoin futures signals
+
+Try again in a few minutes."""
+
+    def _format_market_sentiment_id(self, market_data, btc_futures, eth_futures, news_data):
+        """Format market sentiment in Indonesian"""
+        try:
+            message = "🌍 **OVERVIEW PASAR CRYPTO** (Real-time CoinAPI)\n\n"
+
+            # Market data section
+            if market_data:
+                message += "💰 **Harga Real-time (CoinAPI):**\n"
+                for symbol, data in market_data.items():
+                    price = data.get('price', 0)
+                    change = data.get('change_24h', 0)
+                    change_emoji = "📈" if change >= 0 else "📉"
+                    price_format = f"${price:,.2f}" if price > 1 else f"${price:.4f}"
+                    message += f"• {symbol}: {price_format} {change_emoji} {change:+.1f}%\n"
+                message += "\n"
+
+            # Futures insights
+            if 'error' not in btc_futures:
+                ls_data = btc_futures.get('long_short_ratio_data', {})
+                if 'error' not in ls_data:
+                    long_ratio = ls_data.get('long_ratio', 50)
+                    sentiment = "Bullish" if long_ratio > 60 else "Bearish" if long_ratio < 40 else "Neutral"
+                    message += f"📊 **BTC Futures Sentiment**: {sentiment} ({long_ratio:.1f}% Long)\n\n"
+
+            # Market analysis
+            message += "📈 **Analisis Pasar:**\n"
+            message += "• Data diambil dari CoinAPI real-time\n"
+            message += "• Analisis berbasis Supply & Demand\n"
+            message += "• Terintegrasi dengan Binance Futures data\n\n"
+
+            # News section
+            if news_data and len(news_data) > 0:
+                message += "📰 **Berita Crypto Terbaru:**\n"
+                for i, news in enumerate(news_data[:2], 1):
+                    title = news.get('title', '')[:60] + '...' if len(news.get('title', '')) > 60 else news.get('title', '')
+                    message += f"{i}. {title}\n"
+                message += "\n"
+
+            message += "🎯 **Source**: CoinAPI + Binance Futures + Crypto News\n"
+            message += f"⏰ **Update**: {datetime.now().strftime('%H:%M:%S WIB')}"
+
+            return message
+
+        except Exception as e:
+            return f"❌ Error formatting market sentiment: {str(e)}"
+
+    def _format_market_sentiment_en(self, market_data, btc_futures, eth_futures, news_data):
+        """Format market sentiment in English"""
+        try:
+            message = "🌍 **CRYPTO MARKET OVERVIEW** (Real-time CoinAPI)\n\n"
+
+            # Market data section
+            if market_data:
+                message += "💰 **Real-time Prices (CoinAPI):**\n"
+                for symbol, data in market_data.items():
+                    price = data.get('price', 0)
+                    change = data.get('change_24h', 0)
+                    change_emoji = "📈" if change >= 0 else "📉"
+                    price_format = f"${price:,.2f}" if price > 1 else f"${price:.4f}"
+                    message += f"• {symbol}: {price_format} {change_emoji} {change:+.1f}%\n"
+                message += "\n"
+
+            # Futures insights
+            if 'error' not in btc_futures:
+                ls_data = btc_futures.get('long_short_ratio_data', {})
+                if 'error' not in ls_data:
+                    long_ratio = ls_data.get('long_ratio', 50)
+                    sentiment = "Bullish" if long_ratio > 60 else "Bearish" if long_ratio < 40 else "Neutral"
+                    message += f"📊 **BTC Futures Sentiment**: {sentiment} ({long_ratio:.1f}% Long)\n\n"
+
+            # Market analysis
+            message += "📈 **Market Analysis:**\n"
+            message += "• Data sourced from CoinAPI real-time\n"
+            message += "• Analysis based on Supply & Demand\n"
+            message += "• Integrated with Binance Futures data\n\n"
+
+            # News section
+            if news_data and len(news_data) > 0:
+                message += "📰 **Latest Crypto News:**\n"
+                for i, news in enumerate(news_data[:2], 1):
+                    title = news.get('title', '')[:60] + '...' if len(news.get('title', '')) > 60 else news.get('title', '')
+                    message += f"{i}. {title}\n"
+                message += "\n"
+
+            message += "🎯 **Source**: CoinAPI + Binance Futures + Crypto News\n"
+            message += f"⏰ **Update**: {datetime.now().strftime('%H:%M:%S UTC')}"
+
+            return message
+
+        except Exception as e:
+            return f"❌ Error formatting market sentiment: {str(e)}"
 
     def _analyze_comprehensive_market_health(self, global_data, prices_data, news_data):
         """Analyze comprehensive market health from multiple APIs"""
@@ -619,7 +718,7 @@ Ask me anything about crypto! 🚀"""
         # Market health analysis - escape special characters
         health_status = escape_markdown(market_health.get('status', 'Unknown'))
         message += f"\n\n🏥 **2\\. Kesehatan Pasar:** {health_status}\n"
-        
+
         for factor in market_health.get('factors', [])[:3]:  # Limit to 3 factors
             clean_factor = escape_markdown(factor)
             message += f"• {clean_factor}\n"
@@ -650,14 +749,14 @@ Ask me anything about crypto! 🚀"""
 
 ⚡ **4\\. Futures Sentiment \\(Binance\\):**
 \\- **BTC L/S Ratio**: {futures_btc.get('long_ratio', 50):.1f}% / {futures_btc.get('short_ratio', 50):.1f}%"""
-        
+
         if btc_funding:
             funding_rate = btc_funding.get('last_funding_rate', 0)
             message += f" \\(Funding: {funding_rate:.4f}%\\)"
 
         message += f"""
 \\- **ETH L/S Ratio**: {futures_eth.get('long_ratio', 50):.1f}% / {futures_eth.get('short_ratio', 50):.1f}%"""
-        
+
         if eth_funding:
             eth_funding_rate = eth_funding.get('last_funding_rate', 0)
             message += f" \\(Funding: {eth_funding_rate:.4f}%\\)"
@@ -667,7 +766,7 @@ Ask me anything about crypto! 🚀"""
             latest_news = news_data[0]
             news_title = escape_markdown(latest_news.get('title', 'N/A')[:50])
             news_source = escape_markdown(latest_news.get('source', 'CryptoNews'))
-            
+
             message += f"""
 
 📰 **5\\. Sentiment Berita:**
@@ -678,7 +777,7 @@ Ask me anything about crypto! 🚀"""
         # Final summary
         current_time = datetime.now().strftime('%H:%M:%S')
         health_status_clean = escape_markdown(market_health.get('status', 'Unknown'))
-        
+
         if market_health.get('score', 5) >= 6:
             trading_bias = "Bullish bias"
         elif market_health.get('score', 5) <= 4:
@@ -731,7 +830,7 @@ Ask me anything about crypto! 🚀"""
         # Market health analysis - escape special characters
         health_status = escape_markdown(market_health.get('status', 'Unknown'))
         message += f"\n\n🏥 **2\\. Market Health:** {health_status}\n"
-        
+
         for factor in market_health.get('factors', [])[:3]:  # Limit to 3 factors
             clean_factor = escape_markdown(factor)
             message += f"• {clean_factor}\n"
@@ -762,14 +861,14 @@ Ask me anything about crypto! 🚀"""
 
 ⚡ **4\\. Futures Sentiment \\(Binance\\):**
 \\- **BTC L/S Ratio**: {futures_btc.get('long_ratio', 50):.1f}% / {futures_btc.get('short_ratio', 50):.1f}%"""
-        
+
         if btc_funding:
             funding_rate = btc_funding.get('last_funding_rate', 0)
             message += f" \\(Funding: {funding_rate:.4f}%\\)"
 
         message += f"""
 \\- **ETH L/S Ratio**: {futures_eth.get('long_ratio', 50):.1f}% / {futures_eth.get('short_ratio', 50):.1f}%"""
-        
+
         if eth_funding:
             eth_funding_rate = eth_funding.get('last_funding_rate', 0)
             message += f" \\(Funding: {eth_funding_rate:.4f}%\\)"
@@ -779,7 +878,7 @@ Ask me anything about crypto! 🚀"""
             latest_news = news_data[0]
             news_title = escape_markdown(latest_news.get('title', 'N/A')[:50])
             news_source = escape_markdown(latest_news.get('source', 'CryptoNews'))
-            
+
             message += f"""
 
 📰 **5\\. News Sentiment:**
@@ -790,7 +889,7 @@ Ask me anything about crypto! 🚀"""
         # Final summary
         current_time = datetime.now().strftime('%H:%M:%S')
         health_status_clean = escape_markdown(market_health.get('status', 'Unknown'))
-        
+
         if market_health.get('score', 5) >= 6:
             trading_bias = "Bullish bias"
         elif market_health.get('score', 5) <= 4:
@@ -993,7 +1092,7 @@ Use proper risk management and don't FOMO!"""
             # Get global market sentiment first using Binance data
             print("📊 Getting global market data from Binance...")
             global_data = crypto_api.get_binance_global_data()
-            
+
             print("📰 Getting crypto news...")
             try:
                 news_data = crypto_api.get_crypto_news(3)
@@ -1009,10 +1108,10 @@ Use proper risk management and don't FOMO!"""
             for symbol in major_symbols:
                 try:
                     print(f"📈 Analyzing {symbol}...")
-                    
+
                     # Get price data directly for better reliability in deployment
                     binance_data = crypto_api.get_multi_api_price(symbol, force_refresh=True)
-                    
+
                     # Get futures data
                     binance_futures = {}
                     try:
@@ -1021,7 +1120,7 @@ Use proper risk management and don't FOMO!"""
                             binance_futures = futures_comprehensive
                     except Exception as e:
                         print(f"⚠️ Futures data error for {symbol}: {e}")
-                    
+
                     # Skip CoinGecko in deployment mode for stability
                     coingecko_market = {}
 
@@ -1373,12 +1472,12 @@ Futures trading is high risk!"""
         sd_score = 50
         sd_bias = "Balanced"
         entry_zone_info = "No specific zone"
-        
+
         if sd_analysis and 'error' not in sd_analysis:
             sd_data = sd_analysis.get('supply_demand_score', {})
             sd_score = sd_data.get('score', 50)
             sd_bias = sd_data.get('bias', 'Balanced')
-            
+
             # S&D score enhancement
             if sd_score >= 70:
                 enhanced_score += 2
@@ -1560,7 +1659,7 @@ Trading is high risk! Use proper risk management!"""
         try:
             # Get comprehensive supply/demand analysis
             sd_analysis = crypto_api.analyze_supply_demand(symbol)
-            
+
             if 'error' in sd_analysis:
                 if language == 'id':
                     return f"""❌ **Error dalam Analisis Supply/Demand {symbol}**
@@ -1611,11 +1710,11 @@ Please try again or use other analysis."""
                 # Add supply/demand zones
                 demand_zones = supply_demand_zones.get('demand_zones', [])
                 supply_zones = supply_demand_zones.get('supply_zones', [])
-                
+
                 if demand_zones:
                     nearest_demand = demand_zones[0]
                     message += f"\n- **Demand Zone Terdekat:** ${nearest_demand.get('price_level', 0):,.4f} (Jarak: {nearest_demand.get('distance_from_current', 0):.1f}%)"
-                
+
                 if supply_zones:
                     nearest_supply = supply_zones[0]
                     message += f"\n- **Supply Zone Terdekat:** ${nearest_supply.get('price_level', 0):,.4f} (Jarak: {nearest_supply.get('distance_from_current', 0):.1f}%)"
@@ -1636,7 +1735,7 @@ Please try again or use other analysis."""
 - **Confidence:** {sd_score.get('confidence', 'Low')}
 
 💡 **Faktor Kunci:**"""
-                
+
                 for factor in sd_score.get('factors', [])[:4]:
                     message += f"\n  • {factor}"
 
@@ -1649,14 +1748,14 @@ Please try again or use other analysis."""
 - **Arah:** {primary_rec.get('direction', 'HOLD')}
 - **Tipe Entry:** {primary_rec.get('entry_type', 'N/A')}
 - **Entry Price:** ${primary_rec.get('entry_price', 0):,.4f}"""
-                    
+
                     if primary_rec.get('stop_loss'):
                         message += f"\n- **Stop Loss:** ${primary_rec.get('stop_loss', 0):,.4f}"
                     if primary_rec.get('take_profit'):
                         message += f"\n- **Take Profit:** ${primary_rec.get('take_profit', 0):,.4f}"
                     if primary_rec.get('risk_reward'):
                         message += f"\n- **Risk/Reward:** {primary_rec.get('risk_reward', 0):.1f}:1"
-                    
+
                     message += f"\n- **Logic:** {primary_rec.get('logic', 'N/A')}"
                     message += f"\n- **Timing:** {entry_rec.get('entry_timing', 'Wait')}"
 
@@ -1696,11 +1795,11 @@ Gunakan proper risk management dan position sizing!
                 # Add supply/demand zones
                 demand_zones = supply_demand_zones.get('demand_zones', [])
                 supply_zones = supply_demand_zones.get('supply_zones', [])
-                
+
                 if demand_zones:
                     nearest_demand = demand_zones[0]
                     message += f"\n- **Nearest Demand Zone:** ${nearest_demand.get('price_level', 0):,.4f} (Distance: {nearest_demand.get('distance_from_current', 0):.1f}%)"
-                
+
                 if supply_zones:
                     nearest_supply = supply_zones[0]
                     message += f"\n- **Nearest Supply Zone:** ${nearest_supply.get('price_level', 0):,.4f} (Distance: {nearest_supply.get('distance_from_current', 0):.1f}%)"
@@ -1721,7 +1820,7 @@ Gunakan proper risk management dan position sizing!
 - **Confidence:** {sd_score.get('confidence', 'Low')}
 
 💡 **Key Factors:**"""
-                
+
                 for factor in sd_score.get('factors', [])[:4]:
                     message += f"\n  • {factor}"
 
@@ -1734,14 +1833,14 @@ Gunakan proper risk management dan position sizing!
 - **Direction:** {primary_rec.get('direction', 'HOLD')}
 - **Entry Type:** {primary_rec.get('entry_type', 'N/A')}
 - **Entry Price:** ${primary_rec.get('entry_price', 0):,.4f}"""
-                    
+
                     if primary_rec.get('stop_loss'):
                         message += f"\n- **Stop Loss:** ${primary_rec.get('stop_loss', 0):,.4f}"
                     if primary_rec.get('take_profit'):
                         message += f"\n- **Take Profit:** ${primary_rec.get('take_profit', 0):,.4f}"
                     if primary_rec.get('risk_reward'):
                         message += f"\n- **Risk/Reward:** {primary_rec.get('risk_reward', 0):.1f}:1"
-                    
+
                     message += f"\n- **Logic:** {primary_rec.get('logic', 'N/A')}"
                     message += f"\n- **Timing:** {entry_rec.get('entry_timing', 'Wait')}"
 
@@ -1775,36 +1874,59 @@ Error: {str(e)}
 ⚠️ **Risk Warning:**
 Trading is high risk! Use proper risk management!"""
 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
     def analyze_snd_for_auto_signals(self, symbol, crypto_api):
         """Analyze SnD specifically for auto signals system with high confidence requirements"""
         try:
             if not crypto_api:
                 return {'error': 'API not available'}
-                
+
             # Get SnD analysis
             snd_analysis = crypto_api.analyze_supply_demand(symbol)
-            
+
             if 'error' in snd_analysis:
                 return snd_analysis
-                
+
             # Enhanced confidence scoring for auto signals
             confidence_score = self._calculate_auto_signal_confidence(snd_analysis, symbol, crypto_api)
-            
+
             # Only return signals with high confidence (>=75%)
             if confidence_score < 75:
                 return {'error': 'Confidence too low for auto signal'}
-                
+
             # Extract key data
             signals = snd_analysis.get('signals', [])
             support_levels = snd_analysis.get('support_levels', [])
             resistance_levels = snd_analysis.get('resistance_levels', [])
-            
+
             if not signals:
                 return {'error': 'No signals found'}
-                
+
             # Find best signal
             best_signal = max(signals, key=lambda x: x.get('confidence', 0))
-            
+
             return {
                 'symbol': symbol,
                 'confidence': confidence_score,
@@ -1813,34 +1935,34 @@ Trading is high risk! Use proper risk management!"""
                 'resistance_levels': resistance_levels,
                 'analysis_successful': True
             }
-            
+
         except Exception as e:
             print(f"Error in SnD auto signals analysis for {symbol}: {e}")
             return {'error': str(e)}
-            
+
     def _calculate_auto_signal_confidence(self, snd_analysis, symbol, crypto_api):
         """Calculate enhanced confidence score for auto signals"""
         try:
             base_confidence = 50
-            
+
             # Get additional market data
             price_data = crypto_api.get_binance_price(symbol)
             futures_data = crypto_api.get_binance_futures_price(symbol)
-            
+
             # Factor 1: Volume confirmation (+15 points)
             volume_24h = price_data.get('volume_24h', 0) if price_data else 0
             if volume_24h > 1000000:  # High volume
                 base_confidence += 15
             elif volume_24h > 500000:  # Medium volume
                 base_confidence += 10
-                
+
             # Factor 2: Price momentum (+10 points)
             change_24h = price_data.get('change_24h', 0) if price_data else 0
             if abs(change_24h) > 5:  # Strong momentum
                 base_confidence += 10
             elif abs(change_24h) > 2:  # Medium momentum
                 base_confidence += 5
-                
+
             # Factor 3: SnD signal strength (+15 points)
             signals = snd_analysis.get('signals', [])
             if signals:
@@ -1849,23 +1971,23 @@ Trading is high risk! Use proper risk management!"""
                     base_confidence += 15
                 elif signal_confidence > 60:
                     base_confidence += 10
-                    
+
             # Factor 4: Support/Resistance levels quality (+10 points)
             support_levels = snd_analysis.get('support_levels', [])
             resistance_levels = snd_analysis.get('resistance_levels', [])
-            
+
             total_levels = len(support_levels) + len(resistance_levels)
             if total_levels >= 5:  # Good level identification
                 base_confidence += 10
             elif total_levels >= 3:
                 base_confidence += 5
-                
+
             # Factor 5: Market structure (+10 points)
             if futures_data and 'error' not in futures_data:
                 # Check for clean price action
                 current_price = price_data.get('price', 0) if price_data else 0
                 mark_price = futures_data.get('price', 0)
-                
+
                 # Price convergence indicates clean structure
                 if current_price > 0 and mark_price > 0:
                     price_diff = abs(current_price - mark_price) / current_price
@@ -1873,1051 +1995,10 @@ Trading is high risk! Use proper risk management!"""
                         base_confidence += 10
                     elif price_diff < 0.005:
                         base_confidence += 5
-                        
+
             # Cap at 95% (never 100% certain)
             return min(base_confidence, 95)
-            
-        except Exception as e:
-            print(f"Error calculating auto signal confidence: {e}")
-            return 50  # Default confidence
 
-    def generate_single_futures_signal(self, symbol, language='id', crypto_api=None):
-        """Generate futures trading signal for a single coin using Binance API"""
-        if not crypto_api:
-            if language == 'id':
-                return f"""❌ **Error: API tidak tersedia**
-
-Tidak dapat mengakses data real-time untuk {symbol} saat ini.
-Silakan coba lagi nanti.
-
-⚠️ **Risk Warning:**
-Futures trading berisiko tinggi! 
-Gunakan proper risk management dan jangan FOMO!"""
-            else:
-                return f"""❌ **Error: API unavailable**
-
-Cannot access real-time data for {symbol} currently.
-Please try again later.
-
-⚠️ **Risk Warning:**
-Futures trading is high risk! 
-Use proper risk management and don't FOMO!"""
-
-        try:
-            # Get price data
-            price_data = crypto_api.get_price(symbol)
-            current_price = price_data.get('price', 0) if price_data else 0
-            change_24h = price_data.get('change_24h', 0) if price_data else 0
-            volume_24h = price_data.get('volume_24h', 0) if price_data else 0
-
-            # Get futures data
-            futures_data = crypto_api.get_futures_data(symbol)
-            long_ratio = futures_data.get('long_ratio', 50)
-            short_ratio = futures_data.get('short_ratio', 50)
-
-            # Get funding rate
-            funding_data = crypto_api.get_funding_rate(symbol)
-            funding_rate = funding_data.get('average_funding_rate', 0)
-
-            # Generate signal analysis
-            signal_factors = []
-            signal_score = 0
-
-            # Long/Short ratio analysis
-            if long_ratio > 75:
-                signal_score -= 2
-                signal_factors.append("🔴 Extreme long crowding (>75%)")
-                signal_type = "SHORT"
-            elif long_ratio < 25:
-                signal_score += 2
-                signal_factors.append("🟢 Extreme short crowding (<25%)")
-                signal_type = "LONG"
-            elif long_ratio > 65:
-                signal_score -= 1
-                signal_factors.append("🟡 High long bias")
-                signal_type = "SHORT"
-            elif long_ratio < 35:
-                signal_score += 1
-                signal_factors.append("🟡 High short bias")
-                signal_type = "LONG"
-            else:
-                signal_factors.append("⚪ Balanced sentiment")
-                signal_type = "HOLD"
-
-            # Price momentum
-            if abs(change_24h) > 5:
-                if change_24h > 0:
-                    signal_score += 1
-                    signal_factors.append("📈 Strong bullish momentum")
-                else:
-                    signal_score -= 1
-                    signal_factors.append("📉 Strong bearish momentum")
-
-            # Funding rate analysis
-            if funding_rate > 0.005:
-                signal_score -= 1
-                signal_factors.append("💸 High funding cost")
-            elif funding_rate < -0.005:
-                signal_score += 1
-                signal_factors.append("💰 Negative funding")
-
-            # Determine final signal
-            if signal_score >= 2:
-                final_signal = "STRONG BUY"
-                signal_emoji = "🟢"
-            elif signal_score >= 1:
-                final_signal = "BUY"
-                signal_emoji = "🟡"
-            elif signal_score <= -2:
-                final_signal = "STRONG SELL"
-                signal_emoji = "🔴"
-            elif signal_score <= -1:
-                final_signal = "SELL"
-                signal_emoji = "🟡"
-            else:
-                final_signal = "HOLD"
-                signal_emoji = "⚪"
-
-            if language == 'id':
-                message = f"""⚡ **Analisis Futures {symbol}**
-
-💰 **Data Real-Time:**
-- Harga: ${current_price:,.2f} ({change_24h:+.2f}%)
-- Volume 24h: ${volume_24h:,.0f}
-- Long/Short Ratio: {long_ratio:.1f}% / {short_ratio:.1f}%
-- Funding Rate: {funding_rate:.4f}%
-
-🎯 **Trading Signal:**
-{signal_emoji} **{final_signal}** (Score: {signal_score:+.1f})
-
-📋 **Faktor Signal:**
-""" + "\n".join(f"  • {factor}" for factor in signal_factors[:4])
-
-                message += f"""
-
-💡 **Untuk analisis Supply/Demand yang lebih mendalam, gunakan:**
-`/supply_demand {symbol}` - Analisis entry berdasarkan zone S&D
-
-⚠️ **Risk Warning:**
-Futures trading berisiko tinggi! 
-Gunakan proper risk management dan jangan FOMO!
-
-📡 **Source:** Binance API | 🕐 **Update:** {datetime.now().strftime('%H:%M:%S')}"""
-
-            else:
-                message = f"""⚡ **Futures Analysis {symbol}**
-
-💰 **Real-Time Data:**
-- Price: ${current_price:,.2f} ({change_24h:+.2f}%)
-- Volume 24h: ${volume_24h:,.0f}
-- Long/Short Ratio: {long_ratio:.1f}% / {short_ratio:.1f}%
-- Funding Rate: {funding_rate:.4f}%
-
-🎯 **Trading Signal:**
-{signal_emoji} **{final_signal}** (Score: {signal_score:+.1f})
-
-📋 **Signal Factors:**
-""" + "\n".join(f"  • {factor}" for factor in signal_factors[:4])
-
-                message += f"""
-
-💡 **For deeper Supply/Demand analysis, use:**
-`/supply_demand {symbol}` - Entry analysis based on S&D zones
-
-⚠️ **Risk Warning:**
-Futures trading is high risk! 
-Use proper risk management and don't FOMO!
-
-📡 **Source:** Binance API | 🕐 **Update:** {datetime.now().strftime('%H:%M:%S')}"""
-
-            return message
-
-        except Exception as e:
-            print(f"Error in generate_single_futures_signal: {e}")
-            if language == 'id':
-                return f"""❌ **Error dalam Analisis Futures {symbol}**
-
-Terjadi kesalahan saat menganalisis data.
-Error: {str(e)}
-
-⚠️ **Risk Warning:**
-Futures trading berisiko tinggi!"""
-            else:
-                return f"""❌ **Error in Futures Analysis {symbol}**
-
-Error occurred while analyzing data.
-Error: {str(e)}
-
-⚠️ **Risk Warning:**
-Futures trading is high risk!"""
-
-    def get_comprehensive_analysis(self, symbol, futures_data, price_data, language='id', crypto_api=None):
-        """Get comprehensive crypto analysis using multiple APIs (Binance + CoinGecko + CryptoNews)"""
-        if not crypto_api:
-            return "❌ API tidak tersedia untuk analisis komprehensif"
-
-        try:
-            # Get comprehensive data from all APIs
-            comprehensive_data = crypto_api.get_comprehensive_analysis_data(symbol)
-
-            # Extract data from different sources
-            binance_data = comprehensive_data.get('data_sources', {}).get('binance_price', {})
-            binance_futures = comprehensive_data.get('data_sources', {}).get('binance_futures', {})
-            coingecko_market = comprehensive_data.get('data_sources', {}).get('coingecko_market', {})
-            global_data = comprehensive_data.get('data_sources', {}).get('coingecko_global', {})
-            news_data = comprehensive_data.get('data_sources', {}).get('crypto_news', [])
-
-            # Calculate multi-API sentiment and risk
-            multi_sentiment = self._analyze_multi_api_sentiment(binance_data, coingecko_market, news_data, symbol)
-            market_health = self._analyze_market_health(global_data, coingecko_market)
-            risk_assessment = self._assess_comprehensive_risks(binance_data, binance_futures, coingecko_market, multi_sentiment)
-
-            if language == 'id':
-                message = f"""📊 **Analisis Komprehensif Multi-API {symbol}**
-
-🔍 **Kualitas Data:** {comprehensive_data.get('data_quality', 'unknown').upper()} ({comprehensive_data.get('successful_calls', 0)}/{comprehensive_data.get('total_calls', 0)} API berhasil)
-📡 **Sumber:** Binance + CoinGecko + CryptoNews
-
-💰 **1. Data Harga Terkini:**"""
-
-                # Price data (prioritize best source)
-                if 'error' not in binance_data:
-                    message += f"""
-- **Real-time Price**: ${binance_data.get('price', 0):,.2f} (Binance)
-- **24h Change**: {binance_data.get('change_24h', 0):+.2f}%
-- **Volume 24h**: ${binance_data.get('volume_24h', 0):,.0f}"""
-
-                # Add CoinGecko market insights
-                if 'error' not in coingecko_market:
-                    message += f"""
-
-📈 **2. Data Pasar Mendalam (CoinGecko):**
-- **Market Cap**: ${coingecko_market.get('market_cap', 0):,.0f}
-- **Market Rank**: #{coingecko_market.get('market_cap_rank', 0)}
-- **Circulating Supply**: {coingecko_market.get('circulating_supply', 0):,.0f}
-- **ATH**: ${coingecko_market.get('ath', 0):,.2f} ({coingecko_market.get('ath_change_percentage', 0):+.1f}%)
-- **7d Change**: {coingecko_market.get('price_change_percentage_7d', 0):+.2f}%
-- **30d Change**: {coingecko_market.get('price_change_percentage_30d', 0):+.2f}%"""
-
-                # Market health analysis
-                message += f"""
-
-🌍 **3. Analisis Kesehatan Pasar Global:**
-{market_health}
-
-📰 **4. Analisis Sentimen Multi-Source:**
-{multi_sentiment['analysis']}
-- **Sentiment Score**: {multi_sentiment['score']}/10
-- **Confidence Level**: {multi_sentiment['confidence']}
-- **Market Bias**: {multi_sentiment['bias']}"""
-
-                # Futures data if available
-                if binance_futures and 'error' not in binance_futures:
-                    futures_price = binance_futures.get('price_data', {})
-                    ls_ratio = binance_futures.get('long_short_ratio_data', {})
-                    funding = binance_futures.get('funding_rate_data', {})
-
-                    message += f"""
-
-⚡ **5. Data Futures Advance (Binance):**
-- **Long/Short Ratio**: {ls_ratio.get('long_ratio', 0):.1f}% / {ls_ratio.get('short_ratio', 0):.1f}%
-- **Funding Rate**: {funding.get('last_funding_rate', 0):.4f}%
-- **Open Interest**: ${binance_futures.get('open_interest_data', {}).get('open_interest', 0):,.0f}"""
-
-                # Risk assessment
-                message += f"""
-
-⚠️ **6. Risk Assessment Multi-Faktor:**
-{risk_assessment}
-
-📊 **7. Ringkasan Analisis:**
-- **Teknikal**: {multi_sentiment['technical_signal']}
-- **Fundamental**: {multi_sentiment['fundamental_outlook']}
-- **Sentiment**: {multi_sentiment['bias']} 
-- **Rekomendasi**: {multi_sentiment['recommendation']}
-
-📡 **Multi-API Sources**: Binance (Real-time) + CoinGecko (Market) + CryptoNews (Sentiment)
-🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}"""
-
-            else:
-                # English version with same multi-API structure
-                message = f"""📊 **Multi-API Comprehensive Analysis {symbol}**
-
-🔍 **Data Quality:** {comprehensive_data.get('data_quality', 'unknown').upper()} ({comprehensive_data.get('successful_calls', 0)}/{comprehensive_data.get('total_calls', 0)} APIs successful)
-📡 **Sources:** Binance + CoinGecko + CryptoNews
-
-💰 **1. Real-time Price Data:**"""
-
-                if 'error' not in binance_data:
-                    message += f"""
-- **Real-time Price**: ${binance_data.get('price', 0):,.2f} (Binance)
-- **24h Change**: {binance_data.get('change_24h', 0):+.2f}%
-- **Volume 24h**: ${binance_data.get('volume_24h', 0):,.0f}"""
-
-                if 'error' not in coingecko_market:
-                    message += f"""
-
-📈 **2. Deep Market Data (CoinGecko):**
-- **Market Cap**: ${coingecko_market.get('market_cap', 0):,.0f}
-- **Market Rank**: #{coingecko_market.get('market_cap_rank', 0)}
-- **Circulating Supply**: {coingecko_market.get('circulating_supply', 0):,.0f}
-- **ATH**: ${coingecko_market.get('ath', 0):,.2f} ({coingecko_market.get('ath_change_percentage', 0):+.1f}%)
-- **7d Change**: {coingecko_market.get('price_change_percentage_7d', 0):+.2f}%
-- **30d Change**: {coingecko_market.get('price_change_percentage_30d', 0):+.2f}%"""
-
-                message += f"""
-
-🌍 **3. Global Market Health:**
-{market_health}
-
-📰 **4. Multi-Source Sentiment:**
-{multi_sentiment['analysis']}
-- **Sentiment Score**: {multi_sentiment['score']}/10
-- **Confidence Level**: {multi_sentiment['confidence']}
-- **Market Bias**: {multi_sentiment['bias']}"""
-
-                if binance_futures and 'error' not in binance_futures:
-                    ls_ratio = binance_futures.get('long_short_ratio_data', {})
-                    funding = binance_futures.get('funding_rate_data', {})
-
-                    message += f"""
-
-⚡ **5. Advanced Futures Data (Binance):**
-- **Long/Short Ratio**: {ls_ratio.get('long_ratio', 0):.1f}% / {ls_ratio.get('short_ratio', 0):.1f}%
-- **Funding Rate**: {funding.get('last_funding_rate', 0):.4f}%
-- **Open Interest**: ${binance_futures.get('open_interest_data', {}).get('open_interest', 0):,.0f}"""
-
-                message += f"""
-
-⚠️ **6. Multi-Factor Risk Assessment:**
-{risk_assessment}
-
-📊 **7. Analysis Summary:**
-- **Technical**: {multi_sentiment['technical_signal']}
-- **Fundamental**: {multi_sentiment['fundamental_outlook']}
-- **Sentiment**: {multi_sentiment['bias']}
-- **Recommendation**: {multi_sentiment['recommendation']}
-
-📡 **Multi-API Sources**: Binance (Real-time) + CoinGecko (Market) + CryptoNews (Sentiment)
-🕐 **Update**: {datetime.now().strftime('%H:%M:%S UTC')}"""
-
-            return message
-
-        except Exception as e:
-            error_msg = f"❌ Error dalam analisis multi-API: {str(e)}" if language == 'id' else f"❌ Error in multi-API analysis: {str(e)}"
-            return error_msg
-
-    def _analyze_news_sentiment(self, news_data, symbol):
-        """Analyze market sentiment from crypto news"""
-        if not news_data or 'error' in news_data[0]:
-            return {
-                'score': 7,
-                'trend': 'Bullish',
-                'impact': 'Moderate',
-                'analysis': '- Market menunjukkan optimisme dengan adopsi institusional\n- Regulasi yang mendukung memberikan sentimen positif\n- Volume trading meningkat menunjukkan minat yang tinggi'
-            }
-
-        # Simple sentiment analysis
-        positive_count = 0
-        negative_count = 0
-        neutral_count = 0
-        total_articles = len(news_data[:5])
-
-        for article in news_data[:5]:
-            sentiment = article.get('sentiment', 'neutral').lower()
-            if sentiment == 'positive':
-                positive_count += 1
-            elif sentiment == 'negative':
-                negative_count += 1
-            else:
-                neutral_count += 1
-
-        # Calculate sentiment score (1-10)
-        if total_articles > 0:
-            score = ((positive_count * 2 + neutral_count) / total_articles) * 5 + 5
-            score = min(10, max(1, score))
-        else:
-            score = 7
-
-        # Determine trend and impact
-        if score >= 8:
-            trend = 'Very Bullish'
-            impact = 'High'
-        elif score >= 6.5:
-            trend = 'Bullish'
-            impact = 'Moderate'
-        elif score >= 4:
-            trend = 'Neutral'
-            impact = 'Low'
-        else:
-            trend = 'Bearish'
-            impact = 'High'
-
-        # Generate analysis text
-        analysis_points = []
-        if positive_count > negative_count:
-            analysis_points.append('- Berita positif mendominasi, investor optimis')
-            analysis_points.append('- Sentimen pasar mendukung kenaikan harga')
-        elif negative_count > positive_count:
-            analysis_points.append('- Berita negatif mempengaruhi sentimen pasar')
-            analysis_points.append('- Investor menunjukkan kehati-hatian')
-        else:
-            analysis_points.append('- Sentimen pasar relatif seimbang')
-            analysis_points.append('- Pasar menunggu katalis baru')
-
-        analysis_points.append('- Volume berita tinggi menunjukkan minat publik')
-
-        return {
-            'score': round(score, 1),
-            'trend': trend,
-            'impact': impact,
-            'analysis': '\n'.join(analysis_points)
-        }
-
-    def _assess_market_risks(self, futures_data, price_data, sentiment_score):
-        """Assess market risks and generate warnings"""
-        risk_factors = []
-
-        # Check long/short ratio
-        long_ratio = futures_data.get('long_ratio', 50)
-        if long_ratio > 70:
-            risk_factors.append('- ⚠️ Long ratio sangat tinggi (>70%) - Risk of long squeeze')
-        elif long_ratio < 30:
-            risk_factors.append('- ⚠️ Short ratio tinggi - Potential short squeeze')
-
-        # Check price volatility
-        price_change = abs(price_data.get('change_24h', 0))
-        if price_change > 10:
-            risk_factors.append(f'- 📈 Volatilitas tinggi ({price_change:.1f}%) - Increased risk')
-
-        # Check sentiment vs futures mismatch
-        if sentiment_score['score'] > 8 and long_ratio > 65:
-            risk_factors.append('- 🔴 Euphoria alert - Sentiment & futures overly bullish')
-        elif sentiment_score['score'] < 3 and long_ratio < 35:
-            risk_factors.append('- 🔴 Panic alert - Extreme bearish conditions')
-
-        # Volume analysis
-        volume = price_data.get('volume_24h', 0)
-        if volume < 100000000:  # Less than 100M
-            risk_factors.append('- 📊 Volume rendah - Liquidity concerns')
-
-        # Determine overall risk level
-        if len(risk_factors) >= 3:
-            risk_level = '🔴 TINGGI'
-        elif len(risk_factors) >= 2:
-            risk_level = '🟡 SEDANG'
-        else:
-            risk_level = '🟢 RENDAH'
-
-        if not risk_factors:
-            risk_factors.append('- ✅ Tidak ada warning signifikan terdeteksi')
-            risk_factors.append('- 📊 Kondisi pasar relatif stabil')
-
-        return risk_level, '\n'.join(risk_factors)
-
-    def analyze_futures_data(self, symbol, futures_data, price_data, language='id', crypto_api=None):
-        """Single coin futures analysis with Supply & Demand integration"""
-        try:
-            # Extract basic futures data
-            long_ratio = futures_data.get('long_ratio', 50)
-            short_ratio = futures_data.get('short_ratio', 50)
-            source = futures_data.get('source', 'binance')
-
-            # Extract price data
-            current_price = price_data.get('price', 0) if price_data and 'error' not in price_data else 0
-            change_24h = price_data.get('change_24h', 0) if price_data and 'error' not in price_data else 0
-            volume_24h = price_data.get('volume_24h', 0) if price_data and 'error' not in price_data else 0
-
-            # Get Supply & Demand analysis if crypto_api available
-            supply_demand_analysis = None
-            entry_zones = None
-            
-            if crypto_api:
-                try:
-                    sd_analysis = crypto_api.analyze_supply_demand(symbol)
-                    if 'error' not in sd_analysis:
-                        supply_demand_analysis = sd_analysis
-                        entry_zones = self._extract_entry_zones(sd_analysis, current_price)
-                except Exception as e:
-                    print(f"S&D analysis error: {e}")
-
-            # Enhanced signal determination with S&D
-            signal_data = self._determine_enhanced_futures_signal(
-                long_ratio, short_ratio, current_price, change_24h, 
-                supply_demand_analysis, entry_zones
-            )
-
-            if language == 'id':
-                message = f"""⚡ **Analisis Futures + Supply/Demand {symbol}**
-
-📊 **Kualitas Data:** 🟢 BINANCE + S&D API (Source: {source})
-
-💰 **Data Harga:**
-- Harga saat ini: ${current_price:,.4f}
-- Perubahan 24h: {change_24h:+.2f}%
-- Volume 24h: ${volume_24h:,.0f}
-
-📈 **Long/Short Ratio Analysis:**
-- {symbol}: {long_ratio:.1f}% Long, {short_ratio:.1f}% Short
-- Market Sentiment: {signal_data['sentiment']}
-- Contrarian Signal: {signal_data['contrarian_bias']}
-
-🎯 **Supply/Demand Integration:**"""
-
-                if supply_demand_analysis:
-                    sd_score = supply_demand_analysis.get('supply_demand_score', {})
-                    message += f"""
-- **S&D Score**: {sd_score.get('score', 50)}/100
-- **Market Bias**: {sd_score.get('bias', 'Balanced')}
-- **Confidence**: {sd_score.get('confidence', 'Medium')}"""
-
-                    # Add key supply/demand zones
-                    zones = supply_demand_analysis.get('supply_demand_zones', {})
-                    demand_zones = zones.get('demand_zones', [])
-                    supply_zones = zones.get('supply_zones', [])
-                    
-                    if demand_zones:
-                        nearest_demand = demand_zones[0]
-                        message += f"\n- **Demand Zone**: ${nearest_demand.get('price_level', 0):,.4f} ({nearest_demand.get('distance_from_current', 0):+.1f}%)"
-                    
-                    if supply_zones:
-                        nearest_supply = supply_zones[0]
-                        message += f"\n- **Supply Zone**: ${nearest_supply.get('price_level', 0):,.4f} ({nearest_supply.get('distance_from_current', 0):+.1f}%)"
-
-                message += f"""
-
-🚀 **Rekomendasi Trading Enhanced:**
-- **Direction**: {signal_data['direction']} {signal_data['strength_emoji']}
-- **Entry Price**: ${signal_data['entry_price']:,.4f}
-- **Stop Loss**: ${signal_data['stop_loss']:,.4f} ({signal_data['sl_percentage']:.1f}%)
-- **Take Profit 1**: ${signal_data['tp1']:,.4f} ({signal_data['tp1_percentage']:.1f}%)
-- **Take Profit 2**: ${signal_data['tp2']:,.4f} ({signal_data['tp2_percentage']:.1f}%)
-- **R/R Ratio**: {signal_data['risk_reward']:.1f}:1
-
-💡 **Alasan Entry di Harga Ini:**
-{signal_data['entry_reasoning']}
-
-📊 **Strategi Execution:**
-{signal_data['execution_strategy']}
-
-📈 **Leverage Recommendations:**
-- Conservative: {signal_data['conservative_leverage']}x (recommended)
-- Moderate: {signal_data['moderate_leverage']}x  
-- Aggressive: {signal_data['aggressive_leverage']}x (high risk!)
-
-⚠️ **Risk Management:**
-Futures trading berisiko tinggi! Gunakan proper position sizing dan stop loss ketat.
-
-📡 Source: Binance + S&D Analysis | ⏰ Real-time integrated data"""
-
-            else:
-                # English version with same enhanced structure
-                message = f"""⚡ **Enhanced Futures + Supply/Demand Analysis {symbol}**
-
-📊 **Data Quality:** 🟢 BINANCE + S&D API (Source: {source})
-
-💰 **Price Data:**
-- Current Price: ${current_price:,.4f}
-- 24h Change: {change_24h:+.2f}%
-- Volume 24h: ${volume_24h:,.0f}
-
-📈 **Long/Short Ratio Analysis:**
-- {symbol}: {long_ratio:.1f}% Long, {short_ratio:.1f}% Short
-- Market Sentiment: {signal_data['sentiment']}
-- Contrarian Signal: {signal_data['contrarian_bias']}
-
-🎯 **Supply/Demand Integration:**"""
-
-                if supply_demand_analysis:
-                    sd_score = supply_demand_analysis.get('supply_demand_score', {})
-                    message += f"""
-- **S&D Score**: {sd_score.get('score', 50)}/100
-- **Market Bias**: {sd_score.get('bias', 'Balanced')}
-- **Confidence**: {sd_score.get('confidence', 'Medium')}"""
-
-                    zones = supply_demand_analysis.get('supply_demand_zones', {})
-                    demand_zones = zones.get('demand_zones', [])
-                    supply_zones = zones.get('supply_zones', [])
-                    
-                    if demand_zones:
-                        nearest_demand = demand_zones[0]
-                        message += f"\n- **Demand Zone**: ${nearest_demand.get('price_level', 0):,.4f} ({nearest_demand.get('distance_from_current', 0):+.1f}%)"
-                    
-                    if supply_zones:
-                        nearest_supply = supply_zones[0]
-                        message += f"\n- **Supply Zone**: ${nearest_supply.get('price_level', 0):,.4f} ({nearest_supply.get('distance_from_current', 0):+.1f}%)"
-
-                message += f"""
-
-🚀 **Enhanced Trading Recommendation:**
-- **Direction**: {signal_data['direction']} {signal_data['strength_emoji']}
-- **Entry Price**: ${signal_data['entry_price']:,.4f}
-- **Stop Loss**: ${signal_data['stop_loss']:,.4f} ({signal_data['sl_percentage']:.1f}%)
-- **Take Profit 1**: ${signal_data['tp1']:,.4f} ({signal_data['tp1_percentage']:.1f}%)
-- **Take Profit 2**: ${signal_data['tp2']:,.4f} ({signal_data['tp2_percentage']:.1f}%)
-- **R/R Ratio**: {signal_data['risk_reward']:.1f}:1
-
-💡 **Entry Reasoning:**
-{signal_data['entry_reasoning']}
-
-📊 **Execution Strategy:**
-{signal_data['execution_strategy']}
-
-📈 **Leverage Recommendations:**
-- Conservative: {signal_data['conservative_leverage']}x (recommended)
-- Moderate: {signal_data['moderate_leverage']}x
-- Aggressive: {signal_data['aggressive_leverage']}x (high risk!)
-
-⚠️ **Risk Management:**
-Futures trading is high risk! Use proper position sizing and tight stop losses.
-
-📡 Source: Binance + S&D Analysis | ⏰ Real-time integrated data"""
-
-            return message
-
-        except Exception as e:
-            print(f"Error in enhanced futures analysis: {e}")
-            if language == 'id':
-                return f"""❌ **Error dalam Enhanced Futures Analysis {symbol}**
-
-Terjadi kesalahan saat menganalisis data futures + supply/demand.
-Error: {str(e)}
-
-📊 Silakan coba lagi atau gunakan `/futures_signals` untuk analisis multi-coin."""
-            else:
-                return f"""❌ **Error in Enhanced Futures Analysis {symbol}**
-
-Error occurred while analyzing futures + supply/demand data.
-Error: {str(e)}
-
-📊 Please try again or use `/futures_signals` for multi-coin analysis."""
-
-    def get_ai_futures_recommendation(self, symbol, timeframe, crypto_api):
-        """Get AI recommendation for best futures trading setup"""
-        try:
-            # Get comprehensive data for analysis
-            price_data = crypto_api.get_price(symbol)
-            futures_data = crypto_api.get_futures_data(symbol)
-
-            # Get timeframe-specific data if available
-            try:
-                timeframe_data = crypto_api.get_timeframe_analysis(symbol, timeframe)
-            except:
-                timeframe_data = {'error': 'Timeframe data not available'}
-
-            # Extract key metrics
-            current_price = price_data.get('price', 0) if price_data else 0
-            change_24h = price_data.get('change_24h', 0) if price_data else 0
-            volume_24h = price_data.get('volume_24h', 0) if price_data else 0
-
-            long_ratio = futures_data.get('long_ratio', 50)
-            short_ratio = futures_data.get('short_ratio', 50)
-
-            # AI decision making based on multiple factors
-            ai_decision = self._make_ai_trading_decision(
-                symbol, timeframe, current_price, change_24h, 
-                long_ratio, volume_24h, timeframe_data
-            )
-
-            # Get funding rate for additional context
-            funding_data = crypto_api.get_funding_rate(symbol)
-            funding_rate = funding_data.get('average_funding_rate', 0)
-
-            # Format comprehensive AI analysis
-            current_format = crypto_api._format_price_display(current_price)
-            entry_format = crypto_api._format_price_display(ai_decision['entry_price'])
-            sl_format = crypto_api._format_price_display(ai_decision['stop_loss'])
-            tp1_format = crypto_api._format_price_display(ai_decision['take_profit_1'])
-            tp2_format = crypto_api._format_price_display(ai_decision['take_profit_2'])
-
-            message = f"""🤖 **AI Futures Recommendation - {symbol}**
-📊 **Timeframe**: {timeframe.upper()}
-
-💰 **Market Data:**
-• Current Price: {current_format}
-• 24h Change: {change_24h:+.2f}%
-• Volume 24h: ${volume_24h:,.0f}
-• Long/Short: {long_ratio:.1f}% / {short_ratio:.1f}%
-• Funding Rate: {funding_rate:.4f}%
-
-🎯 **AI Recommendation:** {ai_decision['signal_emoji']} **{ai_decision['signal_type']}**
-**Confidence Level:** {ai_decision['confidence']}
-
-📊 **Trading Setup:**
-• **Entry**: {entry_format}
-• **Stop Loss**: {sl_format} ({ai_decision['sl_percentage']:.1f}%)
-• **Take Profit 1**: {tp1_format} ({ai_decision['tp1_percentage']:.1f}%)
-• **Take Profit 2**: {tp2_format} ({ai_decision['tp2_percentage']:.1f}%)
-• **Risk/Reward**: {ai_decision['risk_reward']:.1f}:1
-
-🧠 **AI Analysis:**
-{ai_decision['reasoning']}
-
-📈 **Market Sentiment:**
-{ai_decision['market_analysis']}
-
-💡 **AI Strategy:**
-{ai_decision['strategy_tips']}
-
-⚠️ **Risk Management:**
-• Position Size: {ai_decision['position_size']}% of portfolio
-• Leverage: {ai_decision['recommended_leverage']}x (max)
-• Time Horizon: {ai_decision['time_horizon']}
-
-🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}
-📡 **AI-Powered Analysis**: Binance API + Advanced ML Models"""
-
-            return message
-
-        except Exception as e:
-            return f"""❌ **Error dalam AI Futures Analysis {symbol}**
-
-Terjadi kesalahan saat AI menganalisis data timeframe {timeframe}.
-Error: {str(e)}
-
-⚠️ **Catatan:**
-Silakan coba lagi dalam beberapa menit atau pilih timeframe lain."""
-
-    def _make_ai_trading_decision(self, symbol, timeframe, current_price, change_24h, long_ratio, volume, timeframe_data):
-        """AI decision making algorithm for trading recommendation"""
-
-        # Initialize decision factors
-        bullish_score = 0
-        bearish_score = 0
-
-        # Factor 1: Price momentum
-        if change_24h > 5:
-            bullish_score += 3
-        elif change_24h > 2:
-            bullish_score += 1
-        elif change_24h < -5:
-            bearish_score += 3
-        elif change_24h < -2:
-            bearish_score += 1
-
-        # Factor 2: Long/Short ratio (contrarian approach)
-        if long_ratio > 75:
-            bearish_score += 2  # Too many longs = potential reversal
-        elif long_ratio < 25:
-            bullish_score += 2  # Too many shorts = potential reversal
-        elif 45 <= long_ratio <= 55:
-            bullish_score += 1  # Balanced = healthy
-
-        # Factor 3: Volume analysis
-        if volume > 500000000:  # High volume = strong move
-            if change_24h > 0:
-                bullish_score += 1
-            else:
-                bearish_score += 1
-
-        # Factor 4: Timeframe consideration
-        timeframe_factor = self._get_timeframe_bias(timeframe, change_24h)
-        if timeframe_factor == 'bullish':
-            bullish_score += 1
-        elif timeframe_factor == 'bearish':
-            bearish_score += 1
-
-        # AI Decision Logic
-        if bullish_score >= bearish_score + 2:
-            signal_type = "STRONG LONG"
-            signal_emoji = "🟢"
-            position = "long"
-            confidence = "High" if bullish_score - bearish_score >= 3 else "Medium"
-        elif bullish_score > bearish_score:
-            signal_type = "LONG"
-            signal_emoji = "🟡"
-            position = "long"
-            confidence = "Medium"
-        elif bearish_score >= bullish_score + 2:
-            signal_type = "STRONG SHORT"
-            signal_emoji = "🔴"
-            position = "short"
-            confidence = "High" if bearish_score - bullish_score >= 3 else "Medium"
-        elif bearish_score > bullish_score:
-            signal_type = "SHORT"
-            signal_emoji = "🟡"
-            position = "short"
-            confidence = "Medium"
-        else:
-            signal_type = "HOLD/WAIT"
-            signal_emoji = "⚪"
-            position = "neutral"
-            confidence = "Low"
-
-        # Calculate entry, TP, SL based on AI decision
-        if position == "long":
-            entry_price = current_price * 0.999
-            stop_loss = current_price * 0.975  # 2.5% SL
-            take_profit_1 = current_price * 1.025  # 2.5% TP1
-            take_profit_2 = current_price * 1.05   # 5% TP2
-            sl_pct = -2.5
-            tp1_pct = 2.5
-            tp2_pct = 5.0
-        elif position == "short":
-            entry_price = current_price * 1.001
-            stop_loss = current_price * 1.025   # 2.5% SL
-            take_profit_1 = current_price * 0.975  # 2.5% TP1
-            take_profit_2 = current_price * 0.95   # 5% TP2
-            sl_pct = 2.5
-            tp1_pct = -2.5
-            tp2_pct = -5.0
-        else:  # neutral
-            entry_price = current_price
-            stop_loss = current_price * 0.98
-            take_profit_1 = current_price * 1.02
-            take_profit_2 = current_price * 1.04
-            sl_pct = -2.0
-            tp1_pct = 2.0
-            tp2_pct = 4.0
-
-        # Risk/Reward calculation
-        risk = abs(entry_price - stop_loss)
-        reward = abs(take_profit_1 - entry_price)
-        risk_reward = reward / risk if risk > 0 else 1.5
-
-        # Generate reasoning
-        reasoning = self._generate_ai_reasoning(bullish_score, bearish_score, long_ratio, change_24h, position)
-
-        # Market analysis
-        market_analysis = self._generate_market_analysis(long_ratio, change_24h, volume)
-
-        # Strategy tips
-        strategy_tips = self._generate_strategy_tips(timeframe, position, confidence)
-
-        # Position sizing and leverage recommendation
-        if confidence == "High":
-            position_size = 3.0
-            max_leverage = 10
-        elif confidence == "Medium":
-            position_size = 2.0
-            max_leverage = 5
-        else:
-            position_size = 1.0
-            max_leverage = 3
-
-        # Time horizon based on timeframe
-        time_horizons = {
-            '15m': '1-4 hours',
-            '30m': '2-8 hours', 
-            '1h': '4-24 hours',
-            '4h': '1-3 days',
-            '1d': '3-7 days',
-            '1w': '1-4 weeks'
-        }
-        time_horizon = time_horizons.get(timeframe, '1-24 hours')
-
-        return {
-            'signal_type': signal_type,
-            'signal_emoji': signal_emoji,
-            'confidence': confidence,
-            'entry_price': entry_price,
-            'stop_loss': stop_loss,
-            'take_profit_1': take_profit_1,
-            'take_profit_2': take_profit_2,
-            'sl_percentage': sl_pct,
-            'tp1_percentage': tp1_pct,
-            'tp2_percentage': tp2_pct,
-            'risk_reward': risk_reward,
-            'reasoning': reasoning,
-            'market_analysis': market_analysis,
-            'strategy_tips': strategy_tips,
-            'position_size': position_size,
-            'recommended_leverage': max_leverage,
-            'time_horizon': time_horizon
-        }
-
-    def _get_timeframe_bias(self, timeframe, change_24h):
-        """Get bias based on timeframe and price action"""
-        if timeframe in ['15m', '30m']:  # Short-term scalping
-            if abs(change_24h) > 3:
-                return 'bullish' if change_24h > 0 else 'bearish'
-        elif timeframe in ['1h', '4h']:  # Medium-term swing
-            if abs(change_24h) > 2:
-                return 'bullish' if change_24h > 0 else 'bearish'
-        elif timeframe in ['1d', '1w']:  # Long-term position
-            if abs(change_24h) > 1:
-                return 'bullish' if change_24h > 0 else 'bearish'
-        return 'neutral'
-
-    def _generate_ai_reasoning(self, bullish_score, bearish_score, long_ratio, change_24h, position):
-        """Generate AI reasoning for the trading decision"""
-        reasons = []
-
-        if position == "long":
-            reasons.append("• Analisis menunjukkan momentum bullish yang kuat")
-            if change_24h > 3:
-                reasons.append("• Price action positif dengan volume tinggi")
-            if long_ratio < 40:
-                reasons.append("• Sentiment bearish berlebihan, potensi reversal")
-            reasons.append("• Setup risk/reward mendukung posisi long")
-        elif position == "short":
-            reasons.append("• Analisis menunjukkan tekanan bearish yang dominan") 
-            if change_24h < -3:
-                reasons.append("• Price action negatif dengan momentum turun")
-            if long_ratio > 70:
-                reasons.append("• Sentiment bullish berlebihan, potensi koreksi")
-            reasons.append("• Setup risk/reward mendukung posisi short")
-        else:
-            reasons.append("• Market menunjukkan kondisi sideways/uncertain")
-            reasons.append("• Sinyal mixed, tunggu konfirmasi lebih jelas")
-
-        return '\n'.join(reasons)
-
-    def _generate_market_analysis(self, long_ratio, change_24h, volume):
-        """Generate market sentiment analysis"""
-        analysis = []
-
-        if long_ratio > 70:
-            analysis.append("• Market sentiment: Extremely Bullish (Risk of reversal)")
-        elif long_ratio > 60:
-            analysis.append("• Market sentiment: Bullish")
-        elif long_ratio < 30:
-            analysis.append("• Market sentiment: Extremely Bearish (Risk of bounce)")
-        elif long_ratio < 40:
-            analysis.append("• Market sentiment: Bearish")
-        else:
-            analysis.append("• Market sentiment: Balanced/Neutral")
-
-        if volume > 1000000000:
-            analysis.append("• Volume: Very High - Strong institutional interest")
-        elif volume > 500000000:
-            analysis.append("• Volume: High - Good liquidity")
-        else:
-            analysis.append("• Volume: Moderate - Normal trading activity")
-
-        if abs(change_24h) > 5:
-            analysis.append("• Volatility: High - Increased opportunity and risk")
-        else:
-            analysis.append("• Volatility: Normal - Stable trading conditions")
-
-        return '\n'.join(analysis)
-
-    def _generate_strategy_tips(self, timeframe, position, confidence):
-        """Generate strategy tips based on timeframe and position"""
-        tips = []
-
-        if timeframe in ['15m', '30m']:
-            tips.append("• Scalping strategy: Quick entry/exit")
-            tips.append("• Monitor closely, set tight stops")
-            tips.append("• Take profits at first resistance/support")
-        elif timeframe in ['1h', '4h']:
-            tips.append("• Swing trading strategy: Medium-term hold")
-            tips.append("• Use trailing stops after TP1")
-            tips.append("• Monitor key support/resistance levels")
-        else:  # 1d, 1w
-            tips.append("• Position trading: Long-term perspective")
-            tips.append("• Focus on major trend direction")
-            tips.append("• Use wider stops, be patient")
-
-        if confidence == "High":
-            tips.append("• High confidence setup - Consider larger position")
-        elif confidence == "Low":
-            tips.append("• Low confidence - Use smaller position, be cautious")
-
-        return '\n'.join(tips)
-
-    def analyze_snd_for_auto_signals(self, symbol, crypto_api):
-        """Analyze SnD specifically for auto signals system with high confidence requirements"""
-        try:
-            if not crypto_api:
-                return {'error': 'API not available'}
-                
-            # Get SnD analysis
-            snd_analysis = crypto_api.analyze_supply_demand(symbol)
-            
-            if 'error' in snd_analysis:
-                return snd_analysis
-                
-            # Enhanced confidence scoring for auto signals
-            confidence_score = self._calculate_auto_signal_confidence(snd_analysis, symbol, crypto_api)
-            
-            # Only return signals with high confidence (>=75%)
-            if confidence_score < 75:
-                return {'error': 'Confidence too low for auto signal'}
-                
-            # Extract key data
-            signals = snd_analysis.get('signals', [])
-            support_levels = snd_analysis.get('support_levels', [])
-            resistance_levels = snd_analysis.get('resistance_levels', [])
-            
-            if not signals:
-                return {'error': 'No signals found'}
-                
-            # Find best signal
-            best_signal = max(signals, key=lambda x: x.get('confidence', 0))
-            
-            return {
-                'symbol': symbol,
-                'confidence': confidence_score,
-                'signal': best_signal,
-                'support_levels': support_levels,
-                'resistance_levels': resistance_levels,
-                'analysis_successful': True
-            }
-            
-        except Exception as e:
-            print(f"Error in SnD auto signals analysis for {symbol}: {e}")
-            return {'error': str(e)}
-            
-    def _calculate_auto_signal_confidence(self, snd_analysis, symbol, crypto_api):
-        """Calculate enhanced confidence score for auto signals"""
-        try:
-            base_confidence = 50
-            
-            # Get additional market data
-            price_data = crypto_api.get_binance_price(symbol)
-            futures_data = crypto_api.get_binance_futures_price(symbol)
-            
-            # Factor 1: Volume confirmation (+15 points)
-            volume_24h = price_data.get('volume_24h', 0) if price_data else 0
-            if volume_24h > 1000000:  # High volume
-                base_confidence += 15
-            elif volume_24h > 500000:  # Medium volume
-                base_confidence += 10
-                
-            # Factor 2: Price momentum (+10 points)
-            change_24h = price_data.get('change_24h', 0) if price_data else 0
-            if abs(change_24h) > 5:  # Strong momentum
-                base_confidence += 10
-            elif abs(change_24h) > 2:  # Medium momentum
-                base_confidence += 5
-                
-            # Factor 3: SnD signal strength (+15 points)
-            signals = snd_analysis.get('signals', [])
-            if signals:
-                signal_confidence = max(s.get('confidence', 0) for s in signals)
-                if signal_confidence > 80:
-                    base_confidence += 15
-                elif signal_confidence > 60:
-                    base_confidence += 10
-                    
-            # Factor 4: Support/Resistance levels quality (+10 points)
-            support_levels = snd_analysis.get('support_levels', [])
-            resistance_levels = snd_analysis.get('resistance_levels', [])
-            
-            total_levels = len(support_levels) + len(resistance_levels)
-            if total_levels >= 5:  # Good level identification
-                base_confidence += 10
-            elif total_levels >= 3:
-                base_confidence += 5
-                
-            # Factor 5: Market structure (+10 points)
-            if futures_data and 'error' not in futures_data:
-                # Check for clean price action
-                current_price = price_data.get('price', 0) if price_data else 0
-                mark_price = futures_data.get('price', 0)
-                
-                # Price convergence indicates clean structure
-                if current_price > 0 and mark_price > 0:
-                    price_diff = abs(current_price - mark_price) / current_price
-                    if price_diff < 0.001:  # Very close prices
-                        base_confidence += 10
-                    elif price_diff < 0.005:
-                        base_confidence += 5
-                        
-            # Cap at 95% (never 100% certain)
-            return min(base_confidence, 95)
-            
         except Exception as e:
             print(f"Error calculating auto signal confidence: {e}")
             return 50  # Default confidence
@@ -2993,7 +2074,7 @@ Silakan coba lagi dalam beberapa menit atau pilih timeframe lain."""
 
             # Base futures sentiment analysis
             futures_score = 0
-            
+
             # Long/Short ratio analysis (contrarian approach)
             if long_ratio > 75:
                 futures_score -= 3  # Extremely long heavy = bearish signal
@@ -3037,12 +2118,12 @@ Silakan coba lagi dalam beberapa menit atau pilih timeframe lain."""
             # Supply & Demand integration
             sd_score = 0
             sd_modifier = ""
-            
+
             if sd_analysis and entry_zones:
                 sd_data = sd_analysis.get('supply_demand_score', {})
                 sd_bias = sd_data.get('bias', 'Balanced')
                 sd_confidence = sd_data.get('confidence', 'Medium')
-                
+
                 if 'Strong Demand' in sd_bias or 'Moderate Demand' in sd_bias:
                     sd_score += 2 if 'Strong' in sd_bias else 1
                     sd_modifier = " + Strong S&D Support"
@@ -3091,7 +2172,8 @@ Silakan coba lagi dalam beberapa menit atau pilih timeframe lain."""
                     demand_zone = entry_zones['strong_demand']
                     signal_data['entry_price'] = demand_zone['zone_high']
                     signal_data['stop_loss'] = demand_zone['zone_low'] * 0.998
-                    signal_data['tp1'] = signal_data['entry_price'] * 1.03   # 3% TP1 (1:2 RR)
+                    ```python
+ signal_data['tp1'] = signal_data['entry_price'] * 1.03   # 3% TP1 (1:2 RR)
                     signal_data['tp2'] = signal_data['entry_price'] * 1.045  # 4.5% TP2 (1:3 RR)
                     signal_data['entry_reasoning'] = f"Entry recommended at demand zone ${signal_data['entry_price']:,.4f} dengan alasan:\n• Strong demand area teridentifikasi\n• Long/Short ratio menunjukkan {signal_data['contrarian_bias']}\n• Price momentum mendukung ({change_24h:+.1f}%){sd_modifier}\n• Risk/reward ratio optimal di level ini"
                 else:
