@@ -2158,7 +2158,6 @@ class CryptoAPI:
             # Calculate enhanced SnD analysis
             highs = [c['high'] for c in candlesticks[-50:]]
             lows = [c['low'] for c in candlesticks[-50:]]
-            ```python
             closes = [c['close'] for c in candlesticks[-50:]]
             opens = [c['open'] for c in candlesticks[-50:]]
             volumes = [c['volume'] for c in candlesticks[-50:]]
