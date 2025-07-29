@@ -728,7 +728,7 @@ class CryptoAPI:
 
             return {
                 'symbol': symbol,
-                'mark_price': float(data['markPrice']),
+                'mark price': float(data['markPrice']),
                 'index_price': float(data['indexPrice']),
                 'estimated_settle_price': float(data.get('estimatedSettlePrice', 0)),
                 'last_funding_rate': float(data['lastFundingRate']),
@@ -2158,6 +2158,7 @@ class CryptoAPI:
             # Calculate enhanced SnD analysis
             highs = [c['high'] for c in candlesticks[-50:]]
             lows = [c['low'] for c in candlesticks[-50:]]
+            ```python
             closes = [c['close'] for c in candlesticks[-50:]]
             opens = [c['open'] for c in candlesticks[-50:]]
             volumes = [c['volume'] for c in candlesticks[-50:]]

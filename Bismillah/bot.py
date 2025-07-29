@@ -198,14 +198,10 @@ class TelegramBot:
                 await self.application.start()
                 print("✅ Application started")
 
-                # Start polling with optimized settings for deployment
+                # Start polling with compatible settings for deployment
                 await self.application.updater.start_polling(
                     poll_interval=1.0,         # Poll every 1 second
                     timeout=20,                # Request timeout
-                    read_timeout=25,           # Read timeout
-                    write_timeout=25,          # Write timeout
-                    connect_timeout=10,        # Connect timeout
-                    pool_timeout=30,           # Pool timeout
                     drop_pending_updates=True, # Drop old updates
                     allowed_updates=['message', 'callback_query']  # Only handle these updates
                 )
