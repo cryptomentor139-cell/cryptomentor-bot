@@ -694,7 +694,7 @@ class TelegramBot:
         await loading_msg.edit_text(message, parse_mode='Markdown')
 
     async def analyze_command(self, update: Update, context: CallbackContext):
-        """Handle /analyze command - comprehensive analysis with news integration"""
+        """Handle /analyze command - comprehensive analysis with CoinAPI integration"""
         # Check if user needs restart
         if await self._check_user_restart_required(update):
             return
@@ -716,14 +716,16 @@ class TelegramBot:
         symbol = context.args[0].upper()
 
         # Show loading message
-        loading_msg = await update.message.reply_text("⏳ Menganalisis data komprehensif + berita crypto...")
+        loading_msg = await update.message.reply_text("⏳ Menganalisis data komprehensif dari CoinAPI + berita crypto...")
 
         try:
-            # Get price and futures data for comprehensive analysis using CoinAPI
+            # Get price data from CoinAPI (primary source)
             price_data = self.crypto_api.get_coinapi_price(symbol, force_refresh=True)
-            futures_data = self.crypto_api.get_futures_data(symbol)
+            
+            # Get futures data from Binance for advanced analysis
+            futures_data = self.crypto_api.get_comprehensive_futures_data(symbol)
 
-            # Use comprehensive analysis function with crypto_api for news
+            # Use comprehensive analysis function with CoinAPI data
             analysis = self.ai.get_comprehensive_analysis(symbol, futures_data, price_data, 'id', self.crypto_api)
 
             # Deduct credit only for non-premium, non-admin users (20 credits for comprehensive analysis)
