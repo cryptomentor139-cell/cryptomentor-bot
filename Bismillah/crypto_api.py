@@ -1687,7 +1687,7 @@ class CryptoAPI:
         return min(strength, 100)  # Cap at 100
 
     def _generate_snd_signals(self, supply_zones, demand_zones, current_price, candlesticks):
-        """Generate trading signals based on SnD zones"""
+        """Generate trading signals based on SnD zones - improved SHORT detection"""
         signals = []
 
         # Get recent price action
@@ -1696,7 +1696,7 @@ class CryptoAPI:
 
         # Check for long signals (near demand zones)
         for zone in demand_zones:
-            if zone['distance_percent'] < 3:  # Within 3% of demand zone
+            if zone['distance_percent'] < 5:  # Within 5% of demand zone (increased range)
                 entry_price = zone['high']
                 stop_loss = zone['low'] * 0.995  # 0.5% below zone
 
@@ -1707,7 +1707,7 @@ class CryptoAPI:
 
                 confidence = self._calculate_signal_confidence(zone, current_price, 'LONG', recent_candles)
 
-                if confidence > 60:
+                if confidence > 55:  # Slightly lower threshold
                     signals.append({
                         'direction': 'LONG',
                         'entry_price': entry_price,
@@ -1715,73 +1715,152 @@ class CryptoAPI:
                         'take_profit_1': take_profit_1,
                         'take_profit_2': take_profit_2,
                         'confidence': confidence,
-                        'risk_reward_ratio': 2.0,
+                        'risk_reward_ratio': risk > 0 and (take_profit_1 - entry_price) / risk or 2.0,
                         'zone_strength': zone['strength'],
-                        'reason': f'Price near strong demand zone (strength: {zone["strength"]})',
+                        'reason': f'Price near strong demand zone (strength: {zone["strength"]:.0f})',
                         'entry_timing': 'Wait for bounce confirmation'
                     })
 
-        # Check for short signals (near supply zones)
+        # Enhanced SHORT signal detection (near supply zones)
         for zone in supply_zones:
-            if zone['distance_percent'] < 3:  # Within 3% of supply zone
-                entry_price = zone['low']
+            if zone['distance_percent'] < 5:  # Within 5% of supply zone (increased range)
+                entry_price = zone['low']  # Enter at bottom of supply zone
                 stop_loss = zone['high'] * 1.005  # 0.5% above zone
 
-                # Calculate take profits
+                # Calculate take profits for SHORT
                 risk = stop_loss - entry_price
-                take_profit_1 = entry_price - (risk * 2)  # 2:1 RR
-                take_profit_2 = entry_price - (risk * 3)  # 3:1 RR
+                take_profit_1 = entry_price - (risk * 2)  # 2:1 RR downward
+                take_profit_2 = entry_price - (risk * 3)  # 3:1 RR downward
 
                 confidence = self._calculate_signal_confidence(zone, current_price, 'SHORT', recent_candles)
 
-                if confidence > 60:
+                # Boost confidence for SHORT signals near strong supply zones
+                if zone['strength'] > 70:
+                    confidence += 10  # Extra confidence for strong supply zones
+                
+                # Additional SHORT-specific confidence factors
+                if current_price >= zone['low'] * 0.998:  # Very close to supply zone
+                    confidence += 8
+
+                if confidence > 55:  # Slightly lower threshold for SHORT
                     signals.append({
                         'direction': 'SHORT',
                         'entry_price': entry_price,
                         'stop_loss': stop_loss,
                         'take_profit_1': take_profit_1,
                         'take_profit_2': take_profit_2,
-                        'confidence': confidence,
-                        'risk_reward_ratio': 2.0,
+                        'confidence': min(95, confidence),  # Cap at 95%
+                        'risk_reward_ratio': risk > 0 and (entry_price - take_profit_1) / risk or 2.0,
                         'zone_strength': zone['strength'],
-                        'reason': f'Price near strong supply zone (strength: {zone["strength"]})',
+                        'reason': f'Price near strong supply zone (strength: {zone["strength"]:.0f})',
                         'entry_timing': 'Wait for rejection confirmation'
                     })
 
-        # Sort by confidence
+        # Additional logic: Look for potential SHORT signals even with weaker supply zones
+        # if we're in a bearish structure
+        recent_closes = [c['close'] for c in recent_candles]
+        recent_trend = (recent_closes[-1] - recent_closes[0]) / recent_closes[0] * 100
+
+        if recent_trend < -2:  # Recent bearish momentum
+            for zone in supply_zones[:3]:  # Top 3 supply zones
+                if zone['distance_percent'] < 8 and zone['strength'] > 50:  # Wider range for bearish momentum
+                    entry_price = zone['low']
+                    stop_loss = zone['high'] * 1.008  # Slightly wider stop
+                    
+                    risk = stop_loss - entry_price
+                    take_profit_1 = entry_price - (risk * 1.8)  # Conservative TP
+                    take_profit_2 = entry_price - (risk * 2.5)
+                    
+                    confidence = 65 + (zone['strength'] - 50) * 0.4  # Base confidence for momentum shorts
+                    
+                    signals.append({
+                        'direction': 'SHORT',
+                        'entry_price': entry_price,
+                        'stop_loss': stop_loss,
+                        'take_profit_1': take_profit_1,
+                        'take_profit_2': take_profit_2,
+                        'confidence': min(88, confidence),
+                        'risk_reward_ratio': risk > 0 and (entry_price - take_profit_1) / risk or 1.8,
+                        'zone_strength': zone['strength'],
+                        'reason': f'Bearish momentum + supply zone (strength: {zone["strength"]:.0f})',
+                        'entry_timing': 'Momentum continuation expected'
+                    })
+
+        # Sort by confidence (prioritize highest confidence signals)
         signals.sort(key=lambda x: x['confidence'], reverse=True)
         return signals
 
     def _calculate_signal_confidence(self, zone, current_price, direction, recent_candles):
-        """Calculate confidence for a trading signal"""
+        """Calculate confidence for a trading signal - direction neutral approach"""
         confidence = zone['strength']  # Base confidence from zone strength
 
-        # Distance factor
+        # Distance factor (closer = more accurate regardless of direction)
         distance = zone['distance_percent']
-        if distance < 1:
+        if distance < 0.5:
+            confidence += 25
+        elif distance < 1:
             confidence += 20
         elif distance < 2:
-            confidence += 10
+            confidence += 12
         elif distance < 3:
-            confidence += 5
+            confidence += 8
+        elif distance < 5:
+            confidence += 4
 
-        # Recent price action
+        # Recent price action - look for momentum ALIGNMENT with signal direction
         if len(recent_candles) >= 3:
             last_candle = recent_candles[-1]
             prev_candle = recent_candles[-2]
-
+            
+            # Calculate recent momentum
+            momentum_1h = (last_candle['close'] - prev_candle['close']) / prev_candle['close'] * 100
+            
+            # For LONG signals - look for either bounce from support or bullish momentum
             if direction == 'LONG':
-                # Look for bullish momentum
+                # Bullish confirmation
                 if last_candle['close'] > last_candle['open']:  # Green candle
-                    confidence += 10
-                if last_candle['close'] > prev_candle['close']:  # Higher close
-                    confidence += 5
+                    confidence += 8
+                if momentum_1h > 0.5:  # Strong bullish momentum
+                    confidence += 12
+                elif momentum_1h > 0:  # Mild bullish momentum
+                    confidence += 6
+                # Check for bounce pattern
+                if (last_candle['low'] < prev_candle['low'] and 
+                    last_candle['close'] > last_candle['open']):
+                    confidence += 10  # Bounce confirmation
+
+            # For SHORT signals - look for either rejection from resistance or bearish momentum  
             else:  # SHORT
-                # Look for bearish momentum
+                # Bearish confirmation
                 if last_candle['close'] < last_candle['open']:  # Red candle
-                    confidence += 10
-                if last_candle['close'] < prev_candle['close']:  # Lower close
-                    confidence += 5
+                    confidence += 8
+                if momentum_1h < -0.5:  # Strong bearish momentum
+                    confidence += 12
+                elif momentum_1h < 0:  # Mild bearish momentum
+                    confidence += 6
+                # Check for rejection pattern
+                if (last_candle['high'] > prev_candle['high'] and 
+                    last_candle['close'] < last_candle['open']):
+                    confidence += 10  # Rejection confirmation
+
+        # Volume confirmation (if available)
+        if len(recent_candles) >= 2:
+            try:
+                current_volume = recent_candles[-1].get('volume', 0)
+                avg_volume = sum(c.get('volume', 0) for c in recent_candles[-3:]) / 3
+                
+                if current_volume > avg_volume * 1.5:  # High volume
+                    confidence += 8
+                elif current_volume > avg_volume * 1.2:  # Above average volume
+                    confidence += 4
+            except:
+                pass
+
+        # Zone quality factor
+        if zone['strength'] > 80:
+            confidence += 5  # Extra points for very strong zones
+        elif zone['strength'] > 90:
+            confidence += 10
 
         return min(confidence, 95)  # Cap at 95%
 
