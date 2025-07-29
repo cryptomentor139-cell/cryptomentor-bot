@@ -736,7 +736,6 @@ class Database:
             return results
         except Exception as e:
             print(f"Error getting recent activity: {e}")
-            return []}")
             return []
 
     def revoke_premium(self, user_id):
