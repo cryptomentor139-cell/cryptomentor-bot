@@ -465,16 +465,33 @@ class Database:
             print(f"DB Error (add_portfolio_item): {e}")
             return False
 
-    def log_user_activity(self, telegram_id, action, details=""):
+    def log_user_activity(self, telegram_id, action, details=None):
         """Log user activity"""
         try:
             self.cursor.execute("""
-                INSERT INTO user_activity (telegram_id, action, details)
-                VALUES (?, ?, ?)
-            """, (telegram_id, action, details))
+                INSERT INTO user_activity (telegram_id, action, details, timestamp)
+                VALUES (?, ?, ?, ?)
+            """, (telegram_id, action, details, datetime.now().isoformat()))
             self.conn.commit()
+            return True
         except Exception as e:
-            print(f"DB Error (log_user_activity): {e}")
+            print(f"Error logging user activity: {e}")
+            return False
+
+    def log_auto_signal_broadcast(self, signals_count, users_reached, total_eligible):
+        """Log auto signal broadcast for monitoring"""
+        try:
+            details = f"Signals: {signals_count}, Reached: {users_reached}/{total_eligible}"
+            self.cursor.execute("""
+                INSERT INTO user_activity (telegram_id, action, details, timestamp)
+                VALUES (?, ?, ?, ?)
+            """, (0, "auto_signal_broadcast", details, datetime.now().isoformat()))
+            self.conn.commit()
+            print(f"[AUTO-SIGNAL SND] 📝 Broadcast logged: {details}")
+            return True
+        except Exception as e:
+            print(f"[AUTO-SIGNAL SND] ❌ Error logging broadcast: {e}")
+            return False
 
     def get_user_stats(self):
         """Get user statistics for admin panel"""

@@ -175,15 +175,20 @@ class TelegramBot:
 
             # Initialize and start auto signals system for BOTH development and deployment
             try:
+                print("[AUTO-SIGNAL SND] Initializing auto signals system...")
                 self.auto_signals = initialize_auto_signals(self)
                 if self.auto_signals:
-                    # Start auto signals in BOTH modes for testing
+                    # Start auto signals in BOTH modes
                     asyncio.create_task(self.auto_signals.start_auto_scanner())
                     mode_text = "DEPLOYMENT" if IS_DEPLOYMENT else "DEVELOPMENT"
-                    print(f"🎯 Auto SnD signals scanner started in {mode_text} mode")
-                    print("📊 Eligible users: Admin & Lifetime premium users")
+                    print(f"[AUTO-SIGNAL SND] ✅ Auto SnD signals scanner started in {mode_text} mode")
+                    print(f"[AUTO-SIGNAL SND] 📊 Eligible users: Admin & Lifetime premium users")
+                    print(f"[AUTO-SIGNAL SND] 🎯 Target coins: {len(self.auto_signals.target_symbols)}")
+                    print(f"[AUTO-SIGNAL SND] ⚡ Min confidence: {self.auto_signals.min_confidence}%")
+                    print(f"[AUTO-SIGNAL SND] 🔄 Scan interval: {self.auto_signals.scan_interval // 60} minutes")
+                    print(f"[AUTO-SIGNAL SND] 🛡️ Anti-spam: {self.auto_signals.signal_cooldown // 3600}h cooldown")
                 else:
-                    print("❌ Auto signals system failed to initialize")
+                    print("[AUTO-SIGNAL SND] ❌ Auto signals system failed to initialize")
             except Exception as e:
                 print(f"⚠️ Auto signals initialization failed: {e}")
                 import traceback
