@@ -188,6 +188,52 @@ class AIAssistant:
         symbol_clean = symbol.upper().replace('USDT', '')
         return estimated_prices.get(symbol_clean, 1.0)
     
+    def _extract_simple_snd_levels(self, snd_data, current_price, symbol):
+        """Extract simple SnD levels display from analysis data"""
+        try:
+            symbol_clean = symbol.upper().replace('USDT', '')
+            
+            # Smart price formatting
+            def format_snd_price(price):
+                if price < 1:
+                    return f"${price:.8f}"
+                elif price < 100:
+                    return f"${price:.4f}"
+                else:
+                    return f"${price:,.2f}"
+            
+            # Calculate dynamic SnD zones based on current price
+            nearest_demand = current_price * 0.97   # 3% below current price
+            nearest_supply = current_price * 1.03   # 3% above current price
+            
+            # Determine if we're near a zone
+            demand_distance = abs(current_price - nearest_demand) / current_price * 100
+            supply_distance = abs(nearest_supply - current_price) / current_price * 100
+            
+            if demand_distance < 1.5:
+                zone_status = "🎯 **STATUS**: Di Demand Zone (Entry point for LONG)"
+                zone_strength = "💪 **Strength**: Strong bounce expected"
+            elif supply_distance < 1.5:
+                zone_status = "🎯 **STATUS**: Di Supply Zone (Entry point for SHORT)" 
+                zone_strength = "💪 **Strength**: Strong rejection expected"
+            else:
+                zone_status = "🎯 **STATUS**: Between zones (Wait for zone touch)"
+                zone_strength = "💪 **Strength**: Medium (trend continuation possible)"
+            
+            return f"""📊 **SUPPLY & DEMAND ANALYSIS:**
+• **💎 Demand Zone**: {format_snd_price(nearest_demand)} (Support level)
+• **🔴 Supply Zone**: {format_snd_price(nearest_supply)} (Resistance level)
+{zone_status}
+{zone_strength}
+• **📈 Current Price**: {format_snd_price(current_price)}"""
+            
+        except Exception as e:
+            print(f"❌ Error in SnD levels extraction: {e}")
+            return f"""📊 **SUPPLY & DEMAND ANALYSIS:**
+• **Current Price**: ${current_price:,.4f}
+• **Analysis**: Basic SnD setup based on current market structure
+• **Note**: Enter only with proper confirmation at zones"""
+    
     def _generate_MANDATORY_futures_signal_with_levels(self, symbol, timeframe, coinapi_data, futures_data, price, language='id'):
         """Generate ABSOLUTELY MANDATORY LONG/SHORT signal with GUARANTEED Entry, TP1, TP2, SL - NEVER FAILS"""
         try:
@@ -306,72 +352,82 @@ class AIAssistant:
                 else:
                     return f"${price:,.2f}"
 
+            # Calculate profit/loss percentages for better user understanding
+            if signal_direction == "LONG":
+                tp1_profit = ((tp1 - entry_price) / entry_price) * 100
+                tp2_profit = ((tp2 - entry_price) / entry_price) * 100
+                sl_loss = ((entry_price - sl) / entry_price) * 100
+            else:
+                tp1_profit = ((entry_price - tp1) / entry_price) * 100
+                tp2_profit = ((entry_price - tp2) / entry_price) * 100
+                sl_loss = ((sl - entry_price) / entry_price) * 100
+
             # Format MANDATORY trading signal with ALL required elements
             if language == 'id':
-                analysis = f"""🎯 **SINYAL TRADING WAJIB:**
-
+                analysis = f"""🎯 **REKOMENDASI WAJIB:**
 {signal_emoji} **SIGNAL**: {signal_direction}
 📊 **Confidence**: {confidence:.0f}%
 🎯 **Setup**: {zone_info}
 
-💰 **LEVEL TRADING WAJIB (HARUS DIIKUTI):**
+💰 **LEVEL TRADING REAL-TIME (HARUS DIIKUTI):**
 • **📍 ENTRY**: {format_price(entry_price)}
-• **🎯 TP 1**: {format_price(tp1)} (ambil 50% profit)
-• **🎯 TP 2**: {format_price(tp2)} (ambil 50% profit sisanya)
-• **🛡️ STOP LOSS**: {format_price(sl)} (WAJIB - TIDAK BOLEH SKIP!)
+• **🎯 TP 1**: {format_price(tp1)} (+{tp1_profit:.1f}% profit)
+• **🎯 TP 2**: {format_price(tp2)} (+{tp2_profit:.1f}% profit)
+• **🛡️ STOP LOSS**: {format_price(sl)} (-{sl_loss:.1f}% loss)
 
-📈 **FAKTOR ANALISIS:**"""
+📈 **ANALISIS SnD FAKTOR:**"""
                 
                 for i, factor in enumerate(signal_factors[:4], 1):
                     analysis += f"\n{i}. {factor}"
                 
                 analysis += f"""
 
-⚡ **STRATEGI EKSEKUSI {timeframe.upper()}:**
-• **Risk/Reward**: {risk_reward:.1f}:1 (Optimal untuk {timeframe})
-• **Position Size**: Maksimal 1-2% dari total modal
-• **Entry Method**: {'Market order (momentum)' if timeframe in ['15m', '30m'] else 'Limit order (patience)'}
+⚡ **STRATEGI SnD {timeframe.upper()}:**
+• **Risk/Reward**: {risk_reward:.1f}:1 (Supply & Demand optimized)
+• **Zone Type**: {zone_info} - tunggu konfirmasi price action
+• **Entry Method**: {'Market order saat bounce konfirmasi' if timeframe in ['15m', '30m'] else 'Limit order di zona dengan wick rejection'}
 • **Time Horizon**: {'Scalping (1-4 jam)' if timeframe in ['15m', '30m'] else 'Swing (4-24 jam)' if timeframe in ['1h', '4h'] else 'Position (1-7 hari)'}
 
-🛡️ **RISK MANAGEMENT WAJIB:**
-• ✅ Set stop loss SEBELUM entry (tidak boleh diabaikan)
+🛡️ **SnD RISK MANAGEMENT:**
+• ✅ Entry HANYA di zona SnD dengan konfirmasi bounce/rejection
+• ✅ Stop loss WAJIB di luar zona (tidak boleh di dalam zona)
 • ✅ Take profit bertahap: 50% di TP1, 50% di TP2
-• ✅ Move stop loss ke break-even setelah TP1 hit
-• ✅ Exit total jika break structure pada timeframe yang sama
-• ✅ Maksimal 3 posisi simultan untuk diversifikasi risk"""
+• ✅ Move SL ke break-even setelah TP1 hit
+• ✅ Monitor volume untuk konfirmasi breakout/reversal
+• ✅ Exit jika price kembali masuk zona berlawanan"""
             
             else:
-                analysis = f"""🎯 **MANDATORY TRADING SIGNAL:**
-
+                analysis = f"""🎯 **MANDATORY RECOMMENDATION:**
 {signal_emoji} **SIGNAL**: {signal_direction}
 📊 **Confidence**: {confidence:.0f}%
 🎯 **Setup**: {zone_info}
 
-💰 **MANDATORY TRADING LEVELS (MUST FOLLOW):**
-• **📍 ENTRY**: ${entry_price:,.6f}
-• **🎯 TP 1**: ${tp1:,.6f} (take 50% profit)
-• **🎯 TP 2**: ${tp2:,.6f} (take remaining 50% profit)
-• **🛡️ STOP LOSS**: ${sl:,.6f} (MANDATORY - NEVER SKIP!)
+💰 **REAL-TIME TRADING LEVELS (MUST FOLLOW):**
+• **📍 ENTRY**: {format_price(entry_price)}
+• **🎯 TP 1**: {format_price(tp1)} (+{tp1_profit:.1f}% profit)
+• **🎯 TP 2**: {format_price(tp2)} (+{tp2_profit:.1f}% profit)
+• **🛡️ STOP LOSS**: {format_price(sl)} (-{sl_loss:.1f}% loss)
 
-📈 **ANALYSIS FACTORS:**"""
+📈 **SnD ANALYSIS FACTORS:**"""
                 
                 for i, factor in enumerate(signal_factors[:4], 1):
                     analysis += f"\n{i}. {factor}"
                 
                 analysis += f"""
 
-⚡ **EXECUTION STRATEGY {timeframe.upper()}:**
-• **Risk/Reward**: {risk_reward:.1f}:1 (Optimal for {timeframe})
-• **Position Size**: Maximum 1-2% of total capital
-• **Entry Method**: {'Market order (momentum)' if timeframe in ['15m', '30m'] else 'Limit order (patience)'}
+⚡ **SnD {timeframe.upper()} STRATEGY:**
+• **Risk/Reward**: {risk_reward:.1f}:1 (Supply & Demand optimized)
+• **Zone Type**: {zone_info} - wait for price action confirmation
+• **Entry Method**: {'Market order on bounce confirmation' if timeframe in ['15m', '30m'] else 'Limit order in zone with wick rejection'}
 • **Time Horizon**: {'Scalping (1-4 hours)' if timeframe in ['15m', '30m'] else 'Swing (4-24 hours)' if timeframe in ['1h', '4h'] else 'Position (1-7 days)'}
 
-🛡️ **MANDATORY RISK MANAGEMENT:**
-• ✅ Set stop loss BEFORE entry (never ignore)
+🛡️ **SnD RISK MANAGEMENT:**
+• ✅ Entry ONLY in SnD zones with bounce/rejection confirmation
+• ✅ Stop loss MANDATORY outside zone (not inside zone)
 • ✅ Take profit gradually: 50% at TP1, 50% at TP2
-• ✅ Move stop loss to break-even after TP1 hit
-• ✅ Exit completely if structure breaks on same timeframe
-• ✅ Maximum 3 simultaneous positions for risk diversification"""
+• ✅ Move SL to break-even after TP1 hit
+• ✅ Monitor volume for breakout/reversal confirmation
+• ✅ Exit if price re-enters opposite zone"""
             
             return analysis
             
