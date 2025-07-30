@@ -370,10 +370,9 @@ class AIAssistant:
 🎯 **Setup**: {zone_info}
 
 💰 **LEVEL TRADING REAL-TIME (HARUS DIIKUTI):**
-• **📍 ENTRY**: {format_price(entry_price)}
-• **🎯 TP 1**: {format_price(tp1)} (+{tp1_profit:.1f}% profit)
-• **🎯 TP 2**: {format_price(tp2)} (+{tp2_profit:.1f}% profit)
-• **🛡️ STOP LOSS**: {format_price(sl)} (-{sl_loss:.1f}% loss)
+📍 **Entry**: {format_price(entry_price)}
+🎯 **Target**: {format_price(tp1)} (+{tp1_profit:.1f}% profit)
+🛡️ **Stop**: {format_price(sl)} (-{sl_loss:.1f}% loss)
 
 📈 **ANALISIS SnD FAKTOR:**"""
                 
@@ -403,10 +402,9 @@ class AIAssistant:
 🎯 **Setup**: {zone_info}
 
 💰 **REAL-TIME TRADING LEVELS (MUST FOLLOW):**
-• **📍 ENTRY**: {format_price(entry_price)}
-• **🎯 TP 1**: {format_price(tp1)} (+{tp1_profit:.1f}% profit)
-• **🎯 TP 2**: {format_price(tp2)} (+{tp2_profit:.1f}% profit)
-• **🛡️ STOP LOSS**: {format_price(sl)} (-{sl_loss:.1f}% loss)
+📍 **Entry**: {format_price(entry_price)}
+🎯 **Target**: {format_price(tp1)} (+{tp1_profit:.1f}% profit)
+🛡️ **Stop**: {format_price(sl)} (-{sl_loss:.1f}% loss)
 
 📈 **SnD ANALYSIS FACTORS:**"""
                 
