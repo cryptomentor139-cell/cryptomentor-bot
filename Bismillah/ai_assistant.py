@@ -106,7 +106,7 @@ class AIAssistant:
         }
 
     def _analyze_market_structure(self, symbol, market_data, timeframe):
-        """Analyze market structure and determine trading direction"""
+        """Analyze market structure and determine trading direction with HOLD for low confidence"""
         futures_data = market_data['futures_data']
         snd_data = market_data['snd_data']
         
@@ -122,9 +122,9 @@ class AIAssistant:
                 signal_factors.append(f"🎯 SnD {best_snd_signal.get('direction', 'LONG')} zone confirmed")
                 preferred_direction = best_snd_signal.get('direction', 'LONG')
             else:
-                preferred_direction = 'LONG'
+                preferred_direction = 'HOLD'  # Set HOLD if SnD confidence is low
         else:
-            preferred_direction = 'LONG'
+            preferred_direction = 'HOLD'  # Set HOLD if no SnD signals
             
         # Factor 2: Futures sentiment
         if 'error' not in futures_data:
@@ -143,16 +143,25 @@ class AIAssistant:
         signal_strength += timeframe_weight
         signal_factors.append(f"📊 {timeframe} structure analysis")
         
-        # Determine final direction and confidence
-        if signal_strength >= 4:
+        # Determine final direction and confidence with HOLD logic
+        if signal_strength >= 4 and preferred_direction != 'HOLD':
             direction = preferred_direction
             confidence = min(90, 65 + signal_strength * 5)
-        elif signal_strength <= 1:
-            direction = 'SHORT' if preferred_direction == 'LONG' else 'LONG'
-            confidence = min(85, 60 + abs(signal_strength) * 5)
+        elif signal_strength <= 1 or preferred_direction == 'HOLD':
+            # NEW LOGIC: Return HOLD instead of forcing LONG/SHORT
+            direction = 'HOLD'
+            confidence = 50  # Low confidence for HOLD
+            signal_factors.append("⏸️ Sinyal tidak jelas - tunggu konfirmasi market")
         else:
-            direction = preferred_direction
-            confidence = min(85, 60 + signal_strength * 5)
+            # Only assign LONG/SHORT if confidence > 60%
+            calculated_confidence = min(85, 60 + signal_strength * 5)
+            if calculated_confidence > 60:
+                direction = preferred_direction if preferred_direction != 'HOLD' else 'LONG'
+                confidence = calculated_confidence
+            else:
+                direction = 'HOLD'
+                confidence = 50
+                signal_factors.append("⏸️ Confidence rendah - hold position")
         
         return {
             'direction': direction,
@@ -195,7 +204,7 @@ class AIAssistant:
         }
 
     def _format_futures_output(self, symbol, timeframe, market_data, market_analysis, trading_levels, language='id'):
-        """Format the final clean output for Telegram"""
+        """Format the final clean output for Telegram with HOLD handling"""
         price = market_data['price']
         direction = market_analysis['direction']
         confidence = market_analysis['confidence']
@@ -210,11 +219,44 @@ class AIAssistant:
             else:
                 return f"${p:,.2f}"
         
-        direction_emoji = "🟢" if direction == 'LONG' else "🔴"
-        confidence_emoji = "🔥" if confidence >= 85 else "⭐" if confidence >= 75 else "💡"
+        # Handle HOLD signals
+        if direction == 'HOLD':
+            direction_emoji = "⏸️"
+            confidence_emoji = "⚠️"
+        else:
+            direction_emoji = "🟢" if direction == 'LONG' else "🔴"
+            confidence_emoji = "🔥" if confidence >= 85 else "⭐" if confidence >= 75 else "💡"
         
         if language == 'id':
-            message = f"""🎯 **FUTURES ANALYSIS {symbol.upper()} ({timeframe})**
+            if direction == 'HOLD':
+                message = f"""🎯 **FUTURES ANALYSIS {symbol.upper()} ({timeframe})**
+
+💰 **Harga**: {format_price(price)} {market_data['price_emoji']}
+📡 **Source**: {market_data['price_source']}
+
+{direction_emoji} **SIGNAL**: {direction} {confidence_emoji}
+📊 **Confidence**: {confidence:.0f}%
+
+⏸️ **REKOMENDASI HOLD:**
+• Tidak ada setup trading yang jelas
+• Tunggu konfirmasi trend yang lebih kuat
+• Monitor level kunci: Support ${format_price(price * 0.97)} | Resistance ${format_price(price * 1.03)}
+
+📈 **ANALISIS:**"""
+                
+                for factor in factors[:3]:  # Limit to 3 key factors
+                    message += f"\n• {factor}"
+                
+                message += f"""
+
+⚡ **STRATEGI HOLD:**
+• Tunggu breakout atau breakdown yang jelas
+• Confidence terlalu rendah untuk entry
+• Observasi saja, jangan FOMO
+
+⏰ **Update**: {datetime.now().strftime('%H:%M:%S WIB')}"""
+            else:
+                message = f"""🎯 **FUTURES ANALYSIS {symbol.upper()} ({timeframe})**
 
 💰 **Harga**: {format_price(price)} {market_data['price_emoji']}
 📡 **Source**: {market_data['price_source']}
@@ -229,11 +271,11 @@ class AIAssistant:
 🛡️ **Stop Loss**: {format_price(trading_levels['sl'])}
 
 📈 **ANALISIS:**"""
-            
-            for factor in factors[:3]:  # Limit to 3 key factors
-                message += f"\n• {factor}"
-            
-            message += f"""
+                
+                for factor in factors[:3]:  # Limit to 3 key factors
+                    message += f"\n• {factor}"
+                
+                message += f"""
 
 ⚡ **STRATEGY {timeframe.upper()}:**
 • Risk/Reward: {trading_levels['rr_ratio']:.1f}:1
@@ -4217,7 +4259,7 @@ Try again in a few minutes for real-time data."""
             return f"❌ Error generating futures trading signals: {str(e)}"
     
     def _generate_individual_futures_signal(self, symbol, coinapi_data, futures_data, language='id'):
-        """Generate individual futures signal for a symbol"""
+        """Generate individual futures signal for a symbol with HOLD for low confidence"""
         try:
             # Get price from best available source
             price = 0
@@ -4283,7 +4325,7 @@ Try again in a few minutes for real-time data."""
                     signal_score += 1
                     signal_reasons.append("Support zone entry")
             
-            # Generate clear signal
+            # Generate clear signal with HOLD for low confidence
             if signal_score >= 2:
                 direction = "LONG"
                 emoji = "🟢"
@@ -4301,28 +4343,21 @@ Try again in a few minutes for real-time data."""
                 tp2 = price * 0.95
                 sl = price * 1.025
             else:
-                # Force signal based on simple logic to ensure always providing recommendation
-                import random
-                if random.choice([True, False]):  # Random but deterministic signal
-                    direction = "LONG"
-                    emoji = "🟢"
-                    confidence = 60
-                    entry = price
-                    tp1 = price * 1.02
-                    tp2 = price * 1.04
-                    sl = price * 0.98
-                    signal_reasons.append("Technical breakout potential")
-                else:
-                    direction = "SHORT"
-                    emoji = "🔴"
-                    confidence = 60
-                    entry = price
-                    tp1 = price * 0.98
-                    tp2 = price * 0.96
-                    sl = price * 1.02
-                    signal_reasons.append("Resistance rejection expected")
+                # NEW LOGIC: Set HOLD for unclear signals (confidence ≤60%)
+                direction = "HOLD"
+                emoji = "⏸️"
+                confidence = 55  # Low confidence for HOLD
+                entry = price
+                tp1 = price * 1.01  # Minimal TP for display
+                tp2 = price * 1.02
+                sl = price * 0.99   # Minimal SL for display
+                signal_reasons.append("Sinyal tidak jelas - tunggu konfirmasi")
             
-            # Format individual signal (remove signal_count reference)
+            # Skip HOLD signals from final output (don't return signal for HOLD)
+            if direction == "HOLD":
+                return None
+            
+            # Format individual signal (only for LONG/SHORT signals)
             if language == 'id':
                 signal_text = f"""**{symbol.upper()}** {emoji} **{direction}**
 💰 Entry: ${entry:,.4f} | TP1: ${tp1:,.4f} | TP2: ${tp2:,.4f} | SL: ${sl:,.4f}
