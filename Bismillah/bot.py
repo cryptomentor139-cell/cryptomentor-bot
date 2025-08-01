@@ -2423,11 +2423,23 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
-        if not context.args:
+        # Get the original message text and extract everything after "/broadcast "
+        original_text = update.message.text
+        if not original_text or len(original_text.strip()) <= 10:  # "/broadcast " = 10 chars
             await update.message.reply_text("❌ Gunakan format: `/broadcast <message>`")
             return
 
-        message = ' '.join(context.args)
+        # Extract message preserving exact formatting (spaces, newlines, etc.)
+        if original_text.startswith('/broadcast '):
+            message = original_text[11:]  # Remove "/broadcast " (11 characters)
+        else:
+            await update.message.reply_text("❌ Format broadcast tidak valid.")
+            return
+
+        if not message.strip():
+            await update.message.reply_text("❌ Pesan broadcast tidak boleh kosong.")
+            return
+
         self.pending_broadcast = message
 
         await update.message.reply_text(
@@ -2465,13 +2477,25 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
                 continue
 
             try:
-                await self.application.bot.send_message(
-                    chat_id=user_id_target,
-                    text=self.pending_broadcast,
-                    parse_mode='Markdown'
-                )
+                # Send message with exact formatting - try markdown first, fallback to plain text
+                try:
+                    await self.application.bot.send_message(
+                        chat_id=user_id_target,
+                        text=self.pending_broadcast,
+                        parse_mode='Markdown'
+                    )
+                except Exception as markdown_error:
+                    # If markdown fails, send as plain text to preserve exact formatting
+                    print(f"Markdown failed for user {user_id_target}, sending as plain text: {markdown_error}")
+                    await self.application.bot.send_message(
+                        chat_id=user_id_target,
+                        text=self.pending_broadcast,
+                        parse_mode=None
+                    )
+                
                 success_count += 1
                 await asyncio.sleep(0.1)  # Rate limiting
+                
             except Exception as e:
                 print(f"Failed to send broadcast to user {user_id_target}: {e}")
                 continue
