@@ -1636,7 +1636,7 @@ Pastikan menyertakan User ID (`{user_id}`) dan paket yang dipilih untuk aktivasi
                 SELECT COUNT(*) FROM users WHERE referred_by = ?
             """, (user_id,))
             total_free_referrals = self.db.cursor.fetchone()[0]
-            credits_earned = self.db.cursor.fetchone()[0] * 10 if self.db.cursor.fetchone() is not None else 0
+            credits_earned = total_free_referrals * 10  # 10 credits per referral
         except Exception as e:
             print(f"Error getting free referral stats: {e}")
             total_free_referrals = 0
@@ -1920,14 +1920,40 @@ Gunakan `/subscribe` untuk upgrade!
             if days == 0:
                 success = self.db.grant_permanent_premium(target_user_id)
                 premium_type = "LIFETIME (Auto Signals Access)"
+                package_amount = 5000000  # Rp 5 juta for lifetime
             else:
                 success = self.db.grant_premium(target_user_id, days)
                 premium_type = f"{days} hari"
+                # Calculate package amount based on days
+                if days == 30:
+                    package_amount = 320000
+                elif days == 60:
+                    package_amount = 600000
+                elif days == 180:
+                    package_amount = 1800000
+                elif days == 365:
+                    package_amount = 3000000
+                else:
+                    package_amount = days * 10000  # Default calculation
 
             if success:
                 user_info = self.db.get_user(target_user_id)
                 username = user_info.get('username', 'No username')
                 first_name = user_info.get('first_name', 'Unknown')
+
+                # Check if user was referred via premium referral
+                referrer_id = self.db.check_premium_referral(target_user_id)
+                referral_reward_msg = ""
+                
+                if referrer_id and self.db.is_user_premium(referrer_id):
+                    # Give premium referral reward
+                    reward_success = self.db.record_premium_referral_reward(
+                        referrer_id, target_user_id, premium_type, package_amount
+                    )
+                    if reward_success:
+                        referrer_info = self.db.get_user(referrer_id)
+                        referrer_name = referrer_info.get('first_name', 'Unknown') if referrer_info else 'Unknown'
+                        referral_reward_msg = f"\n💰 **Premium Referral Reward**: Rp 10,000 diberikan ke {referrer_name} (ID: {referrer_id})"
 
                 message = f"""✅ **Premium berhasil diberikan!**
 
@@ -1942,7 +1968,7 @@ Gunakan `/subscribe` untuk upgrade!
 • **SnD Analysis**: ✅ Unlimited
 • **Auto Signals**: {'✅ Enabled' if days == 0 else '❌ Lifetime Only'}
 
-🎉 User sekarang memiliki akses unlimited ke semua fitur CoinAPI + SnD!"""
+🎉 User sekarang memiliki akses unlimited ke semua fitur CoinAPI + SnD!{referral_reward_msg}"""
 
                 # Log admin action
                 self.db.log_user_activity(
