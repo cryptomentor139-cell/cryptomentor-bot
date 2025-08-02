@@ -497,7 +497,55 @@ class AIAssistant:
             # Identify supply zones (resistance levels dengan volume tinggi)
             supply_zones = []
             for i in range(2, len(highs) - 2):
-
+                if (highs[i] > highs[i-1] and highs[i] > highs[i+1] and 
+                    highs[i] > highs[i-2] and highs[i] > highs[i+2]):
+                    # Local high dengan volume confirmation
+                    if volumes[i] > sum(volumes[max(0, i-3):i+4]) / 7 * 1.2:
+                        supply_zones.append({
+                            'price': highs[i],
+                            'strength': min(100, volumes[i] / max(volumes) * 100),
+                            'touches': 1
+                        })
+            
+            # Identify demand zones (support levels dengan volume tinggi)
+            demand_zones = []
+            for i in range(2, len(lows) - 2):
+                if (lows[i] < lows[i-1] and lows[i] < lows[i+1] and 
+                    lows[i] < lows[i-2] and lows[i] < lows[i+2]):
+                    # Local low dengan volume confirmation
+                    if volumes[i] > sum(volumes[max(0, i-3):i+4]) / 7 * 1.2:
+                        demand_zones.append({
+                            'price': lows[i],
+                            'strength': min(100, volumes[i] / max(volumes) * 100),
+                            'touches': 1
+                        })
+            
+            # Sort dan filter zones terbaik
+            supply_zones = sorted(supply_zones, key=lambda x: x['strength'], reverse=True)[:3]
+            demand_zones = sorted(demand_zones, key=lambda x: x['strength'], reverse=True)[:3]
+            
+            # Calculate overall strength
+            avg_supply_strength = sum(z['strength'] for z in supply_zones) / len(supply_zones) if supply_zones else 0
+            avg_demand_strength = sum(z['strength'] for z in demand_zones) / len(demand_zones) if demand_zones else 0
+            overall_strength = (avg_supply_strength + avg_demand_strength) / 2
+            
+            strength_rating = 'high' if overall_strength > 70 else 'medium' if overall_strength > 40 else 'low'
+            
+            return {
+                'demand_zones': [z['price'] for z in demand_zones],
+                'supply_zones': [z['price'] for z in supply_zones],
+                'strength': strength_rating,
+                'demand_details': demand_zones,
+                'supply_details': supply_zones
+            }
+            
+        except Exception as e:
+            print(f"❌ Error in advanced SnD calculation: {e}")
+            return {
+                'demand_zones': [current_price * 0.95, current_price * 0.97],
+                'supply_zones': [current_price * 1.03, current_price * 1.05],
+                'strength': 'low'
+            }
 
     def _get_higher_timeframe(self, timeframe):
         """Get higher timeframe for trend analysis"""
@@ -2152,6 +2200,30 @@ class AIAssistant:
         except Exception as e:
             print(f"❌ Error extracting SnD levels: {e}")
             return self._generate_basic_snd_levels(current_price)
+
+    def _generate_basic_snd_levels(self, current_price):
+        """Generate basic SnD levels when main analysis fails"""
+        try:
+            entry = current_price * 0.999
+            tp = current_price * 1.02
+            sl = current_price * 0.985
+            
+            def format_price(price):
+                if price < 1:
+                    return f"${price:.8f}"
+                elif price < 100:
+                    return f"${price:.6f}"
+                else:
+                    return f"${price:,.4f}"
+            
+            return f"""🎯 **BASIC SnD LEVELS** 🟢
+📍 **Entry**: {format_price(entry)}
+🎯 **TP**: {format_price(tp)}
+🛡️ **SL**: {format_price(sl)}
+
+"""
+        except Exception:
+            return "🎯 **Basic levels generation failed**\n"
     
     
 
@@ -3543,6 +3615,30 @@ class AIAssistant:
 💡 **Pro Tip**: Wait for confirmation at SnD zones before manual entry"""
         
         return header + "\n\n".join(formatted_recommendations) + footer
+
+    def get_comprehensive_analysis(self, symbol, futures_data, price_data, language='id', crypto_api=None):
+        """Get comprehensive analysis combining multiple data sources"""
+        try:
+            # Get enhanced futures analysis
+            futures_analysis = self.get_enhanced_futures_analysis_with_coinapi(symbol, '4h', language, crypto_api)
+            
+            # Add market sentiment if available
+            if futures_data and 'error' not in futures_data:
+                ls_data = futures_data.get('long_short_ratio_data', {})
+                if 'error' not in ls_data:
+                    long_ratio = ls_data.get('long_ratio', 50)
+                    sentiment = "Bullish" if long_ratio > 60 else "Bearish" if long_ratio < 40 else "Neutral"
+                    
+                    if language == 'id':
+                        futures_analysis += f"\n\n📊 **Sentiment Futures**: {sentiment} ({long_ratio:.1f}% Long positions)"
+                    else:
+                        futures_analysis += f"\n\n📊 **Futures Sentiment**: {sentiment} ({long_ratio:.1f}% Long positions)"
+            
+            return futures_analysis
+            
+        except Exception as e:
+            print(f"❌ Error in comprehensive analysis: {e}")
+            return self.get_enhanced_futures_analysis_with_coinapi(symbol, '4h', language, crypto_api)
 
     def get_ai_response(self, text, language='id'):
         """Enhanced AI response for crypto beginners and general questions"""
