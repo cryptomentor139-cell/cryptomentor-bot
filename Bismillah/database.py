@@ -1036,6 +1036,46 @@ class Database:
             print(f"Error getting premium referral stats: {e}")
             return {'total_referrals': 0, 'total_earnings': 0, 'recent_referrals': []}
 
+    def record_premium_referral_reward(self, referrer_id, referred_id, subscription_type, package_amount):
+        """Record premium referral reward when someone subscribes"""
+        try:
+            # Calculate earnings (Rp 10,000 per premium subscription)
+            earnings = 10000
+            
+            self.cursor.execute("""
+                INSERT INTO premium_referrals 
+                (referrer_id, referred_id, subscription_type, subscription_amount, earnings, status, created_at)
+                VALUES (?, ?, ?, ?, ?, 'paid', datetime('now'))
+            """, (referrer_id, referred_id, subscription_type, package_amount, earnings))
+            
+            # Update referrer's premium earnings
+            self.cursor.execute("""
+                UPDATE users SET premium_earnings = premium_earnings + ? WHERE telegram_id = ?
+            """, (earnings, referrer_id))
+            
+            self.conn.commit()
+            
+            # Log the reward
+            self.log_user_activity(referrer_id, "premium_referral_reward", 
+                                 f"Earned Rp {earnings:,} from {referred_id} subscribing {subscription_type}")
+            
+            return True
+        except Exception as e:
+            print(f"Error recording premium referral reward: {e}")
+            return False
+
+    def check_premium_referral(self, telegram_id):
+        """Check if user was referred via premium referral code"""
+        try:
+            self.cursor.execute("""
+                SELECT referred_by FROM users WHERE telegram_id = ?
+            """, (telegram_id,))
+            result = self.cursor.fetchone()
+            return result[0] if result and result[0] else None
+        except Exception as e:
+            print(f"Error checking premium referral: {e}")
+            return None
+
     def add_credits(self, telegram_id, amount):
         """Add credits to user account"""
         try:
