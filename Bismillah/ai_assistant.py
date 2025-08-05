@@ -634,13 +634,32 @@ class AIAssistant:
             print(f"❌ Error formatting Coinglass analysis: {e}")
             return self._generate_emergency_futures_signal(symbol, timeframe, language, str(e))
 
-    async def generate_futures_signals(self, language='id', crypto_api=None):
+    async def generate_futures_signals(self, language='id', crypto_api=None, query_args=None):
         """Generate comprehensive futures signals using Coinglass v2 data"""
         try:
             if not crypto_api:
                 return "❌ CryptoAPI tidak tersedia untuk generate futures signals."
 
             print("🔄 Generating futures signals with Coinglass v2 integration...")
+
+            # Process query args to clean SND references
+            cleaned_query_info = ""
+            if query_args:
+                raw_query = ' '.join(query_args).upper()
+                query_parts = raw_query.split()
+                
+                # Remove "SND" from query parts and extract meaningful info
+                cleaned_parts = [part for part in query_parts if part != 'SND']
+                if cleaned_parts:
+                    # Check if first part is timeframe
+                    if any(tf in cleaned_parts[0] for tf in ['M', 'H', 'D', 'W']):
+                        timeframe = cleaned_parts[0]
+                        symbol_filter = cleaned_parts[1] if len(cleaned_parts) > 1 else None
+                        cleaned_query_info = f"🎯 **Filter Query**: {timeframe}" + (f" untuk {symbol_filter}" if symbol_filter else "")
+                    else:
+                        # Symbol filter only
+                        symbol_filter = cleaned_parts[0]
+                        cleaned_query_info = f"🎯 **Symbol Filter**: {symbol_filter}"
 
             # Target symbols for analysis
             target_symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'ADA', 'AVAX', 'MATIC', 'DOT', 'ATOM', 'LINK']
@@ -698,14 +717,14 @@ class AIAssistant:
             if not signal_recommendations:
                 return self._generate_no_signals_message(language)
 
-            # Format output with Coinglass v2 data
-            return self._format_coinglass_v2_signals_output(signal_recommendations, language)
+            # Format output with Coinglass v2 data and cleaned query info
+            return self._format_coinglass_v2_signals_output(signal_recommendations, language, cleaned_query_info)
 
         except Exception as e:
             print(f"❌ Error generating futures signals: {e}")
             return f"❌ Error dalam generate futures signals: {str(e)}"
 
-    def _format_coinglass_v2_signals_output(self, signals, language='id'):
+    def _format_coinglass_v2_signals_output(self, signals, language='id', query_info=""):
         """Format Coinglass v2 signals output"""
         try:
             if language == 'id':
@@ -714,6 +733,7 @@ class AIAssistant:
 📊 **{len(signals)} Sinyal Berkualitas Tinggi** (Confidence ≥65%)
 🕐 **Waktu**: {datetime.now().strftime('%H:%M:%S WIB')}
 📡 **Source**: Coinglass API v2 Real-time
+{query_info}
 
 """
             else:
@@ -722,6 +742,7 @@ class AIAssistant:
 📊 **{len(signals)} High-Quality Signals** (Confidence ≥65%)
 🕐 **Time**: {datetime.now().strftime('%H:%M:%S UTC')}
 📡 **Source**: Coinglass API v2 Real-time
+{query_info}
 
 """
 
