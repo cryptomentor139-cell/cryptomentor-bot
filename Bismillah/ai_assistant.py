@@ -812,6 +812,29 @@ class AIAssistant:
     def _format_coinglass_v2_analysis(self, symbol, timeframe, futures_data, language='id'):
         """Format Coinglass v2 futures analysis output"""
         try:
+            import html
+            
+            # Helper function to format price
+            def format_price(price):
+                if price < 1:
+                    return f"${price:.8f}"
+                elif price < 100:
+                    return f"${price:.6f}"
+                else:
+                    return f"${price:,.4f}"
+            
+            # Helper function to escape special characters for Telegram
+            def safe_text(text):
+                # Escape HTML special characters
+                text = html.escape(str(text))
+                # Replace problematic markdown characters
+                text = text.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]')
+                text = text.replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`')
+                text = text.replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=')
+                text = text.replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.')
+                text = text.replace('!', '\\!')
+                return text
+            
             price_data = futures_data.get('price_data', {})
             long_short_data = futures_data.get('long_short_data', {})
             oi_data = futures_data.get('open_interest_data', {})
@@ -822,12 +845,7 @@ class AIAssistant:
 
             # Format price
             current_price = price_data.get('price', 0)
-            if current_price < 1:
-                price_str = f"${current_price:.8f}"
-            elif current_price < 100:
-                price_str = f"${current_price:.6f}"
-            else:
-                price_str = f"${current_price:,.4f}"
+            price_str = format_price(current_price)
 
             # Direction emoji
             direction = recommendation.get('direction', 'HOLD')
@@ -848,102 +866,130 @@ class AIAssistant:
             sentiment = sentiment_analysis.get('overall', 'Neutral')
 
             if language == 'id':
-                message = f"""🎯 **ANALISIS FUTURES COINGLASS v2 - {symbol.upper()} ({timeframe})**
+                message = f"""🎯 *ANALISIS FUTURES COINGLASS v2 \\- {safe_text(symbol.upper())} \\({safe_text(timeframe)}\\)*
 
-💰 **HARGA SAAT INI**: {price_str} (Sumber: Coinglass)
+💰 *HARGA SAAT INI*: {safe_text(price_str)} \\(Sumber: Coinglass\\)
 
-{direction_emoji} **REKOMENDASI: {direction}** {signal_emoji}
-📊 **CONFIDENCE**: {confidence:.0f}%
-🧠 **SENTIMEN**: {sentiment}
+{direction_emoji} *REKOMENDASI: {safe_text(direction)}* {signal_emoji}
+📊 *CONFIDENCE*: {confidence:.0f}%
+🧠 *SENTIMEN*: {safe_text(sentiment)}
 
-💰 **DETAIL TRADING:**"""
+💰 *DETAIL TRADING:*"""
 
                 if direction != 'HOLD':
+                    entry_price = format_price(recommendation.get('entry_price', current_price))
+                    tp1_price = format_price(recommendation.get('take_profit_1', current_price))
+                    tp2_price = format_price(recommendation.get('take_profit_2', current_price))
+                    sl_price = format_price(recommendation.get('stop_loss', current_price))
+                    
                     message += f"""
-┣━ 📍 **ENTRY**: {format_price(recommendation.get('entry_price', current_price))}
-┣━ 🎯 **TP 1**: {format_price(recommendation.get('take_profit_1', current_price))}
-┣━ 🎯 **TP 2**: {format_price(recommendation.get('take_profit_2', current_price))}
-┗━ 🛡️ **STOP LOSS**: {format_price(recommendation.get('stop_loss', current_price))} (**WAJIB!**)"""
+• 📍 *ENTRY*: {safe_text(entry_price)}
+• 🎯 *TP 1*: {safe_text(tp1_price)}
+• 🎯 *TP 2*: {safe_text(tp2_price)}
+• 🛡️ *STOP LOSS*: {safe_text(sl_price)} \\(*WAJIB\\!*\\)"""
                 else:
+                    monitor_low = format_price(current_price * 0.98)
+                    monitor_high = format_price(current_price * 1.02)
                     message += f"""
-┣━ ⏸️ **HOLD POSITION** - Tunggu sinyal yang lebih jelas
-┣━ 📊 **MONITOR LEVEL**: {format_price(current_price * 0.98)} - {format_price(current_price * 1.02)}"""
+• ⏸️ *HOLD POSITION* \\- Tunggu sinyal yang lebih jelas
+• 📊 *MONITOR LEVEL*: {safe_text(monitor_low)} \\- {safe_text(monitor_high)}"""
 
+                long_status = 'Overleveraged Longs' if long_ratio > 70 else 'Oversold Conditions' if long_ratio < 30 else 'Balanced'
+                funding_status = 'High Longs Paying' if funding_rate > 1 else 'High Shorts Paying' if funding_rate < -0.5 else 'Neutral'
+                
                 message += f"""
 
-📊 **DATA COINGLASS v2:**
-• **Long/Short Ratio**: {long_ratio:.1f}% ({'Overleveraged Longs' if long_ratio > 70 else 'Oversold Conditions' if long_ratio < 30 else 'Balanced'})
-• **Open Interest Change**: {oi_data.get('oi_change_percent', 0):+.2f}%
-• **Funding Rate**: {funding_rate:.4f}% ({'High Longs Paying' if funding_rate > 1 else 'High Shorts Paying' if funding_rate < -0.5 else 'Neutral'})
+📊 *DATA COINGLASS v2:*
+• *Long/Short Ratio*: {long_ratio:.1f}% \\({safe_text(long_status)}\\)
+• *Open Interest Change*: {oi_data.get('oi_change_percent', 0):+.2f}%
+• *Funding Rate*: {funding_rate:.4f}% \\({safe_text(funding_status)}\\)
 
-🧠 **ANALISIS SMC:**
-• **Bias**: {smc_analysis.get('smart_money_bias', 'Neutral').title()}
-• **Market Structure**: {smc_analysis.get('market_structure', 'Neutral').title()}"""
+🧠 *ANALISIS SMC:*
+• *Bias*: {safe_text(smc_analysis.get('smart_money_bias', 'Neutral').title())}
+• *Market Structure*: {safe_text(smc_analysis.get('market_structure', 'Neutral').title())}"""
 
                 liquidity_zones = smc_analysis.get('liquidity_zones', [])
                 if liquidity_zones:
-                    message += f"\n• **Liquidity Zones**:"
+                    message += f"\n• *Liquidity Zones*:"
                     for zone in liquidity_zones[:2]:
-                        message += f"\n  - {zone.get('type', 'N/A').title()}: {format_price(zone.get('price', 0))} ({zone.get('strength', 'medium').title()})"
+                        zone_price = format_price(zone.get('price', 0))
+                        zone_type = safe_text(zone.get('type', 'N/A').title())
+                        zone_strength = safe_text(zone.get('strength', 'medium').title())
+                        message += f"\n  \\- {zone_type}: {safe_text(zone_price)} \\({zone_strength}\\)"
 
+                pos_size = '2\\-3%' if confidence >= 80 else '1\\-2%' if confidence >= 70 else '0\\.5\\-1%'
                 message += f"""
 
-⚡ **DETAIL TRADING:**
-• **Confidence**: {confidence:.0f}%
-• **Risk/Reward Ratio**: {risk_reward:.2f}:1
-• **Position Size**: {'2-3%' if confidence >= 80 else '1-2%' if confidence >= 70 else '0.5-1%'} Modal
+⚡ *DETAIL TRADING:*
+• *Confidence*: {confidence:.0f}%
+• *Risk/Reward Ratio*: {risk_reward:.2f}:1
+• *Position Size*: {pos_size} Modal
 
-⏰ **Update**: {datetime.now().strftime('%H:%M:%S WIB')}
-🔄 **Next Update**: Auto-refreshing"""
+⏰ *Update*: {safe_text(datetime.now().strftime('%H:%M:%S WIB'))}
+🔄 *Next Update*: Auto\\-refreshing"""
 
             else: # English
-                message = f"""🎯 **COINGLASS v2 FUTURES ANALYSIS - {symbol.upper()} ({timeframe})**
+                message = f"""🎯 *COINGLASS v2 FUTURES ANALYSIS \\- {safe_text(symbol.upper())} \\({safe_text(timeframe)}\\)*
 
-💰 **CURRENT PRICE**: {price_str} (Source: Coinglass)
+💰 *CURRENT PRICE*: {safe_text(price_str)} \\(Source: Coinglass\\)
 
-{direction_emoji} **RECOMMENDATION: {direction}** {signal_emoji}
-📊 **CONFIDENCE**: {confidence:.0f}%
-🧠 **SENTIMENT**: {sentiment}
+{direction_emoji} *RECOMMENDATION: {safe_text(direction)}* {signal_emoji}
+📊 *CONFIDENCE*: {confidence:.0f}%
+🧠 *SENTIMENT*: {safe_text(sentiment)}
 
-💰 **TRADING DETAILS:**"""
+💰 *TRADING DETAILS:*"""
 
                 if direction != 'HOLD':
+                    entry_price = format_price(recommendation.get('entry_price', current_price))
+                    tp1_price = format_price(recommendation.get('take_profit_1', current_price))
+                    tp2_price = format_price(recommendation.get('take_profit_2', current_price))
+                    sl_price = format_price(recommendation.get('stop_loss', current_price))
+                    
                     message += f"""
-┣━ 📍 **ENTRY**: {format_price(recommendation.get('entry_price', current_price))}
-┣━ 🎯 **TP 1**: {format_price(recommendation.get('take_profit_1', current_price))}
-┣━ 🎯 **TP 2**: {format_price(recommendation.get('take_profit_2', current_price))}
-┗━ 🛡️ **STOP LOSS**: {format_price(recommendation.get('stop_loss', current_price))} (**MANDATORY!**)"""
+• 📍 *ENTRY*: {safe_text(entry_price)}
+• 🎯 *TP 1*: {safe_text(tp1_price)}
+• 🎯 *TP 2*: {safe_text(tp2_price)}
+• 🛡️ *STOP LOSS*: {safe_text(sl_price)} \\(*MANDATORY\\!*\\)"""
                 else:
+                    monitor_low = format_price(current_price * 0.98)
+                    monitor_high = format_price(current_price * 1.02)
                     message += f"""
-┣━ ⏸️ **HOLD POSITION** - Wait for clearer signals
-┣━ 📊 **MONITOR LEVELS**: {format_price(current_price * 0.98)} - {format_price(current_price * 1.02)}"""
+• ⏸️ *HOLD POSITION* \\- Wait for clearer signals
+• 📊 *MONITOR LEVELS*: {safe_text(monitor_low)} \\- {safe_text(monitor_high)}"""
 
+                long_status = 'Overleveraged Longs' if long_ratio > 70 else 'Oversold Conditions' if long_ratio < 30 else 'Balanced'
+                funding_status = 'High Longs Paying' if funding_rate > 1 else 'High Shorts Paying' if funding_rate < -0.5 else 'Neutral'
+                
                 message += f"""
 
-📊 **COINGLASS v2 DATA:**
-• **Long/Short Ratio**: {long_ratio:.1f}% ({'Overleveraged Longs' if long_ratio > 70 else 'Oversold Conditions' if long_ratio < 30 else 'Balanced'})
-• **Open Interest Change**: {oi_data.get('oi_change_percent', 0):+.2f}%
-• **Funding Rate**: {funding_rate:.4f}% ({'High Longs Paying' if funding_rate > 1 else 'High Shorts Paying' if funding_rate < -0.5 else 'Neutral'})
+📊 *COINGLASS v2 DATA:*
+• *Long/Short Ratio*: {long_ratio:.1f}% \\({safe_text(long_status)}\\)
+• *Open Interest Change*: {oi_data.get('oi_change_percent', 0):+.2f}%
+• *Funding Rate*: {funding_rate:.4f}% \\({safe_text(funding_status)}\\)
 
-🧠 **SMC ANALYSIS:**
-• **Bias**: {smc_analysis.get('smart_money_bias', 'Neutral').title()}
-• **Market Structure**: {smc_analysis.get('market_structure', 'Neutral').title()}"""
+🧠 *SMC ANALYSIS:*
+• *Bias*: {safe_text(smc_analysis.get('smart_money_bias', 'Neutral').title())}
+• *Market Structure*: {safe_text(smc_analysis.get('market_structure', 'Neutral').title())}"""
 
                 liquidity_zones = smc_analysis.get('liquidity_zones', [])
                 if liquidity_zones:
-                    message += f"\n• **Liquidity Zones**: "
+                    message += f"\n• *Liquidity Zones*:"
                     for zone in liquidity_zones[:2]:
-                        message += f"\n  - {zone.get('type', 'N/A').title()}: {format_price(zone.get('price', 0))} ({zone.get('strength', 'medium').title()})"
+                        zone_price = format_price(zone.get('price', 0))
+                        zone_type = safe_text(zone.get('type', 'N/A').title())
+                        zone_strength = safe_text(zone.get('strength', 'medium').title())
+                        message += f"\n  \\- {zone_type}: {safe_text(zone_price)} \\({zone_strength}\\)"
 
+                pos_size = '2\\-3%' if confidence >= 80 else '1\\-2%' if confidence >= 70 else '0\\.5\\-1%'
                 message += f"""
 
-⚡ **TRADING DETAILS:**
-• **Confidence**: {confidence:.0f}%
-• **Risk/Reward Ratio**: {risk_reward:.2f}:1
-• **Position Size**: {'2-3%' if confidence >= 80 else '1-2%' if confidence >= 70 else '0.5-1%'} Capital
+⚡ *TRADING DETAILS:*
+• *Confidence*: {confidence:.0f}%
+• *Risk/Reward Ratio*: {risk_reward:.2f}:1
+• *Position Size*: {pos_size} Capital
 
-⏰ **Update**: {datetime.now().strftime('%H:%M:%S UTC')}
-🔄 **Next Update**: Auto-refreshing"""
+⏰ *Update*: {safe_text(datetime.now().strftime('%H:%M:%S UTC'))}
+🔄 *Next Update*: Auto\\-refreshing"""
 
             return message
 

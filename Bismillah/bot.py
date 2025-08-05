@@ -1039,17 +1039,32 @@ class TelegramBot:
                         # Handle long messages
                         if len(analysis_text) > 4000:
                             chunks = [analysis_text[i:i+4000] for i in range(0, len(analysis_text), 4000)]
-                            await query.edit_message_text(chunks[0], parse_mode='Markdown')
-                            for chunk in chunks[1:]:
-                                await query.message.reply_text(chunk, parse_mode='Markdown')
+                            try:
+                                await query.edit_message_text(chunks[0], parse_mode='MarkdownV2')
+                                for chunk in chunks[1:]:
+                                    await query.message.reply_text(chunk, parse_mode='MarkdownV2')
+                            except Exception as markdown_error:
+                                print(f"⚠️ MarkdownV2 error, sending as plain text: {markdown_error}")
+                                # Remove escape characters for plain text
+                                plain_chunks = [chunk.replace('\\', '') for chunk in chunks]
+                                await query.edit_message_text(plain_chunks[0], parse_mode=None)
+                                for chunk in plain_chunks[1:]:
+                                    await query.message.reply_text(chunk, parse_mode=None)
                         else:
-                            await query.edit_message_text(analysis_text, parse_mode='Markdown')
+                            try:
+                                await query.edit_message_text(analysis_text, parse_mode='MarkdownV2')
+                            except Exception as markdown_error:
+                                print(f"⚠️ MarkdownV2 error, sending as plain text: {markdown_error}")
+                                # Remove escape characters for plain text
+                                plain_text = analysis_text.replace('\\', '')
+                                await query.edit_message_text(plain_text, parse_mode=None)
 
                         print(f"✅ Successfully sent futures analysis to user {user_id}")
 
                     except Exception as e:
-                        error_msg = f"❌ Error dalam analisis futures: {str(e)[:100]}...\n\n💡 **Solusi:**\n• Coba `/price {symbol}` untuk harga basic\n• Gunakan `/futures_signals` untuk multiple signals\n• Contact admin jika masalah berlanjut"
-                        await query.edit_message_text(error_msg, parse_mode='Markdown')
+                        # Create safe error message without problematic characters
+                        error_msg = f"❌ Error dalam analisis futures: {str(e)[:100]}...\n\n💡 Solusi:\n• Coba /price {symbol} untuk harga basic\n• Gunakan /futures_signals untuk multiple signals\n• Contact admin jika masalah berlanjut"
+                        await query.edit_message_text(error_msg, parse_mode=None)
                         print(f"❌ Error in futures callback: {e}")
                         import traceback
                         traceback.print_exc()
