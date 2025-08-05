@@ -891,14 +891,29 @@ class TelegramBot:
             await update.message.reply_text("❌ Credit tidak cukup! Sinyal futures membutuhkan 60 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
             return
 
-        # Show loading message
-        loading_msg = await update.message.reply_text("⏳ Menganalisis sinyal futures dengan CoinAPI + Coinglass...")
+        # Show loading message with query processing info
+        query_display = ""
+        if context.args:
+            # Clean the query for display - remove "SND" and show clean timeframe
+            raw_query = ' '.join(context.args).upper()
+            query_parts = raw_query.split()
+            cleaned_parts = [part for part in query_parts if part != 'SND']
+            
+            if cleaned_parts:
+                # Show cleaned query in loading message
+                if any(tf in cleaned_parts[0] for tf in ['M', 'H', 'D', 'W']):
+                    clean_timeframe = cleaned_parts[0]
+                    query_display = f" untuk {clean_timeframe}"
+                else:
+                    query_display = f" untuk {cleaned_parts[0]}"
+
+        loading_msg = await update.message.reply_text(f"⏳ Menganalisis sinyal futures dengan CoinAPI + Coinglass{query_display}...")
 
         try:
             print(f"🔄 Starting futures signals generation for user {user_id}")
 
-            # Generate signals using new async method
-            signals = await self.ai.generate_futures_signals('id', self.crypto_api)
+            # Generate signals using new async method with query args
+            signals = await self.ai.generate_futures_signals('id', self.crypto_api, context.args)
 
             if not signals or len(signals.strip()) < 50:
                 fallback_msg = f"""❌ **Gagal Generate Sinyal Futures**
@@ -968,23 +983,44 @@ class TelegramBot:
             await update.message.reply_text("❌ Credit tidak cukup! Analisis SnD futures membutuhkan 20 credit. Gunakan `/credits` untuk melihat sisa credit Anda.", parse_mode='Markdown')
             return
 
-        symbol = context.args[0].upper()
+        # Clean the symbol query - remove "SND" if present and extract timeframe
+        raw_query = ' '.join(context.args).upper()
+        query_parts = raw_query.split()
+        
+        # Check if first part looks like a timeframe (contains M, H, D, W)
+        if len(query_parts) >= 2 and any(tf in query_parts[0] for tf in ['M', 'H', 'D', 'W']):
+            # Extract timeframe and symbol, remove "SND" if present
+            timeframe_input = query_parts[0].upper()
+            remaining_parts = [part for part in query_parts[1:] if part.upper() != 'SND']
+            symbol = remaining_parts[0] if remaining_parts else 'BTC'
+        else:
+            # Standard format: symbol only
+            symbol = query_parts[0] if query_parts else 'BTC'
+            timeframe_input = None
 
         # Show timeframe selection with inline keyboard for SnD analysis
         keyboard = [
-            [InlineKeyboardButton("⚡ 15m SnD", callback_data=f'snd_futures_{symbol}_15m'),
-             InlineKeyboardButton("🔥 30m SnD", callback_data=f'snd_futures_{symbol}_30m')],
-            [InlineKeyboardButton("📈 1h SnD", callback_data=f'snd_futures_{symbol}_1h'),
-             InlineKeyboardButton("🚀 4h SnD", callback_data=f'snd_futures_{symbol}_4h')],
-            [InlineKeyboardButton("💎 1d SnD", callback_data=f'snd_futures_{symbol}_1d'),
-             InlineKeyboardButton("🌟 1w SnD", callback_data=f'snd_futures_{symbol}_1w')]
+            [InlineKeyboardButton("⚡ 15M", callback_data=f'snd_futures_{symbol}_15m'),
+             InlineKeyboardButton("🔥 30M", callback_data=f'snd_futures_{symbol}_30m')],
+            [InlineKeyboardButton("📈 1H", callback_data=f'snd_futures_{symbol}_1h'),
+             InlineKeyboardButton("🚀 4H", callback_data=f'snd_futures_{symbol}_4h')],
+            [InlineKeyboardButton("💎 1D", callback_data=f'snd_futures_{symbol}_1d'),
+             InlineKeyboardButton("🌟 1W", callback_data=f'snd_futures_{symbol}_1w')]
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 
+        # Display cleaned timeframe if provided in query
+        display_text = f"📊 **Analisis Supply & Demand Futures {symbol}**\n\n"
+        if timeframe_input:
+            # Clean display: show only timeframe without "SND"
+            clean_timeframe = timeframe_input.replace('SND', '').strip()
+            display_text += f"🎯 **Timeframe yang diminta**: {clean_timeframe}\n\n"
+        
+        display_text += "Pilih timeframe untuk analisis SnD dengan Entry/TP/SL:"
+
         await update.message.reply_text(
-            f"📊 **Analisis Supply & Demand Futures {symbol}**\n\n"
-            "Pilih timeframe untuk analisis SnD dengan Entry/TP/SL:",
+            display_text,
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
