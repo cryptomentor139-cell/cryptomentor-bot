@@ -6,12 +6,16 @@ import asyncio
 import time
 from datetime import datetime
 import html
+from crypto_api import CryptoAPI
 
 class AIAssistant:
     def __init__(self, name="CryptoMentor AI"):
         self.name = name
         self.coinglass_key = os.getenv("COINGLASS_API_KEY")
         self.coinglass_base_url = "https://open-api.coinglass.com/public/v2"
+        
+        # Initialize CryptoAPI for comprehensive data
+        self.crypto_api = CryptoAPI()
 
         if not self.coinglass_key:
             print("⚠️ COINGLASS_API_KEY not found in environment variables")
@@ -64,6 +68,24 @@ class AIAssistant:
             "accept": "application/json",
             "coinglassSecret": self.coinglass_key
         }
+
+    def _get_estimated_price(self, symbol):
+        """Get estimated price for a symbol"""
+        try:
+            # Use crypto_api to get price
+            price_data = self.crypto_api.get_crypto_price(symbol)
+            if 'error' not in price_data and price_data.get('price', 0) > 0:
+                return price_data['price']
+            
+            # Fallback prices for common symbols
+            fallback_prices = {
+                'BTC': 112000, 'ETH': 3500, 'BNB': 650, 'SOL': 240,
+                'ADA': 1.2, 'AVAX': 45, 'MATIC': 1.1, 'DOT': 8.5,
+                'ATOM': 12, 'LINK': 22, 'UNI': 15, 'DOGE': 0.4
+            }
+            return fallback_prices.get(symbol.upper(), 100)
+        except:
+            return 100
 
     def _get_coinglass_price(self, symbol):
         """Get price data for Coinglass analysis using Coinglass API"""
@@ -408,7 +430,7 @@ class AIAssistant:
 
             # Get comprehensive CoinGlass data
             coinglass_data = await asyncio.to_thread(
-                crypto_api.get_comprehensive_coinglass_data, symbol
+                self.crypto_api.get_comprehensive_coinglass_data, symbol
             )
 
             if 'error' in coinglass_data:
@@ -1624,8 +1646,8 @@ Ask me anything about crypto! 🚀"""
                 try:
                     # Get comprehensive CoinGlass data
                     coinglass_data = await asyncio.to_thread(
-                        crypto_api.get_comprehensive_coinglass_data, symbol
-                    ) if crypto_api else {'error': 'No crypto API'}
+                        self.crypto_api.get_comprehensive_coinglass_data, symbol
+                    )
                     
                     if 'error' not in coinglass_data:
                         # Analyze the comprehensive data
