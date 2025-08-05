@@ -186,7 +186,9 @@ class TelegramBot:
                     print(f"[AUTO-SIGNAL SND] 🎯 Target coins: {len(self.auto_signals.target_symbols)}")
                     print(f"[AUTO-SIGNAL SND] ⚡ Min confidence: {self.auto_signals.min_confidence}%")
                     print(f"[AUTO-SIGNAL SND] 🔄 Scan interval: {self.auto_signals.scan_interval // 60} minutes")
-                    print(f"[AUTO-SIGNAL SND] 🛡️ Anti-spam: {self.auto_signals.signal_cooldown // 3600}h cooldown")
+                    # Check if signal_cooldown attribute exists
+                cooldown_hours = getattr(self.auto_signals, 'signal_cooldown', 3600) // 3600
+                print(f"[AUTO-SIGNAL SND] 🛡️ Anti-spam: {cooldown_hours}h cooldown")
                 else:
                     print("[AUTO-SIGNAL SND] ❌ Auto signals system failed to initialize")
             except Exception as e:
@@ -776,7 +778,7 @@ class TelegramBot:
 
         try:
             # Get comprehensive analysis using CoinMarketCap data
-            analysis = await self.ai.get_comprehensive_analysis(symbol, {}, {}, 'id', self.crypto_api)
+            analysis = self.ai.get_comprehensive_analysis(symbol, {}, {}, 'id', self.crypto_api)
 
             # Deduct credit only for non-premium, non-admin users
             if not is_premium and not is_admin:
