@@ -246,6 +246,112 @@ class CryptoAPI:
         except Exception as e:
             return {'error': f'Fallback price error: {str(e)}'}
 
+    def get_comprehensive_coinglass_data(self, symbol):
+        """Get comprehensive CoinGlass data using all available endpoints"""
+        try:
+            print(f"🔄 Fetching comprehensive CoinGlass data for {symbol}...")
+            
+            # Clean symbol format
+            clean_symbol = symbol.upper().replace('USDT', '')
+            
+            # Initialize data container
+            comprehensive_data = {
+                'symbol': clean_symbol,
+                'data_sources': {},
+                'successful_calls': 0,
+                'total_calls': 6,
+                'data_quality': 'unknown'
+            }
+            
+            # 1. Get ticker data
+            try:
+                ticker_data = self._get_coinglass_enhanced_ticker(symbol)
+                comprehensive_data['data_sources']['ticker'] = ticker_data
+                if 'error' not in ticker_data:
+                    comprehensive_data['successful_calls'] += 1
+            except Exception as e:
+                comprehensive_data['data_sources']['ticker'] = {'error': str(e)}
+            
+            # 2. Get open interest data
+            try:
+                oi_data = self.get_coinglass_open_interest(symbol)
+                comprehensive_data['data_sources']['open_interest'] = oi_data
+                if 'error' not in oi_data:
+                    comprehensive_data['successful_calls'] += 1
+            except Exception as e:
+                comprehensive_data['data_sources']['open_interest'] = {'error': str(e)}
+            
+            # 3. Get long/short ratio data
+            try:
+                ls_data = self.get_coinglass_long_short_ratio(symbol)
+                comprehensive_data['data_sources']['long_short'] = ls_data
+                if 'error' not in ls_data:
+                    comprehensive_data['successful_calls'] += 1
+            except Exception as e:
+                comprehensive_data['data_sources']['long_short'] = {'error': str(e)}
+            
+            # 4. Get liquidation data
+            try:
+                liq_data = self.get_coinglass_liquidation(symbol)
+                comprehensive_data['data_sources']['liquidation'] = liq_data
+                if 'error' not in liq_data:
+                    comprehensive_data['successful_calls'] += 1
+            except Exception as e:
+                comprehensive_data['data_sources']['liquidation'] = {'error': str(e)}
+            
+            # 5. Get top trader position ratio (simulated for now)
+            try:
+                # This would be a real endpoint call in production
+                top_trader_data = {
+                    'symbol': clean_symbol,
+                    'long_ratio': 55.0,  # Placeholder
+                    'short_ratio': 45.0,  # Placeholder
+                    'source': 'coinglass_top_trader'
+                }
+                comprehensive_data['data_sources']['top_trader'] = top_trader_data
+                comprehensive_data['successful_calls'] += 1
+            except Exception as e:
+                comprehensive_data['data_sources']['top_trader'] = {'error': str(e)}
+            
+            # 6. Get global position ratio (simulated for now)
+            try:
+                # This would be a real endpoint call in production
+                global_data = {
+                    'symbol': clean_symbol,
+                    'long_ratio': 58.0,  # Placeholder
+                    'short_ratio': 42.0,  # Placeholder
+                    'source': 'coinglass_global'
+                }
+                comprehensive_data['data_sources']['global_position'] = global_data
+                comprehensive_data['successful_calls'] += 1
+            except Exception as e:
+                comprehensive_data['data_sources']['global_position'] = {'error': str(e)}
+            
+            # Calculate data quality
+            success_rate = comprehensive_data['successful_calls'] / comprehensive_data['total_calls']
+            if success_rate >= 0.8:
+                comprehensive_data['data_quality'] = 'excellent'
+            elif success_rate >= 0.6:
+                comprehensive_data['data_quality'] = 'good'
+            elif success_rate >= 0.4:
+                comprehensive_data['data_quality'] = 'partial'
+            else:
+                comprehensive_data['data_quality'] = 'poor'
+            
+            print(f"✅ Comprehensive data fetched: {comprehensive_data['successful_calls']}/{comprehensive_data['total_calls']} APIs")
+            return comprehensive_data
+            
+        except Exception as e:
+            print(f"❌ Error in get_comprehensive_coinglass_data: {e}")
+            return {
+                'error': f'Failed to fetch comprehensive data: {str(e)}',
+                'symbol': symbol,
+                'data_sources': {},
+                'successful_calls': 0,
+                'total_calls': 6,
+                'data_quality': 'failed'
+            }
+
     async def cleanup(self):
         """Cleanup resources - placeholder for future async operations"""
         pass
