@@ -437,7 +437,7 @@ class AIAssistant:
 
             # Get comprehensive CoinGlass data from all available endpoints
             coinglass_data = await asyncio.to_thread(
-                self._get_advanced_coinglass_data, symbol
+                self._get_advanced_coinglass_startup_data, symbol
             )
 
             if 'error' in coinglass_data:
@@ -446,7 +446,7 @@ class AIAssistant:
                 )
 
             # Generate advanced trading signal using Smart Money + SnD logic
-            trading_signal = self._generate_advanced_trading_signal(
+            trading_signal = self._format_advanced_coinglass_analysis(
                 symbol, timeframe, coinglass_data, language
             )
 
@@ -455,6 +455,272 @@ class AIAssistant:
         except Exception as e:
             print(f"❌ Error in advanced futures analysis: {e}")
             return self._generate_emergency_futures_signal(symbol, timeframe, language, str(e))
+
+    def _get_advanced_coinglass_startup_data(self, symbol):
+        """Fetch comprehensive data from all CoinGlass Startup Plan endpoints"""
+        try:
+            if not self.coinglass_key:
+                return {'error': 'Coinglass API key not found. Please set COINGLASS_SECRET in Replit Secrets.'}
+
+            clean_symbol = symbol.upper().replace('USDT', '')
+            startup_data = {
+                'symbol': clean_symbol,
+                'endpoints_called': 0,
+                'endpoints_successful': 0,
+                'data_quality': 'unknown'
+            }
+            
+            headers = self._get_coinglass_headers()
+            base_url_pro = "https://open-api.coinglass.com/api/pro/v1"
+            base_url_public = "https://open-api.coinglass.com/public/v2"
+            
+            # 1. Get ticker data (price + funding rate) - PRO API
+            try:
+                ticker_url = f"{base_url_pro}/futures/ticker"
+                params = {'symbol': clean_symbol}
+                
+                response = requests.get(ticker_url, headers=headers, params=params, timeout=15)
+                startup_data['endpoints_called'] += 1
+                
+                if response.status_code == 200:
+                    ticker_data = response.json()
+                    if ticker_data.get('success') and ticker_data.get('data'):
+                        primary_data = ticker_data['data'][0] if ticker_data['data'] else {}
+                        startup_data['ticker'] = {
+                            'price': float(primary_data.get('price', 0)),
+                            'funding_rate': float(primary_data.get('fundingRate', 0)),
+                            'volume_24h': float(primary_data.get('volume24h', 0)),
+                            'price_change_24h': float(primary_data.get('priceChangePercent', 0)),
+                            'exchange': primary_data.get('exchangeName', 'Binance')
+                        }
+                        startup_data['endpoints_successful'] += 1
+                        print(f"✅ CoinGlass Ticker: ${startup_data['ticker']['price']:.2f}")
+                    else:
+                        startup_data['ticker'] = {'error': 'No ticker data'}
+                else:
+                    startup_data['ticker'] = {'error': f'HTTP {response.status_code}'}
+            except Exception as e:
+                startup_data['ticker'] = {'error': str(e)}
+                print(f"❌ Ticker API error: {e}")
+            
+            # 2. Get open interest data - PUBLIC API
+            try:
+                oi_url = f"{base_url_public}/futures/openInterest"
+                response = requests.get(oi_url, headers=headers, params=params, timeout=15)
+                startup_data['endpoints_called'] += 1
+                
+                if response.status_code == 200:
+                    oi_data = response.json()
+                    if oi_data.get('success') and oi_data.get('data'):
+                        oi_list = oi_data['data']
+                        total_oi = sum(float(item.get('openInterest', 0)) for item in oi_list)
+                        
+                        # Calculate OI change (simplified)
+                        if len(oi_list) > 1:
+                            current_val = float(oi_list[-1].get('openInterest', 0))
+                            previous_val = float(oi_list[-2].get('openInterest', 0))
+                            oi_change = ((current_val - previous_val) / previous_val * 100) if previous_val > 0 else 0
+                        else:
+                            oi_change = 0
+                        
+                        startup_data['open_interest'] = {
+                            'total_oi': total_oi,
+                            'oi_change_percent': oi_change,
+                            'exchanges_count': len(oi_list)
+                        }
+                        startup_data['endpoints_successful'] += 1
+                        print(f"✅ Open Interest: ${total_oi/1000000:.1f}M ({oi_change:+.1f}%)")
+                    else:
+                        startup_data['open_interest'] = {'error': 'No OI data'}
+                else:
+                    startup_data['open_interest'] = {'error': f'HTTP {response.status_code}'}
+            except Exception as e:
+                startup_data['open_interest'] = {'error': str(e)}
+                print(f"❌ Open Interest API error: {e}")
+            
+            # 3. Get long/short account ratio - PRO API
+            try:
+                ls_url = f"{base_url_pro}/futures/long_short_account_ratio"
+                response = requests.get(ls_url, headers=headers, params=params, timeout=15)
+                startup_data['endpoints_called'] += 1
+                
+                if response.status_code == 200:
+                    ls_data = response.json()
+                    if ls_data.get('success') and ls_data.get('data'):
+                        ratio_data = ls_data['data']
+                        if ratio_data:
+                            latest = ratio_data[-1] if isinstance(ratio_data, list) else ratio_data
+                            long_account = float(latest.get('longAccount', 50))
+                            short_account = float(latest.get('shortAccount', 50))
+                            
+                            startup_data['long_short_ratio'] = {
+                                'long_account': long_account,
+                                'short_account': short_account,
+                                'ratio_value': long_account / short_account if short_account > 0 else 1.0,
+                                'data_points': len(ratio_data) if isinstance(ratio_data, list) else 1
+                            }
+                            startup_data['endpoints_successful'] += 1
+                            print(f"✅ Long/Short Ratio: {long_account:.1f}% / {short_account:.1f}%")
+                        else:
+                            startup_data['long_short_ratio'] = {'error': 'No ratio data'}
+                    else:
+                        startup_data['long_short_ratio'] = {'error': 'API response failed'}
+                else:
+                    # Fallback to public API
+                    ls_url_public = f"{base_url_public}/futures/longShortChart"
+                    ls_params = {'symbol': clean_symbol, 'intervalType': 2}
+                    response = requests.get(ls_url_public, headers=headers, params=ls_params, timeout=15)
+                    
+                    if response.status_code == 200:
+                        ls_data = response.json()
+                        if ls_data.get('success') and ls_data.get('data'):
+                            chart_data = ls_data['data']
+                            if chart_data:
+                                latest = chart_data[-1]
+                                long_ratio = float(latest.get('longRatio', 50))
+                                short_ratio = float(latest.get('shortRatio', 50))
+                                
+                                startup_data['long_short_ratio'] = {
+                                    'long_account': long_ratio,
+                                    'short_account': short_ratio,
+                                    'ratio_value': long_ratio / short_ratio if short_ratio > 0 else 1.0,
+                                    'data_points': len(chart_data)
+                                }
+                                startup_data['endpoints_successful'] += 1
+                                print(f"✅ Long/Short Ratio (fallback): {long_ratio:.1f}% / {short_ratio:.1f}%")
+                            else:
+                                startup_data['long_short_ratio'] = {'error': 'No chart data'}
+                        else:
+                            startup_data['long_short_ratio'] = {'error': 'Public API failed too'}
+                    else:
+                        startup_data['long_short_ratio'] = {'error': f'Both APIs failed: {response.status_code}'}
+            except Exception as e:
+                startup_data['long_short_ratio'] = {'error': str(e)}
+                print(f"❌ Long/Short Ratio API error: {e}")
+            
+            # 4. Get liquidation map - PRO API
+            try:
+                liq_url = f"{base_url_pro}/liquidation_map"
+                response = requests.get(liq_url, headers=headers, params=params, timeout=15)
+                startup_data['endpoints_called'] += 1
+                
+                if response.status_code == 200:
+                    liq_data = response.json()
+                    if liq_data.get('success') and liq_data.get('data'):
+                        liquidation_zones = liq_data['data']
+                        
+                        # Process liquidation zones
+                        if liquidation_zones:
+                            zones = []
+                            for zone in liquidation_zones[:10]:  # Top 10 zones
+                                zones.append({
+                                    'price': float(zone.get('price', 0)),
+                                    'amount': float(zone.get('amount', 0)),
+                                    'side': zone.get('side', 'unknown')
+                                })
+                            
+                            # Find dominant liquidation zones
+                            long_zones = [z for z in zones if z['side'] == 'long']
+                            short_zones = [z for z in zones if z['side'] == 'short']
+                            
+                            startup_data['liquidation_map'] = {
+                                'zones': zones,
+                                'long_zones_count': len(long_zones),
+                                'short_zones_count': len(short_zones),
+                                'dominant_side': 'Long Heavy' if len(long_zones) > len(short_zones) * 1.5 else 'Short Heavy' if len(short_zones) > len(long_zones) * 1.5 else 'Balanced'
+                            }
+                            startup_data['endpoints_successful'] += 1
+                            print(f"✅ Liquidation Map: {len(zones)} zones identified")
+                        else:
+                            startup_data['liquidation_map'] = {'error': 'No liquidation data'}
+                    else:
+                        startup_data['liquidation_map'] = {'error': 'API response failed'}
+                else:
+                    startup_data['liquidation_map'] = {'error': f'HTTP {response.status_code}'}
+            except Exception as e:
+                startup_data['liquidation_map'] = {'error': str(e)}
+                print(f"❌ Liquidation Map API error: {e}")
+                
+            # 5. Get funding rate history - PRO API
+            try:
+                funding_url = f"{base_url_pro}/futures/funding_rate"
+                response = requests.get(funding_url, headers=headers, params=params, timeout=15)
+                startup_data['endpoints_called'] += 1
+                
+                if response.status_code == 200:
+                    funding_data = response.json()
+                    if funding_data.get('success') and funding_data.get('data'):
+                        funding_list = funding_data['data']
+                        
+                        # Calculate average funding across exchanges
+                        valid_rates = []
+                        for item in funding_list:
+                            rate = float(item.get('fundingRate', 0))
+                            if rate != 0:
+                                valid_rates.append(rate)
+                        
+                        avg_funding = sum(valid_rates) / len(valid_rates) if valid_rates else 0
+                        
+                        startup_data['funding_detail'] = {
+                            'avg_funding_rate': avg_funding,
+                            'exchanges_count': len(valid_rates),
+                            'funding_trend': 'Positive' if avg_funding > 0.005 else 'Negative' if avg_funding < -0.002 else 'Neutral',
+                            'funding_history': funding_list[:5]  # Last 5 records
+                        }
+                        startup_data['endpoints_successful'] += 1
+                        print(f"✅ Funding Rate: {avg_funding*100:.4f}% (avg across {len(valid_rates)} exchanges)")
+                    else:
+                        startup_data['funding_detail'] = {'error': 'No funding data'}
+                else:
+                    startup_data['funding_detail'] = {'error': f'HTTP {response.status_code}'}
+            except Exception as e:
+                startup_data['funding_detail'] = {'error': str(e)}
+                print(f"❌ Funding Rate API error: {e}")
+            
+            # 6. Sentiment Analysis (if available) - PRO API
+            try:
+                sentiment_url = f"{base_url_pro}/futures/sentiment_analysis"
+                response = requests.get(sentiment_url, headers=headers, params=params, timeout=15)
+                startup_data['endpoints_called'] += 1
+                
+                if response.status_code == 200:
+                    sentiment_data = response.json()
+                    if sentiment_data.get('success') and sentiment_data.get('data'):
+                        startup_data['sentiment'] = {
+                            'score': sentiment_data['data'].get('score', 50),
+                            'trend': sentiment_data['data'].get('trend', 'neutral'),
+                            'confidence': sentiment_data['data'].get('confidence', 50)
+                        }
+                        startup_data['endpoints_successful'] += 1
+                        print(f"✅ Sentiment Analysis: {startup_data['sentiment']['trend']} ({startup_data['sentiment']['score']})")
+                    else:
+                        startup_data['sentiment'] = {'error': 'No sentiment data'}
+                else:
+                    startup_data['sentiment'] = {'error': f'HTTP {response.status_code}'}
+            except Exception as e:
+                startup_data['sentiment'] = {'error': str(e)}
+                print(f"⚠️ Sentiment Analysis not available: {e}")
+            
+            # Calculate data quality
+            success_rate = startup_data['endpoints_successful'] / startup_data['endpoints_called'] if startup_data['endpoints_called'] > 0 else 0
+            
+            if success_rate >= 0.8:
+                startup_data['data_quality'] = 'excellent'
+            elif success_rate >= 0.6:
+                startup_data['data_quality'] = 'good'
+            elif success_rate >= 0.4:
+                startup_data['data_quality'] = 'partial'
+            else:
+                startup_data['data_quality'] = 'poor'
+            
+            print(f"✅ CoinGlass Startup Plan data: {startup_data['endpoints_successful']}/{startup_data['endpoints_called']} endpoints successful")
+            print(f"📊 Data quality: {startup_data['data_quality'].upper()}")
+            
+            return startup_data
+            
+        except Exception as e:
+            print(f"❌ Error fetching CoinGlass Startup data: {e}")
+            return {'error': f'CoinGlass Startup data fetch failed: {str(e)}'}
 
     def _get_advanced_coinglass_data(self, symbol):
         """Fetch data from all CoinGlass Startup Plan endpoints"""
@@ -868,6 +1134,252 @@ class AIAssistant:
             print(f"❌ Error formatting comprehensive analysis: {e}")
             return self._generate_emergency_futures_signal(symbol, timeframe, language, str(e))
 
+    def _format_advanced_coinglass_analysis(self, symbol, timeframe, startup_data, language='id'):
+        """Format advanced CoinGlass Startup Plan analysis output"""
+        try:
+            current_time = datetime.now().strftime('%H:%M:%S WIB')
+            
+            # Extract data safely
+            ticker_data = startup_data.get('ticker', {})
+            oi_data = startup_data.get('open_interest', {})
+            ls_data = startup_data.get('long_short_ratio', {})
+            liq_data = startup_data.get('liquidation_map', {})
+            funding_data = startup_data.get('funding_detail', {})
+            sentiment_data = startup_data.get('sentiment', {})
+            
+            # Get basic metrics
+            current_price = ticker_data.get('price', 0) if 'error' not in ticker_data else self._get_estimated_price(symbol)
+            funding_rate = ticker_data.get('funding_rate', 0) if 'error' not in ticker_data else 0
+            price_change_24h = ticker_data.get('price_change_24h', 0) if 'error' not in ticker_data else 0
+            volume_24h = ticker_data.get('volume_24h', 0) if 'error' not in ticker_data else 0
+            
+            # Advanced Signal Logic based on requirements
+            signal_direction = 'HOLD'
+            confidence = 50
+            entry_reason = []
+            
+            # 1. Long/Short Ratio Analysis
+            if 'error' not in ls_data:
+                ratio_value = ls_data.get('ratio_value', 1.0)
+                long_account = ls_data.get('long_account', 50)
+                
+                if ratio_value > 1.3:  # Sentimen terlalu bullish → potensi koreksi
+                    signal_direction = 'SHORT'
+                    confidence += 25
+                    entry_reason.append(f"Long/Short Ratio {ratio_value:.2f} - Sentimen terlalu bullish")
+                elif ratio_value < 0.7:  # Oversold conditions
+                    signal_direction = 'LONG'
+                    confidence += 20
+                    entry_reason.append(f"Long/Short Ratio {ratio_value:.2f} - Kondisi oversold")
+            
+            # 2. Open Interest + Funding Rate Combination
+            if 'error' not in oi_data:
+                oi_change = oi_data.get('oi_change_percent', 0)
+                
+                # OI meningkat cepat dan funding negatif → peluang short squeeze
+                if oi_change > 6 and funding_rate < -0.005:
+                    signal_direction = 'LONG'
+                    confidence += 30
+                    entry_reason.append("Peluang short squeeze: OI naik + funding negatif")
+                elif oi_change > 8 and funding_rate > 0.01:
+                    signal_direction = 'SHORT'
+                    confidence += 20
+                    entry_reason.append("Overleveraged longs: High OI + funding mahal")
+            
+            # 3. Liquidation Zone Analysis
+            if 'error' not in liq_data:
+                zones = liq_data.get('zones', [])
+                dominant_side = liq_data.get('dominant_side', 'Balanced')
+                
+                # Zona likuidasi banyak di atas → potensi reversal turun
+                upper_zones = [z for z in zones if z['price'] > current_price]
+                lower_zones = [z for z in zones if z['price'] < current_price]
+                
+                if len(upper_zones) > len(lower_zones) * 2:
+                    if signal_direction != 'LONG':
+                        signal_direction = 'SHORT'
+                        confidence += 15
+                        entry_reason.append("Zona likuidasi banyak di atas - potensi reversal turun")
+                elif len(lower_zones) > len(upper_zones) * 2:
+                    if signal_direction != 'SHORT':
+                        signal_direction = 'LONG'
+                        confidence += 15
+                        entry_reason.append("Zona likuidasi banyak di bawah - potensi reversal naik")
+            
+            # 4. Sentiment Analysis boost
+            if 'error' not in sentiment_data:
+                sentiment_score = sentiment_data.get('score', 50)
+                if sentiment_score > 75 and signal_direction == 'SHORT':
+                    confidence += 10
+                elif sentiment_score < 25 and signal_direction == 'LONG':
+                    confidence += 10
+            
+            # Final confidence adjustment
+            confidence = min(95, max(30, confidence))
+            
+            # Override to HOLD if confidence too low
+            if confidence < 65:
+                signal_direction = 'HOLD'
+                entry_reason = ["Mixed signals - tunggu setup yang lebih jelas"]
+            
+            # Calculate entry levels with SMC + SnD logic
+            if signal_direction == 'LONG':
+                entry_price = current_price * 0.998
+                tp1 = current_price * 1.025
+                tp2 = current_price * 1.05
+                sl = current_price * 0.975
+            elif signal_direction == 'SHORT':
+                entry_price = current_price * 1.002
+                tp1 = current_price * 0.975
+                tp2 = current_price * 0.95
+                sl = current_price * 1.025
+            else:  # HOLD
+                entry_price = current_price
+                tp1 = current_price * 1.02
+                tp2 = current_price * 1.04
+                sl = current_price * 0.98
+            
+            # Format functions
+            def format_price(price):
+                if price < 1:
+                    return f"${price:.6f}"
+                elif price < 100:
+                    return f"${price:.4f}"
+                else:
+                    return f"${price:,.2f}"
+            
+            def format_currency(amount):
+                if amount >= 1_000_000_000:
+                    return f"${amount/1_000_000_000:.1f}B"
+                elif amount >= 1_000_000:
+                    return f"${amount/1_000_000:.1f}M"
+                else:
+                    return f"${amount:,.0f}"
+            
+            # Direction status
+            if signal_direction == 'LONG':
+                signal_status = "✅ LONG"
+                signal_emoji = "📈"
+            elif signal_direction == 'SHORT':
+                signal_status = "✅ SHORT"
+                signal_emoji = "📉"
+            else:
+                signal_status = "⏸️ HOLD"
+                signal_emoji = "📊"
+            
+            # Generate liquidation zones display
+            liq_zones_display = "N/A"
+            if 'error' not in liq_data and liq_data.get('zones'):
+                zones = liq_data['zones']
+                if zones:
+                    min_price = min(z['price'] for z in zones)
+                    max_price = max(z['price'] for z in zones)
+                    liq_zones_display = f"{format_price(min_price)} - {format_price(max_price)}"
+            
+            # SMC Structure analysis
+            smc_bias = 'Bullish Bias' if signal_direction == 'LONG' else 'Bearish Bias' if signal_direction == 'SHORT' else 'Neutral'
+            
+            if language == 'id':
+                message = f"""🎯 *FUTURES ADVANCED ANALYSIS \\- {symbol.upper()} \\({timeframe}\\)*
+
+💰 *Harga Coinglass*: {format_price(current_price)}
+📊 *Long/Short Ratio*: {ls_data.get('ratio_value', 1.0):.2f} \\({'Bullish Crowd' if ls_data.get('ratio_value', 1.0) > 1.2 else 'Bearish Crowd' if ls_data.get('ratio_value', 1.0) < 0.8 else 'Balanced Crowd'}\\)
+📈 *Open Interest*: {format_currency(oi_data.get('total_oi', 0))} \\(⬆ {oi_data.get('oi_change_percent', 0):+.1f}%\\)
+📉 *Funding Rate*: {funding_rate*100:+.3f}% \\({'Positif' if funding_rate > 0 else 'Negatif' if funding_rate < 0 else 'Netral'}\\)
+🧨 *Zona Likuidasi Dominan*: {liq_zones_display}
+🔎 *Trend Struktur Market \\(SMC\\)*: {smc_bias}
+
+🧠 *Smart Entry Plan \\(SnD \\+ Coinglass Data\\)* {signal_emoji}
+• Entry: {format_price(entry_price)}
+• TP 1: {format_price(tp1)}
+• TP 2: {format_price(tp2)}
+• SL: {format_price(sl)}
+• Confidence: {confidence}% \\({'Strong' if confidence >= 80 else 'Medium' if confidence >= 65 else 'Weak'}\\)
+• Sinyal: {signal_status}"""
+
+                if entry_reason:
+                    reasons_text = '; '.join(entry_reason[:2])
+                    message += f"\n• *Alasan*: {reasons_text}"
+
+                message += f"""
+
+🛡 *Risk Management Ketat*
+• Entry hanya jika break struktur {timeframe}
+• Max trade aktif: 1
+• Gunakan SL sebelum masuk posisi
+• Exit jika OI anjlok mendadak
+
+📡 Data Sources: CoinGlass Startup APIs
+⏰ Update: {current_time}
+
+⭐ Premium Member – Unlimited Signals"""
+
+                # Add data availability status
+                data_status = []
+                if 'error' not in ticker_data:
+                    data_status.append("✅ Ticker")
+                else:
+                    data_status.append("⚠ Ticker unavailable")
+                
+                if 'error' not in oi_data:
+                    data_status.append("✅ OI")
+                else:
+                    data_status.append("⚠ OI unavailable")
+                
+                if 'error' not in ls_data:
+                    data_status.append("✅ L/S")
+                else:
+                    data_status.append("⚠ L/S unavailable")
+                    
+                if 'error' not in liq_data:
+                    data_status.append("✅ Liq")
+                else:
+                    data_status.append("⚠ Liq unavailable")
+
+                message += f"\n\n📊 *API Status*: {' | '.join(data_status)}"
+
+            else:
+                # English version
+                message = f"""🎯 *FUTURES ADVANCED ANALYSIS \\- {symbol.upper()} \\({timeframe}\\)*
+
+💰 *Coinglass Price*: {format_price(current_price)}
+📊 *Long/Short Ratio*: {ls_data.get('ratio_value', 1.0):.2f} \\({'Bullish Crowd' if ls_data.get('ratio_value', 1.0) > 1.2 else 'Bearish Crowd' if ls_data.get('ratio_value', 1.0) < 0.8 else 'Balanced Crowd'}\\)
+📈 *Open Interest*: {format_currency(oi_data.get('total_oi', 0))} \\(⬆ {oi_data.get('oi_change_percent', 0):+.1f}%\\)
+📉 *Funding Rate*: {funding_rate*100:+.3f}% \\({'Positive' if funding_rate > 0 else 'Negative' if funding_rate < 0 else 'Neutral'}\\)
+🧨 *Dominant Liquidation Zone*: {liq_zones_display}
+🔎 *Market Structure Trend \\(SMC\\)*: {smc_bias}
+
+🧠 *Smart Entry Plan \\(SnD \\+ Coinglass Data\\)* {signal_emoji}
+• Entry: {format_price(entry_price)}
+• TP 1: {format_price(tp1)}
+• TP 2: {format_price(tp2)}
+• SL: {format_price(sl)}
+• Confidence: {confidence}% \\({'Strong' if confidence >= 80 else 'Medium' if confidence >= 65 else 'Weak'}\\)
+• Signal: {signal_status}"""
+
+                if entry_reason:
+                    reasons_text = '; '.join(entry_reason[:2])
+                    message += f"\n• *Reason*: {reasons_text}"
+
+                message += f"""
+
+🛡 *Strict Risk Management*
+• Entry only if {timeframe} structure breaks
+• Max active trades: 1
+• Use SL before entering position
+• Exit if OI drops suddenly
+
+📡 Data Sources: CoinGlass Startup APIs
+⏰ Update: {current_time}
+
+⭐ Premium Member – Unlimited Signals"""
+
+            return message
+            
+        except Exception as e:
+            print(f"❌ Error formatting advanced CoinGlass analysis: {e}")
+            return self._generate_emergency_futures_signal(symbol, timeframe, language, str(e))
+
     def _generate_advanced_trading_signal(self, symbol, timeframe, coinglass_data, language='id'):
         """Generate advanced trading signal using CoinGlass Startup Plan data with Smart Money + SnD logic"""
         try:
@@ -1133,6 +1645,62 @@ class AIAssistant:
             print(f"❌ Error generating advanced trading signal: {e}")
             return self._generate_emergency_futures_signal(symbol, timeframe, language, str(e))
     
+    def _generate_emergency_futures_signal(self, symbol, timeframe, language='id', error_msg=""):
+        """Generate emergency futures signal when CoinGlass APIs fail"""
+        current_time = datetime.now().strftime('%H:%M:%S WIB')
+        fallback_price = self._get_estimated_price(symbol)
+        
+        def format_price(price):
+            if price < 1:
+                return f"${price:.6f}"
+            elif price < 100:
+                return f"${price:.4f}"
+            else:
+                return f"${price:,.2f}"
+        
+        if language == 'id':
+            message = f"""🎯 *FUTURES ANALYSIS \\- {symbol.upper()} \\({timeframe}\\)*
+
+⚠️ *Data Coinglass tidak tersedia*
+💰 *Harga Estimasi*: {format_price(fallback_price)}
+
+📊 *Status*: Menggunakan analisa fallback
+🧠 *Rekomendasi*: ⏸️ HOLD
+• *Alasan*: Data tidak mencukupi untuk sinyal akurat
+• *Tunggu*: Koneksi CoinGlass pulih
+
+🛡 *Risk Management*
+• Jangan trading tanpa data lengkap
+• Tunggu sinyal dengan confidence tinggi
+• Monitor update selanjutnya
+
+📡 *Error*: {error_msg[:50]}{'...' if len(error_msg) > 50 else ''}
+⏰ *Update*: {current_time}
+
+💡 *Solusi*: Set COINGLASS_SECRET di Replit Secrets"""
+        else:
+            message = f"""🎯 *FUTURES ANALYSIS \\- {symbol.upper()} \\({timeframe}\\)*
+
+⚠️ *Coinglass data unavailable*
+💰 *Estimated Price*: {format_price(fallback_price)}
+
+📊 *Status*: Using fallback analysis
+🧠 *Recommendation*: ⏸️ HOLD
+• *Reason*: Insufficient data for accurate signal
+• *Wait*: CoinGlass connection recovery
+
+🛡 *Risk Management*
+• Don't trade without complete data
+• Wait for high confidence signals
+• Monitor next updates
+
+📡 *Error*: {error_msg[:50]}{'...' if len(error_msg) > 50 else ''}
+⏰ *Update*: {current_time}
+
+💡 *Solution*: Set COINGLASS_SECRET in Replit Secrets"""
+        
+        return message
+
     def _analyze_comprehensive_coinglass_data(self, data_sources, symbol):
         """Analyze all CoinGlass data sources for trading signal"""
         try:
