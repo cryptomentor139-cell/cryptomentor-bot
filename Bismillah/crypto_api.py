@@ -78,7 +78,7 @@ class CryptoAPI:
                 result_data = data.get('data', {})
                 total_oi = 0
                 oi_change = 0
-                
+
                 # Sum up open interest from all exchanges
                 if isinstance(result_data, list):
                     for exchange_data in result_data:
@@ -319,15 +319,15 @@ class CryptoAPI:
                     # Calculate average funding rate across exchanges
                     total_funding = 0
                     valid_exchanges = 0
-                    
+
                     for exchange_data in result_data:
                         funding_rate = float(exchange_data.get('fundingRate', 0))
                         if funding_rate != 0:  # Only count non-zero rates
                             total_funding += funding_rate
                             valid_exchanges += 1
-                    
+
                     avg_funding = total_funding / valid_exchanges if valid_exchanges > 0 else 0
-                    
+
                     return {
                         'symbol': symbol,
                         'funding_rate': avg_funding,
