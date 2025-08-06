@@ -1,4 +1,5 @@
 
+
 import requests
 import os
 import time
@@ -11,14 +12,14 @@ class CryptoAPI:
     def __init__(self):
         self.provider = BinanceFuturesProvider()
         self.cryptonews_key = os.getenv("CRYPTONEWS_API_KEY")
-        self.coinglass_key = os.getenv("COINGLASS_SECRET")
+        self.coinglass_key = os.getenv("COINGLASS_API_KEY")
         self.cmc_provider = CoinMarketCapProvider()
 
         if not self.coinglass_key:
             print("⚠️ Coinglass API key not found in environment variables")
-            print("💡 Please set COINGLASS_SECRET in Replit Secrets")
+            print("💡 Please set COINGLASS_API_KEY in Replit Secrets")
 
-        self.coinglass_url = "https://api.coinglass.dev/v4"
+        # Coinglass V4 Official API
         self.coinglass_base_url = "https://api.coinglass.dev/v4"
         
         # Initialize Binance URLs for fallback
@@ -29,202 +30,135 @@ class CryptoAPI:
         self.cache_duration = 30
 
         print("🚀 CryptoAPI initialized with Coinglass V4 + CoinMarketCap")
-        print(f"📊 Coinglass V4 API: {self.coinglass_url}")
+        print(f"📊 Coinglass V4 API: {self.coinglass_base_url}")
         print(f"🔑 Coinglass Key: {'✅ Enabled' if self.coinglass_key else '❌ Disabled'}")
         print(f"📊 CoinMarketCap: {'✅ Enabled' if self.cmc_provider.api_key else '❌ Disabled'}")
         print(f"📰 CryptoNews API: {'✅ Enabled' if self.cryptonews_key else '❌ Disabled'}")
-        print("⭐ Data Sources: Coinglass V4 Futures + CoinMarketCap Fundamental")
+        print("⭐ Data Sources: Coinglass V4 Startup Plan + CoinMarketCap")
 
-    # === COINGLASS API METHODS ===
+    # === COINGLASS V4 API METHODS ===
 
     def _get_coinglass_headers(self):
         """Get headers for Coinglass V4 API requests"""
         return {
             "accept": "application/json",
-            "coinglassSecret": self.coinglass_key
+            "X-API-KEY": self.coinglass_key
         }
 
-    def get_coinglass_futures_data(self, symbol):
-        """Get comprehensive futures data from Coinglass"""
+    def get_futures_price(self, symbol):
+        """Get futures price from Coinglass V4"""
         try:
             if not self.coinglass_key:
                 return {'error': 'Coinglass API key not found'}
 
             clean_symbol = symbol.upper().replace('USDT', '')
-            
-            # Get ticker data
-            ticker_url = f"{self.coinglass_url}/futures/ticker"
+            url = f"{self.coinglass_base_url}/futures/ticker"
             headers = self._get_coinglass_headers()
             params = {'symbol': clean_symbol}
 
-            response = requests.get(ticker_url, headers=headers, params=params, timeout=15)
+            response = requests.get(url, headers=headers, params=params, timeout=15)
             
             if response.status_code == 200:
                 data = response.json()
                 if data.get('success') and data.get('data'):
-                    ticker_data = data['data'][0]
+                    ticker_data = data['data']
+                    if isinstance(ticker_data, list) and len(ticker_data) > 0:
+                        primary_data = ticker_data[0]
+                    else:
+                        primary_data = ticker_data
+                    
                     return {
                         'symbol': clean_symbol,
-                        'price': float(ticker_data.get('price', 0)),
-                        'volume_24h': float(ticker_data.get('volume24h', 0)),
-                        'funding_rate': float(ticker_data.get('fundingRate', 0)),
-                        'open_interest': float(ticker_data.get('openInterest', 0)),
-                        'exchange': ticker_data.get('exchangeName', 'Binance'),
-                        'price_change_24h': float(ticker_data.get('priceChangePercent', 0)),
-                        'source': 'coinglass_futures'
+                        'price': float(primary_data.get('price', 0)),
+                        'volume_24h': float(primary_data.get('volume24h', 0)),
+                        'price_change_24h': float(primary_data.get('priceChangePercent', 0)),
+                        'exchange': primary_data.get('exchangeName', 'Binance'),
+                        'source': 'coinglass_v4'
                     }
             
-            return {'error': f'Coinglass futures data error: {response.status_code}'}
+            return {'error': f'Coinglass V4 ticker error: {response.status_code}'}
         except Exception as e:
-            return {'error': f'Coinglass futures data error: {str(e)}'}
+            return {'error': f'Coinglass V4 ticker error: {str(e)}'}
 
-    def get_coinglass_liquidation_zone(self, symbol):
-        """Get liquidation zones from Coinglass"""
+    def get_open_interest(self, symbol):
+        """Get open interest from Coinglass V4"""
         try:
             if not self.coinglass_key:
                 return {'error': 'Coinglass API key not found'}
 
             clean_symbol = symbol.upper().replace('USDT', '')
-            url = f"{self.coinglass_base_url}/futures/liquidation_chart"
+            url = f"{self.coinglass_base_url}/open_interest"
             headers = self._get_coinglass_headers()
-            params = {'symbol': clean_symbol, 'intervalType': 1}
+            params = {'symbol': clean_symbol}
 
             response = requests.get(url, headers=headers, params=params, timeout=15)
             
             if response.status_code == 200:
                 data = response.json()
-                if data.get('success'):
-                    chart_data = data.get('data', [])
-                    if chart_data:
-                        latest = chart_data[-1]
-                        return {
-                            'symbol': clean_symbol,
-                            'total_liquidation': float(latest.get('totalLiquidation', 0)),
-                            'long_liquidation': float(latest.get('longLiquidation', 0)),
-                            'short_liquidation': float(latest.get('shortLiquidation', 0)),
-                            'liquidation_ratio': float(latest.get('longLiquidation', 0)) / max(float(latest.get('totalLiquidation', 1)), 1),
-                            'dominant_side': 'Long Heavy' if float(latest.get('longLiquidation', 0)) > float(latest.get('shortLiquidation', 0)) * 1.5 else 'Short Heavy' if float(latest.get('shortLiquidation', 0)) > float(latest.get('longLiquidation', 0)) * 1.5 else 'Balanced',
-                            'source': 'coinglass_liquidation'
-                        }
-            
-            return {'error': 'No liquidation data available'}
-        except Exception as e:
-            return {'error': f'Coinglass liquidation error: {str(e)}'}
-
-    def get_coinglass_open_interest(self, symbol):
-        """Get open interest data from Coinglass API v2"""
-        try:
-            if not self.coinglass_key:
-                return {'error': 'Coinglass API key not found'}
-
-            clean_symbol = symbol.upper().replace('USDT', '')
-            url = f"{self.coinglass_base_url}/futures/open_interest"
-            headers = self._get_coinglass_headers()
-            params = {'symbol': clean_symbol}
-
-            response = requests.get(url, headers=headers, params=params, timeout=15)
-            response.raise_for_status()
-
-            data = response.json()
-
-            if data.get('success'):
-                result_data = data.get('data', {})
-                total_oi = 0
-                oi_change = 0
-
-                if isinstance(result_data, list):
-                    for exchange_data in result_data:
-                        oi_value = float(exchange_data.get('openInterest', 0))
-                        oi_change_value = float(exchange_data.get('openInterestChange', 0))
-                        total_oi += oi_value
-                        oi_change += oi_change_value
-
-                return {
-                    'symbol': clean_symbol,
-                    'open_interest': total_oi,
-                    'open_interest_change': oi_change,
-                    'exchanges_count': len(result_data) if isinstance(result_data, list) else 1,
-                    'source': 'coinglass_v2',
-                    'timestamp': datetime.now().isoformat()
-                }
-            else:
-                return {'error': f"Coinglass API error: {data.get('msg', 'Unknown error')}"}
-
-        except Exception as e:
-            return {'error': f"Coinglass open interest error: {str(e)}"}
-
-    def get_coinglass_long_short_ratio(self, symbol, interval_type=2):
-        """Get long/short ratio from Coinglass API v2"""
-        try:
-            if not self.coinglass_key:
-                return {'error': 'Coinglass API key not found'}
-
-            clean_symbol = symbol.upper().replace('USDT', '')
-            url = f"{self.coinglass_base_url}/futures/long_short_chart"
-            headers = self._get_coinglass_headers()
-
-            params = {
-                'symbol': clean_symbol,
-                'intervalType': interval_type
-            }
-
-            response = requests.get(url, headers=headers, params=params, timeout=15)
-            response.raise_for_status()
-
-            data = response.json()
-
-            if data.get('success'):
-                chart_data = data.get('data', [])
-                if chart_data and len(chart_data) > 0:
-                    latest = chart_data[-1]
-                    long_ratio = float(latest.get('longRatio', 50))
-                    short_ratio = float(latest.get('shortRatio', 50))
+                if data.get('success') and data.get('data'):
+                    oi_data = data['data']
+                    
+                    total_oi = 0
+                    oi_change = 0
+                    exchanges_count = 0
+                    
+                    if isinstance(oi_data, list):
+                        for exchange_data in oi_data:
+                            oi_value = float(exchange_data.get('openInterest', 0))
+                            oi_change_value = float(exchange_data.get('openInterestChange24h', 0))
+                            total_oi += oi_value
+                            oi_change += oi_change_value
+                            exchanges_count += 1
+                    else:
+                        total_oi = float(oi_data.get('openInterest', 0))
+                        oi_change = float(oi_data.get('openInterestChange24h', 0))
+                        exchanges_count = 1
 
                     return {
                         'symbol': clean_symbol,
-                        'long_ratio': long_ratio,
-                        'short_ratio': short_ratio,
-                        'long_short_ratio': long_ratio / short_ratio if short_ratio > 0 else 1.0,
-                        'interval_type': interval_type,
-                        'timestamp': latest.get('createTime', datetime.now().isoformat()),
-                        'data_points': len(chart_data),
-                        'source': 'coinglass_v2'
+                        'open_interest': total_oi,
+                        'open_interest_change': oi_change,
+                        'exchanges_count': exchanges_count,
+                        'source': 'coinglass_v4',
+                        'timestamp': datetime.now().isoformat()
                     }
-                else:
-                    return {'error': 'No chart data available from Coinglass'}
-            else:
-                return {'error': f"Coinglass API error: {data.get('msg', 'Unknown error')}"}
-
+            
+            return {'error': f'Coinglass V4 OI error: {response.status_code}'}
         except Exception as e:
-            return {'error': f"Coinglass long/short ratio error: {str(e)}"}
+            return {'error': f'Coinglass V4 OI error: {str(e)}'}
 
-    def get_coinglass_funding_rate(self, symbol):
-        """Get funding rate from Coinglass API v2"""
+    def get_funding_rate(self, symbol):
+        """Get funding rate from Coinglass V4"""
         try:
             if not self.coinglass_key:
                 return {'error': 'Coinglass API key not found'}
 
             clean_symbol = symbol.upper().replace('USDT', '')
-            url = f"{self.coinglass_base_url}/futures/funding_rate"
+            url = f"{self.coinglass_base_url}/funding_rate"
             headers = self._get_coinglass_headers()
             params = {'symbol': clean_symbol}
 
             response = requests.get(url, headers=headers, params=params, timeout=15)
-            response.raise_for_status()
-
-            data = response.json()
-
-            if data.get('success'):
-                result_data = data.get('data', [])
-                if result_data and len(result_data) > 0:
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success') and data.get('data'):
+                    funding_data = data['data']
+                    
                     total_funding = 0
                     valid_exchanges = 0
-
-                    for exchange_data in result_data:
-                        funding_rate = float(exchange_data.get('fundingRate', 0))
+                    
+                    if isinstance(funding_data, list):
+                        for exchange_data in funding_data:
+                            funding_rate = float(exchange_data.get('fundingRate', 0))
+                            if funding_rate != 0:
+                                total_funding += funding_rate
+                                valid_exchanges += 1
+                    else:
+                        funding_rate = float(funding_data.get('fundingRate', 0))
                         if funding_rate != 0:
-                            total_funding += funding_rate
-                            valid_exchanges += 1
+                            total_funding = funding_rate
+                            valid_exchanges = 1
 
                     avg_funding = total_funding / valid_exchanges if valid_exchanges > 0 else 0
 
@@ -233,16 +167,129 @@ class CryptoAPI:
                         'funding_rate': avg_funding,
                         'funding_rate_8h': avg_funding * 3,
                         'exchanges_count': valid_exchanges,
-                        'source': 'coinglass_v2',
+                        'source': 'coinglass_v4',
                         'timestamp': datetime.now().isoformat()
                     }
-                else:
-                    return {'error': 'No funding rate data available'}
-            else:
-                return {'error': f"Coinglass API error: {data.get('msg', 'Unknown error')}"}
-
+            
+            return {'error': f'Coinglass V4 funding error: {response.status_code}'}
         except Exception as e:
-            return {'error': f"Coinglass funding rate error: {str(e)}"}
+            return {'error': f'Coinglass V4 funding error: {str(e)}'}
+
+    def get_long_short_ratio(self, symbol):
+        """Get long/short ratio from Coinglass V4"""
+        try:
+            if not self.coinglass_key:
+                return {'error': 'Coinglass API key not found'}
+
+            clean_symbol = symbol.upper().replace('USDT', '')
+            url = f"{self.coinglass_base_url}/long_short_ratio"
+            headers = self._get_coinglass_headers()
+            params = {'symbol': clean_symbol}
+
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success') and data.get('data'):
+                    ls_data = data['data']
+                    
+                    if isinstance(ls_data, list) and len(ls_data) > 0:
+                        latest = ls_data[-1]
+                    else:
+                        latest = ls_data
+                    
+                    long_ratio = float(latest.get('longRatio', 50))
+                    short_ratio = float(latest.get('shortRatio', 50))
+
+                    return {
+                        'symbol': clean_symbol,
+                        'long_ratio': long_ratio,
+                        'short_ratio': short_ratio,
+                        'long_short_ratio': long_ratio / short_ratio if short_ratio > 0 else 1.0,
+                        'timestamp': latest.get('timestamp', datetime.now().isoformat()),
+                        'source': 'coinglass_v4'
+                    }
+            
+            return {'error': f'Coinglass V4 L/S error: {response.status_code}'}
+        except Exception as e:
+            return {'error': f'Coinglass V4 L/S error: {str(e)}'}
+
+    def get_liquidation_price_range(self, symbol):
+        """Get liquidation price ranges from Coinglass V4"""
+        try:
+            if not self.coinglass_key:
+                return {'error': 'Coinglass API key not found'}
+
+            clean_symbol = symbol.upper().replace('USDT', '')
+            url = f"{self.coinglass_base_url}/liquidation_map"
+            headers = self._get_coinglass_headers()
+            params = {'symbol': clean_symbol}
+
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success') and data.get('data'):
+                    liq_data = data['data']
+                    
+                    if isinstance(liq_data, list) and len(liq_data) > 0:
+                        latest = liq_data[-1]
+                    else:
+                        latest = liq_data
+                    
+                    total_liquidation = float(latest.get('totalLiquidation', 0))
+                    long_liquidation = float(latest.get('longLiquidation', 0))
+                    short_liquidation = float(latest.get('shortLiquidation', 0))
+                    
+                    return {
+                        'symbol': clean_symbol,
+                        'total_liquidation': total_liquidation,
+                        'long_liquidation': long_liquidation,
+                        'short_liquidation': short_liquidation,
+                        'liquidation_ratio': long_liquidation / max(total_liquidation, 1),
+                        'dominant_side': 'Long Heavy' if long_liquidation > short_liquidation * 1.5 else 'Short Heavy' if short_liquidation > long_liquidation * 1.5 else 'Balanced',
+                        'price_ranges': latest.get('priceRanges', []),
+                        'source': 'coinglass_v4'
+                    }
+            
+            return {'error': f'Coinglass V4 liquidation error: {response.status_code}'}
+        except Exception as e:
+            return {'error': f'Coinglass V4 liquidation error: {str(e)}'}
+
+    def get_comprehensive_futures_data(self, symbol):
+        """Get comprehensive futures data from Coinglass V4"""
+        try:
+            print(f"🔄 Getting comprehensive futures data for {symbol} from Coinglass V4...")
+
+            # Get all data from V4 endpoints
+            price_data = self.get_futures_price(symbol)
+            oi_data = self.get_open_interest(symbol)
+            funding_data = self.get_funding_rate(symbol)
+            ls_data = self.get_long_short_ratio(symbol)
+            liquidation_data = self.get_liquidation_price_range(symbol)
+
+            successful_calls = 0
+            total_calls = 5
+
+            # Count successful API calls
+            for data in [price_data, oi_data, funding_data, ls_data, liquidation_data]:
+                if isinstance(data, dict) and 'error' not in data:
+                    successful_calls += 1
+
+            return {
+                'symbol': symbol,
+                'price_data': price_data,
+                'open_interest_data': oi_data,
+                'funding_rate_data': funding_data,
+                'long_short_data': ls_data,
+                'liquidation_data': liquidation_data,
+                'successful_api_calls': successful_calls,
+                'total_api_calls': total_calls,
+                'data_quality': 'excellent' if successful_calls >= 4 else 'good' if successful_calls >= 3 else 'fair',
+                'source': 'coinglass_v4_comprehensive'
+            }
+        except Exception as e:
+            return {'error': f"Coinglass V4 comprehensive data error: {str(e)}"}
 
     # === COINMARKETCAP API METHODS ===
 
@@ -392,40 +439,6 @@ class CryptoAPI:
         except Exception as e:
             return {'error': f'All price sources failed: {str(e)}'}
 
-    def get_comprehensive_futures_data(self, symbol):
-        """Get comprehensive futures data from Coinglass"""
-        try:
-            print(f"🔄 Getting futures data for {symbol} from Coinglass...")
-
-            futures_data = self.get_coinglass_futures_data(symbol)
-            oi_data = self.get_coinglass_open_interest(symbol)
-            ls_data = self.get_coinglass_long_short_ratio(symbol)
-            funding_data = self.get_coinglass_funding_rate(symbol)
-            liquidation_data = self.get_coinglass_liquidation_zone(symbol)
-
-            successful_calls = 0
-            total_calls = 5
-
-            # Count successful API calls
-            for data in [futures_data, oi_data, ls_data, funding_data, liquidation_data]:
-                if isinstance(data, dict) and 'error' not in data:
-                    successful_calls += 1
-
-            return {
-                'symbol': symbol,
-                'futures_ticker': futures_data,
-                'open_interest_data': oi_data,
-                'long_short_data': ls_data,
-                'funding_rate_data': funding_data,
-                'liquidation_data': liquidation_data,
-                'successful_api_calls': successful_calls,
-                'total_api_calls': total_calls,
-                'data_quality': 'excellent' if successful_calls >= 4 else 'good' if successful_calls >= 3 else 'fair',
-                'source': 'coinglass_comprehensive'
-            }
-        except Exception as e:
-            return {'error': f"Coinglass futures data error: {str(e)}"}
-
     def get_market_overview(self):
         """Get market overview from CoinMarketCap"""
         try:
@@ -500,3 +513,4 @@ class CryptoAPI:
     async def cleanup(self):
         """Cleanup resources"""
         pass
+
