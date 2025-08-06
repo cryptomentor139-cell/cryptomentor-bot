@@ -1,0 +1,43 @@
+Tolong bantu selesaikan masalah pada proyek bot CryptoMentor AI ini.
+
+🔧 Masalah utama:
+1. Perintah `/analyze` error:
+   - Tidak mengembalikan hasil dari CoinGlass V4
+   - Value harga, OI, atau funding rate muncul sebagai 0
+2. Ingin menambahkan fitur **Support & Resistance** secara otomatis saat user memakai `/analyze`
+3. CoinMarketCap dan CoinGlass sudah diatur API Key-nya via `os.getenv`
+
+🎯 Yang harus kamu lakukan:
+
+1. 🔁 **Perbaiki command `/analyze`**:
+   - Lokasi biasanya di `bot.py` atau `commands.py`
+   - Pastikan ketika user mengirim `/analyze BTC`:
+     - Harga real-time diambil dari CoinMarketCap
+     - Funding rate, Open Interest, dan volume futures dari CoinGlass V4
+     - Semuanya ditampilkan dalam 1 pesan analisis (jangan 0)
+     - Gunakan parsing response JSON yang benar (cek struktur terbaru dari CoinGlass V4)
+
+2. 📊 **Tambahkan fitur Support & Resistance otomatis**:
+   - Support = titik harga terdekat di bawah harga sekarang dengan volume tinggi
+   - Resistance = titik harga terdekat di atas harga sekarang dengan volume tinggi
+   - Bisa estimasi dari historical high/low atau data CoinGlass (jika tersedia)
+   - Tambahkan ke output `/analyze` dalam format:
+     ```
+     🛡️ Support: $XXXX
+     🔺 Resistance: $XXXX
+     ```
+
+3. 🔌 **Fix integrasi CoinGlass V4**:
+   - Gunakan header: `'X-API-KEY': os.getenv("COINGLASS_API_KEY")`
+   - Gunakan endpoint yang benar dan sesuai dokumentasi (misalnya `/api/futures/symbol-mark-price`)
+   - Jangan tampilkan dummy data jika gagal parsing – tampilkan error message/log.
+
+4. 📦 **Fix CoinMarketCapProvider**:
+   - Gunakan endpoint `/v1/cryptocurrency/quotes/latest`
+   - Pastikan harga aktual dikembalikan ke command `/analyze`
+
+5. ✅ **Cek dan pastikan semua dependensi dan import sudah betul**:
+   - `from coinmarketcap_provider import CoinMarketCapProvider`
+   - `from coinglass_provider import CoinGlassProvider` atau nama yang digunakan
+
+6. 💬 Tampilkan hasil /analyze dalam format Telegram-friendly, misalnya:
