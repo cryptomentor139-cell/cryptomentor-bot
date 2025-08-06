@@ -18,8 +18,8 @@ class CryptoAPI:
             print("⚠️ Coinglass API key not found in environment variables")
             print("💡 Please set COINGLASS_SECRET in Replit Secrets")
 
-        self.coinglass_url = "https://open-api.coinglass.com/api/pro/v1"
-        self.coinglass_base_url = "https://open-api.coinglass.com/public/v2"
+        self.coinglass_url = "https://api.coinglass.dev/v4"
+        self.coinglass_base_url = "https://api.coinglass.dev/v4"
         
         # Initialize Binance URLs for fallback
         self.binance_spot_url = "https://api.binance.com/api/v3"
@@ -28,23 +28,20 @@ class CryptoAPI:
         self.cache = {}
         self.cache_duration = 30
 
-        print("🚀 CryptoAPI initialized with Coinglass + CoinMarketCap")
-        print(f"📊 Coinglass API: {self.coinglass_url}")
-        print(f"📊 Coinglass Public API: {self.coinglass_base_url}")
+        print("🚀 CryptoAPI initialized with Coinglass V4 + CoinMarketCap")
+        print(f"📊 Coinglass V4 API: {self.coinglass_url}")
         print(f"🔑 Coinglass Key: {'✅ Enabled' if self.coinglass_key else '❌ Disabled'}")
         print(f"📊 CoinMarketCap: {'✅ Enabled' if self.cmc_provider.api_key else '❌ Disabled'}")
         print(f"📰 CryptoNews API: {'✅ Enabled' if self.cryptonews_key else '❌ Disabled'}")
-        print("⭐ Data Sources: Coinglass Futures + CoinMarketCap Fundamental")
+        print("⭐ Data Sources: Coinglass V4 Futures + CoinMarketCap Fundamental")
 
     # === COINGLASS API METHODS ===
 
     def _get_coinglass_headers(self):
-        """Get headers for Coinglass API requests"""
+        """Get headers for Coinglass V4 API requests"""
         return {
-            "coinglassSecret": self.coinglass_key,
-            "User-Agent": "CryptoMentorAI/1.0",
-            "Accept": "application/json",
-            "Connection": "keep-alive"
+            "accept": "application/json",
+            "coinglassSecret": self.coinglass_key
         }
 
     def get_coinglass_futures_data(self, symbol):
@@ -121,7 +118,7 @@ class CryptoAPI:
                 return {'error': 'Coinglass API key not found'}
 
             clean_symbol = symbol.upper().replace('USDT', '')
-            url = f"{self.coinglass_base_url}/futures/openInterest"
+            url = f"{self.coinglass_base_url}/futures/open_interest"
             headers = self._get_coinglass_headers()
             params = {'symbol': clean_symbol}
 
@@ -163,7 +160,7 @@ class CryptoAPI:
                 return {'error': 'Coinglass API key not found'}
 
             clean_symbol = symbol.upper().replace('USDT', '')
-            url = f"{self.coinglass_base_url}/futures/longShortChart"
+            url = f"{self.coinglass_base_url}/futures/long_short_chart"
             headers = self._get_coinglass_headers()
 
             params = {
@@ -208,7 +205,7 @@ class CryptoAPI:
                 return {'error': 'Coinglass API key not found'}
 
             clean_symbol = symbol.upper().replace('USDT', '')
-            url = f"{self.coinglass_base_url}/futures/fundingRate"
+            url = f"{self.coinglass_base_url}/futures/funding_rate"
             headers = self._get_coinglass_headers()
             params = {'symbol': clean_symbol}
 

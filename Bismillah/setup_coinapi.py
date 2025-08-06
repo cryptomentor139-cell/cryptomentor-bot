@@ -3,8 +3,8 @@ import os
 from crypto_api import CryptoAPI
 
 def verify_api_setup():
-    """Verify Coinglass and CoinMarketCap API setup and configuration"""
-    print("🔧 Verifying Coinglass and CoinMarketCap API setup...")
+    """Verify Coinglass V4 and CoinMarketCap API setup and configuration"""
+    print("🔧 Verifying Coinglass V4 and CoinMarketCap API setup...")
     
     # Check if COINGLASS_SECRET is in environment
     coinglass_key = os.getenv("COINGLASS_SECRET")
