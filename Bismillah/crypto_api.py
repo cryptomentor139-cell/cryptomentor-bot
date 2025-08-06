@@ -14,6 +14,7 @@ class CryptoAPI:
         self.provider = BinanceFuturesProvider()
         self.cryptonews_key = os.getenv("CRYPTONEWS_API_KEY")
         self.cmc_provider = CoinMarketCapProvider()
+        from coinglass_provider import CoinGlassProvider
         self.coinglass_provider = CoinGlassProvider()
 
         # Initialize Binance URLs for fallback
@@ -24,8 +25,10 @@ class CryptoAPI:
         self.cache_duration = 30
 
         print("🚀 CryptoAPI initialized with CoinGlass V4 + CoinMarketCap")
-        print(f"📊 CoinGlass V4 API: {self.coinglass_provider.base_url}")
-        print(f"🔑 CoinGlass Key: {'✅ Enabled' if self.coinglass_provider.api_key else '❌ Disabled'}")
+        self.coinglass_key = self.coinglass_provider.api_key
+        self.coinglass_base_url = self.coinglass_provider.base_url
+        print(f"📊 CoinGlass V4 API: {self.coinglass_base_url}")
+        print(f"🔑 CoinGlass Key: {'✅ Enabled' if self.coinglass_key else '❌ Disabled'}")
         print(f"📊 CoinMarketCap: {'✅ Enabled' if self.cmc_provider.api_key else '❌ Disabled'}")
         print(f"📰 CryptoNews API: {'✅ Enabled' if self.cryptonews_key else '❌ Disabled'}")
         print("⭐ Data Sources: CoinGlass V4 Startup Plan + CoinMarketCap")

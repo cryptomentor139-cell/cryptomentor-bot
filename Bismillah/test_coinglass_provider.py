@@ -41,6 +41,7 @@ def test_coinglass_provider():
     # Test individual endpoints
     print("\n📊 Testing individual endpoints...")
     test_symbol = 'BTC'
+    successful_tests = 0
     
     endpoints = [
         ('Futures Ticker', provider.get_futures_ticker),
@@ -51,50 +52,45 @@ def test_coinglass_provider():
         ('Volume Chart', provider.get_volume_chart)
     ]
     
-    successful_tests = 0
-    for name, func in endpoints:
+    for endpoint_name, endpoint_func in endpoints:
         try:
-            print(f"   Testing {name}...")
-            result = func(test_symbol)
+            print(f"   Testing {endpoint_name}...", end=" ")
+            result = endpoint_func(test_symbol)
             
-            if 'error' not in result:
-                print(f"     ✅ {name} - OK")
+            if isinstance(result, dict) and 'error' not in result:
+                print("✅")
                 successful_tests += 1
             else:
-                print(f"     ❌ {name} - {result['error'][:50]}...")
-                
+                print(f"❌ {result.get('error', 'Unknown error')}")
         except Exception as e:
-            print(f"     ❌ {name} - Exception: {str(e)[:50]}...")
+            print(f"❌ Exception: {str(e)}")
     
     # Test comprehensive data
-    print(f"\n🎯 Testing comprehensive data for {test_symbol}...")
+    print(f"\n📋 Testing comprehensive data...")
     try:
-        comprehensive_data = provider.get_comprehensive_data(test_symbol)
-        
-        if 'error' not in comprehensive_data:
-            success_rate = comprehensive_data['endpoints_successful'] / comprehensive_data['endpoints_called']
-            print(f"   ✅ Comprehensive test completed")
-            print(f"   📊 Success rate: {success_rate:.1%} ({comprehensive_data['endpoints_successful']}/{comprehensive_data['endpoints_called']})")
-            print(f"   📈 Data quality: {comprehensive_data['data_quality'].upper()}")
+        comprehensive = provider.get_comprehensive_data(test_symbol)
+        if 'error' not in comprehensive:
+            print(f"   ✅ Comprehensive data: {comprehensive['data_quality']}")
+            successful_tests += 1
         else:
-            print(f"   ❌ Comprehensive test failed: {comprehensive_data['error']}")
-            
+            print(f"   ❌ {comprehensive['error']}")
     except Exception as e:
-        print(f"   ❌ Comprehensive test exception: {str(e)[:50]}...")
+        print(f"   ❌ Exception: {str(e)}")
     
-    # Test supported symbols
-    print(f"\n📋 Supported symbols ({len(provider.get_supported_symbols())}):")
+    # Show supported symbols
+    print(f"\n📝 Supported symbols ({len(provider.get_supported_symbols())}):")
     symbols = provider.get_supported_symbols()
     for i in range(0, len(symbols), 10):
         print(f"   {', '.join(symbols[i:i+10])}")
     
     # Summary
-    print(f"\n📊 Test Results: {successful_tests}/{len(endpoints)} endpoints working")
+    total_tests = len(endpoints) + 1  # +1 for comprehensive test
+    print(f"\n📊 Test Results: {successful_tests}/{total_tests} endpoints working")
     
-    if successful_tests >= len(endpoints) * 0.8:
+    if successful_tests >= total_tests * 0.8:
         print("✅ CoinGlass Provider V4 is working properly")
         return True
-    elif successful_tests >= len(endpoints) * 0.5:
+    elif successful_tests >= total_tests * 0.5:
         print("⚠️ CoinGlass Provider V4 has partial functionality")
         return True
     else:
@@ -106,5 +102,5 @@ if __name__ == "__main__":
         success = test_coinglass_provider()
         sys.exit(0 if success else 1)
     except Exception as e:
-        print(f"❌ Test script failed: {e}")
+        print(f"💥 Test error: {e}")
         sys.exit(1)
