@@ -79,7 +79,7 @@ class CryptoAPI:
             return {'error': f'Coinglass V4 ticker error: {str(e)}'}
 
     def get_open_interest(self, symbol):
-        """Get open interest from Coinglass V4"""
+        """Get open interest from Coinglass V4 - REAL DATA"""
         try:
             if not self.coinglass_key:
                 print(f"❌ CoinGlass API key not found for {symbol}")
@@ -87,18 +87,21 @@ class CryptoAPI:
 
             # Clean symbol to basic format (BTC, ETH, etc.)
             clean_symbol = symbol.upper().replace('USDT', '').replace('BINANCE_', '').replace('USD', '')
-            print(f"🔄 Getting open interest for {clean_symbol} from CoinGlass V4...")
+            print(f"🔄 Getting REAL open interest for {clean_symbol} from CoinGlass V4...")
 
-            # Use the coinglass_provider for consistent API calls
+            # Use the coinglass_provider for real API calls
             result = self.coinglass_provider.get_open_interest_chart(clean_symbol)
+            
             if result and 'error' not in result:
                 return {
                     'symbol': clean_symbol,
-                    'data': result,
-                    'source': 'coinglass_v4_openinterest',
-                    'timestamp': datetime.now().isoformat()
+                    'open_interest': result.get('open_interest', 0),
+                    'oi_change_percent': result.get('oi_change_percent', 0),
+                    'timestamp': result.get('timestamp', int(time.time() * 1000)),
+                    'source': 'coinglass_v4_realtime'
                 }
             else:
+                print(f"❌ CoinGlass V4 open interest error: {result.get('error', 'Unknown error')}")
                 return result if result else {'error': f'No open interest data for {clean_symbol}'}
 
         except Exception as e:
@@ -106,7 +109,7 @@ class CryptoAPI:
             return {'error': f'Open interest error: {str(e)}'}
 
     def get_funding_rate(self, symbol):
-        """Get funding rate from Coinglass V4"""
+        """Get funding rate from Coinglass V4 - REAL DATA"""
         try:
             if not self.coinglass_key:
                 print(f"❌ CoinGlass API key not found for {symbol}")
@@ -114,18 +117,21 @@ class CryptoAPI:
 
             # Clean symbol to basic format (BTC, ETH, etc.)
             clean_symbol = symbol.upper().replace('USDT', '').replace('BINANCE_', '').replace('USD', '')
-            print(f"🔄 Getting funding rate for {clean_symbol} from CoinGlass V4...")
+            print(f"🔄 Getting REAL funding rate for {clean_symbol} from CoinGlass V4...")
 
-            # Use the coinglass_provider for consistent API calls
+            # Use the coinglass_provider for real API calls
             result = self.coinglass_provider.get_funding_rate_chart(clean_symbol)
+            
             if result and 'error' not in result:
                 return {
                     'symbol': clean_symbol,
-                    'data': result,
-                    'source': 'coinglass_v4_fundingrate',
-                    'timestamp': datetime.now().isoformat()
+                    'funding_rate': result.get('funding_rate', 0),
+                    'funding_rate_percent': result.get('funding_rate_percent', 0),
+                    'timestamp': result.get('timestamp', int(time.time() * 1000)),
+                    'source': 'coinglass_v4_realtime'
                 }
             else:
+                print(f"❌ CoinGlass V4 funding rate error: {result.get('error', 'Unknown error')}")
                 return result if result else {'error': f'No funding rate data for {clean_symbol}'}
 
         except Exception as e:
@@ -133,7 +139,7 @@ class CryptoAPI:
             return {'error': f'Funding rate error: {str(e)}'}
 
     def get_long_short_ratio(self, symbol):
-        """Get long/short ratio from Coinglass V4"""
+        """Get long/short ratio from Coinglass V4 - REAL DATA"""
         try:
             if not self.coinglass_key:
                 print(f"❌ CoinGlass API key not found for {symbol}")
@@ -141,18 +147,21 @@ class CryptoAPI:
 
             # Clean symbol to basic format (BTC, ETH, etc.)
             clean_symbol = symbol.upper().replace('USDT', '').replace('BINANCE_', '').replace('USD', '')
-            print(f"🔄 Getting long/short ratio for {clean_symbol} from CoinGlass V4...")
+            print(f"🔄 Getting REAL long/short ratio for {clean_symbol} from CoinGlass V4...")
 
-            # Use the coinglass_provider for consistent API calls
+            # Use the coinglass_provider for real API calls
             result = self.coinglass_provider.get_long_short_ratio(clean_symbol)
+            
             if result and 'error' not in result:
                 return {
                     'symbol': clean_symbol,
-                    'data': result,
-                    'source': 'coinglass_v4_longshortratio',
-                    'timestamp': datetime.now().isoformat()
+                    'long_ratio': result.get('long_ratio', 50),
+                    'short_ratio': result.get('short_ratio', 50),
+                    'timestamp': result.get('timestamp', int(time.time() * 1000)),
+                    'source': 'coinglass_v4_realtime'
                 }
             else:
+                print(f"❌ CoinGlass V4 long/short error: {result.get('error', 'Unknown error')}")
                 return result if result else {'error': f'No long/short ratio data for {clean_symbol}'}
 
         except Exception as e:
@@ -160,96 +169,73 @@ class CryptoAPI:
             return {'error': f'Long/short ratio error: {str(e)}'}
 
     def get_liquidation_price_range(self, symbol):
-        """Get liquidation price ranges from Coinglass V4"""
+        """Get liquidation price ranges from Coinglass V4 - REAL DATA"""
         try:
             if not self.coinglass_key:
                 return {'error': 'Coinglass API key not found'}
 
-            clean_symbol = symbol.upper().replace('USDT', '')
-            url = f"{self.coinglass_base_url}/liquidation_map"
-            headers = self._get_coinglass_headers()
-            params = {'symbol': clean_symbol}
+            clean_symbol = symbol.upper().replace('USDT', '').replace('BINANCE_', '').replace('USD', '')
+            print(f"🔄 Getting REAL liquidation zones for {clean_symbol} from CoinGlass V4...")
 
-            response = requests.get(url, headers=headers, params=params, timeout=15)
+            # Use the coinglass_provider for real API calls
+            result = self.coinglass_provider.get_liquidation_map(clean_symbol)
+            
+            if result and 'error' not in result:
+                return {
+                    'symbol': clean_symbol,
+                    'total_liquidation': result.get('total_liquidation', 0),
+                    'long_liquidation': result.get('long_liquidation', 0),
+                    'short_liquidation': result.get('short_liquidation', 0),
+                    'long_percentage': result.get('long_percentage', 50),
+                    'short_percentage': result.get('short_percentage', 50),
+                    'dominant_side': result.get('dominant_side', 'Balanced'),
+                    'zones': result.get('zones', []),
+                    'source': 'coinglass_v4_realtime'
+                }
+            else:
+                print(f"❌ CoinGlass V4 liquidation error: {result.get('error', 'Unknown error')}")
+                return result if result else {'error': f'No liquidation data for {clean_symbol}'}
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('success') and data.get('data'):
-                    liq_data = data['data']
-
-                    if isinstance(liq_data, list) and len(liq_data) > 0:
-                        latest = liq_data[-1]
-                    else:
-                        latest = liq_data
-
-                    total_liquidation = float(latest.get('totalLiquidation', 0))
-                    long_liquidation = float(latest.get('longLiquidation', 0))
-                    short_liquidation = float(latest.get('shortLiquidation', 0))
-
-                    return {
-                        'symbol': clean_symbol,
-                        'total_liquidation': total_liquidation,
-                        'long_liquidation': long_liquidation,
-                        'short_liquidation': short_liquidation,
-                        'liquidation_ratio': long_liquidation / max(total_liquidation, 1),
-                        'dominant_side': 'Long Heavy' if long_liquidation > short_liquidation * 1.5 else 'Short Heavy' if short_liquidation > long_liquidation * 1.5 else 'Balanced',
-                        'price_ranges': latest.get('priceRanges', []),
-                        'source': 'coinglass_v4'
-                    }
-
-            return {'error': f'Coinglass V4 liquidation error: {response.status_code}'}
         except Exception as e:
+            print(f"❌ Liquidation zones error for {symbol}: {e}")
             return {'error': f'Coinglass V4 liquidation error: {str(e)}'}
 
     def get_comprehensive_futures_data(self, symbol):
-        """Get comprehensive futures data from Coinglass V4"""
+        """Get comprehensive futures data from Coinglass V4 - REAL DATA"""
         try:
-            print(f"🔄 Getting comprehensive futures data for {symbol} from Coinglass V4...")
+            print(f"🔄 Getting REAL comprehensive futures data for {symbol} from CoinGlass V4...")
 
             # Clean symbol for consistency
             clean_symbol = symbol.upper().replace('USDT', '').replace('BINANCE_', '').replace('USD', '')
 
-            # Get all data from V4 endpoints using coinglass_provider
-            price_data = self.get_futures_price(clean_symbol)
-            oi_data = self.get_open_interest(clean_symbol)
-            funding_data = self.get_funding_rate(clean_symbol)
-            ls_data = self.get_long_short_ratio(clean_symbol)
-            liquidation_data = self.get_liquidation_price_range(clean_symbol)
-
-            successful_calls = 0
-            total_calls = 5
-
-            # Count successful API calls
-            for data in [price_data, oi_data, funding_data, ls_data, liquidation_data]:
-                if isinstance(data, dict) and 'error' not in data:
-                    successful_calls += 1
-
-            # Determine data quality based on success rate
-            if successful_calls >= 4:
-                data_quality = 'excellent'
-            elif successful_calls >= 2:
-                data_quality = 'good'
-            elif successful_calls >= 1:
-                data_quality = 'fair'
+            # Use coinglass_provider directly for real data
+            result = self.coinglass_provider.get_comprehensive_futures_data(clean_symbol)
+            
+            if result and 'error' not in result:
+                successful_calls = result.get('successful_calls', 0)
+                total_calls = result.get('total_calls', 4)
+                
+                print(f"✅ CoinGlass V4 comprehensive data: {successful_calls}/{total_calls} endpoints successful")
+                
+                return {
+                    'symbol': clean_symbol,
+                    'long_short_data': result.get('long_short_data', {}),
+                    'open_interest_data': result.get('open_interest_data', {}),
+                    'funding_rate_data': result.get('funding_rate_data', {}),
+                    'liquidation_data': result.get('liquidation_data', {}),
+                    'successful_api_calls': successful_calls,
+                    'total_api_calls': total_calls,
+                    'data_quality': result.get('data_quality', 'poor'),
+                    'source': 'coinglass_v4_realtime_comprehensive',
+                    'timestamp': datetime.now().isoformat()
+                }
             else:
-                data_quality = 'poor'
-
-            return {
-                'symbol': clean_symbol,
-                'price_data': price_data,
-                'open_interest_data': oi_data,
-                'funding_rate_data': funding_data,
-                'long_short_data': ls_data,
-                'liquidation_data': liquidation_data,
-                'successful_api_calls': successful_calls,
-                'total_api_calls': total_calls,
-                'data_quality': data_quality,
-                'source': 'coinglass_v4_comprehensive',
-                'timestamp': datetime.now().isoformat()
-            }
+                print(f"❌ CoinGlass V4 comprehensive data error: {result.get('error', 'Unknown error') if result else 'No data'}")
+                return result if result else {'error': f'No comprehensive data for {clean_symbol}'}
+                
         except Exception as e:
             print(f"❌ Comprehensive futures data error: {e}")
-            return {'error': f"Coinglass V4 comprehensive data error: {str(e)}"}
+            return {'error': f"CoinGlass V4 comprehensive data error: {str(e)}"}
 
     # === COINMARKETCAP API METHODS ===
 
@@ -528,27 +514,27 @@ class CryptoAPI:
 
     def get_binance_long_short_ratio(self, symbol):
         """Backward compatibility: redirect to get_long_short_ratio"""
-        print(f"🔄 get_binance_long_short_ratio called for {symbol}, redirecting to CoinGlass V4...")
+        print(f"✅ get_binance_long_short_ratio called for {symbol}, using CoinGlass V4 REAL data...")
         return self.get_long_short_ratio(symbol)
 
     def get_binance_open_interest(self, symbol):
         """Backward compatibility: redirect to get_open_interest"""
-        print(f"🔄 get_binance_open_interest called for {symbol}, redirecting to CoinGlass V4...")
+        print(f"✅ get_binance_open_interest called for {symbol}, using CoinGlass V4 REAL data...")
         return self.get_open_interest(symbol)
 
     def get_binance_funding_rate(self, symbol):
         """Backward compatibility: redirect to get_funding_rate"""
-        print(f"🔄 get_binance_funding_rate called for {symbol}, redirecting to CoinGlass V4...")
+        print(f"✅ get_binance_funding_rate called for {symbol}, using CoinGlass V4 REAL data...")
         return self.get_funding_rate(symbol)
 
     def get_liquidation_zones(self, symbol, interval='15m', limit=100):
         """Get liquidation zones - redirect to liquidation price range"""
-        print(f"🔄 get_liquidation_zones called for {symbol}, redirecting to CoinGlass V4...")
+        print(f"✅ get_liquidation_zones called for {symbol}, using CoinGlass V4 REAL data...")
         return self.get_liquidation_price_range(symbol)
 
     def get_binance_oi(self, symbol):
-        """Backward compatibility: redirect to get_open_interest"""
-        print(f"🔄 get_binance_oi called for {symbol}, redirecting to CoinGlass V4...")
+        """Backward compatibility: redirect to get_open_interest"""  
+        print(f"✅ get_binance_oi called for {symbol}, using CoinGlass V4 REAL data...")
         return self.get_open_interest(symbol)
 
     def get_coinglass_futures_data(self, symbol):
