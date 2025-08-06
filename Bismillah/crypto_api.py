@@ -1,20 +1,16 @@
 import requests
 import os
 import time
-import asyncio
 from datetime import datetime, timezone
 from binance_provider import BinanceFuturesProvider
 from coinmarketcap_provider import CoinMarketCapProvider
-from coinapi_helper import CoinAPIHelper
 
 class CryptoAPI:
     def __init__(self):
         self.provider = BinanceFuturesProvider()
         self.cryptonews_key = os.getenv("CRYPTONEWS_API_KEY")
         self.coinglass_key = os.getenv("COINGLASS_API_KEY")
-        self.coinapi_key = os.getenv("COINAPI_KEY")
         self.cmc_provider = CoinMarketCapProvider()
-        self.coinapi_helper = CoinAPIHelper()
 
         if not self.coinglass_key:
             print("⚠️ COINGLASS_API_KEY not found in environment variables")
@@ -24,14 +20,13 @@ class CryptoAPI:
         self.binance_futures_url = "https://fapi.binance.com/fapi/v1"
         self.binance_spot_url = "https://api.binance.com/api/v3"
 
-        print("🚀 CryptoAPI initialized with CoinAPI + Coinglass + Binance integration")
+        print("🚀 CryptoAPI initialized with Coinglass + Binance integration")
         print(f"📊 Coinglass Base URL: {self.coinglass_url}")
         print(f"🔑 Coinglass Key: {'✅ Enabled' if self.coinglass_key else '❌ Disabled'}")
-        print(f"🔑 CoinAPI Key: {'✅ Enabled' if self.coinapi_key else '❌ Disabled'}")
         print(f"📊 CoinMarketCap: {'✅ Enabled' if self.cmc_provider.api_key else '❌ Disabled'}")
         print(f"📈 Binance Futures API: {self.binance_futures_url}")
         print(f"📰 CryptoNews API: {'✅ Enabled' if self.cryptonews_key else '❌ Disabled'}")
-        print("🎯 Real-time data from CoinAPI, futures from Coinglass, market data from Binance")
+        print("🎯 Futures data from Coinglass, market data from Binance")
 
     # === COINGLASS API METHODS ===
 
@@ -43,94 +38,6 @@ class CryptoAPI:
             "Accept": "application/json",
             "Connection": "keep-alive"
         }
-
-    def get_coinglass_ticker(self, symbol):
-        """Get real-time price from Coinglass ticker endpoint"""
-        try:
-            if not self.coinglass_key:
-                return {'error': 'Coinglass API key not found'}
-
-            # Clean symbol (remove USDT if present)
-            clean_symbol = symbol.upper().replace('USDT', '')
-
-            url = f"{self.coinglass_url}/futures/ticker"
-            headers = self._get_coinglass_headers()
-
-            params = {
-                'symbol': clean_symbol
-            }
-
-            print(f"🔄 Fetching ticker for {clean_symbol} from Coinglass...")
-            response = requests.get(url, headers=headers, params=params, timeout=15)
-
-            print(f"📊 Coinglass ticker response status: {response.status_code}")
-
-            if response.status_code != 200:
-                print(f"❌ HTTP Error {response.status_code}: {response.text}")
-                return {'error': f"HTTP {response.status_code}: {response.text}"}
-
-            data = response.json()
-            print(f"📋 Coinglass ticker response: {data}")
-
-            if data.get('success'):
-                result_data = data.get('data', {})
-                if result_data:
-                    price = float(result_data.get('price', 0))
-                    if price > 0:
-                        return {
-                            'symbol': clean_symbol,
-                            'price': price,
-                            'change_24h': float(result_data.get('priceChangePercent', 0)),
-                            'high_24h': float(result_data.get('highPrice', 0)),
-                            'low_24h': float(result_data.get('lowPrice', 0)),
-                            'volume_24h': float(result_data.get('volume', 0)),
-                            'source': 'coinglass_ticker',
-                            'timestamp': datetime.now().isoformat()
-                        }
-                    else:
-                        return {'error': f'Invalid price received: {price}'}
-                else:
-                    return {'error': 'No ticker data available'}
-            else:
-                error_msg = data.get('msg', 'Unknown error')
-                print(f"❌ Coinglass API error: {error_msg}")
-                return {'error': f"Coinglass API error: {error_msg}"}
-
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Request error: {str(e)}")
-            return {'error': f"Request error: {str(e)}"}
-        except Exception as e:
-            print(f"❌ Coinglass ticker error: {str(e)}")
-            return {'error': f"Coinglass ticker error: {str(e)}"}
-
-    # === COINAPI METHODS ===
-
-    def get_coinapi_price(self, symbol, force_refresh=False):
-        """Get price from CoinAPI (sync wrapper for async method)"""
-        try:
-            import asyncio
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If already in async context, create a task
-                return asyncio.create_task(self.coinapi_helper.get_coinapi_price(symbol, force_refresh))
-            else:
-                # If not in async context, run in new loop
-                return loop.run_until_complete(self.coinapi_helper.get_coinapi_price(symbol, force_refresh))
-        except Exception as e:
-            print(f"❌ CoinAPI price sync wrapper error: {e}")
-            return {'error': f"CoinAPI price error: {str(e)}"}
-
-    async def get_coinapi_price_async(self, symbol, force_refresh=False):
-        """Get price from CoinAPI (async wrapper)"""
-        return await self.coinapi_helper.get_coinapi_price(symbol, force_refresh)
-
-    async def get_coinapi_historical(self, symbol, period="1HRS", limit=100):
-        """Get historical data from CoinAPI (async wrapper)"""
-        return await self.coinapi_helper.get_coinapi_historical(symbol, period, limit)
-
-    async def cleanup(self):
-        """Cleanup resources"""
-        await self.coinapi_helper.close_session()
 
     def get_coinglass_open_interest(self, symbol, time_type='24h'):
         """Get open interest data from Coinglass"""
@@ -1078,7 +985,7 @@ class CryptoAPI:
         """Analyze market structure (Higher Highs, Higher Lows, etc.)"""
         try:
             structure = {
-                'pattern': 'consolidation',
+                'pattern': 'consolidation', 
                 'strength': 'medium',
                 'breakout_probability': 50
             }
