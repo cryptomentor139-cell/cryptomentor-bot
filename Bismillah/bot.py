@@ -148,8 +148,8 @@ class TelegramBot:
             print("🤖 Bot handlers registered successfully")
             mode_text = "🌐 DEPLOYMENT MODE (Always On)" if IS_DEPLOYMENT else "🔧 DEVELOPMENT MODE (Workspace)"
             print(f"🌍 Environment: {mode_text}")
-            print(f"🔑 API Status: CG=✅, BIN=✅, NEWS=✅ (Coinglass Primary + Binance + CryptoNews)")
-            print("🚀 Starting bot polling with Coinglass integration...")
+            print(f"🔑 API Status: CG=✅, BIN=✅, NEWS=✅ (Coinglass V4 + Binance + CryptoNews)")
+            print("🚀 Starting bot polling with Coinglass V4 integration...")
 
             # Test bot connection before starting with shorter timeout
             try:
@@ -484,7 +484,7 @@ class TelegramBot:
         if language == 'id':
             welcome_text = f"""🎉 **Selamat datang di CryptoMentor AI, {user.first_name}!**
 
-🤖 Saya adalah AI assistant crypto trading terlengkap dengan data real-time dari CoinAPI & Binance.
+🤖 Saya adalah AI assistant crypto trading terlengkap dengan data real-time dari Coinglass V4 & CoinMarketCap.
 
 💡 **Untuk memulai:** Gunakan `/help` untuk panduan lengkap semua fitur bot!
 
@@ -562,7 +562,7 @@ class TelegramBot:
         user_id = update.effective_user.id
         print(f"🎯 /help command received from user {user_id}")
         logger.info(f"Help command from user {user_id}")
-        help_text = """🤖 **CryptoMentor AI Bot - Panduan Lengkap (CoinMarketCap Edition)**
+        help_text = """🤖 **CryptoMentor AI Bot - Panduan Lengkap (Coinglass V4 + CoinMarketCap Edition)**
 
 ⭐ **BEST COMMANDS untuk Pemula:**
 • `/price btc` - **GRATIS** - Cek harga Bitcoin real-time dari CoinMarketCap
@@ -624,7 +624,7 @@ class TelegramBot:
 🚀 **Data Sources:**
 - **Fundamental**: CoinMarketCap Professional
 - **Prices**: CoinMarketCap Real-time
-- **Futures**: Coinglass API
+- **Futures**: Coinglass V4 Startup Plan
 - **SnD Analysis**: Internal algorithm + Binance candlesticks"""
         await update.message.reply_text(help_text, parse_mode='Markdown')
 
@@ -644,7 +644,7 @@ class TelegramBot:
 
         # Show loading with CoinMarketCap status
         mode_text = "🌐 DEPLOYMENT" if IS_DEPLOYMENT else "🔧 DEVELOPMENT"
-        loading_msg = await update.message.reply_text(f"⏳ Mengambil data real-time {symbol} dari CoinMarketCap... ({mode_text})")
+        loading_msg = await update.message.reply_text(f"⏳ Mengambil data real-time {symbol} dari CoinMarketCap + Coinglass V4... ({mode_text})")
 
         # Get real-time data from CoinMarketCap
         print(f"🔄 Fetching real-time data for {symbol} from CoinMarketCap...")
@@ -886,7 +886,7 @@ class TelegramBot:
                 else:
                     query_display = f" untuk {cleaned_parts[0]}"
 
-        loading_msg = await update.message.reply_text(f"⏳ Menganalisis sinyal futures dengan CoinMarketCap + Coinglass{query_display}...")
+        loading_msg = await update.message.reply_text(f"⏳ Menganalisis sinyal futures dengan CoinMarketCap + Coinglass V4{query_display}...")
 
         try:
             print(f"🔄 Starting futures signals generation for user {user_id}")
@@ -1030,7 +1030,7 @@ class TelegramBot:
 
                     # Show loading
                     await query.edit_message_text(
-                        f"⏳ Menganalisis {symbol} {timeframe} dengan CoinMarketCap + Coinglass...\n\n"
+                        f"⏳ Menganalisis {symbol} {timeframe} dengan CoinMarketCap + Coinglass V4...\n\n"
                         "🔍 Memproses data real-time...",
                         parse_mode='Markdown'
                     )
@@ -1731,12 +1731,14 @@ Gunakan `/subscribe` untuk upgrade!
 • `/broadcast <message>` - Send broadcast
 
 🌐 **API Status:**
-• CoinAPI: {'✅ Active' if self.crypto_api.coinapi_key else '❌ No Key'}
+• Coinglass V4: {'✅ Active' if self.crypto_api.coinglass_key else '❌ No Key'}
+• CoinMarketCap: {'✅ Active' if self.crypto_api.cmc_provider.api_key else '❌ No Key'}
 • Binance: ✅ Active
 • Auto Signals: {auto_status}
 
-💡 **New Features:**
-- CoinAPI integration for real-time data
+💡 **V4 Features:**
+- Coinglass V4 Startup Plan integration
+- Advanced futures analysis with real-time data
 - Supply & Demand analysis for futures
 - Auto signals for admin & lifetime users"""
 
