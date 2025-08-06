@@ -18,6 +18,39 @@ from crypto_api import CryptoAPI
 from ai_assistant import AIAssistant
 from snd_auto_signals import initialize_auto_signals
 
+def escape_markdown_v2(text):
+    """Escape special characters for MarkdownV2"""
+    if not text:
+        return ""
+    
+    # Characters that need escaping in MarkdownV2
+    escape_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    
+    escaped_text = str(text)
+    for char in escape_chars:
+        escaped_text = escaped_text.replace(char, f'\\{char}')
+    
+    return escaped_text
+
+def safe_send_message(update, message, parse_mode='MarkdownV2'):
+    """Safely send message with fallback to HTML or plain text"""
+    try:
+        if parse_mode == 'MarkdownV2':
+            escaped_message = escape_markdown_v2(message)
+            return update.message.reply_text(escaped_message, parse_mode='MarkdownV2')
+        else:
+            return update.message.reply_text(message, parse_mode=parse_mode)
+    except Exception as e:
+        print(f"⚠️ MarkdownV2 failed, trying HTML: {e}")
+        try:
+            # Convert basic markdown to HTML
+            html_message = message.replace('**', '<b>').replace('**', '</b>')
+            html_message = html_message.replace('*', '<i>').replace('*', '</i>')
+            return update.message.reply_text(html_message, parse_mode='HTML')
+        except Exception as e2:
+            print(f"⚠️ HTML failed, sending plain text: {e2}")
+            return update.message.reply_text(message, parse_mode=None)
+
 # Enhanced deployment detection with verification
 deployment_env_checks = {
     'REPLIT_DEPLOYMENT': os.getenv('REPLIT_DEPLOYMENT') == '1',
@@ -839,28 +872,44 @@ class TelegramBot:
 
             print(f"✅ Market analysis completed, sending response ({len(market_data)} chars)")
 
-            # Handle long messages with safe Markdown parsing
+            # Handle long messages with SAFE Markdown parsing
             if len(market_data) > 4000:
                 # Split into chunks
                 chunks = [market_data[i:i+4000] for i in range(0, len(market_data), 4000)]
                 try:
-                    await loading_msg.edit_text(chunks[0], parse_mode='Markdown')
+                    escaped_chunk = escape_markdown_v2(chunks[0])
+                    await loading_msg.edit_text(escaped_chunk, parse_mode='MarkdownV2')
                     for chunk in chunks[1:]:
-                        await update.message.reply_text(chunk, parse_mode='Markdown')
+                        escaped_chunk = escape_markdown_v2(chunk)
+                        await update.message.reply_text(escaped_chunk, parse_mode='MarkdownV2')
                 except Exception as markdown_error:
-                    print(f"⚠️ Markdown error in market command: {markdown_error}")
-                    # Fallback to plain text
-                    await loading_msg.edit_text(chunks[0], parse_mode=None)
-                    for chunk in chunks[1:]:
-                        await update.message.reply_text(chunk, parse_mode=None)
+                    print(f"⚠️ MarkdownV2 error in market command: {markdown_error}")
+                    # Fallback to HTML
+                    try:
+                        html_chunk = chunks[0].replace('**', '<b>').replace('*', '<i>')
+                        await loading_msg.edit_text(html_chunk, parse_mode='HTML')
+                        for chunk in chunks[1:]:
+                            html_chunk = chunk.replace('**', '<b>').replace('*', '<i>')
+                            await update.message.reply_text(html_chunk, parse_mode='HTML')
+                    except Exception as html_error:
+                        print(f"⚠️ HTML also failed, using plain text: {html_error}")
+                        await loading_msg.edit_text(chunks[0], parse_mode=None)
+                        for chunk in chunks[1:]:
+                            await update.message.reply_text(chunk, parse_mode=None)
             else:
-                # Edit loading message with safe Markdown parsing
+                # Edit loading message with SAFE Markdown parsing
                 try:
-                    await loading_msg.edit_text(market_data, parse_mode='Markdown')
+                    escaped_text = escape_markdown_v2(market_data)
+                    await loading_msg.edit_text(escaped_text, parse_mode='MarkdownV2')
                 except Exception as markdown_error:
-                    print(f"⚠️ Markdown error in market command: {markdown_error}")
-                    # Fallback to plain text
-                    await loading_msg.edit_text(market_data, parse_mode=None)
+                    print(f"⚠️ MarkdownV2 error in market command: {markdown_error}")
+                    # Fallback to HTML
+                    try:
+                        html_text = market_data.replace('**', '<b>').replace('*', '<i>')
+                        await loading_msg.edit_text(html_text, parse_mode='HTML')
+                    except Exception as html_error:
+                        print(f"⚠️ HTML also failed, using plain text: {html_error}")
+                        await loading_msg.edit_text(market_data, parse_mode=None)
 
         except Exception as e:
             error_msg = f"❌ Terjadi kesalahan saat menganalisis pasar.\n\n**Error**: {str(e)[:100]}...\n\n💡 **Coba alternatif:**\n• `/price btc` (CoinAPI)\n• `/analyze ethereum` (CoinMarketCap)\n• `/futures_signals` (SnD)"
@@ -931,24 +980,39 @@ class TelegramBot:
             elif is_admin:
                 signals += f"\n\n👑 **Admin Access** - Unlimited"
 
-            # Handle long messages with improved error handling
+            # Handle long messages with SAFE error handling
             if len(signals) > 4000:
                 chunks = [signals[i:i+4000] for i in range(0, len(signals), 4000)]
                 try:
-                    await loading_msg.edit_text(chunks[0], parse_mode='Markdown')
+                    escaped_chunk = escape_markdown_v2(chunks[0])
+                    await loading_msg.edit_text(escaped_chunk, parse_mode='MarkdownV2')
                     for chunk in chunks[1:]:
-                        await update.message.reply_text(chunk, parse_mode='Markdown')
+                        escaped_chunk = escape_markdown_v2(chunk)
+                        await update.message.reply_text(escaped_chunk, parse_mode='MarkdownV2')
                 except Exception as e:
-                    print(f"⚠️ Markdown error in futures_signals, sending as plain text: {e}")
-                    await loading_msg.edit_text(chunks[0], parse_mode=None)
-                    for chunk in chunks[1:]:
-                        await update.message.reply_text(chunk, parse_mode=None)
+                    print(f"⚠️ MarkdownV2 error in futures_signals, trying HTML: {e}")
+                    try:
+                        html_chunks = [chunk.replace('**', '<b>').replace('*', '<i>') for chunk in chunks]
+                        await loading_msg.edit_text(html_chunks[0], parse_mode='HTML')
+                        for chunk in html_chunks[1:]:
+                            await update.message.reply_text(chunk, parse_mode='HTML')
+                    except Exception as e2:
+                        print(f"⚠️ HTML also failed, sending as plain text: {e2}")
+                        await loading_msg.edit_text(chunks[0], parse_mode=None)
+                        for chunk in chunks[1:]:
+                            await update.message.reply_text(chunk, parse_mode=None)
             else:
                 try:
-                    await loading_msg.edit_text(signals, parse_mode='Markdown')
+                    escaped_signals = escape_markdown_v2(signals)
+                    await loading_msg.edit_text(escaped_signals, parse_mode='MarkdownV2')
                 except Exception as e:
-                    print(f"⚠️ Markdown error in futures_signals, sending as plain text: {e}")
-                    await loading_msg.edit_text(signals, parse_mode=None)
+                    print(f"⚠️ MarkdownV2 error in futures_signals, trying HTML: {e}")
+                    try:
+                        html_signals = signals.replace('**', '<b>').replace('*', '<i>')
+                        await loading_msg.edit_text(html_signals, parse_mode='HTML')
+                    except Exception as e2:
+                        print(f"⚠️ HTML also failed, sending as plain text: {e2}")
+                        await loading_msg.edit_text(signals, parse_mode=None)
 
         except Exception as e:
             error_msg = f"❌ Terjadi kesalahan dalam analisis sinyal futures.\n\n**Error**: {str(e)[:100]}...\n\n💡 Coba `/futures btc` untuk analisis spesifik."
@@ -1062,28 +1126,39 @@ class TelegramBot:
                         elif is_admin:
                             analysis_text += f"\n\n👑 **Admin Access** - Unlimited"
 
-                        # Handle long messages
+                        # Handle long messages with SAFE parsing
                         if len(analysis_text) > 4000:
                             chunks = [analysis_text[i:i+4000] for i in range(0, len(analysis_text), 4000)]
                             try:
-                                await query.edit_message_text(chunks[0], parse_mode='MarkdownV2')
+                                escaped_chunk = escape_markdown_v2(chunks[0])
+                                await query.edit_message_text(escaped_chunk, parse_mode='MarkdownV2')
                                 for chunk in chunks[1:]:
-                                    await query.message.reply_text(chunk, parse_mode='MarkdownV2')
+                                    escaped_chunk = escape_markdown_v2(chunk)
+                                    await query.message.reply_text(escaped_chunk, parse_mode='MarkdownV2')
                             except Exception as markdown_error:
-                                print(f"⚠️ MarkdownV2 error, sending as plain text: {markdown_error}")
-                                # Remove escape characters for plain text
-                                plain_chunks = [chunk.replace('\\', '') for chunk in chunks]
-                                await query.edit_message_text(plain_chunks[0], parse_mode=None)
-                                for chunk in plain_chunks[1:]:
-                                    await query.message.reply_text(chunk, parse_mode=None)
+                                print(f"⚠️ MarkdownV2 error, trying HTML: {markdown_error}")
+                                try:
+                                    html_chunks = [chunk.replace('**', '<b>').replace('*', '<i>') for chunk in chunks]
+                                    await query.edit_message_text(html_chunks[0], parse_mode='HTML')
+                                    for chunk in html_chunks[1:]:
+                                        await query.message.reply_text(chunk, parse_mode='HTML')
+                                except Exception as html_error:
+                                    print(f"⚠️ HTML also failed, sending as plain text: {html_error}")
+                                    await query.edit_message_text(chunks[0], parse_mode=None)
+                                    for chunk in chunks[1:]:
+                                        await query.message.reply_text(chunk, parse_mode=None)
                         else:
                             try:
-                                await query.edit_message_text(analysis_text, parse_mode='MarkdownV2')
+                                escaped_text = escape_markdown_v2(analysis_text)
+                                await query.edit_message_text(escaped_text, parse_mode='MarkdownV2')
                             except Exception as markdown_error:
-                                print(f"⚠️ MarkdownV2 error, sending as plain text: {markdown_error}")
-                                # Remove escape characters for plain text
-                                plain_text = analysis_text.replace('\\', '')
-                                await query.edit_message_text(plain_text, parse_mode=None)
+                                print(f"⚠️ MarkdownV2 error, trying HTML: {markdown_error}")
+                                try:
+                                    html_text = analysis_text.replace('**', '<b>').replace('*', '<i>')
+                                    await query.edit_message_text(html_text, parse_mode='HTML')
+                                except Exception as html_error:
+                                    print(f"⚠️ HTML also failed, sending as plain text: {html_error}")
+                                    await query.edit_message_text(analysis_text, parse_mode=None)
 
                         print(f"✅ Successfully sent futures analysis to user {user_id}")
 

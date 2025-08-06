@@ -1,327 +1,222 @@
 
-import os
 import requests
+import os
 import time
-from typing import Dict, Any, Optional
-
-# Mapping symbol user-friendly ke CoinGlass format
-SYMBOL_MAP = {
-    "BTC": "BINANCE_BTCUSDT",
-    "ETH": "BINANCE_ETHUSDT",
-    "BNB": "BINANCE_BNBUSDT",
-    "SOL": "BINANCE_SOLUSDT",
-    "XRP": "BINANCE_XRPUSDT",
-    "ADA": "BINANCE_ADAUSDT",
-    "DOGE": "BINANCE_DOGEUSDT",
-    "AVAX": "BINANCE_AVAXUSDT",
-    "DOT": "BINANCE_DOTUSDT",
-    "LINK": "BINANCE_LINKUSDT",
-    "MATIC": "BINANCE_MATICUSDT",
-    "LTC": "BINANCE_LTCUSDT",
-    "BCH": "BINANCE_BCHUSDT",
-    "NEAR": "BINANCE_NEARUSDT",
-    "UNI": "BINANCE_UNIUSDT",
-    "APT": "BINANCE_APTUSDT",
-    "ATOM": "BINANCE_ATOMUSDT",
-    "FIL": "BINANCE_FILUSDT",
-    "ETC": "BINANCE_ETCUSDT",
-    "ALGO": "BINANCE_ALGOUSDT",
-    "VET": "BINANCE_VETUSDT",
-    "MANA": "BINANCE_MANAUSDT",
-    "SAND": "BINANCE_SANDUSDT"
-}
+from datetime import datetime
 
 class CoinGlassProvider:
-    """CoinGlass API V4 Provider for futures data"""
+    """CoinGlass V4 API Provider - Startup Plan"""
     
     def __init__(self):
-        self.base_url = "https://open-api-v4.coinglass.com/public/v4/futures"
         self.api_key = os.getenv("COINGLASS_API_KEY")
+        self.base_url = "https://open-api-v4.coinglass.com/public/v4"
         self.headers = {
-            "accept": "application/json",
-            "X-API-KEY": self.api_key
+            'X-API-KEY': self.api_key,
+            'accept': 'application/json'
         }
         
         if not self.api_key:
             print("⚠️ COINGLASS_API_KEY not found in environment variables")
-            print("💡 Please set COINGLASS_API_KEY in Replit Secrets")
+        else:
+            print("✅ CoinGlass V4 API initialized with Startup Plan")
 
-    def _map_symbol(self, symbol: str) -> str:
-        """Map user input symbol to CoinGlass format"""
-        clean_symbol = symbol.upper().replace('USDT', '')
-        return SYMBOL_MAP.get(clean_symbol, f"BINANCE_{clean_symbol}USDT")
-
-    def _make_request(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Make request to CoinGlass API with error handling"""
-        if not self.api_key:
-            return {'error': 'CoinGlass API key not configured'}
-        
+    def _make_request(self, endpoint, params=None):
+        """Make authenticated request to CoinGlass V4 API"""
         try:
+            if not self.api_key:
+                return {'error': 'COINGLASS_API_KEY not found'}
+            
             url = f"{self.base_url}/{endpoint}"
-            response = requests.get(url, headers=self.headers, params=params, timeout=15)
+            response = requests.get(url, headers=self.headers, params=params or {}, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
-                if "data" in data:
-                    return data["data"]
-                elif "msg" in data:
-                    return {'error': f'API returned error: {data.get("msg", "Unknown error")}'}
+                if data.get('success', True):
+                    return data
                 else:
-                    return {'error': f'API returned unexpected success format: {data}'}
+                    return {'error': f"API Error: {data.get('msg', 'Unknown error')}"}
             else:
-                return {'error': f'HTTP {response.status_code}: {response.text[:100]}'}
+                return {'error': f"HTTP {response.status_code}: {response.text}"}
                 
         except requests.exceptions.Timeout:
-            return {'error': 'Request timeout'}
-        except requests.exceptions.RequestException as e:
-            return {'error': f'Request failed: {str(e)}'}
+            return {'error': 'CoinGlass API timeout'}
         except Exception as e:
-            return {'error': f'Unexpected error: {str(e)}'}
+            return {'error': f'CoinGlass API error: {str(e)}'}
 
-    def get_futures_ticker(self, symbol: str) -> Dict[str, Any]:
-        """Get futures ticker data"""
-        mapped_symbol = self._map_symbol(symbol)
-        
-        params = {
-            'symbol': mapped_symbol,
-            'time_type': '15min',
-            'currency': 'USDT'
-        }
-        
-        return self._make_request('ticker', params)
-
-    def get_open_interest_chart(self, symbol: str, time_type: str = "15min") -> Dict[str, Any]:
-        """Get open interest chart data"""
-        mapped_symbol = self._map_symbol(symbol)
-        
-        params = {
-            'symbol': mapped_symbol,
-            'time_type': time_type,
-            'currency': 'USDT'
-        }
-        
-        return self._make_request('openInterest', params)
-
-    def get_funding_rate_chart(self, symbol: str, time_type: str = "15min") -> Dict[str, Any]:
-        """Get funding rate chart data"""
-        mapped_symbol = self._map_symbol(symbol)
-        
-        params = {
-            'symbol': mapped_symbol,
-            'time_type': time_type,
-            'currency': 'USDT'
-        }
-        
-        return self._make_request('fundingRate', params)
-
-    def get_long_short_ratio(self, symbol: str, time_type: str = "15min") -> Dict[str, Any]:
-        """Get long/short ratio data"""
-        mapped_symbol = self._map_symbol(symbol)
-        
-        params = {
-            'symbol': mapped_symbol,
-            'time_type': time_type,
-            'currency': 'USDT'
-        }
-        
-        return self._make_request('longShortRatio', params)
-
-    def get_liquidation_map(self, symbol: str, time_type: str = "15min") -> Dict[str, Any]:
-        """Get liquidation map data"""
-        mapped_symbol = self._map_symbol(symbol)
-        
-        params = {
-            'symbol': mapped_symbol,
-            'time_type': time_type,
-            'currency': 'USDT'
-        }
-        
-        return self._make_request('liquidationMap', params)
-
-    def get_liquidation_chart(self, symbol: str, time_type: str = "15min") -> Dict[str, Any]:
-        """Get liquidation chart data"""
-        mapped_symbol = self._map_symbol(symbol)
-        
-        params = {
-            'symbol': mapped_symbol,
-            'time_type': time_type,
-            'currency': 'USDT'
-        }
-        
-        return self._make_request('liquidation', params)
-
-    def get_open_interest_by_exchange(self, symbol: str) -> Dict[str, Any]:
-        """Get open interest by exchange"""
-        mapped_symbol = self._map_symbol(symbol)
-        
-        params = {
-            'symbol': mapped_symbol,
-            'currency': 'USDT'
-        }
-        
-        return self._make_request('openInterest/oiWeight', params)
-
-    def get_volume_chart(self, symbol: str, time_type: str = "15min") -> Dict[str, Any]:
-        """Get volume chart data"""
-        mapped_symbol = self._map_symbol(symbol)
-        
-        params = {
-            'symbol': mapped_symbol,
-            'time_type': time_type,
-            'currency': 'USDT'
-        }
-        
-        return self._make_request('volume', params)
-
-    def get_comprehensive_data(self, symbol: str) -> Dict[str, Any]:
-        """Get comprehensive data from all available endpoints"""
-        if not self.api_key:
-            return {'error': 'CoinGlass API key not configured'}
-
-        print(f"🔄 Getting comprehensive CoinGlass data for {symbol}...")
-        
-        data_container = {
-            'symbol': symbol,
-            'mapped_symbol': self._map_symbol(symbol),
-            'endpoints_called': 0,
-            'endpoints_successful': 0,
-            'data_quality': 'unknown',
-            'timestamp': int(time.time())
-        }
-        
-        # Get data from all endpoints
-        endpoints = [
-            ('ticker', self.get_futures_ticker),
-            ('open_interest', self.get_open_interest_chart),
-            ('funding_rate', self.get_funding_rate_chart),
-            ('long_short_ratio', self.get_long_short_ratio),
-            ('liquidation_map', self.get_liquidation_map),
-            ('liquidation_chart', self.get_liquidation_chart),
-            ('volume', self.get_volume_chart)
-        ]
-        
-        for endpoint_name, endpoint_func in endpoints:
-            try:
-                data_container['endpoints_called'] += 1
-                result = endpoint_func(symbol)
-                
-                if 'error' not in result:
-                    data_container[endpoint_name] = result
-                    data_container['endpoints_successful'] += 1
-                else:
-                    data_container[endpoint_name] = result
-                    
-            except Exception as e:
-                data_container[endpoint_name] = {'error': f'Exception: {str(e)}'}
-        
-        # Calculate data quality
-        if data_container['endpoints_called'] > 0:
-            success_rate = data_container['endpoints_successful'] / data_container['endpoints_called']
-            
-            if success_rate >= 0.8:
-                data_container['data_quality'] = 'excellent'
-            elif success_rate >= 0.6:
-                data_container['data_quality'] = 'good'
-            elif success_rate >= 0.4:
-                data_container['data_quality'] = 'partial'
-            else:
-                data_container['data_quality'] = 'poor'
-        else:
-            data_container['data_quality'] = 'no_endpoints'
-        
-        print(f"✅ CoinGlass data: {data_container['endpoints_successful']}/{data_container['endpoints_called']} endpoints successful")
-        return data_container
-        
-
-    def test_connection(self) -> Dict[str, Any]:
-        """Test CoinGlass API connection"""
-        if not self.api_key:
-            return {'status': 'failed', 'error': 'API key not configured'}
-        
+    def get_long_short_ratio(self, symbol):
+        """Get long/short ratio from CoinGlass V4"""
         try:
-            # Test with BTC ticker
-            result = self.get_futures_ticker('BTC')
+            clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
+            print(f"🔄 Getting long/short ratio for {clean_symbol} from CoinGlass V4...")
             
-            if 'error' not in result:
-                return {'status': 'success', 'message': 'CoinGlass API connection successful'}
-            else:
-                return {'status': 'failed', 'error': result['error']}
-                
+            result = self._make_request('futures/longShortRate', {'symbol': clean_symbol})
+            
+            if 'error' in result:
+                print(f"❌ Long/Short ratio error: {result['error']}")
+                return result
+            
+            # Parse CoinGlass V4 response
+            data = result.get('data', [])
+            if not data:
+                return {'error': f'No long/short data for {clean_symbol}'}
+            
+            # Get latest data point
+            latest = data[-1] if isinstance(data, list) else data
+            
+            long_ratio = float(latest.get('longRate', 50))
+            short_ratio = 100 - long_ratio
+            
+            return {
+                'symbol': clean_symbol,
+                'long_ratio': long_ratio,
+                'short_ratio': short_ratio,
+                'timestamp': latest.get('time', int(time.time() * 1000)),
+                'source': 'coinglass_v4',
+                'raw_data': latest
+            }
+            
         except Exception as e:
-            return {'status': 'failed', 'error': f'Connection test failed: {str(e)}'}
+            print(f"❌ Exception in get_long_short_ratio: {e}")
+            return {'error': f'Long/short ratio error: {str(e)}'}
 
-    def get_supported_symbols(self) -> list:
-        """Get list of supported symbols"""
-        return list(SYMBOL_MAP.keys())
+    def get_open_interest_chart(self, symbol):
+        """Get open interest from CoinGlass V4"""
+        try:
+            clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
+            print(f"🔄 Getting open interest for {clean_symbol} from CoinGlass V4...")
+            
+            result = self._make_request('futures/openInterest', {'symbol': clean_symbol})
+            
+            if 'error' in result:
+                print(f"❌ Open interest error: {result['error']}")
+                return result
+            
+            data = result.get('data', [])
+            if not data:
+                return {'error': f'No open interest data for {clean_symbol}'}
+            
+            latest = data[-1] if isinstance(data, list) else data
+            previous = data[-2] if isinstance(data, list) and len(data) > 1 else latest
+            
+            current_oi = float(latest.get('openInterest', 0))
+            previous_oi = float(previous.get('openInterest', current_oi))
+            
+            oi_change_percent = ((current_oi - previous_oi) / max(previous_oi, 1)) * 100
+            
+            return {
+                'symbol': clean_symbol,
+                'open_interest': current_oi,
+                'oi_change_percent': oi_change_percent,
+                'timestamp': latest.get('time', int(time.time() * 1000)),
+                'source': 'coinglass_v4',
+                'raw_data': latest
+            }
+            
+        except Exception as e:
+            print(f"❌ Exception in get_open_interest_chart: {e}")
+            return {'error': f'Open interest error: {str(e)}'}
 
-    def is_symbol_supported(self, symbol: str) -> bool:
-        """Check if symbol is supported"""
-        clean_symbol = symbol.upper().replace('USDT', '')
-        return clean_symbol in SYMBOL_MAP
+    def get_funding_rate_chart(self, symbol):
+        """Get funding rate from CoinGlass V4"""
+        try:
+            clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
+            print(f"🔄 Getting funding rate for {clean_symbol} from CoinGlass V4...")
+            
+            result = self._make_request('futures/fundingRate', {'symbol': clean_symbol})
+            
+            if 'error' in result:
+                print(f"❌ Funding rate error: {result['error']}")
+                return result
+            
+            data = result.get('data', [])
+            if not data:
+                return {'error': f'No funding rate data for {clean_symbol}'}
+            
+            latest = data[-1] if isinstance(data, list) else data
+            
+            funding_rate = float(latest.get('fundingRate', 0))
+            
+            return {
+                'symbol': clean_symbol,
+                'funding_rate': funding_rate,
+                'funding_rate_percent': funding_rate * 100,
+                'timestamp': latest.get('time', int(time.time() * 1000)),
+                'source': 'coinglass_v4',
+                'raw_data': latest
+            }
+            
+        except Exception as e:
+            print(f"❌ Exception in get_funding_rate_chart: {e}")
+            return {'error': f'Funding rate error: {str(e)}'}
 
-# Backward compatibility functions
-def map_symbol(symbol: str) -> str:
-    """Map user input symbol to CoinGlass format"""
-    clean_symbol = symbol.upper().replace('USDT', '')
-    return SYMBOL_MAP.get(clean_symbol, f"BINANCE_{clean_symbol}USDT")
+    def get_liquidation_map(self, symbol):
+        """Get liquidation zones from CoinGlass V4"""
+        try:
+            clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
+            print(f"🔄 Getting liquidation zones for {clean_symbol} from CoinGlass V4...")
+            
+            result = self._make_request('futures/liquidationMap', {'symbol': clean_symbol})
+            
+            if 'error' in result:
+                print(f"❌ Liquidation map error: {result['error']}")
+                return result
+            
+            data = result.get('data', {})
+            if not data:
+                return {'error': f'No liquidation data for {clean_symbol}'}
+            
+            long_liquidation = float(data.get('longLiquidation', 0))
+            short_liquidation = float(data.get('shortLiquidation', 0))
+            total_liquidation = long_liquidation + short_liquidation
+            
+            return {
+                'symbol': clean_symbol,
+                'long_liquidation': long_liquidation,
+                'short_liquidation': short_liquidation,
+                'total_liquidation': total_liquidation,
+                'long_percentage': (long_liquidation / max(total_liquidation, 1)) * 100,
+                'short_percentage': (short_liquidation / max(total_liquidation, 1)) * 100,
+                'dominant_side': 'Long' if long_liquidation > short_liquidation else 'Short',
+                'zones': data.get('priceRanges', []),
+                'source': 'coinglass_v4',
+                'raw_data': data
+            }
+            
+        except Exception as e:
+            print(f"❌ Exception in get_liquidation_map: {e}")
+            return {'error': f'Liquidation map error: {str(e)}'}
 
-def safe_request(endpoint: str, symbol: str, interval: str = "15min") -> dict:
-    """Safe request function for backward compatibility"""
-    provider = CoinGlassProvider()
-    if not provider.api_key:
-        return None
-    
-    try:
-        mapped_symbol = map_symbol(symbol)
-        url = f"{provider.base_url}/{endpoint}"
-        params = {
-            "symbol": mapped_symbol,
-            "time_type": interval,
-            "currency": "USDT"
-        }
+    def get_comprehensive_futures_data(self, symbol):
+        """Get all futures data for a symbol"""
+        try:
+            clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
+            print(f"🔄 Getting comprehensive futures data for {clean_symbol}...")
+            
+            # Get all data
+            ls_data = self.get_long_short_ratio(clean_symbol)
+            oi_data = self.get_open_interest_chart(clean_symbol) 
+            funding_data = self.get_funding_rate_chart(clean_symbol)
+            liq_data = self.get_liquidation_map(clean_symbol)
+            
+            # Count successful calls
+            successful_calls = 0
+            for data in [ls_data, oi_data, funding_data, liq_data]:
+                if 'error' not in data:
+                    successful_calls += 1
+            
+            return {
+                'symbol': clean_symbol,
+                'long_short_data': ls_data,
+                'open_interest_data': oi_data,
+                'funding_rate_data': funding_data,
+                'liquidation_data': liq_data,
+                'successful_calls': successful_calls,
+                'total_calls': 4,
+                'data_quality': 'excellent' if successful_calls >= 3 else 'good' if successful_calls >= 2 else 'poor',
+                'source': 'coinglass_v4_comprehensive'
+            }
+            
+        except Exception as e:
+            return {'error': f'Comprehensive data error: {str(e)}'}
 
-        response = requests.get(url, headers=provider.headers, params=params)
-        if response.status_code != 200:
-            print(f"❌ HTTP {response.status_code}: {response.text}")
-            return None
-        
-        data = response.json()
-        if "data" not in data:
-            print("⚠️ No data returned:", data)
-            return None
-        
-        return data["data"]
-    except Exception as e:
-        print("❌ Gagal ambil data Coinglass:", e)
-        return None
-
-def get_open_interest_chart(symbol: str = "BTC", interval: str = "15min"):
-    return safe_request("openInterest", symbol, interval)
-
-def get_funding_rate_chart(symbol: str = "BTC", interval: str = "15min"):
-    return safe_request("fundingRate", symbol, interval)
-
-def get_long_short_ratio(symbol: str = "BTC", interval: str = "15min"):
-    return safe_request("longShortRatio", symbol, interval)
-
-def get_liquidation_chart(symbol: str = "BTC", interval: str = "15min"):
-    return safe_request("liquidation", symbol, interval)
-
-def get_price_from_coinglass(symbol: str = "BTC"):
-    provider = CoinGlassProvider()
-    result = provider.get_futures_ticker(symbol)
-    
-    if 'error' not in result and 'close' in result:
-        return float(result['close'])
-    else:
-        print("❌ Error ambil harga:", result.get('error', 'Unknown error'))
-        return None
-
-# Global instance for backward compatibility
-_provider_instance = None
-
-def get_provider_instance():
-    global _provider_instance
-    if _provider_instance is None:
-        _provider_instance = CoinGlassProvider()
-    return _provider_instance
+print("✅ CoinGlassProvider V4 loaded successfully")
