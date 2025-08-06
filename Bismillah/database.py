@@ -1,3 +1,4 @@
+# Adding the get_eligible_auto_signal_users method to the Database class.
 import sqlite3
 import os
 from datetime import datetime, timedelta

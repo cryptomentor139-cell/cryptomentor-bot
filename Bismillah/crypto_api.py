@@ -3,7 +3,8 @@
 import requests
 import os
 import time
-from datetime import datetime
+import asyncio
+from datetime import datetime, timezone
 from binance_provider import BinanceFuturesProvider
 from coinmarketcap_provider import CoinMarketCapProvider
 
@@ -26,7 +27,7 @@ class CryptoAPI:
         self.binance_futures_url = "https://fapi.binance.com/fapi/v1"
 
         self.cache = {}
-        self.cache_duration = 60  # Increased cache duration for better performance
+        self.cache_duration = 30
 
         print("🚀 CryptoAPI initialized with Coinglass V4 + CoinMarketCap")
         print(f"📊 Coinglass V4 API: {self.coinglass_base_url}")
