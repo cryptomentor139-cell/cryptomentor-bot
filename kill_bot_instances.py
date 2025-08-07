@@ -1,12 +1,5 @@
 
 #!/usr/bin/env python3
-import os
-import sys
-import signal
-import psutil
-import time
-
-#!/usr/bin/env python3
 """Kill conflicting bot instances"""
 
 import os
@@ -21,48 +14,36 @@ except ImportError:
     import psutil
 
 def kill_bot_instances():
-    """Kill all conflicting bot instances"""
-    print("🔍 Mencari instance bot yang berjalan...")
+    """Kill all running bot instances"""
+    print("🔍 Searching for running bot instances...")
     
-    current_pid = os.getpid()
     killed_count = 0
+    current_pid = os.getpid()
     
-    try:
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            try:
-                if proc.info['name'] in ['python3', 'python']:
-                    cmdline = ' '.join(proc.info['cmdline'] or [])
-                    
-                    # Kill if running main.py and not current process
-                    if ('main.py' in cmdline or 'bot.py' in cmdline) and proc.pid != current_pid:
-                        print(f"🛑 Menghentikan proses: {proc.pid} - {cmdline}")
-                        proc.terminate()
-                        
-                        # Wait for graceful termination
-                        try:
-                            proc.wait(timeout=3)
-                        except psutil.TimeoutExpired:
-                            # Force kill if needed
-                            proc.kill()
-                            
-                        killed_count += 1
-                        
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                pass
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            if proc.info['pid'] == current_pid:
+                continue
                 
-    except Exception as e:
-        print(f"Error saat mencari proses: {e}")
+            if proc.info['name'] in ['python', 'python3']:
+                cmdline = ' '.join(proc.info['cmdline'] or [])
+                if any(keyword in cmdline for keyword in ['main.py', 'bot.py', 'telegram']):
+                    print(f"🛑 Killing process {proc.info['pid']}: {cmdline}")
+                    proc.terminate()
+                    proc.wait(timeout=3)
+                    killed_count += 1
+                    
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+        except Exception as e:
+            print(f"⚠️ Error handling process {proc.info['pid']}: {e}")
     
-    if killed_count > 0:
-        print(f"✅ Berhasil menghentikan {killed_count} instance bot")
-        print("⏳ Menunggu 3 detik untuk cleanup...")
+    print(f"✅ Killed {killed_count} bot instances")
+    return killed_count
+
+if __name__ == "__main__":
+    killed = kill_bot_instances()
+    if killed > 0:
+        print("⏳ Waiting 3 seconds before exit...")
         time.sleep(3)
-    elseprint("✅ Tidak ada instance bot lain yang berjalan")
-    
-    print("🚀 Siap untuk menjalankan bot!")
-
-if __name__ == "__main__":
-    kill_bot_instances()kan bot baru!")
-
-if __name__ == "__main__":
-    kill_bot_instances()
+    print("🎯 Clean exit")

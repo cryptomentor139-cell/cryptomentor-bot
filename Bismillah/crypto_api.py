@@ -7,6 +7,22 @@ from typing import Dict, Any, Optional, List
 from coinmarketcap_provider import CoinMarketCapProvider
 from coinglass_provider import CoinGlassProvider
 
+import os
+import logging
+from datetime import datetime
+from typing import Dict, Any, List
+
+# Import providers
+try:
+    from coinmarketcap_provider import CoinMarketCapProvider
+except ImportError:
+    CoinMarketCapProvider = None
+    
+try:
+    from coinglass_provider import CoinGlassProvider
+except ImportError:
+    CoinGlassProvider = None
+
 class CryptoAPI:
     """
     Unified API class yang menggabungkan CoinMarketCap dan CoinGlass
@@ -206,11 +222,57 @@ class CryptoAPI:
             if not self.coinmarketcap_key:
                 return {'error': 'CoinMarketCap API key required for crypto info'}
             
-            return self.cmc_provider.get_cryptocurrency_info(symbol)
+            if self.cmc_provider:
+                return self.cmc_provider.get_cryptocurrency_info(symbol)
+            else:
+                return {'error': 'CoinMarketCap provider not available'}
             
         except Exception as e:
             logging.error(f"Error getting crypto info for {symbol}: {e}")
             return {'error': f'Crypto info error: {str(e)}'}
+
+    def analyze_supply_demand(self, symbol: str) -> Dict[str, Any]:
+        """
+        Analyze supply and demand zones for a given symbol
+        """
+        try:
+            # Get current price
+            price_data = self.get_crypto_price(symbol)
+            if 'error' in price_data:
+                return price_data
+            
+            current_price = price_data['price']
+            
+            # Calculate supply and demand zones
+            supply_zone_high = current_price * 1.05
+            supply_zone_low = current_price * 1.02
+            demand_zone_high = current_price * 0.98
+            demand_zone_low = current_price * 0.95
+            
+            return {
+                'symbol': symbol,
+                'supply_zone': {
+                    'high': supply_zone_high,
+                    'low': supply_zone_low,
+                    'strength': 'medium'
+                },
+                'demand_zone': {
+                    'high': demand_zone_high,
+                    'low': demand_zone_low,
+                    'strength': 'medium'
+                },
+                'current_price': current_price,
+                'signals': [{
+                    'direction': 'HOLD',
+                    'confidence': 50,
+                    'reason': 'Basic SnD analysis - needs more data for accurate signals'
+                }],
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logging.error(f"Error in supply/demand analysis for {symbol}: {e}")
+            return {'error': f'SnD analysis error: {str(e)}'}
 
     def test_all_connections(self) -> Dict[str, Any]:
         """
