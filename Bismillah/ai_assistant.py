@@ -502,21 +502,16 @@ class AIAssistant:
                         'funding_rate': ticker_result.get('funding_rate', 0),
                         'volume_24h': ticker_result.get('volume_24h', 0),
                         'price_change_24h': ticker_result.get('change_24h', 0),
-                        'exchange': 'Binance',
-                        'source': 'coinglass_v4_startup'
+                        'exchange': ticker_result.get('exchange', 'Binance'),
+                        'source': 'coinglass_v4_startup',
+                        'data_quality': ticker_result.get('data_quality', 'unknown')
                     }
                     startup_data['endpoints_successful'] += 1
-                    print(f"✅ CoinGlass V4 Ticker: ${startup_data['ticker']['price']:.2f}")
-                    
-                    # Validate real-time data
                     price = startup_data['ticker']['price']
-                    if price in [0, 1, 1000] or price is None:
-                        print("⚠️ Warning: Ticker data may be dummy/placeholder")
-                        startup_data['ticker']['data_quality'] = 'dummy_detected'
-                    else:
-                        startup_data['ticker']['data_quality'] = 'real_time'
+                    print(f"✅ CoinGlass V4 Ticker: ${price:.2f} ({ticker_result.get('data_quality', 'unknown')})")
                 else:
                     startup_data['ticker'] = {'error': ticker_result.get('error', 'Unknown ticker error')}
+                    print(f"❌ Ticker API error: {ticker_result.get('error')}")
             except Exception as e:
                 startup_data['ticker'] = {'error': str(e)}
                 print(f"❌ Ticker API error: {e}")
@@ -531,6 +526,7 @@ class AIAssistant:
                     startup_data['open_interest'] = {
                         'total_oi': oi_result.get('open_interest', 0),
                         'oi_change_percent': oi_result.get('oi_change_percent', 0),
+                        'trend': oi_result.get('trend', 'stable'),
                         'source': 'coinglass_v4_startup'
                     }
                     startup_data['endpoints_successful'] += 1
@@ -539,6 +535,7 @@ class AIAssistant:
                     print(f"✅ V4 Open Interest: ${oi_value/1000000:.1f}M ({oi_change:+.1f}%)")
                 else:
                     startup_data['open_interest'] = {'error': oi_result.get('error', 'No OI data')}
+                    print(f"❌ OI API error: {oi_result.get('error')}")
             except Exception as e:
                 startup_data['open_interest'] = {'error': str(e)}
                 print(f"❌ Open Interest API error: {e}")
@@ -646,7 +643,30 @@ class AIAssistant:
                 startup_data['liquidation_map'] = {'error': str(e)}
                 print(f"❌ Liquidation Map API error: {e}")
                 
-            # 3. Get funding rate using V4 STARTUP
+            # 3. Get long/short ratio using V4 STARTUP (limited access)
+            try:
+                print(f"🔄 Fetching V4 STARTUP long/short data for {clean_symbol}")
+                ls_result = self.coinglass_provider.get_long_short_ratio(clean_symbol)
+                startup_data['endpoints_called'] += 1
+                
+                if 'error' not in ls_result:
+                    startup_data['long_short_ratio'] = {
+                        'long_account': ls_result.get('long_ratio', 50),
+                        'short_account': ls_result.get('short_ratio', 50),
+                        'ratio_value': ls_result.get('ratio_value', 1.0),
+                        'source': 'coinglass_v4_startup'
+                    }
+                    startup_data['endpoints_successful'] += 1
+                    long_ratio = ls_result.get('long_ratio', 50)
+                    print(f"✅ V4 Long/Short: {long_ratio:.1f}% Long")
+                else:
+                    startup_data['long_short_ratio'] = {'error': ls_result.get('error', 'No L/S data')}
+                    print(f"⚠️ L/S Ratio: {ls_result.get('error', 'Limited in STARTUP plan')}")
+            except Exception as e:
+                startup_data['long_short_ratio'] = {'error': str(e)}
+                print(f"❌ Long/Short API error: {e}")
+            
+            # 4. Get funding rate using V4 STARTUP
             try:
                 print(f"🔄 Fetching V4 STARTUP funding data for {clean_symbol}")
                 funding_result = self.coinglass_provider.get_funding_rate(clean_symbol)
@@ -658,17 +678,41 @@ class AIAssistant:
                         'avg_funding_rate': funding_rate,
                         'funding_rate': funding_rate,
                         'exchange': funding_result.get('exchange', 'Binance'),
-                        'next_funding_time': funding_result.get('next_funding_time', ''),
-                        'funding_trend': 'Positive' if funding_rate > 0.005 else 'Negative' if funding_rate < -0.002 else 'Neutral',
+                        'funding_trend': funding_result.get('funding_trend', 'neutral'),
                         'source': 'coinglass_v4_startup'
                     }
                     startup_data['endpoints_successful'] += 1
                     print(f"✅ V4 Funding Rate: {funding_rate*100:.4f}% ({funding_result.get('exchange', 'Binance')})")
                 else:
                     startup_data['funding_detail'] = {'error': funding_result.get('error', 'No funding data')}
+                    print(f"❌ Funding error: {funding_result.get('error')}")
             except Exception as e:
                 startup_data['funding_detail'] = {'error': str(e)}
                 print(f"❌ Funding Rate API error: {e}")
+            
+            # 5. Get liquidation data using V4 STARTUP (limited access)
+            try:
+                print(f"🔄 Fetching V4 STARTUP liquidation data for {clean_symbol}")
+                liq_result = self.coinglass_provider.get_liquidation_data(clean_symbol)
+                startup_data['endpoints_called'] += 1
+                
+                if 'error' not in liq_result:
+                    startup_data['liquidation_map'] = {
+                        'total_liquidation': liq_result.get('total_liquidation', 0),
+                        'long_liquidation': liq_result.get('long_liquidation', 0),
+                        'short_liquidation': liq_result.get('short_liquidation', 0),
+                        'dominant_side': liq_result.get('dominant_side', 'Balanced'),
+                        'source': 'coinglass_v4_startup'
+                    }
+                    startup_data['endpoints_successful'] += 1
+                    total_liq = liq_result.get('total_liquidation', 0)
+                    print(f"✅ V4 Liquidations: ${total_liq/1000000:.1f}M")
+                else:
+                    startup_data['liquidation_map'] = {'error': liq_result.get('error', 'No liquidation data')}
+                    print(f"⚠️ Liquidations: {liq_result.get('error', 'Limited in STARTUP plan')}")
+            except Exception as e:
+                startup_data['liquidation_map'] = {'error': str(e)}
+                print(f"❌ Liquidation API error: {e}")
             
             # 6. Sentiment Analysis (if available) - PRO API
             try:
