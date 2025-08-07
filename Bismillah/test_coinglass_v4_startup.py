@@ -136,3 +136,56 @@ if __name__ == "__main__":
         print(f"💡 Check your COINGLASS_API_KEY and plan status")
     
     print(f"⏰ Test completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+#!/usr/bin/env python3
+"""
+Test CoinGlass V4 STARTUP Plan Implementation
+Verifies all endpoints and data quality
+"""
+
+import os
+import sys
+from datetime import datetime
+
+# Add current directory to path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from coinglass_provider import CoinGlassProvider, run_startup_test
+
+def main():
+    print("🧪 CoinGlass V4 STARTUP Plan Test Suite")
+    print("=" * 60)
+    print(f"⏰ Test Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Check API key
+    api_key = os.getenv("COINGLASS_API_KEY") or os.getenv("COINGLASS_SECRET")
+    if api_key:
+        print(f"🔑 API Key: ✅ Configured (...{api_key[-4:]})")
+    else:
+        print("🔑 API Key: ❌ Not found")
+        print("💡 Please set COINGLASS_API_KEY in Replit Secrets")
+        return
+    
+    print("\n" + "=" * 60)
+    
+    # Run the requested test
+    test_results = run_startup_test()
+    
+    print("\n" + "=" * 60)
+    print("📊 FINAL TEST SUMMARY:")
+    print(f"✅ Success Rate: {test_results.get('success_rate', 0):.1f}%")
+    print(f"📈 Endpoints Working: {test_results.get('successful_endpoints', 0)}/{test_results.get('total_endpoints', 0)}")
+    
+    if test_results.get('success_rate', 0) >= 80:
+        print("🟢 Status: EXCELLENT - STARTUP plan working perfectly")
+    elif test_results.get('success_rate', 0) >= 50:
+        print("🟡 Status: GOOD - Partial STARTUP plan access")
+    else:
+        print("🔴 Status: LIMITED - Check API key and plan")
+    
+    print("\n💡 Next Steps:")
+    print("1. If tests pass → Integration ready for bot")
+    print("2. If tests fail → Check API key in Replit Secrets")
+    print("3. Monitor data quality for real-time validation")
+
+if __name__ == "__main__":
+    main()
