@@ -805,11 +805,6 @@ class TelegramBot:
         try:
             print(f"🔄 Market command initiated by user {user_id}")
 
-            # Verify CoinMarketCap availability first
-            if not self.crypto_api.cmc_provider.api_key:
-                await loading_msg.edit_text("❌ CoinMarketCap API key tidak tersedia. Silakan set CMC_API_KEY di Secrets.", parse_mode='Markdown')
-                return
-
             # Get comprehensive market overview with CoinMarketCap real-time data
             print("📊 Calling AI market sentiment analysis with CoinMarketCap...")
             market_data = self.ai.get_market_sentiment('id', self.crypto_api)

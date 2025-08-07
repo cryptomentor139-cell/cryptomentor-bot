@@ -718,7 +718,7 @@ Ask me anything about crypto! 🚀"""
             try:
                 if crypto_api and hasattr(crypto_api, 'provider'):
                     market_overview = crypto_api.get_market_overview()
-                    
+
                     if market_overview and 'error' not in market_overview and market_overview.get('success', False):
                         data_sources.append("✅ CoinMarketCap")
                         successful_sources += 1
@@ -736,7 +736,7 @@ Ask me anything about crypto! 🚀"""
             # 2. Get BTC futures data for sentiment
             try:
                 btc_futures = self.get_binance_futures_data('BTC')
-                
+
                 if 'error' not in btc_futures and btc_futures.get('price', 0) > 0:
                     data_sources.append("✅ Binance")
                     successful_sources += 1
@@ -752,7 +752,7 @@ Ask me anything about crypto! 🚀"""
                 if crypto_api:
                     top_symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP']
                     top_prices = crypto_api.get_multiple_prices(top_symbols)
-                    
+
                     if top_prices and 'error' not in top_prices and top_prices.get('success', False):
                         data_sources.append("✅ Top Prices")
                         successful_sources += 1
@@ -910,10 +910,10 @@ Ask me anything about crypto! 🚀"""
                     if i <= 5:  # Show top 5
                         price = data.get('price', 0)
                         change_24h = data.get('change_24h', 0)
-                        
+
                         price_display = f"${price:.4f}" if price < 100 else f"${price:,.2f}"
                         change_emoji = "📈" if change_24h >= 0 else "📉"
-                        
+
                         analysis += f"\n• **{i}. {symbol}**: {price_display} {change_emoji} {change_24h:+.1f}%"
 
                 analysis += f"\n\n"
@@ -929,9 +929,9 @@ Ask me anything about crypto! 🚀"""
 
 """
 
-            # Generate market recommendation based on available data
+            # Generate trading recommendation based on available data
             overall_sentiment_score = 0
-            
+
             # Market cap change factor (if available)
             if market_cap_change > 5:
                 overall_sentiment_score += 3
@@ -950,84 +950,84 @@ Ask me anything about crypto! 🚀"""
             if 'error' not in btc_futures:
                 btc_change = btc_futures.get('price_change_24h', 0)
                 long_ratio = btc_futures.get('long_short_ratio', 1.0)
-                
+
                 if btc_change > 5:
                     overall_sentiment_score += 2
                 elif btc_change < -5:
                     overall_sentiment_score -= 2
-                
+
                 if long_ratio > 1.4:  # Too many longs
                     overall_sentiment_score -= 1
                 elif long_ratio < 0.6:  # Too many shorts
                     overall_sentiment_score += 1
 
-            # Generate trading recommendation
+            # Generate trading recommendation (Fix formatting)
             if overall_sentiment_score >= 4:
                 if language == 'id':
-                    market_rec = "🟢 **BULLISH MARKET** - Waktu baik untuk accumulate"
-                    market_action = "• **Action**: DCA strategy pada major coins\n• **Focus**: BTC, ETH, strong altcoins\n• **Risk**: Medium - Momentum positif"
+                    market_rec = "🟢 BULLISH MARKET - Waktu baik untuk accumulate"
+                    market_action = "• Action: DCA strategy pada major coins\n• Focus: BTC, ETH, strong altcoins\n• Risk: Medium - Momentum positif"
                 else:
-                    market_rec = "🟢 **BULLISH MARKET** - Good time to accumulate"
-                    market_action = "• **Action**: DCA strategy on major coins\n• **Focus**: BTC, ETH, strong altcoins\n• **Risk**: Medium - Positive momentum"
+                    market_rec = "🟢 BULLISH MARKET - Good time to accumulate"
+                    market_action = "• Action: DCA strategy on major coins\n• Focus: BTC, ETH, strong altcoins\n• Risk: Medium - Positive momentum"
             elif overall_sentiment_score >= 2:
                 if language == 'id':
-                    market_rec = "🟡 **CAUTIOUSLY BULLISH** - Selektif membeli"
-                    market_action = "• **Action**: Cherry-pick performers terbaik\n• **Focus**: Top 10 dengan volume tinggi\n• **Risk**: Medium - Sinyal campuran"
+                    market_rec = "🟡 CAUTIOUSLY BULLISH - Selektif membeli"
+                    market_action = "• Action: Cherry-pick performers terbaik\n• Focus: Top 10 dengan volume tinggi\n• Risk: Medium - Sinyal campuran"
                 else:
-                    market_rec = "🟡 **CAUTIOUSLY BULLISH** - Selective buying"
-                    market_action = "• **Action**: Cherry-pick strong performers\n• **Focus**: Top 10 with high volume\n• **Risk**: Medium - Mixed signals"
+                    market_rec = "🟡 CAUTIOUSLY BULLISH - Selective buying"
+                    market_action = "• Action: Cherry-pick strong performers\n• Focus: Top 10 with high volume\n• Risk: Medium - Mixed signals"
             elif overall_sentiment_score <= -4:
                 if language == 'id':
-                    market_rec = "🔴 **BEARISH MARKET** - Mode risk-off"
-                    market_action = "• **Action**: Posisi cash/stablecoin\n• **Focus**: Tunggu entry point lebih baik\n• **Risk**: High - Trend masih bearish"
+                    market_rec = "🔴 BEARISH MARKET - Mode risk-off"
+                    market_action = "• Action: Posisi cash/stablecoin\n• Focus: Tunggu entry point lebih baik\n• Risk: High - Trend masih bearish"
                 else:
-                    market_rec = "🔴 **BEARISH MARKET** - Risk-off mode"
-                    market_action = "• **Action**: Cash/stablecoin positions\n• **Focus**: Wait for better entry points\n• **Risk**: High - Bearish trend continues"
+                    market_rec = "🔴 BEARISH MARKET - Risk-off mode"
+                    market_action = "• Action: Cash/stablecoin positions\n• Focus: Wait for better entry points\n• Risk: High - Bearish trend continues"
             elif overall_sentiment_score <= -2:
                 if language == 'id':
-                    market_rec = "🟠 **CAUTIOUSLY BEARISH** - Eksposur terbatas"
-                    market_action = "• **Action**: Position size kecil\n• **Focus**: Coin fundamental kuat saja\n• **Risk**: High - Volatilitas tinggi"
+                    market_rec = "🟠 CAUTIOUSLY BEARISH - Eksposur terbatas"
+                    market_action = "• Action: Position size kecil\n• Focus: Coin fundamental kuat saja\n• Risk: High - Volatilitas tinggi"
                 else:
-                    market_rec = "🟠 **CAUTIOUSLY BEARISH** - Limited exposure"
-                    market_action = "• **Action**: Small position sizing\n• **Focus**: Strong fundamental coins only\n• **Risk**: High - High volatility"
+                    market_rec = "🟠 CAUTIOUSLY BEARISH - Limited exposure"
+                    market_action = "• Action: Small position sizing\n• Focus: Strong fundamental coins only\n• Risk: High - High volatility"
             else:
                 if language == 'id':
-                    market_rec = "⚖️ **NEUTRAL MARKET** - Range-bound"
-                    market_action = "• **Action**: Range trading strategies\n• **Focus**: Peluang scalping\n• **Risk**: Medium - Pergerakan sideways"
+                    market_rec = "⚖️ NEUTRAL MARKET - Range-bound"
+                    market_action = "• Action: Range trading strategies\n• Focus: Peluang scalping\n• Risk: Medium - Pergerakan sideways"
                 else:
-                    market_rec = "⚖️ **NEUTRAL MARKET** - Range-bound"
-                    market_action = "• **Action**: Range trading strategies\n• **Focus**: Scalping opportunities\n• **Risk**: Medium - Sideways movement"
+                    market_rec = "⚖️ NEUTRAL MARKET - Range-bound"
+                    market_action = "• Action: Range trading strategies\n• Focus: Scalping opportunities\n• Risk: Medium - Sideways movement"
 
             if language == 'id':
-                analysis += f"""🎯 **MARKET OUTLOOK & REKOMENDASI:**
+                analysis += f"""🎯 MARKET OUTLOOK & REKOMENDASI:
 {market_rec}
 
-📋 **Strategi Trading:**
+📋 Strategi Trading:
 {market_action}
 
-💡 **Key Levels Monitor:**
-• **BTC Dominance**: {btc_dominance:.1f}% (Alt season jika <40%)
-• **Data Quality**: {successful_sources}/3 sources
-• **Confidence**: {'High' if successful_sources >= 2 else 'Medium'}
+💡 Key Levels Monitor:
+• BTC Dominance: {btc_dominance:.1f}% (Alt season jika <40%)
+• Data Quality: {successful_sources}/3 sources
+• Confidence: {'High' if successful_sources >= 2 else 'Medium'}
 
-⏰ **Update**: {current_time} WIB
-📡 **Sources**: CoinMarketCap + Binance Futures + Price Data
-💎 **Analysis**: Multi-API Integration"""
+⏰ Update: {current_time} WIB
+📡 Sources: CoinMarketCap + Binance Futures + Price Data
+💎 Analysis: Multi-API Integration"""
             else:
-                analysis += f"""🎯 **MARKET OUTLOOK & RECOMMENDATION:**
+                analysis += f"""🎯 MARKET OUTLOOK & RECOMMENDATION:
 {market_rec}
 
-📋 **Trading Strategy:**
+📋 Trading Strategy:
 {market_action}
 
-💡 **Key Levels Monitor:**
-• **BTC Dominance**: {btc_dominance:.1f}% (Alt season if <40%)
-• **Data Quality**: {successful_sources}/3 sources
-• **Confidence**: {'High' if successful_sources >= 2 else 'Medium'}
+💡 Key Levels Monitor:
+• BTC Dominance: {btc_dominance:.1f}% (Alt season if <40%)
+• Data Quality: {successful_sources}/3 sources
+• Confidence: {'High' if successful_sources >= 2 else 'Medium'}
 
-⏰ **Update**: {current_time}
-📡 **Sources**: CoinMarketCap + Binance Futures + Price Data
-💎 **Analysis**: Multi-API Integration"""
+⏰ Update: {current_time}
+📡 Sources: CoinMarketCap + Binance Futures + Price Data
+💎 Analysis: Multi-API Integration"""
 
             return analysis
 
@@ -1035,7 +1035,7 @@ Ask me anything about crypto! 🚀"""
             print(f"❌ Error in market sentiment: {e}")
             import traceback
             traceback.print_exc()
-            
+
             if language == 'id':
                 return f"""❌ **Error mengambil data pasar**
 
@@ -1077,12 +1077,12 @@ Ask me anything about crypto! 🚀"""
                 if crypto_api and hasattr(crypto_api, 'provider') and crypto_api.provider:
                     # Get price data from provider
                     price_result = crypto_api.get_crypto_price(symbol, force_refresh=True)
-                    
+
                     if price_result and 'error' not in price_result and price_result.get('price', 0) > 0:
                         cmc_data = price_result
                         data_sources.append("✅ CoinMarketCap")
                         successful_sources += 1
-                        
+
                         # Try to get additional info
                         try:
                             info_result = crypto_api.get_crypto_info(symbol)
@@ -1198,10 +1198,10 @@ Ask me anything about crypto! 🚀"""
 💰 **1. HARGA & FUNDAMENTAL (Advanced CMC)**
 • **Real-time Price**: {self._format_price_display(current_price)} ({price_source})
 • **24h Change**: {change_24h:+.2f}%"""
-            
+
             if change_7d != 0:
                 analysis += f"\n• **7d Change**: {change_7d:+.2f}%"
-            
+
             analysis += f"""
 • **Volume 24h**: {self._format_currency_display(volume_24h)}"""
 
@@ -1209,11 +1209,11 @@ Ask me anything about crypto! 🚀"""
             if 'error' not in cmc_data:
                 rank = cmc_data.get('rank', 0)
                 circulating_supply = cmc_data.get('circulating_supply', 0)
-                
+
                 analysis += f"""
 
 📈 **2. MARKET DATA (CoinMarketCap Pro)**"""
-                
+
                 if market_cap > 0:
                     analysis += f"\n• **Market Cap**: {self._format_currency_display(market_cap)}"
                 if rank > 0:
@@ -1225,11 +1225,11 @@ Ask me anything about crypto! 🚀"""
                 if 'description' in cmc_data and cmc_data['description']:
                     description = cmc_data['description'][:150] + "..." if len(cmc_data['description']) > 150 else cmc_data['description']
                     analysis += f"\n• **Description**: {description}"
-                
+
                 if 'website' in cmc_data and cmc_data['website']:
                     websites = cmc_data['website'][:2] if isinstance(cmc_data['website'], list) else [cmc_data['website']]
                     analysis += f"\n• **Website**: {', '.join(websites)}"
-                
+
                 if 'category' in cmc_data and cmc_data['category']:
                     analysis += f"\n• **Category**: {cmc_data['category']}"
             else:
@@ -1268,11 +1268,11 @@ Ask me anything about crypto! 🚀"""
                 analysis += f"""
 
 🎯 **4. SUPPLY & DEMAND ZONES + ENTRY POINTS**"""
-                
+
                 support_zones = snd_analysis.get('support_zones', [])
                 resistance_zones = snd_analysis.get('resistance_zones', [])
                 entry_recommendation = snd_analysis.get('entry_recommendation', {})
-                
+
                 if support_zones:
                     analysis += f"\n\n**🟢 SUPPORT ZONES (Demand Areas):**"
                     for i, zone in enumerate(support_zones[:3], 1):
@@ -1280,7 +1280,7 @@ Ask me anything about crypto! 🚀"""
                         price_level = zone.get('price', current_price)
                         distance = ((current_price - price_level) / current_price) * 100
                         analysis += f"\n• **S{i}**: {self._format_price_display(price_level)} ({strength}% strength, {distance:+.1f}%)"
-                
+
                 if resistance_zones:
                     analysis += f"\n\n**🔴 RESISTANCE ZONES (Supply Areas):**"
                     for i, zone in enumerate(resistance_zones[:3], 1):
@@ -1288,13 +1288,13 @@ Ask me anything about crypto! 🚀"""
                         price_level = zone.get('price', current_price)
                         distance = ((price_level - current_price) / current_price) * 100
                         analysis += f"\n• **R{i}**: {self._format_price_display(price_level)} ({strength}% strength, {distance:+.1f}%)"
-                
+
                 # Entry recommendation
                 if entry_recommendation:
                     entry_type = entry_recommendation.get('type', 'WAIT')
                     entry_price = entry_recommendation.get('price', current_price)
                     confidence = entry_recommendation.get('confidence', 50)
-                    
+
                     analysis += f"""
 
 📍 **REKOMENDASI ENTRY POINT:**
@@ -1302,7 +1302,7 @@ Ask me anything about crypto! 🚀"""
 • **Entry Zone**: {self._format_price_display(entry_price)}
 • **Confidence**: {confidence}%
 • **Risk Level**: {entry_recommendation.get('risk_level', 'Medium')}"""
-                    
+
                     if entry_recommendation.get('stop_loss'):
                         analysis += f"\n• **Stop Loss**: {self._format_price_display(entry_recommendation['stop_loss'])}"
                     if entry_recommendation.get('take_profit'):
@@ -1317,7 +1317,7 @@ Ask me anything about crypto! 🚀"""
             # Risk assessment with SnD factors
             risk_level = "🟠 Sedang"
             risk_factors = []
-            
+
             if change_24h > 10:
                 risk_level = "🔴 Tinggi"
                 risk_factors.append("High volatility")
@@ -1327,7 +1327,7 @@ Ask me anything about crypto! 🚀"""
             elif abs(change_24h) < 3:
                 risk_level = "🟢 Rendah"
                 risk_factors.append("Low volatility")
-            
+
             # Add SnD risk factors
             if 'error' not in snd_analysis:
                 snd_risk = snd_analysis.get('risk_assessment', {})
@@ -1468,7 +1468,7 @@ Terjadi kesalahan saat memproses data multi-API.
             for i in range(10, len(lows) - 5):
                 if (lows[i] == min(lows[i-5:i+5]) and  # Local minimum
                     volumes[i] > sum(volumes[i-3:i+3])/6):  # Above average volume
-                    
+
                     strength = self._calculate_zone_strength(lows, i, 'support')
                     support_zones.append({
                         'price': lows[i],
@@ -1482,7 +1482,7 @@ Terjadi kesalahan saat memproses data multi-API.
             for i in range(10, len(highs) - 5):
                 if (highs[i] == max(highs[i-5:i+5]) and  # Local maximum
                     volumes[i] > sum(volumes[i-3:i+3])/6):  # Above average volume
-                    
+
                     strength = self._calculate_zone_strength(highs, i, 'resistance')
                     resistance_zones.append({
                         'price': highs[i],
@@ -1525,12 +1525,12 @@ Terjadi kesalahan saat memproses data multi-API.
         """Calculate the strength of a support/resistance zone"""
         try:
             strength = 50  # Base strength
-            
+
             # Check how many times price has tested this level
             test_range = 0.01  # 1% range
             test_price = price_data[index]
             tests = 0
-            
+
             for i, price in enumerate(price_data):
                 if i != index and abs(price - test_price) / test_price <= test_range:
                     tests += 1
@@ -1586,7 +1586,7 @@ Terjadi kesalahan saat memproses data multi-API.
                 abs(current_price - closest_support['price']) / current_price < 0.03 and  # Within 3% of support
                 closest_support['strength'] > 60 and  # Strong support
                 short_trend == 'bullish'):
-                
+
                 entry_recommendation.update({
                     'type': 'LONG',
                     'price': closest_support['price'],
@@ -1602,7 +1602,7 @@ Terjadi kesalahan saat memproses data multi-API.
                   abs(current_price - closest_resistance['price']) / current_price < 0.03 and  # Within 3% of resistance
                   closest_resistance['strength'] > 60 and  # Strong resistance
                   short_trend == 'bearish'):
-                
+
                 entry_recommendation.update({
                     'type': 'SHORT',
                     'price': closest_resistance['price'],
