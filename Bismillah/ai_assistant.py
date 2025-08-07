@@ -17,21 +17,11 @@ class AIAssistant:
         # Initialize CryptoAPI for comprehensive data
         self.crypto_api = CryptoAPI()
         
-        # Initialize CoinGlass V4 STARTUP provider
+        # Initialize CoinGlass provider directly
         try:
             from coinglass_provider import CoinGlassProvider
             self.coinglass_provider = CoinGlassProvider()
-            if self.coinglass_key:
-                print(f"✅ CoinGlass V4 STARTUP provider initialized with API key")
-                # Test STARTUP plan access on initialization
-                test_result = self.coinglass_provider.test_startup_plan_access()
-                if test_result['success_rate'] >= 50:
-                    print(f"✅ CoinGlass V4 STARTUP: {test_result['successful_endpoints']}/{test_result['total_endpoints']} endpoints working")
-                else:
-                    print(f"⚠️ CoinGlass V4 STARTUP: Limited access ({test_result['success_rate']:.1f}% success rate)")
-            else:
-                print("❌ CoinGlass V4: No API key found")
-                self.coinglass_provider = None
+            print(f"✅ CoinGlass provider initialized: {'With API key' if self.coinglass_key else 'No API key'}")
         except ImportError as e:
             print(f"❌ Failed to import CoinGlassProvider: {e}")
             self.coinglass_provider = None
@@ -476,76 +466,90 @@ class AIAssistant:
             return self._generate_emergency_futures_signal(symbol, timeframe, language, str(e))
 
     def _get_advanced_coinglass_startup_data(self, symbol):
-        """Fetch comprehensive data from CoinGlass V4 STARTUP Plan endpoints"""
+        """Fetch comprehensive data from all CoinGlass Startup Plan endpoints"""
         try:
-            if not self.coinglass_key or not self.coinglass_provider:
-                return {'error': 'CoinGlass V4 API key not found or provider not initialized. Please set COINGLASS_API_KEY in Replit Secrets.'}
+            if not self.coinglass_key:
+                return {'error': 'Coinglass API key not found. Please set COINGLASS_SECRET in Replit Secrets.'}
 
             clean_symbol = symbol.upper().replace('USDT', '')
             startup_data = {
                 'symbol': clean_symbol,
                 'endpoints_called': 0,
                 'endpoints_successful': 0,
-                'data_quality': 'unknown',
-                'plan': 'STARTUP_V4'
+                'data_quality': 'unknown'
             }
             
-            # 1. Get ticker data using V4 STARTUP plan
+            headers = self._get_coinglass_headers()
+            base_url_pro = "https://open-api.coinglass.com/api/pro/v1"
+            base_url_public = "https://open-api.coinglass.com/public/v2"
+            
+            # 1. Get ticker data (price + funding rate) - PRO API
             try:
-                print(f"🔄 Fetching V4 STARTUP ticker data for {clean_symbol}")
-                ticker_result = self.coinglass_provider.get_futures_ticker(clean_symbol)
+                ticker_url = f"{base_url_pro}/futures/ticker"
+                params = {'symbol': clean_symbol}
+                
+                response = requests.get(ticker_url, headers=headers, params=params, timeout=15)
                 startup_data['endpoints_called'] += 1
                 
-                if 'error' not in ticker_result:
-                    startup_data['ticker'] = {
-                        'price': ticker_result.get('price', 0),
-                        'funding_rate': ticker_result.get('funding_rate', 0),
-                        'volume_24h': ticker_result.get('volume_24h', 0),
-                        'price_change_24h': ticker_result.get('change_24h', 0),
-                        'exchange': ticker_result.get('exchange', 'Binance'),
-                        'source': 'coinglass_v4_startup',
-                        'data_quality': ticker_result.get('data_quality', 'unknown')
-                    }
-                    startup_data['endpoints_successful'] += 1
-                    price = startup_data['ticker']['price']
-                    print(f"✅ CoinGlass V4 Ticker: ${price:.2f} ({ticker_result.get('data_quality', 'unknown')})")
+                if response.status_code == 200:
+                    ticker_data = response.json()
+                    if ticker_data.get('success') and ticker_data.get('data'):
+                        primary_data = ticker_data['data'][0] if ticker_data['data'] else {}
+                        startup_data['ticker'] = {
+                            'price': float(primary_data.get('price', 0)),
+                            'funding_rate': float(primary_data.get('fundingRate', 0)),
+                            'volume_24h': float(primary_data.get('volume24h', 0)),
+                            'price_change_24h': float(primary_data.get('priceChangePercent', 0)),
+                            'exchange': primary_data.get('exchangeName', 'Binance')
+                        }
+                        startup_data['endpoints_successful'] += 1
+                        print(f"✅ CoinGlass Ticker: ${startup_data['ticker']['price']:.2f}")
+                    else:
+                        startup_data['ticker'] = {'error': 'No ticker data'}
                 else:
-                    startup_data['ticker'] = {'error': ticker_result.get('error', 'Unknown ticker error')}
-                    print(f"❌ Ticker API error: {ticker_result.get('error')}")
+                    startup_data['ticker'] = {'error': f'HTTP {response.status_code}'}
             except Exception as e:
                 startup_data['ticker'] = {'error': str(e)}
                 print(f"❌ Ticker API error: {e}")
             
-            # 2. Get open interest data using V4 STARTUP
+            # 2. Get open interest data - PUBLIC API
             try:
-                print(f"🔄 Fetching V4 STARTUP OI data for {clean_symbol}")
-                oi_result = self.coinglass_provider.get_open_interest(clean_symbol)
+                oi_url = f"{base_url_public}/futures/openInterest"
+                response = requests.get(oi_url, headers=headers, params=params, timeout=15)
                 startup_data['endpoints_called'] += 1
                 
-                if 'error' not in oi_result:
-                    startup_data['open_interest'] = {
-                        'total_oi': oi_result.get('open_interest', 0),
-                        'oi_change_percent': oi_result.get('oi_change_percent', 0),
-                        'trend': oi_result.get('trend', 'stable'),
-                        'source': 'coinglass_v4_startup'
-                    }
-                    startup_data['endpoints_successful'] += 1
-                    oi_value = startup_data['open_interest']['total_oi']
-                    oi_change = startup_data['open_interest']['oi_change_percent']
-                    print(f"✅ V4 Open Interest: ${oi_value/1000000:.1f}M ({oi_change:+.1f}%)")
+                if response.status_code == 200:
+                    oi_data = response.json()
+                    if oi_data.get('success') and oi_data.get('data'):
+                        oi_list = oi_data['data']
+                        total_oi = sum(float(item.get('openInterest', 0)) for item in oi_list)
+                        
+                        # Calculate OI change (simplified)
+                        if len(oi_list) > 1:
+                            current_val = float(oi_list[-1].get('openInterest', 0))
+                            previous_val = float(oi_list[-2].get('openInterest', 0))
+                            oi_change = ((current_val - previous_val) / previous_val * 100) if previous_val > 0 else 0
+                        else:
+                            oi_change = 0
+                        
+                        startup_data['open_interest'] = {
+                            'total_oi': total_oi,
+                            'oi_change_percent': oi_change,
+                            'exchanges_count': len(oi_list)
+                        }
+                        startup_data['endpoints_successful'] += 1
+                        print(f"✅ Open Interest: ${total_oi/1000000:.1f}M ({oi_change:+.1f}%)")
+                    else:
+                        startup_data['open_interest'] = {'error': 'No OI data'}
                 else:
-                    startup_data['open_interest'] = {'error': oi_result.get('error', 'No OI data')}
-                    print(f"❌ OI API error: {oi_result.get('error')}")
+                    startup_data['open_interest'] = {'error': f'HTTP {response.status_code}'}
             except Exception as e:
                 startup_data['open_interest'] = {'error': str(e)}
                 print(f"❌ Open Interest API error: {e}")
             
             # 3. Get long/short account ratio - PRO API
             try:
-                base_url_pro = f"{self.coinglass_base_url}"
                 ls_url = f"{base_url_pro}/futures/long_short_account_ratio"
-                headers = self._get_coinglass_headers()
-                params = {'symbol': clean_symbol}
                 response = requests.get(ls_url, headers=headers, params=params, timeout=15)
                 startup_data['endpoints_called'] += 1
                 
@@ -572,7 +576,6 @@ class AIAssistant:
                         startup_data['long_short_ratio'] = {'error': 'API response failed'}
                 else:
                     # Fallback to public API
-                    base_url_public = f"{self.coinglass_base_url}"
                     ls_url_public = f"{base_url_public}/futures/longShortChart"
                     ls_params = {'symbol': clean_symbol, 'intervalType': 2}
                     response = requests.get(ls_url_public, headers=headers, params=ls_params, timeout=15)
@@ -647,76 +650,41 @@ class AIAssistant:
                 startup_data['liquidation_map'] = {'error': str(e)}
                 print(f"❌ Liquidation Map API error: {e}")
                 
-            # 3. Get long/short ratio using V4 STARTUP (limited access)
+            # 5. Get funding rate history - PRO API
             try:
-                print(f"🔄 Fetching V4 STARTUP long/short data for {clean_symbol}")
-                ls_result = self.coinglass_provider.get_long_short_ratio(clean_symbol)
+                funding_url = f"{base_url_pro}/futures/funding_rate"
+                response = requests.get(funding_url, headers=headers, params=params, timeout=15)
                 startup_data['endpoints_called'] += 1
                 
-                if 'error' not in ls_result:
-                    startup_data['long_short_ratio'] = {
-                        'long_account': ls_result.get('long_ratio', 50),
-                        'short_account': ls_result.get('short_ratio', 50),
-                        'ratio_value': ls_result.get('ratio_value', 1.0),
-                        'source': 'coinglass_v4_startup'
-                    }
-                    startup_data['endpoints_successful'] += 1
-                    long_ratio = ls_result.get('long_ratio', 50)
-                    print(f"✅ V4 Long/Short: {long_ratio:.1f}% Long")
+                if response.status_code == 200:
+                    funding_data = response.json()
+                    if funding_data.get('success') and funding_data.get('data'):
+                        funding_list = funding_data['data']
+                        
+                        # Calculate average funding across exchanges
+                        valid_rates = []
+                        for item in funding_list:
+                            rate = float(item.get('fundingRate', 0))
+                            if rate != 0:
+                                valid_rates.append(rate)
+                        
+                        avg_funding = sum(valid_rates) / len(valid_rates) if valid_rates else 0
+                        
+                        startup_data['funding_detail'] = {
+                            'avg_funding_rate': avg_funding,
+                            'exchanges_count': len(valid_rates),
+                            'funding_trend': 'Positive' if avg_funding > 0.005 else 'Negative' if avg_funding < -0.002 else 'Neutral',
+                            'funding_history': funding_list[:5]  # Last 5 records
+                        }
+                        startup_data['endpoints_successful'] += 1
+                        print(f"✅ Funding Rate: {avg_funding*100:.4f}% (avg across {len(valid_rates)} exchanges)")
+                    else:
+                        startup_data['funding_detail'] = {'error': 'No funding data'}
                 else:
-                    startup_data['long_short_ratio'] = {'error': ls_result.get('error', 'No L/S data')}
-                    print(f"⚠️ L/S Ratio: {ls_result.get('error', 'Limited in STARTUP plan')}")
-            except Exception as e:
-                startup_data['long_short_ratio'] = {'error': str(e)}
-                print(f"❌ Long/Short API error: {e}")
-            
-            # 4. Get funding rate using V4 STARTUP
-            try:
-                print(f"🔄 Fetching V4 STARTUP funding data for {clean_symbol}")
-                funding_result = self.coinglass_provider.get_funding_rate(clean_symbol)
-                startup_data['endpoints_called'] += 1
-                
-                if 'error' not in funding_result:
-                    funding_rate = funding_result.get('funding_rate', 0)
-                    startup_data['funding_detail'] = {
-                        'avg_funding_rate': funding_rate,
-                        'funding_rate': funding_rate,
-                        'exchange': funding_result.get('exchange', 'Binance'),
-                        'funding_trend': funding_result.get('funding_trend', 'neutral'),
-                        'source': 'coinglass_v4_startup'
-                    }
-                    startup_data['endpoints_successful'] += 1
-                    print(f"✅ V4 Funding Rate: {funding_rate*100:.4f}% ({funding_result.get('exchange', 'Binance')})")
-                else:
-                    startup_data['funding_detail'] = {'error': funding_result.get('error', 'No funding data')}
-                    print(f"❌ Funding error: {funding_result.get('error')}")
+                    startup_data['funding_detail'] = {'error': f'HTTP {response.status_code}'}
             except Exception as e:
                 startup_data['funding_detail'] = {'error': str(e)}
                 print(f"❌ Funding Rate API error: {e}")
-            
-            # 5. Get liquidation data using V4 STARTUP (limited access)
-            try:
-                print(f"🔄 Fetching V4 STARTUP liquidation data for {clean_symbol}")
-                liq_result = self.coinglass_provider.get_liquidation_data(clean_symbol)
-                startup_data['endpoints_called'] += 1
-                
-                if 'error' not in liq_result:
-                    startup_data['liquidation_map'] = {
-                        'total_liquidation': liq_result.get('total_liquidation', 0),
-                        'long_liquidation': liq_result.get('long_liquidation', 0),
-                        'short_liquidation': liq_result.get('short_liquidation', 0),
-                        'dominant_side': liq_result.get('dominant_side', 'Balanced'),
-                        'source': 'coinglass_v4_startup'
-                    }
-                    startup_data['endpoints_successful'] += 1
-                    total_liq = liq_result.get('total_liquidation', 0)
-                    print(f"✅ V4 Liquidations: ${total_liq/1000000:.1f}M")
-                else:
-                    startup_data['liquidation_map'] = {'error': liq_result.get('error', 'No liquidation data')}
-                    print(f"⚠️ Liquidations: {liq_result.get('error', 'Limited in STARTUP plan')}")
-            except Exception as e:
-                startup_data['liquidation_map'] = {'error': str(e)}
-                print(f"❌ Liquidation API error: {e}")
             
             # 6. Sentiment Analysis (if available) - PRO API
             try:
@@ -3214,43 +3182,6 @@ Error processing data:
         except (ValueError, TypeError):
             return "$0.00"
 
-    def _calculate_support_resistance(self, symbol, current_price, coinglass_data=None):
-        """Calculate Support & Resistance levels with Supply & Demand zones"""
-        try:
-            if current_price <= 0:
-                return {'error': 'Invalid price for S&R calculation'}
-            
-            # Basic Support & Resistance calculation
-            support_level = current_price * 0.97  # 3% below current price
-            resistance_level = current_price * 1.03  # 3% above current price
-            
-            # Supply & Demand zones calculation
-            demand_low = current_price * 0.965  # -3.5%
-            demand_high = current_price * 0.975  # -2.5%
-            supply_low = current_price * 1.025  # +2.5%
-            supply_high = current_price * 1.035  # +3.5%
-            
-            # Calculate distances
-            support_distance = ((current_price - support_level) / current_price) * 100
-            resistance_distance = ((resistance_level - current_price) / current_price) * 100
-            
-            return {
-                'nearest_support': support_level,
-                'nearest_resistance': resistance_level,
-                'support_distance': support_distance,
-                'resistance_distance': resistance_distance,
-                'support_strength': 'Medium',
-                'resistance_strength': 'Medium',
-                'demand_zone_low': demand_low,
-                'demand_zone_high': demand_high,
-                'supply_zone_low': supply_low,
-                'supply_zone_high': supply_high,
-                'calculation_method': 'CoinMarketCap Based S&R + SnD'
-            }
-            
-        except Exception as e:
-            return {'error': f'S&R calculation failed: {str(e)}'}
-
     def _format_currency_display(self, amount):
         """Format currency for display with null safety"""
         if amount is None or amount <= 0:
@@ -3423,48 +3354,35 @@ Error processing data:
                 funding_rate = float(coinglass_data['funding_rate'].get('funding_rate', 0))
 
             # Build comprehensive analysis (plain text to avoid MarkdownV2 issues)
-            analysis = f"""📊 **ANALISA {symbol.upper()}/USDT**
+            analysis = f"""🎯 **ANALISIS KOMPREHENSIF MULTI-API {symbol.upper()}**
 
-💰 **Harga Spot**: {self._format_price_display(current_price)} ({price_source})"""
+🔍 **Kualitas Data**: {quality_emoji} {quality} ({successful_sources}/{total_sources} sumber berhasil)
+📡 **Sumber**: {', '.join(data_sources)}
+
+💰 **1. Harga Terkini**
+• Real-time Price: {self._format_price_display(current_price)} ({price_source})
+• 24h Change: {change_24h:+.2f}%
+• Volume 24h: {self._format_currency_display(volume_24h)}
+
+🛡️ **2. Support & Resistance Analysis**"""
             
-            # Add Support & Resistance data in the exact format requested
+            # Add Support & Resistance data
             if 'error' not in support_resistance:
                 nearest_support = support_resistance.get('nearest_support', 0)
                 nearest_resistance = support_resistance.get('nearest_resistance', 0)
-                demand_low = support_resistance.get('demand_zone_low', 0)
-                demand_high = support_resistance.get('demand_zone_high', 0)
-                supply_low = support_resistance.get('supply_zone_low', 0)
-                supply_high = support_resistance.get('supply_zone_high', 0)
+                support_distance = support_resistance.get('support_distance', 0)
+                resistance_distance = support_resistance.get('resistance_distance', 0)
+                support_strength = support_resistance.get('support_strength', 'Medium')
+                resistance_strength = support_resistance.get('resistance_strength', 'Medium')
                 
                 analysis += f"""
-🛡️ **Support**: {self._format_price_display(nearest_support)}
-🔺 **Resistance**: {self._format_price_display(nearest_resistance)}
-📦 **Area Supply**: {self._format_price_display(supply_low)} - {self._format_price_display(supply_high)}
-📥 **Area Demand**: {self._format_price_display(demand_low)} - {self._format_price_display(demand_high)}"""
+• 🛡️ Support: {self._format_price_display(nearest_support)} ({support_strength}) - {support_distance:.1f}% below
+• 🔺 Resistance: {self._format_price_display(nearest_resistance)} ({resistance_strength}) - {resistance_distance:.1f}% above
+• Method: {support_resistance.get('calculation_method', 'Technical Analysis')}"""
             else:
-                support_est = current_price * 0.97
-                resistance_est = current_price * 1.03
-                supply_low_est = current_price * 1.025
-                supply_high_est = current_price * 1.035
-                demand_low_est = current_price * 0.965
-                demand_high_est = current_price * 0.975
-                
                 analysis += f"""
-🛡️ **Support**: {self._format_price_display(support_est)}
-🔺 **Resistance**: {self._format_price_display(resistance_est)}
-📦 **Area Supply**: {self._format_price_display(supply_low_est)} - {self._format_price_display(supply_high_est)}
-📥 **Area Demand**: {self._format_price_display(demand_low_est)} - {self._format_price_display(demand_high_est)}
-
-*Data diambil dari CoinMarketCap API*"""
-
-            analysis += f"""
-
-🔍 **Kualitas Data**: {quality_emoji} {quality} ({successful_sources}/{total_sources} sumber berhasil)
-📡 **Sumber**: CoinMarketCap
-
-💰 **Detail Harga**
-• 24h Change: {change_24h:+.2f}%
-• Volume 24h: {self._format_currency_display(volume_24h)}"""
+• ⚠️ Support & Resistance calculation unavailable
+• Using estimated levels: S: {self._format_price_display(current_price * 0.95)} | R: {self._format_price_display(current_price * 1.05)}"""
 
             analysis += f"""
 
@@ -3510,9 +3428,16 @@ Error processing data:
 
 📰 **4. Analisis Sentimen (Multi-Source)**
 • Binance: Momentum Score 8/10
-• CoinMarketCap: Fundamental Score 7/10
-• News: Sentiment Score 7/10
-→ Confidence: High | Bias: Bullish"""
+• CoinMarketCap: Fundamental Score 7/10"""
+            
+            if 'error' not in news_sentiment:
+                sentiment_score = news_sentiment.get('sentiment_score', 7)
+                if sentiment_score is not None:
+                    analysis += f"\n• News: Sentiment Score {sentiment_score}/10"
+                    analysis += f"\n→ Confidence: High | Bias: Bullish"
+            else:
+                analysis += f"\n• News: ⚠️ Data tidak tersedia"
+                analysis += f"\n→ Confidence: Medium | Bias: Neutral"
 
             # Add CoinGlass futures data with null checks
             analysis += f"""
@@ -4184,52 +4109,19 @@ Error fetching CoinMarketCap data:
         print(f"⚠️ Using estimated price for {symbol}: ${estimated_price}")
         return estimated_price
 
-    def analyze_supply_demand(self, symbol):
-        """Analyze supply and demand zones for a given symbol"""
-        try:
-            current_price = self._get_estimated_price(symbol)
-            
-            # Simple supply/demand zone calculation
-            supply_zone_high = current_price * 1.05
-            supply_zone_low = current_price * 1.02
-            demand_zone_high = current_price * 0.98
-            demand_zone_low = current_price * 0.95
-            
-            return {
-                'symbol': symbol,
-                'supply_zone': {
-                    'high': supply_zone_high,
-                    'low': supply_zone_low,
-                    'strength': 'medium'
-                },
-                'demand_zone': {
-                    'high': demand_zone_high,
-                    'low': demand_zone_low,
-                    'strength': 'medium'
-                },
-                'current_price': current_price,
-                'signals': [{
-                    'direction': 'HOLD',
-                    'confidence': 50,
-                    'reason': 'Neutral market conditions'
-                }]
-            }
-        except Exception as e:
-            return {'error': f'Supply/demand analysis failed: {str(e)}'}
-
     def _estimate_price(self, symbol):
         """Helper to get an estimated price, fallback to 0 if not found"""
         # Redirect to the correct method
         return self._get_estimated_price(symbol)
 
     # Placeholder for safe_text to avoid NameError
-    def safe_text(text, max_length=100):
-    """Safely truncate text and escape HTML characters."""
-    if not isinstance(text, str):
-        return ""
-    text = text[:max_length]
-    text = html.escape(text)
-    return text
+    def safe_text(self, text, max_length=100):
+        """Safely truncate text and escape HTML characters."""
+        if not isinstance(text, str):
+            return ""
+        text = text[:max_length]
+        text = html.escape(text)
+        return text
 
     # Placeholder for determine_overall_sentiment to avoid NameError
     def determine_overall_sentiment(self, cmc_data, smc_analysis, price_data):
