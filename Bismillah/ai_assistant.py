@@ -207,7 +207,7 @@ class AIAssistant:
                 target_2 = current_price * 1.06
                 stop_loss = current_price * 0.97
             else:
-                signal_emoji = "🔴"  
+                signal_emoji = "🔴"
                 signal_text = "📉"
                 trend = "Strong Bearish"
                 reason = f"Volume analysis suggests downward pressure (Confidence: {confidence}%)"
@@ -338,7 +338,7 @@ class AIAssistant:
 
             # Force binary decision (no HOLD)
             if final_score >= 0:
-                direction = "LONG" 
+                direction = "LONG"
                 direction_emoji = "🟢"
                 signal_emoji = "📈"
                 confidence = random.randint(75, 92)
@@ -346,7 +346,7 @@ class AIAssistant:
                 market_structure = "Bullish bias confirmed"
             else:
                 direction = "SHORT"
-                direction_emoji = "🔴" 
+                direction_emoji = "🔴"
                 signal_emoji = "📉"
                 confidence = random.randint(72, 88)
                 reason = f"Bearish momentum with {confidence}% confidence"
@@ -871,7 +871,7 @@ Ask me anything about crypto! 🚀"""
 
 💡 **Alternatives to try:**
 • `/price btc` - Check Bitcoin price
-• `/price eth` - Check Ethereum price  
+• `/price eth` - Check Ethereum price
 • Make sure COINAPI_API_KEY is set in Secrets
 
 🔄 Try `/market` command again in a few minutes."""
@@ -977,7 +977,7 @@ Ask me anything about crypto! 🚀"""
                     else:
                         volume_trend = 0
 
-                    # Momentum calculation  
+                    # Momentum calculation
                     if len(prices) >= 5:
                         short_ma = sum(prices[-5:]) / 5
                         long_ma = sum(prices[:10]) / 10
@@ -990,7 +990,7 @@ Ask me anything about crypto! 🚀"""
                     momentum = random.uniform(-2, 2)
             else:
                 price_change = random.uniform(-3, 3)  # Fallback random values
-                volume_trend = random.uniform(-10, 10) 
+                volume_trend = random.uniform(-10, 10)
                 momentum = random.uniform(-2, 2)
 
             # Build analysis
@@ -1130,7 +1130,7 @@ Ask me anything about crypto! 🚀"""
   - Strength: {zone.get('strength', 0):.1f}%
   - Distance: {distance:+.2f}% from current price"""
 
-                # Display multiple demand zones  
+                # Display multiple demand zones
                 if demand_zones:
                     analysis += f"""
 
@@ -1559,19 +1559,19 @@ Terjadi kesalahan saat memproses data CoinAPI.
 
             # Simplified approach: look for price clusters or significant highs/lows
             # This is a basic example; real-world S&R would be more sophisticated.
-            
+
             prices = [float(c.get('price_close', c.get('close', 0))) for c in candles]
             lows = [float(c.get('price_low', c.get('low', 0))) for c in candles]
             highs = [float(c.get('price_high', c.get('high', 0))) for c in candles]
             volumes = [float(c.get('volume_traded', c.get('volume', 0))) for c in candles if float(c.get('volume_traded', c.get('volume', 0))) > 0]
 
             current_price = prices[-1]
-            
+
             # Basic Resistance Level Detection: Look for significant highs
             for i in range(len(highs) - 1, 0, -1): # Iterate from most recent to oldest
                 if len(resistance_levels) >= 3: # Limit to top 3 resistance levels
                     break
-                
+
                 price = highs[i]
                 # Heuristic: A resistance level might be a significant high that price has tested multiple times or a high that caused a notable reversal.
                 # For simplicity, we'll consider highs that are significantly higher than surrounding prices.
@@ -1599,7 +1599,7 @@ Terjadi kesalahan saat memproses data CoinAPI.
             for i in range(len(lows) - 1, 0, -1): # Iterate from most recent to oldest
                 if len(support_levels) >= 3: # Limit to top 3 support levels
                     break
-                
+
                 price = lows[i]
                 # Heuristic: A support level might be a significant low that price has tested multiple times or a low that caused a notable reversal.
                 is_significant_low = True
@@ -1645,7 +1645,7 @@ Terjadi kesalahan saat memproses data CoinAPI.
                 nearest_resistance = resistance_levels[0]
                 res_price = nearest_resistance['price']
                 res_strength = nearest_resistance['strength']
-                
+
                 if abs(res_price - current_price) / current_price < 0.02: # Within 2% of resistance
                     strength_emoji = "🔥" if res_strength > 80 else "⭐" if res_strength > 60 else "💡"
                     recommendations.append(f"• **Resistance Hit**: Approaching R1 ${res_price:.4f} {strength_emoji}")
