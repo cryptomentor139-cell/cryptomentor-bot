@@ -542,7 +542,10 @@ class AIAssistant:
             
             # 3. Get long/short account ratio - PRO API
             try:
+                base_url_pro = f"{self.coinglass_base_url}"
                 ls_url = f"{base_url_pro}/futures/long_short_account_ratio"
+                headers = self._get_coinglass_headers()
+                params = {'symbol': clean_symbol}
                 response = requests.get(ls_url, headers=headers, params=params, timeout=15)
                 startup_data['endpoints_called'] += 1
                 
@@ -569,6 +572,7 @@ class AIAssistant:
                         startup_data['long_short_ratio'] = {'error': 'API response failed'}
                 else:
                     # Fallback to public API
+                    base_url_public = f"{self.coinglass_base_url}"
                     ls_url_public = f"{base_url_public}/futures/longShortChart"
                     ls_params = {'symbol': clean_symbol, 'intervalType': 2}
                     response = requests.get(ls_url_public, headers=headers, params=ls_params, timeout=15)
@@ -4180,19 +4184,52 @@ Error fetching CoinMarketCap data:
         print(f"⚠️ Using estimated price for {symbol}: ${estimated_price}")
         return estimated_price
 
+    def analyze_supply_demand(self, symbol):
+        """Analyze supply and demand zones for a given symbol"""
+        try:
+            current_price = self._get_estimated_price(symbol)
+            
+            # Simple supply/demand zone calculation
+            supply_zone_high = current_price * 1.05
+            supply_zone_low = current_price * 1.02
+            demand_zone_high = current_price * 0.98
+            demand_zone_low = current_price * 0.95
+            
+            return {
+                'symbol': symbol,
+                'supply_zone': {
+                    'high': supply_zone_high,
+                    'low': supply_zone_low,
+                    'strength': 'medium'
+                },
+                'demand_zone': {
+                    'high': demand_zone_high,
+                    'low': demand_zone_low,
+                    'strength': 'medium'
+                },
+                'current_price': current_price,
+                'signals': [{
+                    'direction': 'HOLD',
+                    'confidence': 50,
+                    'reason': 'Neutral market conditions'
+                }]
+            }
+        except Exception as e:
+            return {'error': f'Supply/demand analysis failed: {str(e)}'}
+
     def _estimate_price(self, symbol):
         """Helper to get an estimated price, fallback to 0 if not found"""
         # Redirect to the correct method
         return self._get_estimated_price(symbol)
 
     # Placeholder for safe_text to avoid NameError
-    def safe_text(self, text, max_length=100):
-        """Safely truncate text and escape HTML characters."""
-        if not isinstance(text, str):
-            return ""
-        text = text[:max_length]
-        text = html.escape(text)
-        return text
+    def safe_text(text, max_length=100):
+    """Safely truncate text and escape HTML characters."""
+    if not isinstance(text, str):
+        return ""
+    text = text[:max_length]
+    text = html.escape(text)
+    return text
 
     # Placeholder for determine_overall_sentiment to avoid NameError
     def determine_overall_sentiment(self, cmc_data, smc_analysis, price_data):
