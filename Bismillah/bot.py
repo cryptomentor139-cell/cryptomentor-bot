@@ -1703,12 +1703,32 @@ Gunakan `/subscribe` untuk upgrade!
         auto_status = "🟢 RUNNING" if self.auto_signals and self.auto_signals.is_running else "🔴 STOPPED"
         deployment_mode = "🚀 DEPLOYMENT" if IS_DEPLOYMENT else "🔧 DEVELOPMENT"
 
+        # Validate admin access first
+        admin_user_id_env = os.getenv('ADMIN_USER_ID')
+        is_valid_admin = (
+            user_id == self.admin_id and 
+            admin_user_id_env and 
+            str(user_id) == str(admin_user_id_env)
+        )
+
+        if not is_valid_admin:
+            await update.message.reply_text(
+                f"❌ **Access Denied**\n\n"
+                f"**Your ID**: {user_id}\n"
+                f"**Configured Admin**: {self.admin_id}\n"
+                f"**Secrets ADMIN_USER_ID**: {admin_user_id_env or 'NOT SET'}\n\n"
+                f"⚠️ Admin access hanya untuk user dengan ID yang sesuai dengan ADMIN_USER_ID di Secrets.",
+                parse_mode='Markdown'
+            )
+            return
+
         message = f"""👑 **CryptoMentor AI - Admin Panel** ({deployment_mode})
 
-🔑 **Admin Info:**
-• **Configured Admin ID**: {self.admin_id}
-• **Current User ID**: {user_id}
-• **Admin Access**: {'✅ GRANTED' if user_id == self.admin_id else '❌ DENIED'}
+🔑 **Admin Verification:**
+• **Your User ID**: {user_id} ✅
+• **Secrets ADMIN_USER_ID**: {admin_user_id_env} ✅
+• **Bot Admin ID**: {self.admin_id} ✅
+• **Admin Access**: ✅ VERIFIED & GRANTED
 
 📊 **Bot Statistics:**
 • Total Users: {stats['total_users']}
@@ -1732,9 +1752,8 @@ Gunakan `/subscribe` untuk upgrade!
 • `/broadcast <message>` - Send broadcast
 
 🌐 **API Status:**
-• CoinMarketCap: {'✅ Active' if hasattr(self.crypto_api, 'data_provider') and hasattr(self.crypto_api.data_provider, 'cmc_provider') and self.crypto_api.data_provider.cmc_provider.api_key else '❌ No Key'}
-• CoinMarketCap: {'✅ Active' if self.crypto_api.cmc_provider.api_key else '❌ No Key'}
-• Binance: ✅ Active
+• CoinMarketCap: {'✅ Active' if hasattr(self.crypto_api, 'data_provider') and self.crypto_api.data_provider else '❌ No Provider'}
+• Binance: ✅ Active (Public API)
 • Auto Signals: {auto_status}
 
 💡 **V4 Features:**
