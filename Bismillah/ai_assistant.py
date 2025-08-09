@@ -889,7 +889,7 @@ class AIAssistant:
             return self._error_fallback(symbol, f"enhanced futures analysis: {str(e)[:50]}")
 
     async def generate_futures_signals(self, language='id', crypto_api=None, query_args=None):
-        """Generate futures signals following system prompt template"""
+        """Generate futures signals with proper formatting and filtering"""
         try:
             # Check database connection for user-related operations
             db_available, db_error = self._check_database_required("FUTURES_SIGNALS")
@@ -898,11 +898,7 @@ class AIAssistant:
 
             current_time = self._get_wib_time()
 
-            # Get global market conditions
-            market_data = self.get_cmc_global_metrics()
-            market_conditions = self._format_market_conditions(market_data)
-
-            # Target symbols for scanning - use more symbols for better signal detection
+            # Target symbols for scanning
             target_symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'MATIC', 'DOT', 'LINK']
 
             # If specific symbol requested, use that
@@ -911,90 +907,83 @@ class AIAssistant:
                 if len(first_arg) <= 5:
                     target_symbols = [first_arg]
 
-            high_confidence_signals = []
+            all_signals = []
 
-            # Scan symbols for signals with improved logic
+            # Scan symbols for signals
             for symbol in target_symbols:
                 try:
                     signal = await self._enhanced_scan_symbol_for_signal(symbol, crypto_api)
-                    if signal and signal.get('confidence', 0) >= 75:  # Minimum 75% confidence
-                        high_confidence_signals.append(signal)
-                        print(f"✅ Found signal: {symbol} - {signal['confidence']}% ({signal['direction']})")
+                    if signal:
+                        all_signals.append(signal)
+                        print(f"✅ Found signal: {symbol} - {signal['confidence']:.2f}% ({signal['direction']})")
                 except Exception as e:
                     print(f"Error scanning {symbol}: {e}")
                     continue
 
-            # Sort by confidence and take only the best signal
-            if high_confidence_signals:
-                high_confidence_signals = sorted(high_confidence_signals, key=lambda x: x.get('confidence', 0), reverse=True)[:1]
+            # Apply filtering and formatting rules
+            filtered_signals = self._filter_and_format_signals(all_signals)
 
-            # Format response with safe markdown
-            if not high_confidence_signals:
-                no_signals_msg = f"""🚨 **FUTURES SIGNALS SCAN**
+            # Format response
+            if not filtered_signals:
+                return f"""🚨 FUTURES SIGNALS – SUPPLY & DEMAND ANALYSIS
 
-🕐 **Scan Time**: {self._escape_markdown_v2(current_time)}
-🌍 **Market Conditions**: {self._escape_markdown_v2(market_conditions)}
+🕐 Scan Time: {current_time}
+📊 Signals Found: 0 (Confidence ≥ 75.00%)
 
-❌ **No High\\-Confidence Signals Found**
+❌ No High-Confidence Signals Found
 
-📊 **Symbols Scanned**: {self._escape_markdown_v2(', '.join(target_symbols))}
-⚠️ **Status**: Tidak ada setup trading yang jelas saat ini
+📊 Symbols Scanned: {', '.join(target_symbols)}
+⚠️ Status: Tidak ada setup trading yang jelas saat ini
 
-💡 **Kemungkinan Penyebab**:
+💡 Kemungkinan Penyebab:
 • Market dalam kondisi consolidation
 • Volatilitas rendah saat ini
 • Menunggu momentum yang lebih jelas
 
-🔄 **Alternatif**:
-• Coba `/futures btc` untuk analisis spesifik
-• Gunakan `/analyze eth` untuk analisis fundamental
-• Monitor kondisi market dengan `/market`"""
+🔄 Alternatif:
+• Coba /futures btc untuk analisis spesifik
+• Gunakan /analyze eth untuk analisis fundamental
+• Monitor kondisi market dengan /market"""
 
-                safe_text, parse_mode = self._safe_output(no_signals_msg)
-                return safe_text
+            # Format signals message
+            message = f"""🚨 FUTURES SIGNALS – SUPPLY & DEMAND ANALYSIS
 
-            # Format signals found with safe markdown
-            message = f"""🚨 **AUTO SIGNALS - SUPPLY & DEMAND ANALYSIS**
-
-🕐 **Scan Time**: {self._escape_markdown_v2(current_time)}
-📊 **Signals Found**: {len(high_confidence_signals)}
+🕐 Scan Time: {current_time}
+📊 Signals Found: {len(filtered_signals)} (Confidence ≥ 75.00%)
 
 """
 
-            for i, signal in enumerate(high_confidence_signals, 1):
+            for i, signal in enumerate(filtered_signals, 1):
                 direction_emoji = "🟢" if signal['direction'] in ['LONG', 'BUY'] else "🔴"
 
-                # Get price data for 24h change
+                # Get 24h change data
                 symbol = signal['symbol']
                 price_data = crypto_api.get_crypto_price(symbol) if crypto_api else {}
                 change_24h = price_data.get('change_24h', 0) if price_data.get('success') else 0
 
                 message += f"""{i}. {signal['symbol']} {direction_emoji} {signal['direction']}
-⭐️ Confidence: {signal['confidence']:.1f}%
-💰 Entry: {self._format_price(signal['entry'])}
-🛑 Stop Loss: {self._format_price(signal['sl'])}
-🎯 TP1: {self._format_price(signal['tp1'])}
-🎯 TP2: {self._format_price(signal['tp2'])}
-📊 R/R Ratio: {signal.get('rr', '2.0:1')}
-🔄 Trend: {signal.get('primary_trend', 'Bullish' if signal['direction'] in ['LONG', 'BUY'] else 'Bearish')}
-⚡️ Structure: {signal.get('structure', signal['direction'])} Bias
-🧠 Reason: {signal.get('reason', 'Technical analysis with confluence')}
-📈 24h Change: {self._format_percentage(change_24h)}
+⭐️ Confidence: {signal['confidence']:.2f}%
+💰 Entry: ${signal['entry']:.2f}
+🛑 Stop Loss: ${signal['sl']:.2f}
+🎯 TP1: ${signal['tp1']:.2f}
+🎯 TP2: ${signal['tp2']:.2f}
+📊 R/R Ratio: {signal['rr_ratio']}
+🔄 Trend: {signal['trend']}
+⚡️ Structure: {signal['structure']} Bias
+🧠 Reason: {signal['reason']}
+📈 24h Change: {change_24h:+.2f}%
 
 """
 
-            message += f"""⚠️ **TRADING DISCLAIMER**:
+            message += """⚠️ TRADING DISCLAIMER:
 • Signals berbasis Supply & Demand analysis
 • Gunakan proper risk management
 • Position sizing sesuai risk level
 • DYOR sebelum trading
 
-🎯 Futures signals dengan confidence 75%+ only
 📡 Next scan in 30 minutes"""
 
-            # Validate and return safe output
-            safe_text, parse_mode = self._safe_output(message)
-            return safe_text
+            return message
 
         except Exception as e:
             return self._error_fallback("FUTURES_SIGNALS", f"scan process: {str(e)[:50]}")
@@ -1802,6 +1791,63 @@ class AIAssistant:
             insights.append("• 📉 Low volume - Watch for volume confirmation")
 
         return "\n".join(insights)
+
+    def _filter_and_format_signals(self, signals):
+        """Filter and format signals according to rules"""
+        if not signals:
+            return []
+
+        # Filter signals with confidence >= 75%
+        filtered = []
+        for signal in signals:
+            confidence = signal.get('confidence', 0)
+            
+            # Fix confidence if > 100 (divide by 10)
+            if confidence > 100:
+                confidence = confidence / 10
+                
+            # Only keep signals with >= 75% confidence
+            if confidence >= 75.0:
+                # Format the signal properly
+                formatted_signal = self._format_signal_properly(signal, confidence)
+                filtered.append(formatted_signal)
+
+        # Sort by confidence (highest to lowest)
+        filtered.sort(key=lambda x: x['confidence'], reverse=True)
+
+        # Return maximum 5 signals
+        return filtered[:5]
+
+    def _format_signal_properly(self, signal, corrected_confidence):
+        """Format individual signal according to rules"""
+        # Format R/R Ratio properly (X.X:1)
+        rr_value = signal.get('risk_reward', 2.0)
+        if isinstance(rr_value, str):
+            # Extract number from string like "2.5:1"
+            try:
+                rr_value = float(rr_value.split(':')[0])
+            except:
+                rr_value = 2.0
+        
+        rr_formatted = f"{rr_value:.1f}:1"
+
+        # Determine trend based on direction
+        direction = signal.get('direction', 'LONG')
+        trend = signal.get('primary_trend', 'Bullish' if direction in ['LONG', 'BUY'] else 'Bearish')
+        
+        return {
+            'symbol': signal.get('symbol', 'UNKNOWN'),
+            'direction': direction,
+            'confidence': corrected_confidence,
+            'entry': signal.get('entry', 0),
+            'sl': signal.get('sl', 0), 
+            'tp1': signal.get('tp1', 0),
+            'tp2': signal.get('tp2', 0),
+            'rr_ratio': rr_formatted,
+            'trend': trend.title(),
+            'structure': direction,
+            'reason': signal.get('reason', 'Technical analysis with confluence')
+        }
 
     def _error_fallback(self, symbol, error_context):
         """Generate user-friendly error message"""
