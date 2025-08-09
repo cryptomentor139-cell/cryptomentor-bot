@@ -129,6 +129,12 @@ class TelegramBot:
             logger.error(f"❌ Failed to initialize bot: {e}")
             sys.exit(1)
 
+    def is_admin(self, user_id: int) -> bool:
+        """Check if the user ID is one of the configured admins."""
+        # In a more complex setup, you might load multiple admin IDs from environment variables or a config file.
+        # For now, we check against the primary admin ID from the environment.
+        return user_id == self.admin_id
+
     async def run_bot(self):
         """Main method to run the bot"""
         try:
@@ -788,7 +794,7 @@ class TelegramBot:
         user_id = update.message.from_user.id
         credits = self.db.get_user_credits(user_id)
         is_premium = self.db.is_user_premium(user_id)
-        is_admin = user_id == self.admin_id
+        is_admin = self.is_admin(user_id)
 
         # Check credits for non-premium, non-admin users
         if not is_premium and not is_admin and credits < 20:
@@ -839,7 +845,7 @@ class TelegramBot:
         user_id = update.message.from_user.id
         credits = self.db.get_user_credits(user_id)
         is_premium = self.db.is_user_premium(user_id)
-        is_admin = user_id == self.admin_id
+        is_admin = self.is_admin(user_id)
 
         # Check credits for non-premium, non-admin users
         if not is_premium and not is_admin and credits < 20:
@@ -905,7 +911,7 @@ class TelegramBot:
         user_id = update.message.from_user.id
         credits = self.db.get_user_credits(user_id)
         is_premium = self.db.is_user_premium(user_id)
-        is_admin = user_id == self.admin_id
+        is_admin = self.is_admin(user_id)
 
         # Check credits for non-premium, non-admin users
         if not is_premium and not is_admin and credits < 60:
@@ -966,9 +972,9 @@ class TelegramBot:
             if len(signals) > 4000:
                 chunks = [signals[i:i+4000] for i in range(0, len(signals), 4000)]
                 try:
-                    await loading_msg.edit_text(chunks[0], parse_mode='Markdown')
+                    await loading_msg.edit_text(chunks[0], parse_mode='MarkdownV2')
                     for chunk in chunks[1:]:
-                        await update.message.reply_text(chunk, parse_mode='Markdown')
+                        await update.message.reply_text(chunk, parse_mode='MarkdownV2')
                 except Exception as e:
                     print(f"⚠️ Markdown error, sending as plain text: {e}")
                     await loading_msg.edit_text(chunks[0], parse_mode=None)
@@ -976,7 +982,7 @@ class TelegramBot:
                         await update.message.reply_text(chunk, parse_mode=None)
             else:
                 try:
-                    await loading_msg.edit_text(signals, parse_mode='Markdown')
+                    await loading_msg.edit_text(signals, parse_mode='MarkdownV2')
                 except Exception as e:
                     print(f"⚠️ Markdown error, sending as plain text: {e}")
                     await loading_msg.edit_text(signals, parse_mode=None)
@@ -997,7 +1003,7 @@ class TelegramBot:
         user_id = update.message.from_user.id
         credits = self.db.get_user_credits(user_id)
         is_premium = self.db.is_user_premium(user_id)
-        is_admin = user_id == self.admin_id
+        is_admin = self.is_admin(user_id)
 
         # Check credits for non-premium, non-admin users (20 credits for SnD futures analysis)
         if not is_premium and not is_admin and credits < 20:
@@ -1063,7 +1069,7 @@ class TelegramBot:
 
                     # Check credits
                     is_premium = self.db.is_user_premium(user_id)
-                    is_admin = user_id == self.admin_id
+                    is_admin = self.is_admin(user_id)
                     credits = self.db.get_user_credits(user_id)
 
                     if not is_premium and not is_admin and credits < 20:
@@ -1224,7 +1230,7 @@ class TelegramBot:
         user_id = update.message.from_user.id
         credits = self.db.get_user_credits(user_id)
         is_premium = self.db.is_user_premium(user_id)
-        is_admin = user_id == self.admin_id
+        is_admin = self.is_admin(user_id)
 
         if is_admin:
             message = f"""💳 **CryptoMentor AI Bot - Credit Information**
@@ -1291,8 +1297,8 @@ Gunakan credit dengan bijak!"""
         """Handle /auto_signals_status command - Admin only"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
-            await update.message.reply_text("❌ Command ini hanya untuk admin.")
+        if not self.is_admin(user_id):
+            await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
         if not self.auto_signals:
@@ -1323,8 +1329,8 @@ Gunakan credit dengan bijak!"""
         """Handle /enable_auto_signal_ai command - Admin only"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
-            await update.message.reply_text("❌ Command ini hanya untuk admin.")
+        if not self.is_admin(user_id):
+            await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
         if not self.auto_signals:
@@ -1356,8 +1362,8 @@ Gunakan credit dengan bijak!"""
         """Handle /disable_auto_signal_ai command - Admin only"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
-            await update.message.reply_text("❌ Command ini hanya untuk admin.")
+        if not self.is_admin(user_id):
+            await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
         if not self.auto_signals:
@@ -1748,7 +1754,7 @@ Gunakan `/subscribe` untuk upgrade!
         """Handle /admin command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -1824,7 +1830,7 @@ Gunakan `/subscribe` untuk upgrade!
         """Handle /grant_premium command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -1931,7 +1937,7 @@ Gunakan `/subscribe` untuk upgrade!
         """Handle /grant_credits command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -1990,7 +1996,7 @@ Gunakan `/subscribe` untuk upgrade!
         """Handle /revoke_premium command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -2050,7 +2056,7 @@ Gunakan `/subscribe` untuk upgrade!
         """Handle /fix_all_credits command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -2085,7 +2091,7 @@ Gunakan `/subscribe` untuk upgrade!
         """Handle /broadcast_welcome command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -2119,7 +2125,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
         """Handle /recovery_stats command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -2158,7 +2164,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
         """Handle /check_admin command"""
         user_id = update.message.from_user.id
 
-        is_admin = user_id == self.admin_id
+        is_admin = self.is_admin(user_id)
 
         message = f"""🔍 **Admin Check**
 
@@ -2175,7 +2181,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
         """Handle /restart command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -2200,7 +2206,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
         """Handle /refresh_credits command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -2290,7 +2296,7 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
         """Handle /grant_package command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -2386,7 +2392,7 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
         """Handle /broadcast command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -2419,7 +2425,7 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
         """Handle /confirm_broadcast command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
@@ -2477,7 +2483,7 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
         """Handle /cancel_broadcast command"""
         user_id = update.message.from_user.id
 
-        if user_id != self.admin_id:
+        if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
