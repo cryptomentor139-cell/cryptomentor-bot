@@ -180,7 +180,7 @@ class Database:
         try:
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS portfolio (
-                    id INTEGER PRIMARYKEY AUTOINCREMENT,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     telegram_id INTEGER,
                     symbol TEXT,
                     amount REAL,
@@ -588,7 +588,19 @@ class Database:
         """Get user's current credits"""
         try:
             user = self.get_user(telegram_id)
-            return user.get('credits', 0) if user else 0
+            if not user:
+                print(f"❌ User {telegram_id} not found when getting credits")
+                return 0
+                
+            credits = user.get('credits')
+            if credits is None:
+                # Fix NULL credits by setting to default 100
+                print(f"⚠️ User {telegram_id} has NULL credits, fixing...")
+                self.cursor.execute("UPDATE users SET credits = 100 WHERE telegram_id = ?", (telegram_id,))
+                self.conn.commit()
+                return 100
+                
+            return max(0, credits)  # Ensure credits never go negative
         except Exception as e:
             print(f"Error getting user credits: {e}")
             return 0
@@ -647,6 +659,16 @@ class Database:
                 # Admins and premium users don't lose credits
                 return True
 
+            # Check current credits first to ensure user has enough
+            current_user = self.get_user(telegram_id)
+            if not current_user:
+                return False
+                
+            current_credits = current_user.get('credits', 0)
+            if current_credits < amount:
+                print(f"❌ Insufficient credits for user {telegram_id}: has {current_credits}, needs {amount}")
+                return False
+
             self.cursor.execute("""
                 UPDATE users SET credits = credits - ? 
                 WHERE telegram_id = ? AND credits >= ?
@@ -654,6 +676,8 @@ class Database:
 
             if self.cursor.rowcount > 0:
                 self.conn.commit()
+                # Log credit deduction for tracking
+                self.log_user_activity(telegram_id, "credit_deduction", f"Deducted {amount} credits, remaining: {current_credits - amount}")
                 return True
             return False
         except Exception as e:
@@ -728,22 +752,12 @@ class Database:
                 SELECT telegram_id FROM users WHERE referral_code = ?
             """, (referral_code,))
             row = self.cursor.fetchone()
-            return row[0] if row else 0
+            return row[0] if row else None
         except Exception as e:
             print(f"DB Error (get_user_by_referral_code): {e}")
-            return
+            return None
 
-    def update_user_language(self, telegram_id, language):
-        """Update user language preference"""
-        try:
-            self.cursor.execute("""
-                UPDATE users SET language_code = ? WHERE telegram_id = ?
-            """, (language, telegram_id))
-            self.conn.commit()
-            return True
-        except Exception as e:
-            print(f"DB Error (update_user_language): {e}")
-            return False
+    
 
     def get_bot_statistics(self):
         """Get bot usage statistics"""
@@ -869,6 +883,66 @@ class Database:
             return total_fixed
         except Exception as e:
             print(f"Error fixing all user credits: {e}")
+            return 0
+            
+    def fix_referral_data_integrity(self):
+        """Fix missing referral codes and other referral-related issues"""
+        try:
+            import random
+            import string
+            
+            fixed_count = 0
+            
+            # Get users with missing referral codes
+            self.cursor.execute("""
+                SELECT telegram_id, username, first_name 
+                FROM users 
+                WHERE (referral_code IS NULL OR premium_referral_code IS NULL) 
+                AND telegram_id IS NOT NULL
+            """)
+            
+            users_to_fix = self.cursor.fetchall()
+            
+            for user in users_to_fix:
+                telegram_id, username, first_name = user
+                
+                # Generate referral codes if missing
+                self.cursor.execute("SELECT referral_code, premium_referral_code FROM users WHERE telegram_id = ?", (telegram_id,))
+                codes = self.cursor.fetchone()
+                
+                referral_code = codes[0] if codes and codes[0] else None
+                premium_referral_code = codes[1] if codes and codes[1] else None
+                
+                # Generate free referral code if missing
+                if not referral_code:
+                    referral_code = 'F' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
+                    while self.get_user_by_referral_code(referral_code):
+                        referral_code = 'F' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
+                
+                # Generate premium referral code if missing
+                if not premium_referral_code:
+                    premium_referral_code = 'P' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
+                    while self.get_user_by_premium_referral_code(premium_referral_code):
+                        premium_referral_code = 'P' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
+                
+                # Update the user
+                self.cursor.execute("""
+                    UPDATE users 
+                    SET referral_code = COALESCE(referral_code, ?),
+                        premium_referral_code = COALESCE(premium_referral_code, ?)
+                    WHERE telegram_id = ?
+                """, (referral_code, premium_referral_code, telegram_id))
+                
+                if self.cursor.rowcount > 0:
+                    fixed_count += 1
+                    print(f"✅ Fixed referral codes for user {telegram_id} ({first_name})")
+            
+            self.conn.commit()
+            print(f"✅ Fixed referral data for {fixed_count} users")
+            return fixed_count
+            
+        except Exception as e:
+            print(f"❌ Error fixing referral data integrity: {e}")
             return 0
 
     def mark_all_users_for_restart(self):
@@ -1056,8 +1130,33 @@ class Database:
     def record_premium_referral_reward(self, referrer_id, referred_id, subscription_type, package_amount):
         """Record premium referral reward when someone subscribes"""
         try:
+            # Validate inputs
+            if not referrer_id or not referred_id:
+                print(f"❌ Invalid referral IDs: referrer={referrer_id}, referred={referred_id}")
+                return False
+                
+            # Check if referrer exists and is premium (only premium users can earn money)
+            referrer = self.get_user(referrer_id)
+            if not referrer:
+                print(f"❌ Referrer {referrer_id} not found")
+                return False
+                
+            if not self.is_user_premium(referrer_id):
+                print(f"❌ Referrer {referrer_id} is not premium, cannot earn money rewards")
+                return False
+
             # Calculate earnings (Rp 10,000 per premium subscription)
             earnings = 10000
+
+            # Check if this referral reward already exists to prevent duplicates
+            self.cursor.execute("""
+                SELECT id FROM premium_referrals 
+                WHERE referrer_id = ? AND referred_id = ? AND status = 'paid'
+            """, (referrer_id, referred_id))
+            
+            if self.cursor.fetchone():
+                print(f"⚠️ Premium referral reward already exists for {referrer_id} → {referred_id}")
+                return True  # Not an error, just already processed
 
             self.cursor.execute("""
                 INSERT INTO premium_referrals 
@@ -1067,7 +1166,7 @@ class Database:
 
             # Update referrer's premium earnings
             self.cursor.execute("""
-                UPDATE users SET premium_earnings = premium_earnings + ? WHERE telegram_id = ?
+                UPDATE users SET premium_earnings = COALESCE(premium_earnings, 0) + ? WHERE telegram_id = ?
             """, (earnings, referrer_id))
 
             self.conn.commit()
@@ -1075,7 +1174,8 @@ class Database:
             # Log the reward
             self.log_user_activity(referrer_id, "premium_referral_reward", 
                                  f"Earned Rp {earnings:,} from {referred_id} subscribing {subscription_type}")
-
+            
+            print(f"✅ Premium referral reward processed: {referrer_id} earned Rp {earnings:,}")
             return True
         except Exception as e:
             print(f"Error recording premium referral reward: {e}")
@@ -1096,6 +1196,19 @@ class Database:
     def add_credits(self, telegram_id, amount):
         """Add credits to user account"""
         try:
+            # Validate amount is positive
+            if amount <= 0:
+                print(f"❌ Invalid credit amount: {amount}")
+                return False
+                
+            # Get current credits for logging
+            current_user = self.get_user(telegram_id)
+            if not current_user:
+                print(f"❌ User {telegram_id} not found when adding credits")
+                return False
+                
+            current_credits = current_user.get('credits', 0)
+            
             self.cursor.execute("""
                 UPDATE users SET credits = credits + ? WHERE telegram_id = ?
             """, (amount, telegram_id))
@@ -1103,6 +1216,10 @@ class Database:
             success = self.cursor.rowcount > 0
             if success:
                 self.conn.commit()
+                new_total = current_credits + amount
+                # Log credit addition for tracking
+                self.log_user_activity(telegram_id, "credit_addition", f"Added {amount} credits, new total: {new_total}")
+                print(f"✅ Added {amount} credits to user {telegram_id}: {current_credits} → {new_total}")
 
             return success
         except Exception as e:
@@ -1201,15 +1318,27 @@ class Database:
             # Check for data corruption
             self.cursor.execute("SELECT COUNT(*) FROM users WHERE telegram_id IS NULL OR telegram_id = 0")
             corrupt_count = self.cursor.fetchone()[0]
+            
+            # Check for referral data integrity
+            self.cursor.execute("SELECT COUNT(*) FROM users WHERE referral_code IS NULL AND telegram_id IS NOT NULL")
+            missing_referral_codes = self.cursor.fetchone()[0]
+            
+            # Check for NULL or negative credits
+            self.cursor.execute("SELECT COUNT(*) FROM users WHERE credits IS NULL OR credits < 0")
+            invalid_credits = self.cursor.fetchone()[0]
 
             integrity_report = {
                 'premium_users': premium_count,
                 'lifetime_users': lifetime_count,
                 'corrupt_entries': corrupt_count,
-                'integrity_ok': corrupt_count == 0
+                'missing_referral_codes': missing_referral_codes,
+                'invalid_credits': invalid_credits,
+                'integrity_ok': corrupt_count == 0 and missing_referral_codes == 0 and invalid_credits == 0
             }
 
             print(f"📊 Data Integrity: Premium={premium_count}, Lifetime={lifetime_count}, Corrupt={corrupt_count}")
+            print(f"📊 Referral Integrity: Missing codes={missing_referral_codes}, Invalid credits={invalid_credits}")
+            
             return integrity_report
 
         except Exception as e:
