@@ -28,7 +28,7 @@ class AIAssistant:
         # Initialize Supabase connection with validation
         self.supabase = self._init_supabase()
         self.supabase_connected = self._validate_supabase_connection()
-        
+
         # Admin logging system - ensure this is always initialized
         self.admin_log = []
 
@@ -61,10 +61,10 @@ class AIAssistant:
             # Try Supabase first
             supabase_url = os.environ.get("SUPABASE_URL")
             supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY")
-            
+
             # Try Replit PostgreSQL
             database_url = os.environ.get("DATABASE_URL")
-            
+
             if supabase_url and supabase_anon_key:
                 supabase: Client = create_client(supabase_url, supabase_anon_key)
                 print("✅ Supabase client initialized successfully")
@@ -89,7 +89,7 @@ class AIAssistant:
             if not self.supabase:
                 print("⚠️ Supabase client not available - using SQLite fallback")
                 return False
-            
+
             # Simple connection test - don't fail if tables don't exist yet
             test_result = self.supabase.from_('users').select('*').limit(1).execute()
             print("✅ Supabase connection validated successfully")
@@ -103,7 +103,7 @@ class AIAssistant:
         # Initialize admin_log if it doesn't exist
         if not hasattr(self, 'admin_log'):
             self.admin_log = []
-            
+
         log_entry = {
             'timestamp': datetime.now().isoformat(),
             'command': command,
@@ -120,13 +120,13 @@ class AIAssistant:
         """Escape special characters for MarkdownV2"""
         if not isinstance(text, str):
             return str(text)
-        
+
         # Characters that need escaping in MarkdownV2
         escape_chars = ['_', '*', '[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '{', '}', '.', '!']
-        
+
         for char in escape_chars:
             text = text.replace(char, f'\\{char}')
-        
+
         return text
 
     def _safe_format_price(self, price):
@@ -146,7 +146,7 @@ class AIAssistant:
         if command_name in ['ANALYZE', 'FUTURES', 'FUTURES_SIGNALS', 'MARKET_SENTIMENT']:
             # These commands work fine without database
             return True, None
-        
+
         if not self.supabase_connected:
             print(f"⚠️ Database not available for {command_name} - continuing with limited functionality")
             return True, None  # Don't block execution
@@ -165,19 +165,19 @@ class AIAssistant:
             # Simple validation - check for common problematic patterns
             if not isinstance(text, str):
                 return False
-            
+
             # Check for unescaped special characters in problematic contexts
             problematic_patterns = [
                 r'[^\\]_[^\\]',  # Unescaped underscores
                 r'[^\\]\*[^\\]',  # Unescaped asterisks
                 r'[^\\]\[[^\\]',  # Unescaped brackets
             ]
-            
+
             import re
             for pattern in problematic_patterns:
                 if re.search(pattern, text):
                     return False
-            
+
             return True
         except Exception:
             return False
@@ -416,6 +416,9 @@ class AIAssistant:
             true_range = pd.concat([high_low, high_close_prev, low_close_prev], axis=1).max(axis=1)
             indicators['atr'] = true_range.rolling(window=14).mean().iloc[-1]
 
+            # Store recent volumes for volume trend analysis
+            indicators['recent_volumes'] = df['volume_traded'].tolist()
+
             return indicators
 
         except Exception as e:
@@ -591,11 +594,11 @@ class AIAssistant:
 
             # Direction formatting
             direction_emoji = "🟢" if signal_data['direction'] in ['BUY', 'LONG'] else "🔴" if signal_data['direction'] in ['SELL', 'SHORT'] else "🟡"
-            
+
             # Technical indicators formatting
             rsi_value = main_indicators.get('rsi', 0)
             rsi_condition = "Oversold" if rsi_value < 30 else "Overbought" if rsi_value > 70 else "Normal"
-            
+
             macd_value = main_indicators.get('macd_histogram', 0)
             macd_condition = "Bullish" if macd_value > 0 else "Bearish"
 
@@ -611,32 +614,11 @@ class AIAssistant:
 🎯 **Strategy**: {signal_data.get('strategy', 'Technical Analysis')}
 ⚡ **Time Horizon**: {signal_data.get('time_horizon', '4-24 hours')}
 
-```
-💰 DETAILED TRADING SETUP:
-• Entry Zone: ${trading_levels['entry_min']:.6f} - ${trading_levels['entry_max']:.6f}
-• Optimal Entry: ${trading_levels['entry']:.6f}
-• Stop Loss: ${trading_levels['stop_loss']:.6f}
-• TP1 (50%): ${trading_levels['tp1']:.6f}
-• TP2 (30%): ${trading_levels['tp2']:.6f} 
-• TP3 (20%): ${trading_levels['tp3']:.6f}
-• Risk/Reward: {trading_levels['rr_ratio']:.1f}:1
-• Max Risk: {trading_levels['risk_percentage']:.1f}% per position
-```
-
-```
-🔬 TECHNICAL ANALYSIS (1H):
-• EMA50: ${main_indicators.get('ema_50', 0):,.4f}
-• EMA200: ${main_indicators.get('ema_200', 0):,.4f}
-• RSI(14): {rsi_value:.1f} ({rsi_condition})
-• MACD: {macd_value:.4f} ({macd_condition})
-• ATR: ${main_indicators.get('atr', 0):,.4f}
-• Volume Trend: {signal_data.get('volume_trend', 'Normal')}
-```
-
-🎯 **ENHANCED SUPPLY & DEMAND ZONES**:"""
+"""
 
             # Add enhanced S&D zones
             analysis += f"""
+🎯 **ENHANCED SUPPLY & DEMAND ZONES**:
 • 🔴 Supply Zone 1: ${enhanced_snd_zones.get('supply_1', current_price * 1.02):,.6f} ({((enhanced_snd_zones.get('supply_1', current_price * 1.02)/current_price-1)*100):+.1f}%)
 • 🔴 Supply Zone 2: ${enhanced_snd_zones.get('supply_2', current_price * 1.04):,.6f} ({((enhanced_snd_zones.get('supply_2', current_price * 1.04)/current_price-1)*100):+.1f}%)
 • 🟢 Demand Zone 1: ${enhanced_snd_zones.get('demand_1', current_price * 0.98):,.6f} ({((enhanced_snd_zones.get('demand_1', current_price * 0.98)/current_price-1)*100):+.1f}%)
@@ -651,14 +633,14 @@ class AIAssistant:
                 long_short = data.get('long_short', {})
                 funding_details = data.get('funding_details', {})
                 open_interest = data.get('open_interest', {})
-                
+
                 long_ratio = long_short.get('long_ratio', 50)
                 funding_rate = funding_details.get('current_rate', 0)
                 oi_total = open_interest.get('total', 0)
                 sentiment = long_short.get('sentiment', 'Neutral')
-                
+
                 funding_condition = "Bullish Bias" if funding_rate < -0.01 else "Bearish Bias" if funding_rate > 0.01 else "Balanced"
-                
+
                 analysis += f"""
 • 📊 Long/Short Ratio: {long_ratio:.1f}% Long | {100-long_ratio:.1f}% Short
 • 💰 Funding Rate: {funding_rate*100:.4f}% ({funding_condition})
@@ -669,12 +651,6 @@ class AIAssistant:
                 analysis += """
 • Futures metrics based on spot market analysis
 • Technical indicators show market structure"""
-
-            # Add coin fundamentals
-            analysis += f"""
-
-💎 **COIN FUNDAMENTALS**:
-{coin_fundamentals}"""
 
             # Higher timeframe confirmation
             if timeframes_data.get('4h'):
@@ -694,11 +670,11 @@ class AIAssistant:
 {self._get_advanced_trading_insights(signal_data, trading_levels, confidence)}
 
 ⚠️ **RISK MANAGEMENT PROTOCOL**:
-• Position Size: {trading_levels['position_size']:.1f}% of portfolio max
-• Entry Method: {trading_levels['entry_method']}
-• Stop Loss Type: {trading_levels['stop_type']}
-• Profit Taking: Scale out at each TP level
-• Market Condition: {signal_data.get('market_condition', 'Normal Volatility')}
+• Gunakan proper position sizing (1-3% per trade)
+• Set stop loss sebelum entry
+• Take profit secara bertahap
+• Monitor market conditions
+• DYOR sebelum trading
 
 🎯 **EXECUTION CHECKLIST**:
 • ✅ Confirm price action at entry zone
@@ -750,7 +726,7 @@ class AIAssistant:
             # Get multiple timeframes for better analysis
             primary_ohlcv = self.get_coinapi_ohlcv_data(symbol, api_timeframe, 100)
             higher_tf_ohlcv = self.get_coinapi_ohlcv_data(symbol, '4HRS', 100)
-            
+
             if not primary_ohlcv.get('success'):
                 return self._error_fallback(symbol, f"OHLCV data for {timeframe}")
 
@@ -758,7 +734,7 @@ class AIAssistant:
             higher_tf_indicators = {}
             if higher_tf_ohlcv.get('success'):
                 higher_tf_indicators = self.calculate_technical_indicators(higher_tf_ohlcv['data'])
-            
+
             if 'error' in primary_indicators:
                 return self._error_fallback(symbol, "technical indicators")
 
@@ -789,14 +765,14 @@ class AIAssistant:
 
             # Direction formatting
             direction_emoji = "🟢" if signal_data['direction'] in ['BUY', 'LONG'] else "🔴" if signal_data['direction'] in ['SELL', 'SHORT'] else "🟡"
-            
+
             # Technical indicators formatting
             rsi_value = primary_indicators.get('rsi', 0)
             rsi_condition = "Oversold" if rsi_value < 30 else "Overbought" if rsi_value > 70 else "Normal"
-            
+
             macd_value = primary_indicators.get('macd_histogram', 0)
             macd_condition = "Bullish" if macd_value > 0 else "Bearish"
-            
+
             # Create comprehensive analysis
             analysis = f"""🔍 **PROFESSIONAL FUTURES ANALYSIS - {symbol} ({timeframe})**
 
@@ -855,15 +831,15 @@ class AIAssistant:
                 long_short = data.get('long_short', {})
                 funding_details = data.get('funding_details', {})
                 open_interest = data.get('open_interest', {})
-                
+
                 long_ratio = long_short.get('long_ratio', 50)
                 funding_rate = funding_details.get('current_rate', 0)
                 oi_total = open_interest.get('total', 0)
                 sentiment = long_short.get('sentiment', 'Neutral')
-                
+
                 # Funding rate analysis
                 funding_condition = "Bullish Bias" if funding_rate < -0.01 else "Bearish Bias" if funding_rate > 0.01 else "Balanced"
-                
+
                 analysis += f"""
 • 📊 Long/Short Ratio: {long_ratio:.1f}% Long | {100-long_ratio:.1f}% Short
 • 💰 Funding Rate: {funding_rate*100:.4f}% ({funding_condition})
@@ -891,11 +867,11 @@ class AIAssistant:
 {self._get_advanced_trading_insights(signal_data, trading_levels, confidence)}
 
 ⚠️ **RISK MANAGEMENT PROTOCOL**:
-• Position Size: {trading_levels['position_size']:.1f}% of portfolio max
-• Entry Method: {trading_levels['entry_method']}
-• Stop Loss Type: {trading_levels['stop_type']}
-• Profit Taking: Scale out at each TP level
-• Market Condition: {signal_data.get('market_condition', 'Normal Volatility')}
+• Gunakan proper position sizing (1-3% per trade)
+• Set stop loss sebelum entry
+• Take profit secara bertahap
+• Monitor market conditions
+• DYOR sebelum trading
 
 🎯 **EXECUTION CHECKLIST**:
 • ✅ Confirm price action at entry zone
@@ -969,42 +945,46 @@ class AIAssistant:
 • Coba `/futures btc` untuk analisis spesifik
 • Gunakan `/analyze eth` untuk analisis fundamental
 • Monitor kondisi market dengan `/market`"""
-                
+
                 safe_text, parse_mode = self._safe_output(no_signals_msg)
                 return safe_text
 
             # Format signals found with safe markdown
-            message = f"""🚨 **FUTURES SIGNALS SCAN**
+            message = f"""🚨 **AUTO SIGNALS - SUPPLY & DEMAND ANALYSIS**
 
 🕐 **Scan Time**: {self._escape_markdown_v2(current_time)}
-🌍 **Market Conditions**: {self._escape_markdown_v2(market_conditions)}
-
-📈 **HIGH\\-CONFIDENCE SIGNALS** \\({len(high_confidence_signals)} found\\):
+📊 **Signals Found**: {len(high_confidence_signals)}
 
 """
 
             for i, signal in enumerate(high_confidence_signals[:8], 1):  # Limit to top 8 signals
                 direction_emoji = "🟢" if signal['direction'] in ['LONG', 'BUY'] else "🔴"
-                confidence_level = "🔥" if signal['confidence'] >= 80 else "⚡"
+                confidence_level = "🔥" if signal['confidence'] >= 80 else "⚡" if signal['confidence'] >= 70 else "💡"
 
                 message += f"""```
-{i}. {signal['symbol']} {direction_emoji} {signal['direction']} {confidence_level}
-Entry: {self._format_price(signal['entry'])}
-TP1: {self._format_price(signal['tp1'])} | TP2: {self._format_price(signal['tp2'])}
-SL: {self._format_price(signal['sl'])}
-Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
+{i}. {signal['symbol']} {direction_emoji} {signal['direction']}
+⭐️ Confidence: {signal['confidence']}.0%
+💰 Entry: {self._format_price(signal['entry'])}
+🛑 Stop Loss: {self._format_price(signal['sl'])}
+🎯 TP1: {self._format_price(signal['tp1'])}
+🎯 TP2: {self._format_price(signal['tp2'])}
+📊 R/R Ratio: {signal.get('rr', 'N/A')}
+🔄 Trend: {signal.get('primary_trend', 'N/A')}
+⚡ Structure: {signal.get('strategy', 'N/A').split(' ')[0]} Bias
+🧠 Reason: {signal.get('strategy', 'N/A')} detected
+📈 24h Change: {self._format_percentage(price_data.get('change_24h', 0) if 'price_data' in locals() else 0)}
 ```
 
 """
 
-            message += f"""⚠️ **TRADING RULES**:
-• Maksimal 2% risk per position
-• Entry dengan konfirmasi price action
-• Gunakan stop loss sebelum entry
-• Take profit bertahap \\(50% di TP1, 50% di TP2\\)
+            message += f"""⚠️ **TRADING DISCLAIMER**:
+• Signals berbasis Supply & Demand analysis
+• Gunakan proper risk management
+• Position sizing sesuai risk level
+• DYOR sebelum trading
 
-🕐 **Analysis Time**: {self._escape_markdown_v2(current_time)}
-📡 **Data Sources**: CoinAPI Real\\-time \\+ Binance Futures"""
+🎯 Auto Signal, tapi bedanya di Futures Signal, tolong buat improvisasi yang sudah ku sebutkan
+📡 Next scan in 30 minutes"""
 
             # Validate and return safe output
             safe_text, parse_mode = self._safe_output(message)
@@ -1020,13 +1000,13 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
         try:
             trends = []
             trend_strengths = []
-            
+
             for tf, data in timeframes_data.items():
                 ema_50 = data.get('ema_50')
                 ema_200 = data.get('ema_200')
                 rsi = data.get('rsi', 50)
                 macd = data.get('macd_histogram', 0)
-                
+
                 if ema_50 and ema_200:
                     # Basic trend direction
                     if ema_50 > ema_200:
@@ -1038,7 +1018,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                         trends.append('BEARISH')
                         ema_distance = ((ema_200 - ema_50) / ema_50) * 100
                         strength = min(100, max(0, ema_distance * 50))
-                    
+
                     # Adjust strength based on RSI and MACD
                     if trends[-1] == 'BULLISH':
                         if rsi > 60 and macd > 0:
@@ -1050,7 +1030,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                             strength *= 1.2  # Strong bearish confluence
                         elif rsi > 60 or macd > 0:
                             strength *= 0.7  # Weakening bearish trend
-                    
+
                     trend_strengths.append(min(100, strength))
 
             # Determine overall trend with strength
@@ -1140,21 +1120,21 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
         try:
             # Get basic SnD data
             basic_snd = self._get_supply_demand_zones(symbol, current_price, crypto_api)
-            
+
             # Calculate enhanced zones using technical indicators
             atr = indicators.get('atr', current_price * 0.02)
             ema_50 = indicators.get('ema_50', current_price)
             ema_200 = indicators.get('ema_200', current_price)
-            
+
             # Calculate multiple resistance and support levels
             # Supply zones (resistance levels)
             supply_1 = max(basic_snd.get('supply_1', current_price * 1.02), ema_50 * 1.015)
             supply_2 = supply_1 + (atr * 2)
-            
+
             # Demand zones (support levels)  
             demand_1 = min(basic_snd.get('demand_1', current_price * 0.98), ema_50 * 0.985)
             demand_2 = demand_1 - (atr * 2)
-            
+
             # Determine current position relative to zones
             if current_price > supply_1:
                 position = "Above Supply Zone 1 - Strong Bullish Momentum"
@@ -1172,7 +1152,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
             else:
                 position = "Near Demand Zone 1 - Support Testing"
                 strength = "Medium"
-            
+
             return {
                 'supply_1': supply_1,
                 'supply_2': supply_2,
@@ -1182,7 +1162,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                 'strength': strength,
                 'atr_based': True
             }
-            
+
         except Exception as e:
             # Fallback to basic calculation
             return {
@@ -1202,7 +1182,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
             market_cap = self._normalize_data(price_info, ['market_cap', 'marketCap'])
             volume_24h = self._normalize_data(price_info, ['volume_24h', 'volume'])
             rank = self._normalize_data(price_info, ['rank', 'cmc_rank', 'market_cap_rank'])
-            
+
             # Format market cap
             if market_cap and market_cap > 0:
                 if market_cap > 1e12:
@@ -1215,7 +1195,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                     mc_format = f"${market_cap:,.0f}"
             else:
                 mc_format = "N/A"
-            
+
             # Format volume
             if volume_24h and volume_24h > 0:
                 if volume_24h > 1e9:
@@ -1226,17 +1206,17 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                     vol_format = f"${volume_24h:,.0f}"
             else:
                 vol_format = "N/A"
-            
+
             fundamentals = f"""• 🏆 Market Cap Rank: #{rank if rank else 'N/A'}
 • 💰 Market Cap: {mc_format}
 • 📊 24h Volume: {vol_format}"""
-            
+
             # Add coin info if available
             if coin_info and isinstance(coin_info, dict):
                 name = coin_info.get('name', symbol)
                 category = coin_info.get('category', 'N/A')
                 tags = coin_info.get('tags', [])
-                
+
                 if name and name != symbol:
                     fundamentals += f"\n• 📝 Full Name: {name}"
                 if category and category != 'N/A':
@@ -1244,7 +1224,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                 if tags and len(tags) > 0:
                     top_tags = tags[:3]  # Show top 3 tags
                     fundamentals += f"\n• 🔖 Tags: {', '.join(top_tags)}"
-            
+
             # Add market cap category
             if market_cap and market_cap > 0:
                 if market_cap > 200e9:
@@ -1255,11 +1235,11 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                     cap_category = "Small Cap"
                 else:
                     cap_category = "Micro Cap (High Risk)"
-                
+
                 fundamentals += f"\n• 📈 Cap Category: {cap_category}"
-            
+
             return fundamentals
-            
+
         except Exception as e:
             return f"• Fundamental data: Analysis in progress\n• Error: {str(e)[:50]}..."
 
@@ -1272,7 +1252,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                 eth_dominance = market_data.get('eth_dominance', 0)
                 total_market_cap = market_data.get('total_market_cap', 0)
                 total_volume = market_data.get('total_volume_24h', 0)
-                
+
                 # Market sentiment based on market cap change
                 if market_cap_change > 3:
                     sentiment = "🚀 Very Bullish"
@@ -1284,7 +1264,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                     sentiment = "📉 Bearish"
                 else:
                     sentiment = "💥 Very Bearish"
-                
+
                 # Format market cap and volume
                 if total_market_cap > 1e12:
                     mc_format = f"${total_market_cap/1e12:.2f}T"
@@ -1292,14 +1272,14 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                     mc_format = f"${total_market_cap/1e9:.2f}B"
                 else:
                     mc_format = "N/A"
-                
+
                 if total_volume > 1e9:
                     vol_format = f"${total_volume/1e9:.1f}B"
                 elif total_volume > 1e6:
                     vol_format = f"${total_volume/1e6:.1f}M"
                 else:
                     vol_format = "N/A"
-                
+
                 return f"{sentiment} | MarketCap: {mc_format} ({self._format_percentage(market_cap_change)}) | Volume: {vol_format} | BTC Dom: {btc_dominance:.1f}% | ETH Dom: {eth_dominance:.1f}%"
             else:
                 return "Market data temporarily unavailable - using technical analysis"
@@ -1541,14 +1521,14 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
 
             # Primary trend determination
             primary_trend = 'BULLISH' if ema_50 > ema_200 else 'BEARISH'
-            
+
             # Higher timeframe confirmation
             htf_confirmation = 'NEUTRAL'
             if higher_tf_indicators:
                 htf_ema_50 = higher_tf_indicators.get('ema_50', 0)
                 htf_ema_200 = higher_tf_indicators.get('ema_200', 0)
                 htf_trend = 'BULLISH' if htf_ema_50 > htf_ema_200 else 'BEARISH'
-                
+
                 if htf_trend == primary_trend:
                     htf_confirmation = 'CONFIRMED'
                     base_confidence += 15
@@ -1570,7 +1550,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
             if snd_data.get('success'):
                 supply_1 = snd_data.get('Supply 1', current_price * 1.02)
                 demand_1 = snd_data.get('Demand 1', current_price * 0.98)
-                
+
                 if current_price <= demand_1 * 1.005 and primary_trend == 'BULLISH':
                     snd_signal = 'BULLISH'
                     base_confidence += 12
@@ -1659,30 +1639,30 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
             direction = signal_data['direction']
             confidence = signal_data['confidence']
             atr = indicators.get('atr', current_price * 0.02)
-            
+
             # Base calculations
             if direction == 'LONG':
                 entry = current_price * 0.998
                 entry_min = current_price * 0.995
                 entry_max = current_price * 1.001
                 stop_loss = current_price - (atr * 2.5)
-                
+
                 # Multiple TP levels
                 tp1 = current_price + (atr * 1.5)
                 tp2 = current_price + (atr * 2.5)
                 tp3 = current_price + (atr * 4.0)
-                
+
             elif direction == 'SHORT':
                 entry = current_price * 1.002
                 entry_min = current_price * 0.999
                 entry_max = current_price * 1.005
                 stop_loss = current_price + (atr * 2.5)
-                
+
                 # Multiple TP levels
                 tp1 = current_price - (atr * 1.5)
                 tp2 = current_price - (atr * 2.5)
                 tp3 = current_price - (atr * 4.0)
-                
+
             else:  # NEUTRAL
                 return {
                     'entry': current_price, 'entry_min': current_price, 'entry_max': current_price,
@@ -1695,7 +1675,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
             if snd_data.get('success'):
                 supply_1 = snd_data.get('Supply 1', current_price * 1.02)
                 demand_1 = snd_data.get('Demand 1', current_price * 0.98)
-                
+
                 if direction == 'LONG' and demand_1 < current_price:
                     stop_loss = max(stop_loss, demand_1 * 0.995)
                 elif direction == 'SHORT' and supply_1 > current_price:
@@ -1720,7 +1700,7 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
                 position_size = 1.0
                 risk_percentage = 1.0
 
-            # Entry method based on setup quality
+            # Entry method based on quality
             entry_method = 'Market Order' if confidence >= 80 else 'Limit Order at Zone'
             stop_type = 'ATR-Based Stop' if confidence >= 70 else 'Support/Resistance Stop'
 
@@ -1772,10 +1752,10 @@ Confidence: {signal['confidence']}% | RR: {signal.get('rr', 'N/A')}
     def _get_advanced_trading_insights(self, signal_data, trading_levels, confidence):
         """Generate advanced trading insights"""
         insights = []
-        
+
         direction = signal_data['direction']
         strategy = signal_data.get('strategy', 'Unknown')
-        
+
         if confidence >= 85:
             insights.append("• 🔥 Extremely high probability setup - Consider larger position")
             insights.append("• ⚡ Strong confluence of multiple signals")
@@ -1910,7 +1890,7 @@ Coba `/analyze btc` untuk analisis komprehensif!"""
 
             # Fear & Greed equivalent based on metrics
             fear_greed_score = self._calculate_fear_greed_score(market_cap_change, btc_dominance, total_volume)
-            
+
             # Market structure analysis
             market_structure = self._analyze_market_structure(btc_dominance, eth_dominance, market_cap_change)
 
@@ -2148,17 +2128,17 @@ Coba `/analyze btc` untuk analisis komprehensif!"""
         """Get analysis of top cryptocurrencies performance"""
         if not crypto_api:
             return "• Top crypto data temporarily unavailable"
-        
+
         top_symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP']
         analysis_lines = []
-        
+
         try:
             for i, symbol in enumerate(top_symbols[:5], 1):
                 price_data = crypto_api.get_crypto_price(symbol)
                 if price_data.get('success'):
                     price = price_data.get('price', 0)
                     change_24h = price_data.get('change_24h', 0)
-                    
+
                     if change_24h > 5:
                         emoji = "🚀"
                         trend = "Strong Bull"
@@ -2174,14 +2154,14 @@ Coba `/analyze btc` untuk analisis komprehensif!"""
                     else:
                         emoji = "💥"
                         trend = "Strong Bear"
-                    
+
                     analysis_lines.append(f"{i}. {symbol} {emoji} ${price:,.2f} ({change_24h:+.1f}%) - {trend}")
                 else:
                     analysis_lines.append(f"{i}. {symbol} - Data unavailable")
-                    
+
         except Exception as e:
             return f"• Top crypto analysis error: {str(e)[:50]}"
-        
+
         return "\n".join(analysis_lines) if analysis_lines else "• Top crypto data processing..."
 
     def get_admin_logs(self, last_n=10):
