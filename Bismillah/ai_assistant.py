@@ -31,6 +31,13 @@ class AIAssistant:
 
         # Admin logging system - ensure this is always initialized
         self.admin_log = []
+        
+        # Connection monitoring
+        self.connection_status = {
+            'last_check': datetime.now(),
+            'consecutive_failures': 0,
+            'total_reconnections': 0
+        }
 
         # Enhanced configuration
         self.auto_signal_enabled = True
@@ -40,7 +47,98 @@ class AIAssistant:
         self.min_confidence_threshold = 75  # Minimum 75% confidence
 
         # Target symbols for futures analysis
+
+    def check_connection_health(self):
+        """Periodic health check for Supabase connection"""
+        try:
+            current_time = datetime.now()
+            
+            # Check if we need to perform health check (every 5 minutes)
+            if (current_time - self.connection_status['last_check']).total_seconds() < 300:
+                return self.supabase_connected
+            
+            print("🏥 Performing Supabase connection health check...")
+            
+            if self._test_supabase_connection():
+                self.connection_status['consecutive_failures'] = 0
+                self.supabase_connected = True
+                print("✅ Connection health check passed")
+            else:
+                self.connection_status['consecutive_failures'] += 1
+                print(f"❌ Connection health check failed (failures: {self.connection_status['consecutive_failures']})")
+                
+                # Auto-reconnect after 2 consecutive failures
+                if self.connection_status['consecutive_failures'] >= 2:
+                    print("🔄 Triggering auto-reconnection due to health check failures")
+                    if self._reconnect_supabase():
+                        self.connection_status['total_reconnections'] += 1
+                        self.supabase_connected = True
+                    else:
+                        self.supabase_connected = False
+            
+            self.connection_status['last_check'] = current_time
+            return self.supabase_connected
+            
+        except Exception as e:
+            print(f"❌ Health check error: {e}")
+            self.supabase_connected = False
+            return False
+
+    def get_connection_stats(self):
+        """Get connection statistics for monitoring"""
+        return {
+            'connected': self.supabase_connected,
+            'last_user_count': AIAssistant._last_user_count,
+            'consecutive_failures': self.connection_status['consecutive_failures'],
+            'total_reconnections': self.connection_status['total_reconnections'],
+            'last_check': self.connection_status['last_check'].isoformat(),
+            'retry_count': AIAssistant._connection_retry_count
+        }
+
+
         self.target_symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'MATIC', 'DOT', 'LINK']
+
+    @classmethod
+    def reset_connection_after_deploy(cls):
+        """Reset connection state after bot redeploy"""
+        print("🔄 Resetting Supabase connection state after deployment...")
+        cls._supabase_instance = None
+        cls._connection_retry_count = 0
+        cls._last_user_count = None
+        print("✅ Connection state reset complete")
+
+    def post_deploy_validation(self):
+        """Validate data consistency after deployment"""
+        try:
+            print("🔍 Running post-deployment validation...")
+            
+            # Reset connection state
+            self.reset_connection_after_deploy()
+            
+            # Reinitialize connection
+            self.supabase = self._init_supabase()
+            self.supabase_connected = self._validate_supabase_connection()
+            
+            if self.supabase_connected:
+                # Validate data integrity
+                user_count = self.get_user_count()
+                premium_count = self.get_premium_users_count()
+                
+                print(f"✅ Post-deploy validation complete:")
+                print(f"   📊 Total users: {user_count}")
+                print(f"   👑 Premium users: {premium_count}")
+                print(f"   🔗 Connection: {'✅ Stable' if self.supabase_connected else '❌ Failed'}")
+                
+                return True
+            else:
+                print("❌ Post-deployment validation failed - connection not established")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Post-deployment validation error: {e}")
+            return False
+
+
 
         # Signal tracking
         self.last_signals = {}
@@ -55,47 +153,155 @@ class AIAssistant:
 
         print(f"✅ CryptoMentor AI initialized - Professional Trading Assistant")
 
+    _supabase_instance = None
+    _last_user_count = None
+    _connection_retry_count = 0
+    _max_retries = 3
+
     def _init_supabase(self):
-        """Initialize Supabase client"""
+        """Initialize Supabase client with singleton pattern"""
+        if AIAssistant._supabase_instance is not None:
+            print("♻️ Reusing existing Supabase connection")
+            return AIAssistant._supabase_instance
+
         try:
-            # Try Supabase first
+            # Get credentials from environment
             supabase_url = os.environ.get("SUPABASE_URL")
-            supabase_anon_key = <REDACTED_SUPABASE_KEY>
+            supabase_key = <REDACTED_SUPABASE_KEY>
 
-            # Try Replit PostgreSQL
-            database_url = os.environ.get("DATABASE_URL")
-
-            if supabase_url and supabase_anon_key:
-                supabase: Client = create_client(supabase_url, supabase_anon_key)
-                print("✅ Supabase client initialized successfully")
-                return supabase
-            elif database_url:
-                print("✅ Replit PostgreSQL detected - creating Supabase client")
-                # For Replit PostgreSQL, we'd need to adapt or use direct postgres connection
-                # For now, just log that it's available
-                print("💡 PostgreSQL available but Supabase client needs direct DB connection")
+            if not supabase_url or not supabase_key:
+                print("⚠️ Missing Supabase credentials (SUPABASE_URL or SUPABASE_KEY)")
+                print("💡 Add to Replit Secrets: SUPABASE_URL and SUPABASE_KEY")
                 return None
+
+            # Create singleton instance
+            AIAssistant._supabase_instance = create_client(supabase_url, supabase_key)
+            print("✅ Supabase client initialized successfully (singleton)")
+            
+            # Test connection immediately
+            if self._test_supabase_connection():
+                return AIAssistant._supabase_instance
             else:
-                print("⚠️ No database credentials found - using SQLite fallback")
+                AIAssistant._supabase_instance = None
                 return None
 
         except Exception as e:
-            print(f"⚠️ Database initialization failed: {e} - using SQLite fallback")
+            print(f"❌ Supabase initialization failed: {e}")
+            AIAssistant._supabase_instance = None
             return None
 
-    def _validate_supabase_connection(self):
-        """Validate Supabase connection"""
+    def _test_supabase_connection(self):
+        """Test Supabase connection with ping"""
         try:
-            if not self.supabase:
-                print("⚠️ Supabase client not available - using SQLite fallback")
+            if not AIAssistant._supabase_instance:
                 return False
 
-            # Simple connection test - don't fail if tables don't exist yet
-            test_result = self.supabase.from_('users').select('*').limit(1).execute()
-            print("✅ Supabase connection validated successfully")
+            # Simple ping test
+            result = AIAssistant._supabase_instance.from_('users').select('count', count='exact').limit(1).execute()
+            
+            # Store user count for validation
+            current_count = result.count if hasattr(result, 'count') else 0
+            
+            # Validate data consistency
+            if AIAssistant._last_user_count is not None:
+                if abs(current_count - AIAssistant._last_user_count) > 5:
+                    print(f"⚠️ Data inconsistency detected: {AIAssistant._last_user_count} → {current_count}")
+                    # Re-fetch all data to ensure consistency
+                    self._validate_data_integrity()
+            
+            AIAssistant._last_user_count = current_count
+            print(f"✅ Supabase connection active - Users: {current_count}")
             return True
+
         except Exception as e:
-            print(f"⚠️ Supabase connection test failed: {e} - using SQLite fallback")
+            print(f"❌ Supabase connection test failed: {e}")
+            return False
+
+    def _reconnect_supabase(self):
+        """Reconnect to Supabase with retry logic"""
+        if AIAssistant._connection_retry_count >= AIAssistant._max_retries:
+            print(f"❌ Max retries ({AIAssistant._max_retries}) reached for Supabase reconnection")
+            return False
+
+        try:
+            AIAssistant._connection_retry_count += 1
+            print(f"🔄 Attempting Supabase reconnection (attempt {AIAssistant._connection_retry_count}/{AIAssistant._max_retries})")
+            
+            # Reset instance to force new connection
+            AIAssistant._supabase_instance = None
+            
+            # Wait before retry
+            import time
+            time.sleep(2)
+            
+            # Reinitialize
+            self.supabase = self._init_supabase()
+            
+            if self.supabase and self._test_supabase_connection():
+                print("✅ Supabase reconnection successful")
+                AIAssistant._connection_retry_count = 0  # Reset counter on success
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            print(f"❌ Supabase reconnection failed: {e}")
+            return False
+
+    def _validate_data_integrity(self):
+        """Validate data integrity after inconsistency detection"""
+        try:
+            if not AIAssistant._supabase_instance:
+                return False
+
+            print("🔍 Validating data integrity...")
+            
+            # Get complete user count
+            result = AIAssistant._supabase_instance.from_('users').select('count', count='exact').execute()
+            total_users = result.count if hasattr(result, 'count') else 0
+            
+            # Get premium users count
+            premium_result = AIAssistant._supabase_instance.from_('users').select('count', count='exact').eq('is_premium', True).execute()
+            premium_users = premium_result.count if hasattr(premium_result, 'count') else 0
+            
+            print(f"📊 Data integrity check: Total={total_users}, Premium={premium_users}")
+            
+            # Update cached values
+            AIAssistant._last_user_count = total_users
+            
+            return True
+
+        except Exception as e:
+            print(f"❌ Data integrity validation failed: {e}")
+            return False
+
+    def _ensure_supabase_connection(self):
+        """Ensure Supabase connection before query execution"""
+        # Test existing connection
+        if self._test_supabase_connection():
+            return True
+        
+        # Try to reconnect if connection failed
+        print("🔄 Connection lost, attempting reconnection...")
+        return self._reconnect_supabase()
+
+    def _validate_supabase_connection(self):
+        """Enhanced validation with auto-reconnect"""
+        try:
+            if not AIAssistant._supabase_instance:
+                print("⚠️ No Supabase instance - attempting initialization")
+                self.supabase = self._init_supabase()
+                return bool(self.supabase)
+
+            # Test connection
+            if self._test_supabase_connection():
+                return True
+            else:
+                # Try reconnection
+                return self._reconnect_supabase()
+
+        except Exception as e:
+            print(f"❌ Supabase validation failed: {e}")
             return False
 
     def _log_admin_error(self, command, error_detail):
@@ -141,6 +347,9 @@ class AIAssistant:
 
     def _check_database_required(self, command_name):
         """Check if database is required and available for command"""
+        # Perform periodic health check
+        self.check_connection_health()
+        
         # Most commands don't actually require database for core functionality
         # Only user-specific features like premium status, credits need database
         if command_name in ['ANALYZE', 'FUTURES', 'FUTURES_SIGNALS', 'MARKET_SENTIMENT']:
@@ -149,6 +358,9 @@ class AIAssistant:
 
         if not self.supabase_connected:
             print(f"⚠️ Database not available for {command_name} - continuing with limited functionality")
+            # Try one more reconnection attempt for critical operations
+            if command_name in ['USER_MANAGEMENT', 'PREMIUM_CHECK']:
+                self._reconnect_supabase()
             return True, None  # Don't block execution
         return True, None
 
@@ -458,16 +670,54 @@ class AIAssistant:
         except Exception as e:
             return {'error': f'Request failed: {str(e)}', 'success': False}
 
-    def save_user(self, user_id, username=""):
-        """Save user to database"""
-        try:
-            if not self.supabase:
-                return False
+    def _supabase_query(self, query_func, operation_name="query"):
+        """Execute Supabase query with auto-reconnection"""
+        max_attempts = 3
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # Ensure connection is active
+                if not self._ensure_supabase_connection():
+                    if attempt == max_attempts:
+                        print(f"❌ {operation_name} failed: No stable connection after {max_attempts} attempts")
+                        return None
+                    continue
 
+                # Execute query
+                result = query_func()
+                
+                # Log successful operation
+                if attempt > 1:
+                    print(f"✅ {operation_name} successful on attempt {attempt}")
+                
+                return result
+
+            except Exception as e:
+                print(f"❌ {operation_name} attempt {attempt} failed: {e}")
+                
+                if attempt < max_attempts:
+                    print(f"🔄 Retrying {operation_name} in 2 seconds...")
+                    import time
+                    time.sleep(2)
+                    
+                    # Force reconnection for next attempt
+                    AIAssistant._supabase_instance = None
+                    self.supabase = self._init_supabase()
+                else:
+                    print(f"❌ {operation_name} failed after {max_attempts} attempts")
+                    return None
+
+        return None
+
+    def save_user(self, user_id, username=""):
+        """Save user to database with auto-reconnection"""
+        def query_operation():
+            # Check if user exists
             existing_user = self.supabase.table('users').select('*').eq('id', str(user_id)).execute()
             if existing_user.data:
                 return True
 
+            # Create new user
             user_data = {
                 'id': str(user_id),
                 'username': username,
@@ -478,9 +728,36 @@ class AIAssistant:
             result = self.supabase.table('users').insert(user_data).execute()
             return bool(result.data)
 
-        except Exception as e:
-            print(f"❌ Error saving user: {e}")
-            return False
+        return self._supabase_query(query_operation, "save_user") or False
+
+    def get_user_count(self):
+        """Get total user count with data validation"""
+        def query_operation():
+            result = self.supabase.from_('users').select('count', count='exact').execute()
+            return result.count if hasattr(result, 'count') else 0
+
+        count = self._supabase_query(query_operation, "get_user_count")
+        
+        if count is not None:
+            # Validate against last known count
+            if AIAssistant._last_user_count is not None:
+                diff = abs(count - AIAssistant._last_user_count)
+                if diff > 5:
+                    print(f"⚠️ Significant user count change detected: {AIAssistant._last_user_count} → {count}")
+                    # Trigger data integrity check
+                    self._validate_data_integrity()
+            
+            AIAssistant._last_user_count = count
+            
+        return count or 0
+
+    def get_premium_users_count(self):
+        """Get premium user count with validation"""
+        def query_operation():
+            result = self.supabase.from_('users').select('count', count='exact').eq('is_premium', True).execute()
+            return result.count if hasattr(result, 'count') else 0
+
+        return self._supabase_query(query_operation, "get_premium_users_count") or 0
 
     def greet(self):
         return f"Halo! Saya {self.name}, asisten trading crypto profesional dengan analisis multi-timeframe dan supply/demand zones."
