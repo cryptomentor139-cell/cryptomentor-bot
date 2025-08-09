@@ -965,8 +965,8 @@ class AIAssistant:
         except Exception as e:
             return self._error_fallback(symbol, f"comprehensive analysis: {str(e)[:50]}")
 
-    def get_futures_analysis(self, symbol, timeframe='15m', language='id', crypto_api=None):
-        """Enhanced futures analysis with comprehensive breakdown"""
+    async def get_futures_analysis(self, symbol, timeframe='15m', language='id', crypto_api=None):
+        """Enhanced futures analysis with comprehensive breakdown - Fixed async function"""
         try:
             # Check database connection for user-related operations
             db_available, db_error = self._check_database_required("FUTURES")
@@ -1159,6 +1159,203 @@ class AIAssistant:
         except Exception as e:
             return self._error_fallback(symbol, f"enhanced futures analysis: {str(e)[:50]}")
 
+    def _generate_enhanced_trading_signal(self, primary_indicators, higher_tf_indicators, futures_data, current_price, snd_data):
+        """Generate enhanced trading signal with multiple timeframe confirmation - Helper function"""
+        try:
+            # Basic signal logic with enhanced features
+            confidence = 0
+            direction = 'NEUTRAL'
+            
+            # Primary timeframe indicators
+            ema_50 = primary_indicators.get('ema_50', 0)
+            ema_200 = primary_indicators.get('ema_200', 0)
+            rsi = primary_indicators.get('rsi', 50)
+            macd = primary_indicators.get('macd_histogram', 0)
+            
+            # Trend determination
+            if ema_50 > ema_200:
+                confidence += 30
+                if rsi < 70:
+                    confidence += 15
+                if macd > 0:
+                    confidence += 15
+                direction = 'LONG'
+            elif ema_50 < ema_200:
+                confidence += 30
+                if rsi > 30:
+                    confidence += 15
+                if macd < 0:
+                    confidence += 15
+                direction = 'SHORT'
+            else:
+                confidence += 10
+                
+            # Higher timeframe confirmation
+            if higher_tf_indicators:
+                htf_ema_50 = higher_tf_indicators.get('ema_50', 0)
+                htf_ema_200 = higher_tf_indicators.get('ema_200', 0)
+                if htf_ema_50 > htf_ema_200 and direction == 'LONG':
+                    confidence += 20
+                elif htf_ema_50 < htf_ema_200 and direction == 'SHORT':
+                    confidence += 20
+                    
+            # Futures data confirmation
+            if futures_data and futures_data.get('success'):
+                funding_rate = futures_data.get('funding_rate', 0)
+                if abs(funding_rate) < 0.01:  # Normal funding
+                    confidence += 10
+                    
+            return {
+                'direction': direction,
+                'confidence': min(confidence, 100),
+                'strategy': 'Multi-Timeframe Analysis',
+                'time_horizon': '4-24 hours',
+                'mtf_confirmation': 'Strong' if confidence > 80 else 'Partial',
+                'volume_trend': 'Normal'
+            }
+            
+        except Exception as e:
+            return {
+                'direction': 'NEUTRAL',
+                'confidence': 50,
+                'strategy': 'Basic Analysis',
+                'time_horizon': '4-24 hours',
+                'error': str(e)
+            }
+
+    def _calculate_advanced_trading_levels(self, current_price, signal_data, indicators, snd_data):
+        """Calculate advanced trading levels with proper risk management - Helper function"""
+        try:
+            atr = indicators.get('atr', current_price * 0.02)
+            direction = signal_data['direction']
+            
+            if direction == 'LONG':
+                entry = current_price * 0.999
+                stop_loss = current_price - (atr * 2.5)
+                tp1 = current_price + (atr * 1.5)
+                tp2 = current_price + (atr * 3)
+                tp3 = current_price + (atr * 4.5)
+            elif direction == 'SHORT':
+                entry = current_price * 1.001
+                stop_loss = current_price + (atr * 2.5)
+                tp1 = current_price - (atr * 1.5)
+                tp2 = current_price - (atr * 3)
+                tp3 = current_price - (atr * 4.5)
+            else:
+                return {
+                    'entry': current_price,
+                    'stop_loss': current_price,
+                    'tp1': current_price,
+                    'tp2': current_price,
+                    'tp3': current_price,
+                    'rr_ratio': 0,
+                    'risk_percentage': 2.5
+                }
+                
+            # Calculate risk/reward ratio
+            risk = abs(entry - stop_loss)
+            reward = abs(tp2 - entry)
+            rr_ratio = reward / risk if risk > 0 else 0
+            
+            return {
+                'entry': entry,
+                'stop_loss': stop_loss,
+                'tp1': tp1,
+                'tp2': tp2,
+                'tp3': tp3,
+                'rr_ratio': rr_ratio,
+                'risk_percentage': 2.5
+            }
+            
+        except Exception as e:
+            return {
+                'entry': current_price,
+                'stop_loss': current_price,
+                'tp1': current_price,
+                'tp2': current_price,
+                'tp3': current_price,
+                'rr_ratio': 0,
+                'risk_percentage': 2.5
+            }
+
+    def _get_futures_bias(self, long_ratio, funding_rate):
+        """Get futures bias based on long/short ratio and funding rate - Helper function"""
+        try:
+            if long_ratio > 60 and funding_rate > 0.01:
+                return "Bullish Overheated"
+            elif long_ratio > 55:
+                return "Bullish"
+            elif long_ratio < 40 and funding_rate < -0.01:
+                return "Bearish Oversold"
+            elif long_ratio < 45:
+                return "Bearish"
+            else:
+                return "Neutral"
+        except:
+            return "Neutral"
+
+    def _get_zone_position(self, current_price, supply_zone, demand_zone):
+        """Determine current position relative to supply/demand zones - Helper function"""
+        try:
+            if current_price > supply_zone:
+                return "Above Supply Zone"
+            elif current_price < demand_zone:
+                return "Below Demand Zone"
+            else:
+                return "Between Zones"
+        except:
+            return "Unknown Position"
+
+    def _get_advanced_trading_insights(self, signal_data, trading_levels, confidence):
+        """Generate advanced trading insights - Helper function"""
+        try:
+            insights = []
+            
+            if confidence >= 80:
+                insights.append("• High probability setup dengan multiple confirmations")
+            elif confidence >= 70:
+                insights.append("• Setup trading solid dengan konfirmasi cukup")
+            else:
+                insights.append("• Setup berisiko, gunakan position size kecil")
+                
+            rr_ratio = trading_levels.get('rr_ratio', 0)
+            if rr_ratio > 2:
+                insights.append("• Risk/Reward ratio menguntungkan untuk swing trading")
+            elif rr_ratio > 1:
+                insights.append("• Risk/Reward ratio acceptable untuk day trading")
+            else:
+                insights.append("• Risk/Reward ratio kurang ideal, pertimbangkan skip")
+                
+            direction = signal_data.get('direction', 'NEUTRAL')
+            if direction != 'NEUTRAL':
+                insights.append(f"• Bias market mendukung posisi {direction}")
+            else:
+                insights.append("• Market dalam kondisi sideways, tunggu breakout")
+                
+            return "\n".join(insights)
+            
+        except Exception as e:
+            return "• Analisis insight temporarily unavailable"
+
+    def _filter_and_format_signals(self, all_signals):
+        """Filter and format signals for display - Helper function"""
+        try:
+            # Filter signals with confidence >= 75%
+            filtered = [s for s in all_signals if s.get('confidence', 0) >= 75]
+            
+            # Sort by confidence (highest first)
+            filtered.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+            
+            # Take top 10 signals to avoid spam
+            return filtered[:10]
+            
+        except Exception as e:
+            return []
+
+    def _error_fallback(self, symbol, error_context):
+        """Generate error fallback message - Helper function"""
+        return f"❌ Error in {error_context} for {symbol}\n\n💡 Alternatif:\n• `/price {symbol.lower()}` untuk harga basic\n• Contact admin jika masalah berlanjut"
+
     async def generate_futures_signals(self, language='id', crypto_api=None, query_args=None):
         """Generate futures signals with proper formatting and filtering"""
         try:
@@ -1295,6 +1492,117 @@ class AIAssistant:
 
         except Exception as e:
             return self._error_fallback("FUTURES_SIGNALS", f"scan process: {str(e)[:50]}")
+
+    def get_market_sentiment(self, language='id', crypto_api=None):
+        """Get comprehensive market sentiment analysis - Non-async function"""
+        try:
+            current_time = self._get_wib_time()
+            
+            # Get global market metrics
+            global_metrics = self.get_cmc_global_metrics()
+            
+            if not global_metrics.get('success'):
+                return self._get_basic_market_fallback()
+                
+            # Extract key metrics
+            total_market_cap = global_metrics.get('total_market_cap', 0)
+            market_cap_change = global_metrics.get('market_cap_change_24h', 0)
+            total_volume = global_metrics.get('total_volume_24h', 0)
+            active_cryptos = global_metrics.get('active_cryptocurrencies', 0)
+            btc_dominance = global_metrics.get('btc_dominance', 0)
+            eth_dominance = global_metrics.get('eth_dominance', 0)
+
+            # Market sentiment analysis
+            if market_cap_change > 3:
+                sentiment = "🚀 Very Bullish"
+                sentiment_desc = "Market sangat bullish dengan pertumbuhan kuat"
+            elif market_cap_change > 1:
+                sentiment = "📈 Bullish"
+                sentiment_desc = "Market bullish dengan tren positif"
+            elif market_cap_change > -1:
+                sentiment = "😐 Neutral"
+                sentiment_desc = "Market dalam kondisi sideways"
+            elif market_cap_change > -3:
+                sentiment = "📉 Bearish"
+                sentiment_desc = "Market bearish dengan tekanan jual"
+            else:
+                sentiment = "💥 Very Bearish"
+                sentiment_desc = "Market sangat bearish dengan penurunan tajam"
+
+            # Format market analysis
+            analysis = f"""🌍 **OVERVIEW PASAR CRYPTO GLOBAL**
+
+🕐 **Analysis Time**: {current_time}
+🎯 **Market Sentiment**: {sentiment}
+
+💰 **GLOBAL METRICS:**
+• Total Market Cap: ${total_market_cap/1e12:.2f}T
+• 24h Market Change: {market_cap_change:+.2f}%
+• Total Volume 24h: ${total_volume/1e9:.1f}B
+• Active Cryptocurrencies: {active_cryptos:,}
+• BTC Dominance: {btc_dominance:.1f}%
+• ETH Dominance: {eth_dominance:.1f}%
+
+📊 **MARKET ANALYSIS:**
+• 🎭 **Sentiment**: {sentiment_desc}
+• 📈 **Dominance**: {"BTC masih mendominasi" if btc_dominance > 50 else "Altseason potential"}
+• 💹 **Volume**: {"Tinggi" if total_volume > 50e9 else "Normal" if total_volume > 30e9 else "Rendah"}
+• 🌊 **Trend**: {"Uptrend" if market_cap_change > 1 else "Downtrend" if market_cap_change < -1 else "Sideways"}
+
+💡 **TRADING RECOMMENDATIONS:**
+{self._get_market_trading_recommendations(market_cap_change, btc_dominance)}
+
+📡 **Data Sources**: CoinMarketCap Global Metrics
+🔄 **Update Frequency**: Real-time market data refresh"""
+
+            return analysis
+            
+        except Exception as e:
+            return self._get_basic_market_fallback()
+
+    def _get_market_trading_recommendations(self, market_change, btc_dominance):
+        """Get trading recommendations based on market conditions - Helper function"""
+        try:
+            recommendations = []
+            
+            if market_change > 2:
+                recommendations.append("• 🚀 Consider long positions pada major coins")
+                recommendations.append("• 📈 Altcoins berpotensi follow BTC momentum")
+            elif market_change > 0:
+                recommendations.append("• 🎯 Selective long pada coins dengan strong fundamentals")
+                recommendations.append("• ⚖️ Risk management tetap prioritas")
+            elif market_change < -2:
+                recommendations.append("• 🛡️ Defensive strategy, consider short positions")
+                recommendations.append("• 💰 DCA opportunities pada major dips")
+            else:
+                recommendations.append("• 🕐 Wait and see approach")
+                recommendations.append("• 📊 Focus on technical analysis untuk entry points")
+                
+            if btc_dominance > 55:
+                recommendations.append("• 👑 BTC dominance tinggi, focus pada BTC trades")
+            elif btc_dominance < 45:
+                recommendations.append("• 🌈 Altseason potential, consider altcoin positions")
+                
+            return "\n".join(recommendations)
+            
+        except:
+            return "• Analisis rekomendasi temporarily unavailable"
+
+    def _get_basic_market_fallback(self):
+        """Get basic market fallback when APIs fail - Helper function"""
+        return """🌍 **OVERVIEW PASAR CRYPTO**
+
+⚠️ **Data global sementara tidak tersedia**
+
+💡 **Alternatif analisis:**
+• `/price btc` - Cek harga Bitcoin real-time
+• `/price eth` - Cek harga Ethereum real-time  
+• `/analyze btc` - Analisis fundamental Bitcoin
+• `/futures_signals` - Scan sinyal trading
+
+🔄 **Coba command `/market` lagi dalam beberapa menit**
+
+📡 **Info**: Menggunakan analisis teknikal sebagai backup"""
 
     # ============ HELPER METHODS ============
 
@@ -1716,7 +2024,7 @@ class AIAssistant:
             return None
 
     async def _enhanced_scan_symbol_for_signal(self, symbol, crypto_api):
-        """Enhanced scan for trading signal with more detailed logic"""
+        """Enhanced scan for trading signal with more detailed logic - Fixed async function"""
         try:
             if not crypto_api:
                 return None
