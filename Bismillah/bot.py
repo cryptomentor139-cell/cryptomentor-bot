@@ -81,18 +81,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import Supabase and Admin Agent
+# TODO: Import database client and Admin Agent after setup
 try:
-    from supabase_client import (
-        supabase, add_user, get_user, update_user, delete_user,
-        add_premium, revoke_premium, set_premium, parse_premium_duration,
-        admin_set_premium, admin_revoke_premium, admin_grant_credits
-    )
     from admin_agent import AdminAgent
-    SUPABASE_AVAILABLE = True
+    SUPABASE_AVAILABLE = False  # Temporarily disabled
+    logger.info("✅ Admin Agent available (Database integration pending)")
 except ImportError as e:
-    logger.error(f"❌ Failed to import Supabase or Admin Agent: {e}")
+    logger.error(f"❌ Failed to import Admin Agent: {e}")
     SUPABASE_AVAILABLE = False
+
+# Placeholder functions for compatibility
+def add_user(*args, **kwargs):
+    return {"success": False, "error": "Database not configured"}
+
+def get_user(*args, **kwargs):
+    return None
+
+def update_user(*args, **kwargs):
+    return {"success": False, "error": "Database not configured"}
+
+def delete_user(*args, **kwargs):
+    return {"success": False, "error": "Database not configured"}
+
+def add_premium(*args, **kwargs):
+    return {"success": False, "error": "Database not configured"}
+
+def revoke_premium(*args, **kwargs):
+    return {"success": False, "error": "Database not configured"}
+
+def set_premium(*args, **kwargs):
+    return {"success": False, "error": "Database not configured"}
+
+def parse_premium_duration(*args, **kwargs):
+    return None
+
+def admin_set_premium(*args, **kwargs):
+    return {"success": False, "error": "Database not configured"}
+
+def admin_revoke_premium(*args, **kwargs):
+    return {"success": False, "error": "Database not configured"}
+
+def admin_grant_credits(*args, **kwargs):
+    return {"success": False, "error": "Database not configured"}
 
 # Placeholder for ADMIN_IDS if Supabase is not available
 if not SUPABASE_AVAILABLE:
@@ -126,24 +156,18 @@ class TelegramBot:
             # Continue without database - some features will be limited
             self.db = None
 
-        # Initialize Supabase functions if available
-        self.supabase_enabled = SUPABASE_AVAILABLE
-        if self.supabase_enabled:
-            logger.info("✅ Supabase functions imported")
-        else:
-            logger.error("❌ Supabase functions not available. Some features will be limited.")
+        # TODO: Initialize database functions after setup
+        self.supabase_enabled = False
+        logger.info("✅ Database integration pending setup")
 
         # Initialize Admin Agent if available
         self.admin_agent = None
-        if self.supabase_enabled: # Admin Agent depends on Supabase client availability
-            try:
-                self.admin_agent = AdminAgent()
-                logger.info("✅ Admin Agent initialized")
-            except Exception as e:
-                logger.error(f"❌ Failed to initialize Admin Agent: {e}")
-                self.admin_agent = None
-        else:
-            logger.warning("Admin Agent not initialized because Supabase is not available.")
+        try:
+            self.admin_agent = AdminAgent()
+            logger.info("✅ Admin Agent initialized (Database features pending)")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Admin Agent: {e}")
+            self.admin_agent = None
 
 
         # Get bot token from environment - try multiple possible keys including 'TOKEN'
@@ -195,37 +219,9 @@ class TelegramBot:
         return user_id in self.admin_ids
 
     def register_user_supabase(self, user):
-        """Register new user in Supabase database - simplified without validation"""
-        if not self.supabase_enabled:
-            print(f"⚠️ Supabase not enabled, skipping registration for user {user.id}")
-            return False
-
-        try:
-            from supabase_client import add_user
-
-            print(f"🔄 Registering user {user.id} in Supabase...")
-            print(f"📝 User data: ID={user.id}, Username={user.username}, Name={user.first_name}")
-
-            # Direct registration without validation checks
-            result = add_user(
-                user_id=user.id,
-                username=user.username,
-                is_premium=False,
-                expired_date=None
-            )
-
-            if result["success"]:
-                logger.info(f"✅ User {user.id} registered in Supabase successfully")
-                return True
-            else:
-                error_msg = result.get('error', 'Unknown error')
-                logger.error(f"❌ Failed to register user {user.id} in Supabase: {error_msg}")
-                return False
-
-        except Exception as e:
-            error_msg = f"Error registering user {user.id} in Supabase: {str(e)}"
-            logger.error(f"❌ {error_msg}")
-            return False
+        """TODO: Register new user in database after setup"""
+        print(f"⚠️ Database not configured, skipping registration for user {user.id}")
+        return False
 
     async def run_bot(self):
         """Main method to run the bot"""
