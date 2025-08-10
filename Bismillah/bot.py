@@ -157,7 +157,7 @@ class TelegramBot:
             mode, ready, note = init_db()
             print(f"🗄️ DB Mode: {mode} | Ready: {ready} | {note}")
             logger.info(f"Database router initialized: {mode} ({note})")
-            
+
             # Keep original database for compatibility
             self.db = Database()
             logger.info("✅ Database connection established")
@@ -331,7 +331,7 @@ class TelegramBot:
             )
             print("🚀 Bot polling started successfully!")
 
-            # Keep running until interrupted - fix for telegram-bot v22.x
+            # Keep running until interrupted
             try:
                 import signal
                 stop_event = asyncio.Event()
@@ -433,7 +433,7 @@ class TelegramBot:
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command with enhanced user persistence"""
         from app.chat_store import remember_chat
-        
+
         user = update.effective_user
         print(f"🎯 /start command received from user {user.id if user else 'Unknown'}")
         logger.info(f"Start command from user {user.id}")
@@ -1750,6 +1750,16 @@ Gunakan `/subscribe` untuk upgrade!
         try:
             # Get AI response
             response = self.ai.get_ai_response(question, 'id')
+            # Premium access check using Supabase
+            from app.supabase_conn import sb_is_premium_user
+            if not sb_is_premium_user(user_id):
+                await update.effective_message.reply_text(
+                    "⚠️ **Premium Required**\n\n"
+                    "This command requires premium access. Upgrade to premium for unlimited access to advanced features!\n\n"
+                    "💎 Contact admin to upgrade your account.",
+                    parse_mode='Markdown'
+                )
+                return
 
             # Log activity
             self.db.log_user_activity(user_id, "ask_ai", f"Question: {question[:50]}...")
@@ -1928,7 +1938,7 @@ Gunakan `/subscribe` untuk upgrade!
         """Admin command untuk set premium user dengan Database Router"""
         from app.db_router import add_premium
         from app.safe_send import safe_reply
-        
+
         user_id = update.effective_user.id
         if not self.is_admin(user_id):
             await safe_reply(update.effective_message, "❌ Akses ditolak. Command ini hanya untuk admin.")
@@ -1947,7 +1957,7 @@ Gunakan `/subscribe` untuk upgrade!
         try:
             target_user_id = int(context.args[0])
             duration = context.args[1]
-            
+
             # Map common duration formats
             if duration.lower() in ['month', 'bulan']:
                 duration = '30'
@@ -1955,17 +1965,17 @@ Gunakan `/subscribe` untuk upgrade!
                 duration = duration[:-1]
             elif duration.startswith('days:'):
                 duration = duration[5:]
-            
+
             _, msg = add_premium(target_user_id, duration)
             await safe_reply(update.effective_message, msg)
-            
+
             # Log admin action
             self.db.log_user_activity(
                 user_id,
                 "admin_setpremium",
                 f"Set premium {duration} for user {target_user_id}"
             )
-            
+
         except Exception as e:
             await safe_reply(update.effective_message, f"❌ Gagal: {e}")
             print(f"❌ Error in setpremium command: {e}")
@@ -1974,7 +1984,7 @@ Gunakan `/subscribe` untuk upgrade!
         """Handle /grant_credits command with Database Router"""
         from app.db_router import grant_credits
         from app.safe_send import safe_reply, safe_dm
-        
+
         user_id = update.message.from_user.id
 
         if not self.is_admin(user_id):
@@ -2001,7 +2011,7 @@ Gunakan `/subscribe` untuk upgrade!
                 "admin_grant_credits",
                 f"Added {amount} credits to user {target_user_id}"
             )
-            
+
             await safe_reply(update.message, message)
 
             # Optional DM to target user
@@ -2012,7 +2022,7 @@ Gunakan `/subscribe` untuk upgrade!
                 await safe_reply(update.message, "ℹ️ User belum /start bot, DM dilewati.")
             except Exception as e:
                 await safe_reply(update.message, f"⚠️ DM gagal: {e}")
-                
+
         except Exception as e:
             await safe_reply(update.message, f"❌ Gagal: {e}")
             print(f"❌ Error in grant_credits command: {e}")
@@ -2072,7 +2082,7 @@ Gunakan `/subscribe` untuk upgrade!
         """Admin command untuk revoke premium user dengan Database Router"""
         from app.db_router import remove_premium
         from app.safe_send import safe_reply
-        
+
         user_id = update.effective_user.id
         if not self.is_admin(user_id):
             await safe_reply(update.effective_message, "❌ Akses ditolak. Command ini hanya untuk admin.")
@@ -2086,14 +2096,14 @@ Gunakan `/subscribe` untuk upgrade!
             target_user_id = int(context.args[0])
             remove_premium(target_user_id)
             await safe_reply(update.effective_message, f"✅ Premium untuk {target_user_id} dicabut.")
-            
+
             # Log admin action
             self.db.log_user_activity(
                 user_id,
                 "admin_revoke_premium",
                 f"Revoked premium for user {target_user_id}"
             )
-            
+
         except Exception as e:
             await safe_reply(update.effective_message, f"❌ Gagal: {e}")
             print(f"❌ Error in revoke_premium command: {e}")
@@ -2548,20 +2558,20 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
         """Handle /db_status command"""
         from app.db_router import db_status
         from app.safe_send import safe_reply
-        
+
         status = db_status()
         message = f"🗄️ **Database Status**\n\n"
         message += f"• **Mode**: {status['mode']}\n"
         message += f"• **Ready**: {status['ready']}\n"
         message += f"• **Note**: {status['note']}\n\n"
-        
+
         if status['mode'] == 'supabase':
             message += "📊 **Backend**: Supabase Cloud Database\n"
         elif status['mode'] == 'local':
             message += "📁 **Backend**: Local JSON Storage\n"
         else:
             message += "❌ **Backend**: No database available\n"
-        
+
         await safe_reply(update.effective_message, message)
 
 
@@ -2629,7 +2639,7 @@ ADMIN2 = [optional_second_admin_id]
         """Handle /banned command with Database Router"""
         from app.db_router import ban_user, unban_user, get_user_info, check_user_banned
         from app.safe_send import safe_reply
-        
+
         user_id = update.message.from_user.id
 
         if not self.is_admin(user_id):
@@ -2664,7 +2674,7 @@ ADMIN2 = [optional_second_admin_id]
             if not user_info:
                 await safe_reply(update.message, f"❌ User {target_user_id} tidak ditemukan.")
                 return
-            
+
             username = user_info.get('username', 'No username')
             first_name = user_info.get('first_name', 'Unknown')
             current_banned_status = check_user_banned(target_user_id)

@@ -1,4 +1,3 @@
-
 # app/db_router.py
 import os
 from typing import Tuple, Optional, Dict, Any
@@ -77,7 +76,7 @@ def add_premium(telegram_id: int, duration: str) -> Tuple[Dict[str, Any], str]:
         iso = _iso_in_days(int(duration))
         fields = {"banned": False, "is_premium": True, "premium_until": iso}
         msg = f"✅ Premium {duration} hari diaktifkan untuk {telegram_id} sampai {iso}."
-    
+
     if DB_MODE == "supabase" and DB_READY:
         rec = sb_upsert(telegram_id, **fields)
         return rec, msg
@@ -99,7 +98,7 @@ def grant_credits(telegram_id: int, amount: int) -> Tuple[Dict[str, Any], int]:
     amt = int(amount)
     if amt < 0:
         raise ValueError("credits harus >= 0")
-    
+
     if DB_MODE == "supabase" and DB_READY:
         rec = sb_get(telegram_id) or {}
         current = int(rec.get("credits", 0))
@@ -132,17 +131,17 @@ def check_user_premium(telegram_id: int) -> bool:
     user = get_user_info(telegram_id)
     if not user:
         return False
-    
+
     is_premium = user.get("is_premium", False)
     premium_until = user.get("premium_until")
-    
+
     if not is_premium:
         return False
-    
+
     # Check if premium is expired
     if premium_until is None:  # Lifetime
         return True
-    
+
     try:
         expiry = datetime.fromisoformat(premium_until.replace('Z', '+00:00'))
         return datetime.now(timezone.utc) < expiry
