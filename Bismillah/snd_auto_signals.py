@@ -194,8 +194,8 @@ class SnDAutoSignals:
     async def send_signals_to_eligible_users(self, signals):
         """Send signals to admin and lifetime users only"""
         try:
-            # Get eligible users (admin and lifetime)
-            eligible_users = self.db.get_eligible_auto_signal_users()
+            # Get eligible users (admin and lifetime from Supabase)
+            eligible_users = self._get_eligible_users_supabase()
 
             if not eligible_users:
                 print("❌ No eligible users found for auto signals")
@@ -289,6 +289,49 @@ class SnDAutoSignals:
 📡 Next scan in {self.scan_interval/60:.0f} minutes"""
 
         return message
+
+    def _get_eligible_users_supabase(self):
+        """Get eligible users from Supabase (admin + lifetime premium)"""
+        try:
+            import os
+            from app.supabase_conn import sb_list_users
+            
+            # Get admin IDs from environment
+            eligible_users = []
+            
+            # Add admin users
+            for i in range(1, 10):
+                env_key = f'ADMIN{i}'
+                admin_id_str = (os.getenv(env_key) or "").strip()
+                
+                # Fallback to old naming format
+                if not admin_id_str and i <= 2:
+                    fallback_key = f'ADMIN{i}_USER_ID' if i > 1 else 'ADMIN_USER_ID'
+                    admin_id_str = (os.getenv(fallback_key) or "").strip()
+                
+                if admin_id_str and admin_id_str.lower() != "none" and admin_id_str.isdigit():
+                    eligible_users.append(int(admin_id_str))
+            
+            # Get lifetime premium users from Supabase
+            lifetime_users = sb_list_users({
+                "is_premium": "eq.true",
+                "banned": "eq.false", 
+                "premium_until": "is.null",
+                "select": "telegram_id"
+            })
+            
+            # Add lifetime users
+            for user in lifetime_users:
+                user_id = user.get("telegram_id")
+                if user_id and user_id not in eligible_users:
+                    eligible_users.append(user_id)
+            
+            print(f"📊 Eligible users found: {len(eligible_users)} (Admins + Lifetime from Supabase)")
+            return eligible_users
+            
+        except Exception as e:
+            print(f"❌ Error getting eligible users from Supabase: {e}")
+            return []
 
     def _get_enhanced_snd_analysis(self, symbol):
         """Get enhanced Supply & Demand analysis with error handling"""
