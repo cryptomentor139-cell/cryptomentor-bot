@@ -244,61 +244,10 @@ class TelegramBot:
             except Exception as cleanup_error:
                 print(f"⚠️ Cleanup warning: {cleanup_error}")
 
-            # Add command handlers with proper async functions
-            self.application.add_handler(CommandHandler("start", self.start))
-            self.application.add_handler(CommandHandler("help", self.help_command))
-            self.application.add_handler(CommandHandler("price", self.price_command))
-            self.application.add_handler(CommandHandler("analyze", self.analyze_command))
-            self.application.add_handler(CommandHandler("portfolio", self.portfolio_command))
-            self.application.add_handler(CommandHandler("add_coin", self.add_coin_command))
-            self.application.add_handler(CommandHandler("market", self.market_command))
-            self.application.add_handler(CommandHandler("futures_signals", self.futures_signals_command))
-            self.application.add_handler(CommandHandler("futures", self.futures_command))
-            self.application.add_handler(CommandHandler("credits", self.credits_command))
-            self.application.add_handler(CommandHandler("subscribe", self.subscribe_command))
-            self.application.add_handler(CommandHandler("referral", self.referral_command))
-            self.application.add_handler(CommandHandler("language", self.language_command))
-            self.application.add_handler(CommandHandler("ask_ai", self.handle_ask_ai))
-            self.application.add_handler(CommandHandler("whoami", self.whoami_command))
-            self.application.add_handler(CommandHandler("admin_debug", self.admin_debug_command))
+            self._register_handlers()
 
-            # Admin commands
-            self.application.add_handler(CommandHandler("admin", self.admin_command))
-            self.application.add_handler(CommandHandler("revoke_premium", self.revoke_premium_command))
-            self.application.add_handler(CommandHandler("setpremium", self.setpremium_command))
-            self.application.add_handler(CommandHandler("grant_credits", self.grant_credits_command))
-            self.application.add_handler(CommandHandler("check_user_status", self.check_user_status_command))
-            self.application.add_handler(CommandHandler("fix_all_credits", self.fix_all_credits_command))
-            self.application.add_handler(CommandHandler("broadcast", self.broadcast_command))
-            self.application.add_handler(CommandHandler("confirm_broadcast", self.confirm_broadcast_command))
-            self.application.add_handler(CommandHandler("cancel_broadcast", self.cancel_broadcast_command))
-            self.application.add_handler(CommandHandler("broadcast_welcome", self.broadcast_welcome_command))
-            self.application.add_handler(CommandHandler("recovery_stats", self.recovery_stats_command))
-            self.application.add_handler(CommandHandler("check_admin", self.check_admin_command))
-            self.application.add_handler(CommandHandler("restart", self.restart_command))
-            self.application.add_handler(CommandHandler("refresh_credits", self.refresh_credits_command))
-            self.application.add_handler(CommandHandler("premium_earnings", self.premium_earnings_command))
-            self.application.add_handler(CommandHandler("grant_package", self.grant_package_command))
-            self.application.add_handler(CommandHandler("setup_admin", self.setup_admin_command)) # Added setup_admin command
-
-            # Supabase health check command
-            try:
-                from handlers_sb import cmd_sb_status
-                self.application.add_handler(CommandHandler("sb_status", cmd_sb_status))
-                print("✅ Supabase status command registered")
-            except ImportError as e:
-                print(f"⚠️ Supabase handler not available: {e}")
-            # Renamed for clarity and consistency with user request
-            self.application.add_handler(CommandHandler("auto_signal_ai_status", self.auto_signals_status_command))
-            self.application.add_handler(CommandHandler("enable_auto_signal_ai", self.start_auto_signals_command))
-            self.application.add_handler(CommandHandler("disable_auto_signal_ai", self.stop_auto_signals_command))
-
-
-            # Add callback query handler
-            self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
-
-            # Add message handler for regular text (should be last)
-            self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+            # Add global error handler
+            self.application.add_error_handler(self._on_error)
 
             print("🤖 Bot handlers registered successfully")
             mode_text = "🌐 DEPLOYMENT (Always On)" if IS_DEPLOYMENT else "🔧 DEVELOPMENT (Workspace)"
@@ -2622,7 +2571,7 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
 • Value: `{user_id}` (your User ID)
 
 **Step 3 (Optional): Tambah Admin Kedua**
-• Key: `ADMIN2` 
+• Key: `ADMIN2`
 • Value: `[USER_ID_ADMIN_KEDUA]`
 
 **Step 4: Restart Bot**
@@ -2718,6 +2667,71 @@ ADMIN2 = [optional_second_admin_id]
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
+    async def _on_error(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Global error handler to log unhandled exceptions"""
+        user_id = getattr(getattr(update, "effective_user", None), "id", None)
+        command = getattr(getattr(update, "message", None), "text", "unknown")
+        print(f"⚠️ Bot Error: {repr(context.error)} | User: {user_id} | Command: {command[:50]}")
+
+    def _register_handlers(self):
+        """Register all bot handlers"""
+        # Add command handlers with proper async functions
+        self.application.add_handler(CommandHandler("start", self.start))
+        self.application.add_handler(CommandHandler("help", self.help_command))
+        self.application.add_handler(CommandHandler("price", self.price_command))
+        self.application.add_handler(CommandHandler("analyze", self.analyze_command))
+        self.application.add_handler(CommandHandler("portfolio", self.portfolio_command))
+        self.application.add_handler(CommandHandler("add_coin", self.add_coin_command))
+        self.application.add_handler(CommandHandler("market", self.market_command))
+        self.application.add_handler(CommandHandler("futures_signals", self.futures_signals_command))
+        self.application.add_handler(CommandHandler("futures", self.futures_command))
+        self.application.add_handler(CommandHandler("credits", self.credits_command))
+        self.application.add_handler(CommandHandler("subscribe", self.subscribe_command))
+        self.application.add_handler(CommandHandler("referral", self.referral_command))
+        self.application.add_handler(CommandHandler("language", self.language_command))
+        self.application.add_handler(CommandHandler("ask_ai", self.handle_ask_ai))
+        self.application.add_handler(CommandHandler("whoami", self.whoami_command))
+        self.application.add_handler(CommandHandler("admin_debug", self.admin_debug_command))
+
+        # Admin commands
+        self.application.add_handler(CommandHandler("admin", self.admin_command))
+        self.application.add_handler(CommandHandler("revoke_premium", self.revoke_premium_command))
+        self.application.add_handler(CommandHandler("setpremium", self.setpremium_command))
+        self.application.add_handler(CommandHandler("grant_credits", self.grant_credits_command))
+        self.application.add_handler(CommandHandler("check_user_status", self.check_user_status_command))
+        self.application.add_handler(CommandHandler("fix_all_credits", self.fix_all_credits_command))
+        self.application.add_handler(CommandHandler("broadcast", self.broadcast_command))
+        self.application.add_handler(CommandHandler("confirm_broadcast", self.confirm_broadcast_command))
+        self.application.add_handler(CommandHandler("cancel_broadcast", self.cancel_broadcast_command))
+        self.application.add_handler(CommandHandler("broadcast_welcome", self.broadcast_welcome_command))
+        self.application.add_handler(CommandHandler("recovery_stats", self.recovery_stats_command))
+        self.application.add_handler(CommandHandler("check_admin", self.check_admin_command))
+        self.application.add_handler(CommandHandler("restart", self.restart_command))
+        self.application.add_handler(CommandHandler("refresh_credits", self.refresh_credits_command))
+        self.application.add_handler(CommandHandler("premium_earnings", self.premium_earnings_command))
+        self.application.add_handler(CommandHandler("grant_package", self.grant_package_command))
+        self.application.add_handler(CommandHandler("setup_admin", self.setup_admin_command)) # Added setup_admin command
+
+        # Supabase health check command
+        try:
+            from handlers_sb import cmd_sb_status
+            self.application.add_handler(CommandHandler("sb_status", cmd_sb_status))
+            print("✅ Supabase status command registered")
+        except ImportError as e:
+            print(f"⚠️ Supabase handler not available: {e}")
+        # Renamed for clarity and consistency with user request
+        self.application.add_handler(CommandHandler("auto_signal_ai_status", self.auto_signals_status_command))
+        self.application.add_handler(CommandHandler("enable_auto_signal_ai", self.start_auto_signals_command))
+        self.application.add_handler(CommandHandler("disable_auto_signal_ai", self.stop_auto_signals_command))
+
+
+        # Add callback query handler
+        self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
+
+        # Add message handler for regular text (should be last)
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+
+    # End of TelegramBot class definition
 if __name__ == "__main__":
     bot = TelegramBot()
     asyncio.run(bot.run_bot())
