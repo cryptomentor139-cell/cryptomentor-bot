@@ -7,23 +7,26 @@ async def cmd_sb_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin-only command to check Supabase connection status"""
     uid = update.effective_user.id if update and update.effective_user else None
     
-    # Enhanced admin check with environment variable fallback
+    # Dynamic admin check with environment variable fallback
     import os
     admin_ids = set()
     
-    # Load admin IDs from environment variables
+    # Check ADMIN1, ADMIN2, etc.
     for i in range(1, 10):
         env_key = f'ADMIN{i}'
-        admin_id_str = os.getenv(env_key, '0')
-        try:
-            admin_id = int(admin_id_str)
-            if admin_id > 0:
-                admin_ids.add(admin_id)
-        except ValueError:
-            continue
+        admin_id_str = (os.getenv(env_key) or "").strip()
+        
+        # Fallback to old naming format
+        if not admin_id_str and i <= 2:
+            fallback_key = f'ADMIN{i}_USER_ID' if i > 1 else 'ADMIN_USER_ID'
+            admin_id_str = (os.getenv(fallback_key) or "").strip()
+        
+        # Add to set if valid
+        if admin_id_str and admin_id_str.lower() != "none":
+            admin_ids.add(str(admin_id_str))
     
-    # Check if user is admin
-    is_admin = uid in admin_ids
+    # Check if user is admin (string comparison)
+    is_admin = str(uid) in admin_ids
     
     if not is_admin:
         await update.effective_message.reply_text(
