@@ -124,26 +124,36 @@ def admin_revoke_premium(*args, **kwargs):
 def admin_grant_credits(*args, **kwargs):
     return {"success": False, "error": "Database not configured"}
 
-# Placeholder for ADMIN_IDS if Supabase is not available
-if not SUPABASE_AVAILABLE:
-    ADMIN_IDS = set()
-    logger.warning("Supabase and Admin Agent not available. Admin commands might not function correctly.")
-else:
-    # Dynamically load ADMIN_IDS from environment variables
-    ADMIN_IDS = set()
-    for i in range(1, 10):
-        env_key = f'ADMIN{i}_USER_ID' # Changed to ADMIN{i}_USER_ID
-        admin_id_str = os.getenv(env_key, '0')
-        try:
-            admin_id = int(admin_id_str)
-            if admin_id > 0:
-                ADMIN_IDS.add(admin_id)
-        except ValueError:
-            if admin_id_str != '0':
-                logger.warning(f"Invalid {env_key}: {admin_id_str}")
+def _get_env_admin_ids():
+        """
+        Read admin IDs from Replit Secrets dynamically.
+        Priority:
+          1) ADMIN1, ADMIN2, etc.
+          2) ADMIN_USER_ID, ADMIN2_USER_ID (fallback)
+        """
+        admin_ids = set()
+
+        # Check ADMIN1, ADMIN2, etc.
+        for i in range(1, 10):
+            env_key = f'ADMIN{i}'
+            admin_id_str = (os.getenv(env_key) or "").strip()
+
+            # Fallback to old naming format
+            if not admin_id_str and i <= 2:
+                fallback_key = f'ADMIN{i}_USER_ID' if i > 1 else 'ADMIN_USER_ID'
+                admin_id_str = (os.getenv(fallback_key) or "").strip()
+
+            # Add to set if valid
+            if admin_id_str and admin_id_str.lower() != "none":
+                admin_ids.add(str(admin_id_str))
+
+        return admin_ids
+
+# Get initial admin IDs for logging
+ADMIN_IDS = _get_env_admin_ids()
 
 if not ADMIN_IDS:
-    logger.warning("No ADMIN_USER_ID or ADMIN{i}_USER_ID found in environment variables. Admin commands will be inaccessible.")
+    logger.warning("No ADMIN1, ADMIN2 or fallback admin environment variables found. Admin commands will be inaccessible.")
 
 class TelegramBot:
     def __init__(self):
@@ -216,7 +226,7 @@ class TelegramBot:
 
     def is_admin(self, user_id: int) -> bool:
         """Check if the user ID is one of the configured admins."""
-        return user_id in self.admin_ids
+        return str(user_id) in self.admin_ids
 
     def register_user_supabase(self, user):
         """TODO: Register new user in database after setup"""
@@ -249,6 +259,8 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("referral", self.referral_command))
             self.application.add_handler(CommandHandler("language", self.language_command))
             self.application.add_handler(CommandHandler("ask_ai", self.handle_ask_ai))
+            self.application.add_handler(CommandHandler("whoami", self.whoami_command))
+            self.application.add_handler(CommandHandler("admin_debug", self.admin_debug_command))
 
             # Admin commands
             self.application.add_handler(CommandHandler("admin", self.admin_command))
@@ -2648,6 +2660,63 @@ ADMIN2 = [optional_second_admin_id]
 
         self.pending_broadcast = None
         await update.message.reply_text("✅ Broadcast dibatalkan.")
+
+    async def whoami_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /whoami command - shows user ID"""
+        user_id = update.effective_user.id if update.effective_user else None
+        username = update.effective_user.username if update.effective_user else "No username"
+        first_name = update.effective_user.first_name if update.effective_user else "Unknown"
+
+        message = f"👤 **Your Information:**\n\n"
+        message += f"• **User ID**: `{user_id}`\n"
+        message += f"• **Username**: @{username}\n"
+        message += f"• **Name**: {first_name}\n"
+        message += f"• **Admin Status**: {'✅ ADMIN' if self.is_admin(user_id) else '❌ NOT ADMIN'}"
+
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def admin_debug_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /admin_debug command - shows admin configuration debug info"""
+        user_id = update.effective_user.id if update.effective_user else None
+
+        # Get current admin configuration
+        admin_ids = set()
+        env_info = []
+
+        # Check ADMIN1, ADMIN2, etc.
+        for i in range(1, 10):
+            env_key = f'ADMIN{i}'
+            admin_id_str = (os.getenv(env_key) or "").strip()
+
+            if admin_id_str:
+                env_info.append(f"{env_key}=SET")
+                if admin_id_str.lower() != "none":
+                    admin_ids.add(str(admin_id_str))
+
+            # Check fallback
+            if i <= 2:
+                fallback_key = f'ADMIN{i}_USER_ID' if i > 1 else 'ADMIN_USER_ID'
+                fallback_str = (os.getenv(fallback_key) or "").strip()
+                if fallback_str and not admin_id_str:
+                    env_info.append(f"{fallback_key}=SET (fallback)")
+                    if fallback_str.lower() != "none":
+                        admin_ids.add(str(fallback_str))
+
+        is_caller_admin = self.is_admin(user_id)
+
+        message = f"🔧 **Admin Debug Information**\n\n"
+        message += f"👤 **Caller ID**: `{user_id}`\n"
+        message += f"✅ **Is Admin**: {is_caller_admin}\n"
+        message += f"👑 **Resolved Admin IDs**: {sorted(list(admin_ids)) if admin_ids else 'NONE'}\n"
+        message += f"⚙️ **Environment Variables**: {', '.join(env_info) if env_info else 'NONE SET'}\n\n"
+
+        message += f"💡 **Expected Format in Replit Secrets:**\n"
+        message += f"• Key: `ADMIN1`, Value: `{user_id}` (your ID)\n"
+        message += f"• Key: `ADMIN2`, Value: `[second_admin_id]` (optional)\n\n"
+
+        message += f"🔄 **Remember**: Restart bot after changing Secrets!"
+
+        await update.message.reply_text(message, parse_mode='Markdown')
 
 if __name__ == "__main__":
     bot = TelegramBot()
