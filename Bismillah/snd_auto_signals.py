@@ -204,6 +204,10 @@ class AutoSignalScanner:
         except Exception as e:
             print(f"[AUTO-SIGNAL] ❌ Error sending signals: {e}")
 
+    def _get_eligible_users(self) -> List[int]:
+        """Get eligible users - wrapper for compatibility"""
+        return self.get_eligible_users()
+
     def get_eligible_users(self) -> List[int]:
         """Get eligible users for AutoSignal - Only admin + Supabase lifetime users"""
         try:

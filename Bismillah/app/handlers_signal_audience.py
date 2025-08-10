@@ -24,17 +24,22 @@ async def get_autosignal_audience(update: Update, context: ContextTypes.DEFAULT_
             if val and val.isdigit():
                 admin_ids.add(int(val))
 
-        # Get lifetime premium from Supabase only
+        # Get all premium users from Supabase only
+        from app.supabase_conn import sb_get_premium_count, sb_get_premium_users
+        
+        premium_counts = sb_get_premium_count()
         lifetime_users = []
+        
         try:
-            rows = sb_list_users({
+            # Get lifetime users only for audience display
+            lifetime_rows = sb_list_users({
                 "is_premium": "eq.true",
-                "banned": "eq.false",
-                "premium_until": "is.null"  # lifetime only
+                "banned": "eq.false", 
+                "premium_until": "is.null"
             }, columns="telegram_id,first_name,username")
 
             # Filter users who have private chat consent
-            for row in rows:
+            for row in lifetime_rows:
                 tid = row.get("telegram_id")
                 if tid and get_private_chat_id(int(tid)) is not None:
                     lifetime_users.append({
@@ -43,7 +48,7 @@ async def get_autosignal_audience(update: Update, context: ContextTypes.DEFAULT_
                         'username': row.get('username', 'no_username')
                     })
         except Exception as e:
-            print(f"Error getting Supabase lifetime users: {e}")
+            print(f"Error getting Supabase premium users: {e}")
 
         total_eligible = len(admin_ids) + len(lifetime_users)
 
@@ -55,20 +60,25 @@ async def get_autosignal_audience(update: Update, context: ContextTypes.DEFAULT_
 • 👑 Admin users: {len(admin_ids)}
 • ⭐ Lifetime premium: {len(lifetime_users)}
 
-🔍 **Strict Filters**:
+📈 **All Premium Stats (Supabase)**:
+• 💎 Lifetime: {premium_counts['lifetime']}
+• ⏰ Timed Active: {premium_counts['timed']}
+• 📊 Total Premium: {premium_counts['total']}
+
+🔍 **AutoSignal Filters**:
 • ✅ Not banned (Supabase check)
 • ✅ Has private chat consent (/start used)
 • ✅ Lifetime premium ONLY (premium_until IS NULL)
 • ✅ Admin from environment variables
+• 🚫 No local backup/JSON sources
 
 📡 **AutoSignal Config**:
 • ⏰ Interval: 30 minutes
 • 🎯 Min Confidence: 75%
-• 🚫 No local backup users
-• 🗄️ Source: Supabase only
+• 🗄️ Source: Supabase REST API only
 
 **Sample Recipients**:
-{[tid for tid in list(admin_ids)[:5] + [u['telegram_id'] for u in lifetime_users[:5]]]}
+{[tid for tid in list(admin_ids)[:3] + [u['telegram_id'] for u in lifetime_users[:7]]]}
 """
 
         await safe_reply(update.message, message)
