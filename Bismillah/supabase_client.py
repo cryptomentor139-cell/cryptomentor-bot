@@ -1,3 +1,4 @@
+
 import os
 from supabase import create_client, Client
 from datetime import datetime, timedelta, timezone
@@ -53,6 +54,9 @@ else:
     print("✅ Supabase client initialized successfully")
     print(f"🔗 URL: {SUPABASE_URL}")
     print(f"🔑 Service Role Client: ✅ Ready")
+
+# Create alias for backward compatibility
+supabase_service = supabase
 
 # CRUD Functions for User Management
 def add_user(user_id, username=None, is_premium=False, expired_date=None, first_name=None, last_name=None):
@@ -179,32 +183,94 @@ def delete_user(user_id):
         print(f"❌ {error_msg}")
         return {"success": False, "error": error_msg}
 
+def set_premium(user_id, duration_type, duration_value=None):
+    """
+    Set premium status for user with flexible duration
+    
+    Args:
+        user_id: Telegram user ID
+        duration_type: "days", "months", or "lifetime"
+        duration_value: Number of days/months (required for days/months)
+    
+    Returns:
+        dict: Result with success status and expiry date
+    """
+    if not supabase:
+        return {"success": False, "error": "Supabase not configured"}
+
+    try:
+        telegram_id = int(user_id)
+        current_time = datetime.now(timezone.utc)
+        
+        # Calculate premium expiry date
+        if duration_type == "lifetime":
+            premium_expired_at = None  # NULL for lifetime
+            expiry_text = "lifetime"
+        elif duration_type == "days":
+            if not duration_value:
+                return {"success": False, "error": "duration_value required for days"}
+            premium_expired_at = (current_time + timedelta(days=int(duration_value))).isoformat()
+            expiry_text = f"{duration_value} hari"
+        elif duration_type == "months":
+            if not duration_value:
+                return {"success": False, "error": "duration_value required for months"}
+            # Calculate months (approximate as 30 days per month)
+            days = int(duration_value) * 30
+            premium_expired_at = (current_time + timedelta(days=days)).isoformat()
+            expiry_text = f"{duration_value} bulan"
+        else:
+            return {"success": False, "error": "Invalid duration_type. Use 'days', 'months', or 'lifetime'"}
+
+        # Update user premium status
+        update_data = {
+            "is_premium": True,
+            "subscription_end": premium_expired_at,
+            "updated_at": current_time.isoformat()
+        }
+
+        print(f"📝 Setting premium for user {telegram_id}: {expiry_text}")
+        print(f"📅 Premium expires at: {premium_expired_at}")
+
+        result = supabase.table('users').update(update_data).eq('telegram_id', telegram_id).execute()
+
+        if result.data:
+            print(f"✅ Premium set successfully for user {telegram_id}")
+            return {
+                "success": True,
+                "user_id": telegram_id,
+                "duration_type": duration_type,
+                "duration_value": duration_value,
+                "expiry_date": premium_expired_at,
+                "expiry_text": expiry_text,
+                "data": result.data[0]
+            }
+        else:
+            error_msg = f"Failed to update premium for user {telegram_id}"
+            print(f"❌ {error_msg}")
+            return {"success": False, "error": error_msg}
+
+    except Exception as e:
+        error_msg = f"Error setting premium for user {user_id}: {str(e)}"
+        print(f"❌ {error_msg}")
+        return {"success": False, "error": error_msg}
+
 def add_premium(user_id, duration_days=None):
-    """Add premium status to user"""
+    """Add premium status to user (legacy function for compatibility)"""
     if not supabase:
         return {"success": False, "error": "Supabase not configured"}
 
     try:
         if duration_days == "lifetime":
-            # Lifetime premium
-            premium_until = "9999-12-31T23:59:59+00:00"
+            return set_premium(user_id, "lifetime")
         elif duration_days:
-            # Calculate expiry date
             try:
                 days = int(duration_days)
-                premium_until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+                return set_premium(user_id, "days", days)
             except ValueError:
                 return {"success": False, "error": "Invalid duration format"}
         else:
             # Default 30 days
-            premium_until = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
-
-        update_data = {
-            "is_premium": True,
-            "subscription_end": premium_until
-        }
-
-        return update_user(user_id, update_data)
+            return set_premium(user_id, "days", 30)
 
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -217,7 +283,8 @@ def revoke_premium(user_id):
     try:
         update_data = {
             "is_premium": False,
-            "subscription_end": None
+            "subscription_end": None,
+            "updated_at": datetime.now(timezone.utc).isoformat()
         }
 
         return update_user(user_id, update_data)
