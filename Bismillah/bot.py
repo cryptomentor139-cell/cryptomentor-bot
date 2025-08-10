@@ -8,12 +8,12 @@ from dotenv import load_dotenv
 # Load environment variables from .env file (if exists) and system environment
 load_dotenv()
 
-# Add missing imports
+# Core telegram imports
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode
 
-# Import required modules for database operations
+# Local module imports
 from database import Database
 
 from crypto_api import CryptoAPI
@@ -1871,31 +1871,20 @@ Gunakan `/subscribe` untuk upgrade!
             if env_value and env_value != '0':
                 admin_env_vars[key] = env_value
 
-        if not self.is_admin(user_id):
-            await update.message.reply_text(
-                f"❌ **Access Denied**\n\n"
-                f"**Your ID**: {user_id}\n"
-                f"**Configured Admin IDs**: {sorted(list(self.admin_ids))}\n"
-                f"**Environment Variables**: {', '.join(admin_env_vars.keys()) if admin_env_vars else 'NONE SET'}\n\n"
-                f"⚠️ Admin access hanya untuk user dengan ID yang sesuai dengan admin environment variables di Secrets.",
-                parse_mode='Markdown'
-            )
-            return
-
         message = f"""👑 **CryptoMentor AI - Admin Panel** ({deployment_mode})
 
 🔑 **Admin Verification:**
-• **Your User ID**: {user_id} ✅
-• **Your Admin Status**: {'✅ PRIMARY' if user_id == self.admin_id else '✅ SECONDARY'}
-• **All Admin IDs**: {sorted(list(self.admin_ids))}
-• **Environment Variables**: {', '.join(admin_env_vars.keys()) if admin_env_vars else 'NONE SET'}
-• **Admin Access**: ✅ VERIFIED & GRANTED
+- Your User ID: {user_id} ✅
+- Your Admin Status: {'✅ PRIMARY' if user_id == self.admin_id else '✅ SECONDARY'}
+- All Admin IDs: {sorted(list(self.admin_ids))}
+- Environment Variables: {', '.join(admin_env_vars.keys()) if admin_env_vars else 'NONE SET'}
+- Admin Access: ✅ VERIFIED & GRANTED
 
 📊 **Bot Statistics:**
-• Total Users: {stats['total_users']}
-• Premium Users: {stats['premium_users']}
-• Active Today: {stats['active_today']}
-• Total Credits: {stats['total_credits']:,}
+- Total Users: {stats['total_users']}
+- Premium Users: {stats['premium_users']}
+- Active Today: {stats['active_today']}
+- Total Credits: {stats['total_credits']:,}
 
 🎯 **Auto SnD Signals:**
 • Status: {auto_status}
@@ -1903,7 +1892,28 @@ Gunakan `/subscribe` untuk upgrade!
 • Eligible Users: {len(eligible_auto_users)} (Admin + Lifetime)
 • Scan Interval: {(self.auto_signals.scan_interval // 60) if self.auto_signals else 'N/A'} minutes
 
+🔧 **Admin Commands:**
+- `/setpremium <user_id> <type>` - Set premium (month/lifetime)
+- `/revoke_premium <user_id>` - Remove premium status
+- `/grant_credits <user_id> <amount>` - Add credits
+- `/check_supabase_config` - Validate Supabase configuration
+- `/auto_signal_ai_status` - SnD signals status
+- `/enable_auto_signal_ai` - Start momentum signals scanner
+- `/disable_auto_signal_ai` - Stop momentum signals scanner
+- `/broadcast <message>` - Send broadcast
 
+🌐 **API Status:**
+- CoinAPI: {'Active' if hasattr(self.crypto_api, 'data_provider') and self.crypto_api.data_provider else 'No Provider'}
+- Binance: Active (Public API)
+- Auto Signals: {auto_status}
+
+💡 **V4 Features:**
+- CoinAPI integration
+- Advanced futures analysis with real-time data
+- Supply & Demand analysis for futures
+- Auto signals for admin & lifetime users"""
+
+        await update.message.reply_text(message, parse_mode='Markdown')
 
     async def check_supabase_config_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /check_supabase_config command - Admin only"""
