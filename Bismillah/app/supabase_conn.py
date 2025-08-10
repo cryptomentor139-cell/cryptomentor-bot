@@ -1,8 +1,8 @@
 # app/supabase_conn.py
 import os
 import requests
-from typing import Dict, Any, Tuple, Optional
-from datetime import datetime
+from typing import Dict, Any, List
+from datetime import datetime, timezone
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_SERVICE_KEY = <REDACTED_SUPABASE_KEY>
@@ -83,3 +83,31 @@ def update_user_tid(telegram_id: int, table_name: str = "users", **fields) -> Di
         raise RuntimeError(f"UPDATE {table_name} failed: {response.status_code} {response.text}")
 
     return response.json()[0] if response.status_code == 200 and response.text else {"telegram_id": telegram_id, **fields}
+
+def is_premium_user(telegram_id: int) -> bool:
+    """
+    Check if a user is a premium user by querying the 'users' table.
+    Returns True if the user is premium, False otherwise.
+    """
+    try:
+        user_data = get_user_by_tid(telegram_id)
+        if user_data and user_data.get("is_premium"):
+            return True
+        return False
+    except Exception as e:
+        print(f"Error checking premium status for user {telegram_id}: {e}")
+        return False
+
+def get_premium_user_data(telegram_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve all data for a premium user from the 'users' table.
+    Returns the user data dictionary if the user is premium, None otherwise.
+    """
+    try:
+        user_data = get_user_by_tid(telegram_id)
+        if user_data and user_data.get("is_premium"):
+            return user_data
+        return None
+    except Exception as e:
+        print(f"Error getting premium user data for user {telegram_id}: {e}")
+        return None
