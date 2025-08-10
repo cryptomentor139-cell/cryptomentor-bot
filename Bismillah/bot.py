@@ -278,6 +278,7 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("add_premium", self.add_premium_command))
             self.application.add_handler(CommandHandler("revoke_premium", self.revoke_premium_command))
             self.application.add_handler(CommandHandler("grant_premium", self.grant_premium_command))
+            self.application.add_handler(CommandHandler("setpremium", self.setpremium_command))
             self.application.add_handler(CommandHandler("grant_credits", self.grant_credits_command))
             self.application.add_handler(CommandHandler("fix_all_credits", self.fix_all_credits_command))
             self.application.add_handler(CommandHandler("broadcast", self.broadcast_command))
@@ -1922,6 +1923,7 @@ Gunakan `/subscribe` untuk upgrade!
 • `/add_premium <user_id> <days>` - Add premium status
 • `/revoke_premium <user_id>` - Remove premium status
 • `/grant_premium <user_id> <days>` - Grant premium (legacy)
+• `/setpremium <user_id> <type> [value]` - Set premium (flexible)
 • `/grant_credits <user_id> <amount>` - Add credits
 • `/auto_signals_status` - SnD signals status
 • `/enable_auto_signal_ai` - Start momentum signals scanner
@@ -2139,6 +2141,106 @@ Gunakan `/subscribe` untuk upgrade!
         except Exception as e:
             message = f"❌ **Error koneksi ke Supabase!**\n\n**Error**: {str(e)}"
             print(f"Error in grant_premium_command: {e}")
+
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def setpremium_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /setpremium command"""
+        user_id = update.message.from_user.id
+
+        if not self.is_admin(user_id):
+            await update.message.reply_text("❌ Access denied. Admin only command.")
+            return
+
+        if len(context.args) < 2:
+            await update.message.reply_text(
+                "❌ **Format salah!**\n\n"
+                "Gunakan: `/setpremium <user_id> <days|months|lifetime> [value]`\n\n"
+                "**Contoh:**\n"
+                "• `/setpremium 123456789 days 30` - Premium 30 hari\n"
+                "• `/setpremium 123456789 months 6` - Premium 6 bulan\n"
+                "• `/setpremium 123456789 lifetime` - Premium selamanya",
+                parse_mode='Markdown'
+            )
+            return
+
+        try:
+            target_user_id = int(context.args[0])
+            duration_type = context.args[1].lower()
+            
+            duration_value = None
+            if duration_type in ["days", "months"]:
+                if len(context.args) < 3:
+                    await update.message.reply_text(f"❌ Value diperlukan untuk {duration_type}!")
+                    return
+                try:
+                    duration_value = int(context.args[2])
+                except ValueError:
+                    await update.message.reply_text("❌ Value harus berupa angka!")
+                    return
+            
+        except ValueError:
+            await update.message.reply_text("❌ User ID harus berupa angka!")
+            return
+
+        # Set premium using new function
+        try:
+            from supabase_client import set_premium, get_user
+            
+            # Check if user exists first
+            user_result = get_user(target_user_id)
+            
+            if not user_result["success"]:
+                await update.message.reply_text(
+                    f"❌ **User tidak ditemukan!**\n\n"
+                    f"User ID {target_user_id} tidak ada di database.\n"
+                    f"Pastikan user sudah pernah menggunakan bot."
+                )
+                return
+            
+            # Set premium status
+            result = set_premium(target_user_id, duration_type, duration_value)
+            
+            if result["success"]:
+                user_data = user_result["data"]
+                username = user_data.get('username', 'no_username')
+                first_name = user_data.get('first_name', 'Unknown')
+                
+                expiry_text = result.get('expiry_text', 'unknown')
+                expiry_date = result.get('expiry_date')
+                
+                if expiry_date:
+                    # Format date for display
+                    from datetime import datetime
+                    try:
+                        exp_dt = datetime.fromisoformat(expiry_date.replace('Z', '+00:00'))
+                        formatted_date = exp_dt.strftime('%d/%m/%Y %H:%M WIB')
+                        expiry_display = f"sampai {formatted_date}"
+                    except:
+                        expiry_display = f"sampai {expiry_date[:10]}"
+                else:
+                    expiry_display = "LIFETIME (tanpa batas)"
+                
+                message = f"""✅ **Premium berhasil diatur untuk user {target_user_id} {expiry_display}**
+
+👤 **User Info:**
+• **Telegram ID**: {target_user_id}
+• **Name**: {first_name}
+• **Username**: @{username}
+
+⭐ **Premium Status:**
+• **Type**: {expiry_text}
+• **Duration**: {duration_type}
+• **Value**: {duration_value if duration_value else 'N/A'}
+• **Database**: ✅ Updated in Supabase
+
+🎉 User sekarang memiliki akses premium!"""
+            else:
+                message = f"❌ **Gagal mengatur premium!**\n\n**Error**: {result.get('error', 'Unknown error')}"
+
+        except Exception as e:
+            message = f"❌ **Error sistem!**\n\n**Error**: {str(e)}"
+            print(f"Error in setpremium_command: {e}")
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
