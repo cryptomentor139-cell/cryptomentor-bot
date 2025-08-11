@@ -889,8 +889,8 @@ class TelegramBot:
             credits = sb_get_credits(user_id)
         except Exception as e:
             print(f"⚠️ Supabase premium check failed, using fallback: {e}")
-            is_premium = self.db.is_user_premium(user_id)
-            credits = self.db.get_user_credits(user_id)
+            is_premium = False  # Default to free if Supabase fails
+            credits = 0
 
         is_admin = self.is_admin(user_id)
 
@@ -948,8 +948,8 @@ class TelegramBot:
             credits = sb_get_credits(user_id)
         except Exception as e:
             print(f"⚠️ Supabase premium check failed, using fallback: {e}")
-            is_premium = self.db.is_user_premium(user_id)
-            credits = self.db.get_user_credits(user_id)
+            is_premium = False  # Default to free if Supabase fails
+            credits = 0
 
         is_admin = self.is_admin(user_id)
 
@@ -1022,8 +1022,8 @@ class TelegramBot:
             credits = sb_get_credits(user_id)
         except Exception as e:
             print(f"⚠️ Supabase premium check failed, using fallback: {e}")
-            is_premium = self.db.is_user_premium(user_id)
-            credits = self.db.get_user_credits(user_id)
+            is_premium = False  # Default to free if Supabase fails
+            credits = 0
 
         is_admin = self.is_admin(user_id)
 
@@ -1091,8 +1091,10 @@ class TelegramBot:
                         await update.message.reply_text(chunk, parse_mode='MarkdownV2')
                 except Exception as e:
                     print(f"⚠️ Markdown error, sending as plain text: {e}")
-                    await loading_msg.edit_text(chunks[0], parse_mode=None)
-                    for chunk in chunks[1:]:
+                    # Remove escape characters for plain text
+                    plain_chunks = [chunk.replace('\\', '') for chunk in chunks]
+                    await loading_msg.edit_text(plain_chunks[0], parse_mode=None)
+                    for chunk in plain_chunks[1:]:
                         await update.message.reply_text(chunk, parse_mode=None)
             else:
                 try:
@@ -1124,8 +1126,8 @@ class TelegramBot:
             credits = sb_get_credits(user_id)
         except Exception as e:
             print(f"⚠️ Supabase premium check failed, using fallback: {e}")
-            is_premium = self.db.is_user_premium(user_id)
-            credits = self.db.get_user_credits(user_id)
+            is_premium = False  # Default to free if Supabase fails
+            credits = 0
 
         is_admin = self.is_admin(user_id)
 
@@ -1199,8 +1201,8 @@ class TelegramBot:
                         credits = sb_get_credits(user_id)
                     except Exception as e:
                         print(f"⚠️ Supabase premium check failed, using fallback: {e}")
-                        is_premium = self.db.is_user_premium(user_id)
-                        credits = self.db.get_user_credits(user_id)
+                        is_premium = False  # Default to free if Supabase fails
+                        credits = 0
 
                     is_admin = self.is_admin(user_id)
 
@@ -1368,8 +1370,8 @@ class TelegramBot:
             credits = sb_get_credits(user_id)
         except Exception as e:
             print(f"⚠️ Supabase premium check failed, using fallback: {e}")
-            is_premium = self.db.is_user_premium(user_id)
-            credits = self.db.get_user_credits(user_id)
+            is_premium = False  # Default to free if Supabase fails
+            credits = 0
 
         is_admin = self.is_admin(user_id)
 
@@ -1590,16 +1592,13 @@ Harga akan diambil real-time dari CoinAPI."""
         """Handle /subscribe command"""
         user_id = update.message.from_user.id
         username = update.message.from_user.username or "Tidak ada username"
-        first_name = update.message.from_user.first_name or ""
-
-        # Check current status
         # Use Supabase for premium checks
         try:
             from app.premium_check import is_premium as sb_is_premium
             is_premium = sb_is_premium(user_id)
         except Exception as e:
             print(f"⚠️ Supabase premium check failed, using fallback: {e}")
-            is_premium = self.db.is_user_premium(user_id)
+            is_premium = False  # Default to free if Supabase fails
 
         user_data = self.db.get_user(user_id)
         is_lifetime = user_data and user_data.get('subscription_end') is None if user_data else False
@@ -1610,7 +1609,7 @@ Harga akan diambil real-time dari CoinAPI."""
 
             message = f"""⭐ **Status {premium_type} Aktif**
 
-👤 **{first_name}**, Anda sudah menjadi member {premium_type}!
+👤 **{update.effective_user.first_name}**, Anda sudah menjadi member {premium_type}!
 
 🚀 **Keuntungan yang Anda nikmati:**
 • ♾️ Unlimited analisis CoinAPI + SnD
@@ -1626,7 +1625,7 @@ Nikmati semua fitur tanpa batasan credit."""
 👤 **Informasi Anda:**
 • **User ID:** `{user_id}`
 • **Username:** @{username}
-• **Nama:** {first_name}
+• **Nama:** {update.effective_user.first_name}
 
 🚀 **Fitur Premium CoinAPI + SnD:**
 • ♾️ Unlimited analisis dengan CoinAPI real-time
@@ -1660,7 +1659,7 @@ Nikmati semua fitur tanpa batasan credit."""
 3. Sertakan informasi ini:
    • User ID: `{user_id}`
    • Username: @{username}
-   • Nama: {first_name}
+   • Nama: {update.effective_user.first_name}
    • Paket: (pilih paket)
 4. Tunggu konfirmasi aktivasi (maks 24 jam)
 
@@ -1685,7 +1684,7 @@ Pastikan menyertakan User ID (`{user_id}`) dan paket yang dipilih untuk aktivasi
             is_premium = sb_is_premium(user_id)
         except Exception as e:
             print(f"⚠️ Supabase premium check failed, using fallback: {e}")
-            is_premium = self.db.is_user_premium(user_id)
+            is_premium = False  # Default to free if Supabase fails
 
         # Get bot username dynamically
         try:
@@ -2391,7 +2390,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
             is_premium = sb_is_premium(user_id)
         except Exception as e:
             print(f"⚠️ Supabase premium check failed, using fallback: {e}")
-            is_premium = self.db.is_user_premium(user_id)
+            is_premium = False  # Default to free if Supabase fails
 
         if not is_premium:
             await update.message.reply_text(
