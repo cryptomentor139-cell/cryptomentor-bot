@@ -85,25 +85,67 @@ def upsert_user_tid(telegram_id: int, table: str = "users", **fields) -> Dict[st
     if not url or not key:
         raise RuntimeError("Supabase env missing")
     
-    payload = [{"telegram_id": int(telegram_id), **fields}]
+    payload = {"telegram_id": int(telegram_id), **fields}
     
-    r = requests.post(
+    print(f"🔄 Upserting user {telegram_id} with data: {payload}")
+    
+    # Try UPDATE first
+    update_r = requests.patch(
         f"{rest}/{table}",
-        headers=_headers(key, "resolution=merge-duplicates,return=representation"),
-        params={"on_conflict": "telegram_id"},
+        headers=_headers(key, "return=representation"),
+        params={"telegram_id": f"eq.{int(telegram_id)}"},
+        json=fields,
+        timeout=20
+    )
+    
+    print(f"📝 UPDATE response: {update_r.status_code} - {update_r.text[:200]}")
+    
+    if update_r.status_code == 200 and update_r.text.strip() != "[]":
+        # User exists and was updated
+        try:
+            data = update_r.json()
+            return data[0] if isinstance(data, list) and data else payload
+        except:
+            return payload
+    
+    # User doesn't exist, try INSERT
+    print(f"🔄 User not found, inserting new user {telegram_id}")
+    insert_r = requests.post(
+        f"{rest}/{table}",
+        headers=_headers(key, "return=representation"),
         json=payload,
         timeout=20
     )
     
-    if r.status_code not in (200, 201):
-        raise RuntimeError(f"UPSERT failed: {r.status_code} {r.text}")
+    print(f"📝 INSERT response: {insert_r.status_code} - {insert_r.text[:200]}")
+    
+    if insert_r.status_code not in (200, 201):
+        # Final fallback: try upsert with conflict resolution
+        print(f"🔄 Trying upsert with conflict resolution for user {telegram_id}")
+        upsert_r = requests.post(
+            f"{rest}/{table}",
+            headers=_headers(key, "resolution=merge-duplicates,return=representation"),
+            params={"on_conflict": "telegram_id"},
+            json=[payload],
+            timeout=20
+        )
+        
+        print(f"📝 UPSERT response: {upsert_r.status_code} - {upsert_r.text[:200]}")
+        
+        if upsert_r.status_code not in (200, 201):
+            raise RuntimeError(f"All operations failed. Last error: {upsert_r.status_code} {upsert_r.text}")
+        
+        try:
+            data = upsert_r.json()
+            return data[0] if isinstance(data, list) and data else payload
+        except:
+            return payload
     
     try:
-        data = r.json()
-    except Exception:
-        data = None
-    
-    return data[0] if isinstance(data, list) and data else {"telegram_id": telegram_id, **fields}
+        data = insert_r.json()
+        return data[0] if isinstance(data, list) and data else payload
+    except:
+        return payload
 
 def update_user_tid(telegram_id: int, table: str = "users", **fields) -> Dict[str, Any]:
     """Update user by telegram_id"""
