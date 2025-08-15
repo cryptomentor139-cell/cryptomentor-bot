@@ -1826,82 +1826,139 @@ Gunakan `/subscribe` untuk upgrade!
 
     # Essential admin commands
     async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /admin command"""
+        """Handle /admin command with enhanced UI"""
         user_id = update.message.from_user.id
 
         if not self.is_admin(user_id):
             await update.message.reply_text("❌ Access denied. Admin only command.")
             return
 
-        # Get bot statistics
+        # Get comprehensive statistics
         stats = self.db.get_bot_statistics()
         eligible_auto_users = self.db.get_eligible_auto_signal_users()
         auto_status = "🟢 RUNNING" if self.auto_signals and self.auto_signals.is_running else "🔴 STOPPED"
         deployment_mode = "🚀 DEPLOYMENT" if IS_DEPLOYMENT else "🔧 DEVELOPMENT"
-
-        # Enhanced admin verification for multiple admins
+        
+        # Get current time for status
+        current_time = datetime.now().strftime('%H:%M:%S WIB')
+        
+        # Enhanced admin verification
         admin_env_vars = {}
         for i in range(1, 10):
             key = f'ADMIN_USER_ID' if i == 1 else f'ADMIN{i}_USER_ID'
             env_value = os.getenv(key)
             if env_value and env_value != '0':
                 admin_env_vars[key] = env_value
-
-        if not self.is_admin(user_id):
-            await update.message.reply_text(
-                f"❌ **Access Denied**\n\n"
-                f"**Your ID**: {user_id}\n"
-                f"**Configured Admin IDs**: {sorted(list(self.admin_ids))}\n"
-                f"**Environment Variables**: {', '.join(admin_env_vars.keys()) if admin_env_vars else 'NONE SET'}\n\n"
-                f"⚠️ Admin access hanya untuk user dengan ID yang sesuai dengan admin environment variables di Secrets.",
-                parse_mode='Markdown'
-            )
-            return
-
-        message = f"""👑 **CryptoMentor AI - Admin Panel** ({deployment_mode})
-
-🔑 **Admin Verification:**
-• **Your User ID**: {user_id} ✅
-• **Your Admin Status**: {'✅ PRIMARY' if user_id == self.admin_id else '✅ SECONDARY'}
-• **All Admin IDs**: {sorted(list(self.admin_ids))}
-• **Environment Variables**: {', '.join(admin_env_vars.keys()) if admin_env_vars else 'NONE SET'}
-• **Admin Access**: ✅ VERIFIED & GRANTED
-
-📊 **Bot Statistics:**
-• Total Users: {stats['total_users']}
-• Premium Users: {stats['premium_users']}
-• Active Today: {stats['active_today']}
-• Total Credits: {stats['total_credits']:,}
-
-🎯 **Auto SnD Signals (Enhanced Control):**
-        • Feature Flag: {'✅ ON' if AUTO_SIGNALS_ENABLED else '❌ OFF'}
-        • Runtime Status: {auto_status}
-        • Mode: Works in {deployment_mode} mode
-        • Eligible Users: {len(eligible_auto_users)} (Admin + Lifetime)
-        • Target Coins: {len(self.auto_signals.target_symbols) if self.auto_signals else 0} top coins
-        • Scan Interval: {(self.auto_signals.scan_interval // 60) if self.auto_signals else 'N/A'} minutes
         
-🔧 **Admin Commands:**
-        • `/grant_premium <user_id> <days>` - Grant premium
-        • `/revoke_premium <user_id>` - Revoke premium
-        • `/grant_credits <user_id> <amount>` - Add credits
-        • `/autosignal_status` - Enhanced auto signals status
-        • `/autosignal_force_off` - Force stop all auto signals
-        • `/autosignal_temp_on` - Temporary enable (session only)
-        • `/enable_auto_signal_ai` - Start signals (legacy)
-        • `/disable_auto_signal_ai` - Stop signals (legacy)
-        • `/broadcast <message>` - Send broadcast
+        # Add ADMIN support
+        admin_value = os.getenv('ADMIN')
+        if admin_value and admin_value != '0':
+            admin_env_vars['ADMIN'] = admin_value
 
-🌐 **API Status:**
-• CoinAPI: {'✅ Active' if hasattr(self.crypto_api, 'data_provider') and self.crypto_api.data_provider else '❌ No Provider'}
-• Binance: ✅ Active (Public API)
-• Auto Signals: {auto_status}
+        # Check API health
+        coinapi_status = "✅ Active" if hasattr(self.crypto_api, 'data_provider') and self.crypto_api.data_provider else "❌ No Provider"
+        binance_status = "✅ Active"
+        database_status = "✅ Online" if self.db else "❌ Offline"
 
-💡 **V4 Features:**
-- CoinAPI integration
-- Advanced futures analysis with real-time data
-- Supply & Demand analysis for futures
-- Auto signals for admin & lifetime users"""
+        message = f"""╔══════════════════════════════════════╗
+║      👑 **CRYPTOMENTOR AI ADMIN**      ║
+║           **CONTROL PANEL**            ║
+╚══════════════════════════════════════╝
+
+🕐 **Status Update**: {current_time} | Mode: {deployment_mode}
+
+┌─────────────────────────────────────┐
+│          🔐 **ADMIN ACCESS**          │
+└─────────────────────────────────────┘
+• **Your User ID**: `{user_id}` ✅
+• **Access Level**: {'👑 PRIMARY ADMIN' if user_id == self.admin_id else '⭐ SECONDARY ADMIN'}
+• **Configured Admins**: {len(self.admin_ids)} total
+• **Admin IDs**: `{', '.join(map(str, sorted(list(self.admin_ids))))}`
+• **Environment Variables**: {len(admin_env_vars)} configured
+  {chr(10).join([f"  • {key}: {'SET' if val else 'EMPTY'}" for key, val in admin_env_vars.items()])}
+
+┌─────────────────────────────────────┐
+│         📊 **BOT STATISTICS**         │
+└─────────────────────────────────────┘
+• **Total Users**: {stats['total_users']:,} users
+• **Premium Users**: {stats['premium_users']:,} users ({(stats['premium_users']/max(stats['total_users'],1)*100):.1f}%)
+• **Active Today**: {stats['active_today']:,} users
+• **Total Credits**: {stats['total_credits']:,} credits
+• **Avg Credits/User**: {stats.get('avg_credits', 0):.1f} credits
+
+┌─────────────────────────────────────┐
+│        🎯 **AUTO SND SIGNALS**        │
+└─────────────────────────────────────┘
+• **Feature Flag**: {'🟢 ENABLED' if AUTO_SIGNALS_ENABLED else '🔴 DISABLED'}
+• **Runtime Status**: {auto_status}
+• **Eligible Users**: {len(eligible_auto_users)} (Admin + Lifetime)
+• **Target Coins**: {len(self.auto_signals.target_symbols) if self.auto_signals else 0} altcoins
+• **Scan Interval**: {(self.auto_signals.scan_interval // 60) if self.auto_signals else 'N/A'} minutes
+• **Min Confidence**: {getattr(self.auto_signals, 'min_confidence', 'N/A')}%
+
+┌─────────────────────────────────────┐
+│         🌐 **SYSTEM STATUS**          │
+└─────────────────────────────────────┘
+• **Database**: {database_status}
+• **CoinAPI**: {coinapi_status}
+• **Binance API**: {binance_status}
+• **Auto Signals**: {auto_status}
+• **Deployment**: {deployment_mode}
+
+┌─────────────────────────────────────┐
+│       🛠️ **PREMIUM MANAGEMENT**       │
+└─────────────────────────────────────┘
+• `/grant_premium <user_id> <days>` - Grant premium access
+• `/grant_premium <user_id> 0` - Grant lifetime premium
+• `/revoke_premium <user_id>` - Remove premium access
+• `/grant_package <user_id> <package>` - Grant specific package
+
+┌─────────────────────────────────────┐
+│        💳 **CREDIT MANAGEMENT**       │
+└─────────────────────────────────────┘
+• `/grant_credits <user_id> <amount>` - Add credits to user
+• `/fix_all_credits` - Fix NULL/negative credits
+• `/refresh_credits` - Give bonus credits to free users
+
+┌─────────────────────────────────────┐
+│      🎯 **AUTO SIGNALS CONTROL**      │
+└─────────────────────────────────────┘
+• `/autosignal_status` - Detailed auto signals status
+• `/enable_auto_signal_ai` - Start auto signals scanner
+• `/disable_auto_signal_ai` - Stop auto signals scanner
+• `/autosignal_force_off` - Force stop (emergency)
+• `/autosignal_temp_on` - Temporary enable (session only)
+
+┌─────────────────────────────────────┐
+│       📢 **BROADCAST SYSTEM**        │
+└─────────────────────────────────────┘
+• `/broadcast <message>` - Create broadcast message
+• `/broadcast_welcome` - Send welcome broadcast
+• `/confirm_broadcast` - Send pending broadcast
+• `/cancel_broadcast` - Cancel pending broadcast
+
+┌─────────────────────────────────────┐
+│        📊 **MONITORING TOOLS**       │
+└─────────────────────────────────────┘
+• `/recovery_stats` - Database & recovery statistics
+• `/premium_earnings` - Premium referral earnings (Premium only)
+• `/check_admin` - Verify admin status
+• `/restart` - Restart bot (emergency only)
+
+┌─────────────────────────────────────┐
+│         🚀 **V4 FEATURES**           │
+└─────────────────────────────────────┘
+✅ Real-time CoinAPI integration
+✅ Advanced SnD analysis for futures
+✅ Enhanced auto signals system
+✅ Multi-admin support system
+✅ Comprehensive broadcast system
+✅ Premium referral earnings tracking
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 **Quick Actions**: Use commands above to manage the bot
+⚠️ **Security**: Only use admin commands responsibly
+🔄 **Status updates** refresh automatically every command"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
