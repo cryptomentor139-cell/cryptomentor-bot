@@ -11,6 +11,11 @@ from app.services.analysis import (
     futures_signals as futures_signals_modern
 )
 from app.services.futures_legacy import futures_signals_legacy
+from app.services.futures_report import build_futures_signals_report
+from app.services.market_report import build_market_report
+from app.formatters.futures_signals_html import format_futures_signals_html
+from app.formatters.market_card import format_market_report
+from app.formatters.signal_card import format_signal_card, format_signal_list
 from config import USE_LEGACY_FUTURES_SIGNALS
 import importlib
 
@@ -36,52 +41,24 @@ except ImportError:
         }
 
 async def cmd_futures_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /futures_signals command"""
+    """Handle /futures_signals command with improved global metrics"""
     user_id = update.effective_user.id
-    requested_coins = [arg.upper() for arg in context.args] if context.args else []
-
-    print(f"🚨 /futures_signals from user {user_id} - coins: {requested_coins}")
+    coins = [c.upper() for c in (context.args or [])]
+    threshold = 75.0  # High confidence threshold
+    
+    print(f"🚨 /futures_signals from user {user_id} - coins: {coins}")
 
     try:
-        # Use configuration to determine which pipeline to use
-        if USE_LEGACY_FUTURES_SIGNALS:
-            signals = await futures_signals_legacy(requested_coins or None)
-        else:
-            signals = await futures_signals_modern(requested_coins or None, threshold=0.0)
-
-        # Format dengan list kartu
-        header = "🚨 FUTURES SIGNALS – SUPPLY & DEMAND ANALYSIS"
-        # Assuming format_signal_list is available and correctly imported
-        # If not, a fallback will be needed, but the changes provided imply it exists.
-        try:
-            from app.formatters.signal_card import format_signal_list
-            formatted_text = format_signal_list(signals, include_entry=True, title=header)
-        except ImportError:
-            # Fallback to old formatting if new formatter is not found
-            lines = [f"🚨 **{header}**"]
-            if not signals:
-                lines.append("❌ Tidak ada sinyal")
-            else:
-                for it in signals:
-                    if "error" in it:
-                        lines.append(f"- {it.get('coin', 'N/A')}: ❌ error")
-                        continue
-                    entry = it.get('entry', 0)
-                    rsi = it.get('rsi', 0)
-                    macd_hist = it.get('macd_hist', 0)
-                    trend = it.get('trend', 'Unknown')
-                    lines.append(
-                        f"- **{it.get('coin', 'N/A')}**: Entry {entry:.4f} | "
-                        f"RSI {rsi:.1f} | MACD {macd_hist:.4f} | {trend}"
-                    )
-            formatted_text = "\n".join(lines)
-
-
-        await safe_reply(update, formatted_text)
-
+        rep = await build_futures_signals_report(coins or None, threshold=threshold)
+        text = format_futures_signals_html(rep)
+        await safe_reply(update, text, prefer_html=True)
     except Exception as e:
         print(f"❌ Error in futures_signals command: {e}")
-        await safe_reply(update, "❌ Terjadi kesalahan mengambil futures signals.")
+        await safe_reply(update,
+            "❌ Terjadi kesalahan mengambil data untuk FUTURES_SIGNALS\n\n"
+            f"🔄 Error context: {e}",
+            prefer_html=True
+        )
 
 async def cmd_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /analyze command"""
@@ -189,3 +166,22 @@ async def cmd_futures(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #             "💡 Coba: /price btc — Cek harga basic"
 #         )
 #         await safe_reply(update, error_msg)
+
+
+async def cmd_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /market command"""
+    user_id = update.effective_user.id
+    syms = [s.upper() for s in (context.args or [])]
+    
+    print(f"📊 /market from user {user_id} - symbols: {syms}")
+
+    try:
+        rep = await build_market_report(symbols=syms or None)
+        text = format_market_report(rep)
+        await safe_reply(update, text, prefer_html=True)
+    except Exception as e:
+        print(f"❌ Error in market command: {e}")
+        await safe_reply(update,
+            "❌ Terjadi kesalahan saat menganalisis pasar.",
+            prefer_html=True
+        )
