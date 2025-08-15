@@ -152,7 +152,7 @@ class CryptoAPI:
 
             if futures_data.get('success'):
                 data = futures_data.get('data', {})
-                
+
                 # Extract key metrics for compatibility
                 result = {
                     'symbol': symbol,

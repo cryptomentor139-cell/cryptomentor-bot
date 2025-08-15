@@ -31,7 +31,7 @@ class AIAssistant:
 
         # Admin logging system - ensure this is always initialized
         self.admin_log = []
-        
+
         # Connection monitoring
         self.connection_status = {
             'last_check': datetime.now(),
@@ -52,13 +52,13 @@ class AIAssistant:
         """Periodic health check for Supabase connection"""
         try:
             current_time = datetime.now()
-            
+
             # Check if we need to perform health check (every 5 minutes)
             if (current_time - self.connection_status['last_check']).total_seconds() < 300:
                 return self.supabase_connected
-            
+
             print("🏥 Performing Supabase connection health check...")
-            
+
             if self._test_supabase_connection():
                 self.connection_status['consecutive_failures'] = 0
                 self.supabase_connected = True
@@ -66,7 +66,7 @@ class AIAssistant:
             else:
                 self.connection_status['consecutive_failures'] += 1
                 print(f"❌ Connection health check failed (failures: {self.connection_status['consecutive_failures']})")
-                
+
                 # Auto-reconnect after 2 consecutive failures
                 if self.connection_status['consecutive_failures'] >= 2:
                     print("🔄 Triggering auto-reconnection due to health check failures")
@@ -75,10 +75,10 @@ class AIAssistant:
                         self.supabase_connected = True
                     else:
                         self.supabase_connected = False
-            
+
             self.connection_status['last_check'] = current_time
             return self.supabase_connected
-            
+
         except Exception as e:
             print(f"❌ Health check error: {e}")
             self.supabase_connected = False
@@ -96,7 +96,7 @@ class AIAssistant:
         }
 
 
-        self.target_symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'MATIC', 'DOT', 'LINK']
+        self.target_symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'LINK']
 
     @classmethod
     def reset_connection_after_deploy(cls):
@@ -111,29 +111,29 @@ class AIAssistant:
         """Validate data consistency after deployment"""
         try:
             print("🔍 Running post-deployment validation...")
-            
+
             # Reset connection state
             self.reset_connection_after_deploy()
-            
+
             # Reinitialize connection
             self.supabase = self._init_supabase()
             self.supabase_connected = self._validate_supabase_connection()
-            
+
             if self.supabase_connected:
                 # Validate data integrity
                 user_count = self.get_user_count()
                 premium_count = self.get_premium_users_count()
-                
+
                 print(f"✅ Post-deploy validation complete:")
                 print(f"   📊 Total users: {user_count}")
                 print(f"   👑 Premium users: {premium_count}")
                 print(f"   🔗 Connection: {'✅ Stable' if self.supabase_connected else '❌ Failed'}")
-                
+
                 return True
             else:
                 print("❌ Post-deployment validation failed - connection not established")
                 return False
-                
+
         except Exception as e:
             print(f"❌ Post-deployment validation error: {e}")
             return False
@@ -164,7 +164,7 @@ class AIAssistant:
             # Use the centralized supabase client
             AIAssistant._supabase_instance = supabase
             print("✅ Using centralized Supabase client")
-            
+
             # Test connection immediately
             if self._test_supabase_connection():
                 return AIAssistant._supabase_instance
@@ -186,17 +186,17 @@ class AIAssistant:
 
             # Simple ping test
             result = AIAssistant._supabase_instance.from_('users').select('count', count='exact').limit(1).execute()
-            
+
             # Store user count for validation
             current_count = result.count if hasattr(result, 'count') else 0
-            
+
             # Validate data consistency
             if AIAssistant._last_user_count is not None:
                 if abs(current_count - AIAssistant._last_user_count) > 5:
                     print(f"⚠️ Data inconsistency detected: {AIAssistant._last_user_count} → {current_count}")
                     # Re-fetch all data to ensure consistency
                     self._validate_data_integrity()
-            
+
             AIAssistant._last_user_count = current_count
             print(f"✅ Supabase connection active - Users: {current_count}")
             return True
@@ -214,17 +214,17 @@ class AIAssistant:
         try:
             AIAssistant._connection_retry_count += 1
             print(f"🔄 Attempting Supabase reconnection (attempt {AIAssistant._connection_retry_count}/{AIAssistant._max_retries})")
-            
+
             # Reset instance to force new connection
             AIAssistant._supabase_instance = None
-            
+
             # Wait before retry
             import time
             time.sleep(2)
-            
+
             # Reinitialize
             self.supabase = self._init_supabase()
-            
+
             if self.supabase and self._test_supabase_connection():
                 print("✅ Supabase reconnection successful")
                 AIAssistant._connection_retry_count = 0  # Reset counter on success
@@ -243,20 +243,20 @@ class AIAssistant:
                 return False
 
             print("🔍 Validating data integrity...")
-            
+
             # Get complete user count
             result = AIAssistant._supabase_instance.from_('users').select('count', count='exact').execute()
             total_users = result.count if hasattr(result, 'count') else 0
-            
+
             # Get premium users count
             premium_result = AIAssistant._supabase_instance.from_('users').select('count', count='exact').eq('is_premium', True).execute()
             premium_users = premium_result.count if hasattr(premium_result, 'count') else 0
-            
+
             print(f"📊 Data integrity check: Total={total_users}, Premium={premium_users}")
-            
+
             # Update cached values
             AIAssistant._last_user_count = total_users
-            
+
             return True
 
         except Exception as e:
@@ -268,7 +268,7 @@ class AIAssistant:
         # Test existing connection
         if self._test_supabase_connection():
             return True
-        
+
         # Try to reconnect if connection failed
         print("🔄 Connection lost, attempting reconnection...")
         return self._reconnect_supabase()
@@ -337,7 +337,7 @@ class AIAssistant:
         """Check if database is required and available for command"""
         # Perform periodic health check
         self.check_connection_health()
-        
+
         # Most commands don't actually require database for core functionality
         # Only user-specific features like premium status, credits need database
         if command_name in ['ANALYZE', 'FUTURES', 'FUTURES_SIGNALS', 'MARKET_SENTIMENT']:
@@ -354,10 +354,10 @@ class AIAssistant:
 
     def _get_database_error_message(self):
         """Get user-friendly database error message"""
-        return """⚠️ Database tidak tersedia saat ini\\. 
+        return """⚠️ Database tidak tersedia saat ini\. 
 
-✅ Analisis tetap berfungsi normal\\!
-💡 Fitur premium dan riwayat mungkin terbatas\\."""
+✅ Analisis tetap berfungsi normal\!
+💡 Fitur premium dan riwayat mungkin terbatas\."""
 
     def _validate_markdown_output(self, text):
         """Validate if text is safe for Markdown parsing"""
@@ -661,7 +661,7 @@ class AIAssistant:
     def _supabase_query(self, query_func, operation_name="query"):
         """Execute Supabase query with auto-reconnection"""
         max_attempts = 3
-        
+
         for attempt in range(1, max_attempts + 1):
             try:
                 # Ensure connection is active
@@ -673,21 +673,21 @@ class AIAssistant:
 
                 # Execute query
                 result = query_func()
-                
+
                 # Log successful operation
                 if attempt > 1:
                     print(f"✅ {operation_name} successful on attempt {attempt}")
-                
+
                 return result
 
             except Exception as e:
                 print(f"❌ {operation_name} attempt {attempt} failed: {e}")
-                
+
                 if attempt < max_attempts:
                     print(f"🔄 Retrying {operation_name} in 2 seconds...")
                     import time
                     time.sleep(2)
-                    
+
                     # Force reconnection for next attempt
                     AIAssistant._supabase_instance = None
                     self.supabase = self._init_supabase()
@@ -725,7 +725,7 @@ class AIAssistant:
             return result.count if hasattr(result, 'count') else 0
 
         count = self._supabase_query(query_operation, "get_user_count")
-        
+
         if count is not None:
             # Validate against last known count
             if AIAssistant._last_user_count is not None:
@@ -734,9 +734,9 @@ class AIAssistant:
                     print(f"⚠️ Significant user count change detected: {AIAssistant._last_user_count} → {count}")
                     # Trigger data integrity check
                     self._validate_data_integrity()
-            
+
             AIAssistant._last_user_count = count
-            
+
         return count or 0
 
     def get_premium_users_count(self):
@@ -775,34 +775,28 @@ class AIAssistant:
 
     # ============ MAIN COMMAND HANDLERS ============
 
-    def get_comprehensive_analysis(self, symbol, snd_data={}, price_data={}, language='id', crypto_api=None):
-        """Enhanced comprehensive analysis matching professional futures format"""
+    def get_comprehensive_analysis(self, symbol, price_data, futures_data, language='id', crypto_api=None):
+        """Generate comprehensive crypto analysis with CoinAPI data"""
         try:
-            # Check database connection for user-related operations
-            db_available, db_error = self._check_database_required("ANALYZE")
-            if not db_available:
-                return db_error
+            # Get fresh price data from CoinAPI if not provided
+            if not price_data or 'error' in price_data:
+                price_data = crypto_api.get_crypto_price(symbol, force_refresh=True)
 
-            current_time = self._get_wib_time()
-            symbol = symbol.upper()
+            # Get OHLCV data for technical analysis (spot market for general analysis)
+            try:
+                import asyncio
+                ohlcv_data = asyncio.run(crypto_api.get_ohlcv_data(symbol, period="5MIN", limit=100, market="spot"))
+            except Exception as e:
+                print(f"⚠️ OHLCV data unavailable: {e}")
+                ohlcv_data = []
 
-            # Get current price data with extended info
-            if crypto_api:
-                price_info = crypto_api.get_crypto_price(symbol, force_refresh=True)
-                futures_data = crypto_api.get_futures_data(symbol)
-                coin_info = crypto_api.get_coin_info(symbol) if hasattr(crypto_api, 'get_coin_info') else {}
-            else:
-                price_info = {'error': 'API unavailable'}
-                futures_data = {}
-                coin_info = {}
-
-            if 'error' in price_info or not price_info.get('success'):
+            if 'error' in price_data or not price_data.get('success'):
                 return self._error_fallback(symbol, "price data")
 
-            current_price = self._normalize_data(price_info, ['price', 'current_price', 'last', 'close'])
-            change_24h = self._normalize_data(price_info, ['change_24h', 'price_change_24h', 'percent_change_24h'])
-            volume_24h = self._normalize_data(price_info, ['volume_24h', 'volume', 'total_volume'])
-            market_cap = self._normalize_data(price_info, ['market_cap', 'marketCap'])
+            current_price = self._normalize_data(price_data, ['price', 'current_price', 'last', 'close'])
+            change_24h = self._normalize_data(price_data, ['change_24h', 'price_change_24h', 'percent_change_24h'])
+            volume_24h = self._normalize_data(price_data, ['volume_24h', 'volume', 'total_volume'])
+            market_cap = self._normalize_data(price_data, ['market_cap', 'marketCap'])
 
             if not current_price:
                 return self._error_fallback(symbol, "price normalization")
@@ -840,7 +834,7 @@ class AIAssistant:
             market_data = self.get_cmc_global_metrics()
 
             # Get coin fundamentals if available
-            coin_fundamentals = self._get_coin_fundamentals(symbol, price_info, coin_info)
+            coin_fundamentals = self._get_coin_fundamentals(symbol, price_data, crypto_api.get_coin_info(symbol) if hasattr(crypto_api, 'get_coin_info') else {})
 
             # Determine confidence level description
             confidence = signal_data['confidence']
@@ -870,7 +864,7 @@ class AIAssistant:
             # Format comprehensive analysis matching futures style
             analysis = f"""🔍 **PROFESSIONAL COMPREHENSIVE ANALYSIS - {symbol}**
 
-🕐 **Analysis Time**: {current_time}
+🕐 **Analysis Time**: {self._get_wib_time()}
 💰 **Current Price**: ${current_price:,.6f}
 📊 **24h Change**: {change_24h:+.2f}%
 
@@ -956,24 +950,18 @@ class AIAssistant:
         except Exception as e:
             return self._error_fallback(symbol, f"comprehensive analysis: {str(e)[:50]}")
 
-    async def get_futures_analysis(self, symbol, timeframe='15m', language='id', crypto_api=None):
-        """Enhanced futures analysis with comprehensive breakdown"""
+    async def get_futures_analysis(self, symbol, timeframe, language='id', crypto_api=None):
+        """Generate futures analysis with SnD for specific timeframe"""
         try:
-            # Check database connection for user-related operations
-            db_available, db_error = self._check_database_required("FUTURES")
-            if not db_available:
-                return db_error
+            print(f"🎯 Starting futures analysis: {symbol} {timeframe}")
 
-            current_time = self._get_wib_time()
-            symbol = symbol.upper()
+            # Get real-time data
+            price_data = crypto_api.get_crypto_price(symbol, force_refresh=True)
+            futures_data = crypto_api.get_futures_data(symbol)
 
-            # Get comprehensive data
-            if crypto_api:
-                price_data = crypto_api.get_crypto_price(symbol, force_refresh=True)
-                futures_data = crypto_api.get_futures_data(symbol)
-                snd_data = crypto_api.analyze_supply_demand(symbol, timeframe)
-            else:
-                return self._error_fallback(symbol, "API connection")
+            # Get OHLCV data with perp market for futures analysis
+            ohlcv_data = await crypto_api.get_ohlcv_data(symbol, period="5MIN", limit=300, market="perp")
+
 
             if 'error' in price_data or not price_data.get('success'):
                 return self._error_fallback(symbol, "price data")
@@ -1005,12 +993,12 @@ class AIAssistant:
 
             # Enhanced signal generation with multiple timeframe confirmation
             signal_data = self._generate_enhanced_trading_signal(
-                primary_indicators, higher_tf_indicators, futures_data, current_price, snd_data
+                primary_indicators, higher_tf_indicators, futures_data, current_price, {}
             )
 
             # Advanced trading levels calculation
             trading_levels = self._calculate_advanced_trading_levels(
-                current_price, signal_data, primary_indicators, snd_data
+                current_price, signal_data, primary_indicators, {}
             )
 
             # Determine confidence level description
@@ -1041,7 +1029,7 @@ class AIAssistant:
             # Create comprehensive analysis
             analysis = f"""🔍 **PROFESSIONAL FUTURES ANALYSIS - {symbol} ({timeframe})**
 
-🕐 **Analysis Time**: {current_time}
+🕐 **Analysis Time**: {self._get_wib_time()}
 💰 **Current Price**: ${current_price:,.6f}
 📊 **24h Change**: {change_24h:+.2f}%
 
@@ -1057,7 +1045,7 @@ class AIAssistant:
 • Stop Loss: ${trading_levels['stop_loss']:.6f}
 • TP1 (50%): ${trading_levels['tp1']:.6f}
 • TP2 (30%): ${trading_levels['tp2']:.6f} 
-• TP3 (20%): ${trading_levels['tp3']:.6f}
+• TP3 (20%): ${trading_levels['tp3']:.6f} 
 • Risk/Reward: {trading_levels['rr_ratio']:.1f}:1
 • Max Risk: {trading_levels['risk_percentage']:.1f}% per position
 ```
@@ -1075,17 +1063,23 @@ class AIAssistant:
 🎯 **SUPPLY & DEMAND ZONES**:"""
 
             # Add Supply & Demand analysis if available
-            if snd_data.get('success'):
-                supply_1 = snd_data.get('Supply 1', current_price * 1.02)
-                demand_1 = snd_data.get('Demand 1', current_price * 0.98)
-                analysis += f"""
+            if ohlcv_data and isinstance(ohlcv_data, dict) and ohlcv_data.get('success'):
+                snd_data = crypto_api.analyze_supply_demand(symbol, timeframe) # Re-analyzing for consistency
+                if snd_data.get('success'):
+                    supply_1 = snd_data.get('Supply 1', current_price * 1.02)
+                    demand_1 = snd_data.get('Demand 1', current_price * 0.98)
+                    analysis += f"""
 • 🔴 Supply Zone 1: ${supply_1:,.6f} ({((supply_1/current_price-1)*100):+.1f}%)
 • 🟢 Demand Zone 1: ${demand_1:,.6f} ({((demand_1/current_price-1)*100):+.1f}%)
 • 📍 Current Position: {self._get_zone_position(current_price, supply_1, demand_1)}
 • 💪 Zone Strength: {snd_data.get('zone_strength', 'Medium')}"""
+                else:
+                    analysis += """
+• Supply/Demand analysis temporarily unavailable
+• Using technical levels for zone identification"""
             else:
                 analysis += """
-• Supply/Demand analysis temporarily unavailable
+• Supply/Demand analysis unavailable
 • Using technical levels for zone identification"""
 
             # Add futures metrics
@@ -1146,7 +1140,7 @@ class AIAssistant:
 • ✅ Watch for news/events impact
 
 📡 **Data Sources**: CoinAPI OHLCV + Binance Futures + SnD Analysis
-🔄 **Update Frequency**: Real-time price + 15min technical refresh"""
+🔄 **Update Frequency**: Real-time price + {timeframe} technical refresh"""
 
             return analysis
 
@@ -1154,40 +1148,70 @@ class AIAssistant:
             return self._error_fallback(symbol, f"enhanced futures analysis: {str(e)[:50]}")
 
     async def generate_futures_signals(self, language='id', crypto_api=None, query_args=None):
-        """Generate futures signals with proper formatting and filtering"""
+        """Generate comprehensive futures signals with SnD analysis"""
         try:
-            # Check database connection for user-related operations
-            db_available, db_error = self._check_database_required("FUTURES_SIGNALS")
-            if not db_available:
-                return db_error
+            print(f"🔄 Starting futures signals generation...")
 
-            current_time = self._get_wib_time()
-
-            # Target symbols for scanning - expanded list for variety
-            all_symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'MATIC', 'DOT', 'LINK', 
+            # Target symbols for analysis
+            target_symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'MATIC', 'DOT', 'LINK', 
                           'BNB', 'TRX', 'LTC', 'BCH', 'NEAR', 'UNI', 'APT', 'ATOM', 'FIL', 'ETC',
                           'ALGO', 'VET', 'MANA', 'SAND', 'SHIB']
 
             # If specific symbol requested, use that
             if query_args and len(query_args) > 0:
                 first_arg = query_args[0].upper()
-                if len(first_arg) <= 5:
+                if len(first_arg) <= 5 and first_arg in target_symbols: # Check if it's a valid symbol and short enough
                     target_symbols = [first_arg]
                 else:
                     # Randomize symbol selection for variety each time
                     import random
-                    target_symbols = random.sample(all_symbols, min(15, len(all_symbols)))
+                    target_symbols = random.sample(target_symbols, min(15, len(target_symbols)))
             else:
                 # Randomize symbol selection for variety each time
                 import random
-                target_symbols = random.sample(all_symbols, min(15, len(all_symbols)))
+                target_symbols = random.sample(target_symbols, min(15, len(target_symbols)))
 
             all_signals = []
 
             # Scan symbols for signals
-            for symbol in target_symbols:
+            for symbol in target_symbols[:3]:  # Limit to 3 for performance
                 try:
-                    signal = await self._enhanced_scan_symbol_for_signal(symbol, crypto_api)
+                    # Get OHLCV data with perp market for futures
+                    ohlcv_data = await crypto_api.get_ohlcv_data(symbol, period="5MIN", limit=300, market="perp")
+
+                    if not ohlcv_data:
+                        continue
+
+                    # Process OHLCV data into a pandas DataFrame
+                    if not isinstance(ohlcv_data, dict) or not ohlcv_data.get('success'):
+                        print(f"⚠️ Invalid OHLCV data for {symbol}")
+                        continue
+                        
+                    ohlcv_df = ohlcv_data.get('data')
+                    if ohlcv_df is None or ohlcv_df.empty:
+                        print(f"⚠️ Empty OHLCV data for {symbol}")
+                        continue
+
+                    # Calculate technical indicators
+                    indicators = self.calculate_technical_indicators(ohlcv_df)
+                    if 'error' in indicators:
+                        print(f"⚠️ Error calculating indicators for {symbol}: {indicators['error']}")
+                        continue
+                    
+                    # Get futures and price data
+                    futures_data = crypto_api.get_futures_data(symbol)
+                    price_data = crypto_api.get_crypto_price(symbol, force_refresh=True)
+
+                    if 'error' in price_data or not price_data.get('success'):
+                        continue
+
+                    current_price = self._normalize_data(price_data, ['price', 'current_price'])
+                    if not current_price:
+                        continue
+
+                    # Generate signal
+                    signal = self._enhanced_scan_symbol_for_signal(symbol, crypto_api)
+                    
                     if signal:
                         all_signals.append(signal)
                         print(f"✅ Found signal: {symbol} - {signal['confidence']:.2f}% ({signal['direction']})")
@@ -1202,7 +1226,7 @@ class AIAssistant:
             if not filtered_signals:
                 return f"""🚨 FUTURES SIGNALS – SUPPLY & DEMAND ANALYSIS
 
-🕐 Scan Time: {current_time}
+🕐 Scan Time: {self._get_wib_time()}
 📊 Signals Found: 0 (Confidence ≥ 75.00%)
 
 ❌ Tidak ada sinyal memenuhi syarat
@@ -1225,7 +1249,7 @@ class AIAssistant:
             # Format signals message
             message = f"""🚨 FUTURES SIGNALS – SUPPLY & DEMAND ANALYSIS
 
-🕐 Scan Time: {current_time}
+🕐 Scan Time: {self._get_wib_time()}
 📊 Signals Found: {len(filtered_signals)} (Confidence ≥ 75.00%)
 
 """
@@ -2079,11 +2103,11 @@ class AIAssistant:
         filtered = []
         for signal in signals:
             confidence = signal.get('confidence', 0)
-            
+
             # Fix confidence if > 100 (divide by 10)
             if confidence > 100:
                 confidence = confidence / 10
-                
+
             # Only keep signals with >= 75% confidence
             if confidence >= 75.0:
                 # Format the signal properly
@@ -2115,7 +2139,7 @@ class AIAssistant:
         """Format individual signal according to rules"""
         # Format R/R Ratio properly (X.X:1) - ensure one decimal place
         rr_value = signal.get('risk_reward', 2.0)
-        
+
         # Handle different input formats
         if isinstance(rr_value, str):
             # Extract number from string like "2.5:1"
@@ -2127,14 +2151,14 @@ class AIAssistant:
             rr_value = float(rr_value)
         else:
             rr_value = 2.0
-        
+
         # Ensure proper formatting with exactly 1 decimal place
         rr_formatted = f"{rr_value:.1f}:1"
 
         # Determine trend based on direction
         direction = signal.get('direction', 'LONG')
         trend = signal.get('primary_trend', 'Bullish' if direction in ['LONG', 'BUY'] else 'Bearish')
-        
+
         return {
             'symbol': signal.get('symbol', 'UNKNOWN'),
             'direction': direction,
@@ -2201,25 +2225,49 @@ Saya menggunakan:
 Coba `/analyze btc` untuk analisis komprehensif!"""
 
     def get_market_sentiment(self, language='id', crypto_api=None):
-        """Get comprehensive market analysis with detailed breakdown"""
+        """Get comprehensive market sentiment and overview with CoinAPI data"""
         try:
-            # Check database connection for user-related operations
-            db_available, db_error = self._check_database_required("MARKET_SENTIMENT")
-            if not db_available:
-                return db_error
+            print(f"📊 Starting market sentiment analysis...")
 
-            current_time = self._get_wib_time()
-            market_data = self.get_cmc_global_metrics()
+            # Get top cryptocurrencies data
+            top_cryptos = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA']
+            market_data = []
 
-            if not market_data.get('success'):
-                return self._error_fallback("MARKET", "global data")
+            for symbol in top_cryptos:
+                try:
+                    price_data = crypto_api.get_crypto_price(symbol, force_refresh=True)
 
-            market_cap_change = market_data.get('market_cap_change_24h', 0)
-            btc_dominance = market_data.get('btc_dominance', 0)
-            eth_dominance = market_data.get('eth_dominance', 0)
-            total_market_cap = market_data.get('total_market_cap', 0)
-            total_volume = market_data.get('total_volume_24h', 0)
-            active_cryptos = market_data.get('active_cryptocurrencies', 0)
+                    # Try to get OHLCV for technical analysis
+                    try:
+                        import asyncio
+                        ohlcv_data = asyncio.run(crypto_api.get_ohlcv_data(symbol, period="5MIN", limit=50, market="spot"))
+                    except Exception as e:
+                        ohlcv_data = []
+
+                    if price_data and price_data.get('success'):
+                        market_data.append({
+                            'symbol': symbol,
+                            'price_data': price_data,
+                            'ohlcv_data': ohlcv_data
+                        })
+                except Exception as e:
+                    print(f"Error fetching data for {symbol}: {e}")
+                    continue
+
+            if not market_data:
+                return self._error_fallback("MARKET", "top crypto data unavailable")
+
+            # Aggregate global metrics
+            global_metrics = self.get_cmc_global_metrics()
+            if not global_metrics.get('success'):
+                return self._error_fallback("MARKET", "global metrics unavailable")
+
+            market_cap_change = global_metrics.get('market_cap_change_24h', 0)
+            btc_dominance = global_metrics.get('btc_dominance', 0)
+            eth_dominance = global_metrics.get('eth_dominance', 0)
+            total_market_cap = global_metrics.get('total_market_cap', 0)
+            total_volume = global_metrics.get('total_volume_24h', 0)
+            active_cryptos = global_metrics.get('active_cryptocurrencies', 0)
 
             # Determine sentiment with confidence
             confidence = 75
@@ -2256,7 +2304,7 @@ Coba `/analyze btc` untuk analisis komprehensif!"""
             # Create comprehensive analysis
             analysis = f"""🌍 **COMPREHENSIVE MARKET ANALYSIS**
 
-🕐 **Analysis Time**: {current_time}
+🕐 **Analysis Time**: {self._get_wib_time()}
 📊 **Global Sentiment**: {sentiment}
 ⭐ **Confidence**: {confidence}%
 
