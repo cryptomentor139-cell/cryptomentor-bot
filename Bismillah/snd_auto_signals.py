@@ -1,9 +1,17 @@
 import asyncio
 import time
-import random
-from datetime import datetime
-from crypto_api import CryptoAPI
+from datetime import datetime, timedelta
+import logging
 from database import Database
+from crypto_api import CryptoAPI
+from ai_assistant import AIAssistant
+
+# Import config with feature flag
+try:
+    from config import AUTO_SIGNALS_ENABLED
+except ImportError:
+    import os
+    AUTO_SIGNALS_ENABLED = os.getenv("AUTO_SIGNALS_ENABLED", "false").lower() in ("1", "true", "yes", "on")
 
 class SnDAutoSignals:
     def __init__(self, bot_instance):
@@ -32,19 +40,56 @@ class SnDAutoSignals:
         print(f"🎯 Auto SnD Signals initialized with {len(self.target_symbols)} altcoins")
         print(f"⏰ Scan interval: {self.scan_interval // 60} minutes")
         print(f"📈 Min confidence: {self.min_confidence}%")
+        print(f"[AUTO-SIGNAL] Feature flag: {'✅ ENABLED' if AUTO_SIGNALS_ENABLED else '❌ DISABLED'}")
 
     async def start_auto_scanner(self):
-        """Start the auto signal scanner"""
-        try:
-            if self.is_running:
-                print("[AUTO-SIGNAL SND] Scanner sudah berjalan")
-                return
+        """Start the automatic signal scanner"""
+        # Feature flag guard
+        if not AUTO_SIGNALS_ENABLED:
+            print("[AUTO-SIGNAL] ❌ Auto signals DISABLED by feature flag")
+            return False
 
-            self.is_running = True
-            print(f"[AUTO-SIGNAL SND] ✅ Scanner started - Interval: {self.scan_interval//60} minutes")
+        if self.is_running:
+            print("[AUTO-SIGNAL] Scanner already running")
+            return False
+
+        print("[AUTO-SIGNAL] Starting Auto Signal Scanner...")
+        print(f"[AUTO-SIGNAL] Target coins: {len(self.target_symbols)}")
+        print(f"[AUTO-SIGNAL] Scan interval: {self.scan_interval // 60} minutes")
+        print(f"[AUTO-SIGNAL] Min confidence: {self.min_confidence}%")
+        print(f"[AUTO-SIGNAL] Feature flag: {'✅ ENABLED' if AUTO_SIGNALS_ENABLED else '❌ DISABLED'}")
+
+        self.is_running = True
+        self.active_scanner_task = asyncio.create_task(self._scanner_loop())
+        return True
+
+
+    async def stop_auto_scanner(self):
+        """Stop the auto SnD scanner"""
+        self.is_running = False
+        if hasattr(self, 'active_scanner_task') and self.active_scanner_task:
+            self.active_scanner_task.cancel()
+        print("🛑 Enhanced SnD auto scanner stopped")
+
+    async def _scanner_loop(self):
+        """Main scanner loop"""
+        try:
+            print("[AUTO-SIGNAL SND] 🎯 Auto Signal Scanner started successfully")
 
             while self.is_running:
                 try:
+                    # Runtime feature flag check
+                    if not AUTO_SIGNALS_ENABLED:
+                        print("[AUTO-SIGNAL] ❌ Feature flag disabled, stopping scanner")
+                        self.is_running = False
+                        break
+
+                    # Check if enough time has passed since last scan
+                    current_time = time.time()
+                    if current_time - self.last_scan_time < self.scan_interval:
+                        await asyncio.sleep(10)  # Check every 10 seconds
+                        continue
+
                     print(f"[AUTO-SIGNAL SND] 🔄 Starting scan cycle...")
                     await self.scan_and_send_signals()
 
@@ -52,6 +97,9 @@ class SnDAutoSignals:
                         print(f"[AUTO-SIGNAL SND] ⏰ Next scan in {self.scan_interval//60} minutes...")
                         await asyncio.sleep(self.scan_interval)
 
+                except asyncio.CancelledError:
+                    print("[AUTO-SIGNAL SND] Scanner loop cancelled.")
+                    break
                 except Exception as scan_error:
                     print(f"[AUTO-SIGNAL SND] ❌ Scan error: {scan_error}")
                     # Continue running even if one scan fails
@@ -60,11 +108,6 @@ class SnDAutoSignals:
         except Exception as e:
             print(f"[AUTO-SIGNAL SND] ❌ Scanner error: {e}")
             self.is_running = False
-
-    async def stop_auto_scanner(self):
-        """Stop the auto SnD scanner"""
-        self.is_running = False
-        print("🛑 Enhanced SnD auto scanner stopped")
 
     async def scan_and_send_signals(self):
         """Scan for SnD signals and send to eligible users"""
@@ -502,7 +545,7 @@ class SnDAutoSignals:
     def _generate_snd_signal(self, current_price, resistance_levels, support_levels, volume_trend, highs, lows, closes):
         """Generate an SnD signal based on analysis"""
         signal = {
-            'symbol': self.current_symbol, # Need to set this from caller
+            'symbol': self.current_symbol, # Set this from caller
             'direction': 'LONG', # Default
             'entry_price': current_price,
             'tp1': current_price,
