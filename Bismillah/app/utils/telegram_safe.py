@@ -5,6 +5,28 @@ from telegram.constants import ParseMode
 # Escape semua karakter khusus MarkdownV2 (termasuk '-')
 _MD_V2_SPECIALS = r'_*[]()~`>#+-=|{}.!'
 
+async def safe_reply(update, text, *, prefer_html=False, **kwargs):
+    """Safe reply with HTML or Markdown fallback"""
+    try:
+        if prefer_html:
+            await update.message.reply_text(text, parse_mode=ParseMode.HTML, **kwargs)
+        else:
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN_V2, **kwargs)
+    except Exception:
+        # Fallback to plain text
+        await update.message.reply_text(text, **kwargs)
+
+async def safe_edit(update, text, *, prefer_html=False, **kwargs):
+    """Safe edit with HTML or Markdown fallback"""
+    try:
+        if prefer_html:
+            await update.callback_query.edit_message_text(text, parse_mode=ParseMode.HTML, **kwargs)
+        else:
+            await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN_V2, **kwargs)
+    except Exception:
+        # Fallback to plain text
+        await update.callback_query.edit_message_text(text, **kwargs)
+
 def escape_md_v2(text: str) -> str:
     return re.sub(r'([\\_*\[\]\(\)~`>#+\-=\|{}\.\!])', r'\\\1', text.replace('-', r'\-'))
 
