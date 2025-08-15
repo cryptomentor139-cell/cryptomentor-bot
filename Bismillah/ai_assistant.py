@@ -403,9 +403,9 @@ class AIAssistant:
         """Get current time in WIB (Asia/Jakarta)"""
         try:
             wib_tz = timezone(timedelta(hours=7))
-            return datetime.now(wib_tz).strftime('%H:%M:%S WIB')
+            return datetime.now(wib_tz).strftime('%d-%m-%Y %H:%M:%S WIB')
         except:
-            return datetime.now().strftime('%H:%M:%S WIB')
+            return datetime.now().strftime('%d-%m-%Y %H:%M:%S WIB')
 
     def _normalize_data(self, data, field_aliases):
         """Normalize data fields using aliases"""
