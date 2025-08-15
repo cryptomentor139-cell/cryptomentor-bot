@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 
 from app.utils.rate_limiter import rate_limiter
 from app.utils.text_formatter import format_futures_signals_response
+from app.utils.telegram_safe import safe_reply
 from app.services.analysis import (
     AnalysisService, 
     analyze_coin_crypto, 
@@ -63,12 +64,12 @@ async def cmd_futures_signals(update: Update, context: ContextTypes.DEFAULT_TYPE
                     )
             text = "\n".join(lines)
 
-        await update.effective_message.reply_text(text, parse_mode='Markdown')
+        await safe_reply(update, text)
     except Exception as e:
-        await update.effective_message.reply_text(
-            "❌ **Terjadi kesalahan mengambil data untuk FUTURES_SIGNALS**\n\n"
-            "🔄 **Error context**: legacy mode\n"
-            f"`{e}`\n"
-            "💡 Coba: /price btc — Cek harga basic\n",
-            parse_mode="Markdown",
+        error_msg = (
+            "❌ Terjadi kesalahan mengambil data untuk FUTURES_SIGNALS\n\n"
+            "🔄 Error context: legacy mode\n"
+            f"Error: {str(e)[:100]}\n"
+            "💡 Coba: /price btc — Cek harga basic"
         )
+        await safe_reply(update, error_msg)

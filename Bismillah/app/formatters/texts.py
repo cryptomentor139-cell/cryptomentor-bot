@@ -4,11 +4,18 @@ from typing import List, Dict, Any
 def format_futures_signals(signals: List[Dict[str, Any]]) -> str:
     """Legacy formatter for futures signals"""
     if not signals:
-        return "🚨 **FUTURES SIGNALS**\n\n❌ Tidak ada sinyal tersedia"
+        return "🚨 FUTURES SIGNALS\n\n❌ Tidak ada sinyal tersedia"
     
-    lines = ["🚨 **FUTURES SIGNALS**\n"]
+    lines = ["🚨 FUTURES SIGNALS\n"]
     
     for signal in signals:
+        # Guard kalau ada residu yang bukan dict
+        if not isinstance(signal, dict):
+            try:
+                signal = dict(signal)  # attempt coerce
+            except Exception:
+                lines.append("• item tidak valid")
+                continue
         if "error" in signal:
             lines.append(f"❌ **{signal['coin']}**: Error - {signal['error']}")
             continue
