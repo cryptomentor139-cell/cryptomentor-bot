@@ -65,7 +65,7 @@ except ImportError as e:
     def initialize_auto_signals(bot_instance):
         print("[AUTO-SIGNAL] Using mock Auto Signal Scanner (snd_auto_signals not available)")
         return MockAutoSignals(bot_instance)
-    
+
     # Define AUTO_SIGNALS_ENABLED as False if module is not found
     AUTO_SIGNALS_ENABLED = False
 
@@ -222,8 +222,9 @@ class TelegramBot:
 
             # Admin commands
             self.application.add_handler(CommandHandler("admin", self.admin_command))
-            self.application.add_handler(CommandHandler("grant_premium", self.grant_premium_command))
-            self.application.add_handler(CommandHandler("revoke_premium", self.revoke_premium_command))
+            # Updated premium commands with new format based on user request
+            self.application.add_handler(CommandHandler("setpremium", self.set_premium_command))
+            self.application.add_handler(CommandHandler("remove_premium", self.remove_premium_command))
             self.application.add_handler(CommandHandler("grant_credits", self.grant_credits_command))
             self.application.add_handler(CommandHandler("fix_all_credits", self.fix_all_credits_command))
             self.application.add_handler(CommandHandler("broadcast", self.broadcast_command))
@@ -743,6 +744,14 @@ class TelegramBot:
 • **Scheduled Check**: Setiap 5 menit
 • **Optimized**: Anti-spam, cooldown, no duplicates
 
+═══════════════════════════════════
+
+💡 **QUICK PREMIUM COMMANDS**
+
+• `/setpremium 123456789 0` - Lifetime
+• `/setpremium 123456789 30d` - 1 month
+• `/setpremium 123456789 180d` - 6 months
+• `/remove_premium 123456789` - Remove
 """
         await update.message.reply_text(help_text, parse_mode='Markdown')
 
@@ -1382,7 +1391,7 @@ Gunakan credit dengan bijak!"""
         • Eligible Users: {len(eligible_users)} (Admin + Lifetime)
         • Target Coins: {len(self.auto_signals.target_symbols)} top coins
         • Scan Interval: {self.auto_signals.scan_interval // 60} minutes
-        
+
         🔧 **Admin Commands:**
         • `/grant_premium <user_id> <days>` - Grant premium
         • `/revoke_premium <user_id>` - Revoke premium
@@ -1838,18 +1847,18 @@ Gunakan `/subscribe` untuk upgrade!
         eligible_auto_users = self.db.get_eligible_auto_signal_users()
         auto_status = "🟢 **RUNNING**" if self.auto_signals and self.auto_signals.is_running else "🔴 **STOPPED**"
         deployment_mode = "🚀 **DEPLOYMENT**" if IS_DEPLOYMENT else "🔧 **DEVELOPMENT**"
-        
+
         # Get current time for status
         current_time = datetime.now().strftime('%H:%M WIB')
         current_date = datetime.now().strftime('%d %B %Y')
-        
+
         # Check API health with enhanced status
         coinapi_status = "🟢 **ACTIVE**" if hasattr(self.crypto_api, 'data_provider') and self.crypto_api.data_provider else "🔴 **OFFLINE**"
         database_status = "🟢 **ONLINE**" if self.db else "🔴 **OFFLINE**"
-        
+
         # Calculate performance metrics
         premium_percentage = (stats['premium_users']/max(stats['total_users'],1)*100) if stats['total_users'] > 0 else 0
-        
+
         # Enhanced access level determination
         if user_id == self.admin_id:
             access_level = "👑 **SUPREME ADMIN**"
@@ -1944,8 +1953,8 @@ Gunakan `/subscribe` untuk upgrade!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-    async def grant_premium_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /grant_premium command"""
+    async def set_premium_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /setpremium command"""
         user_id = update.message.from_user.id
 
         if not self.is_admin(user_id):
@@ -1955,20 +1964,35 @@ Gunakan `/subscribe` untuk upgrade!
         if len(context.args) < 1:
             await update.message.reply_text(
                 "❌ **Format salah!**\n\n"
-                "Gunakan: `/grant_premium <user_id> [days]`\n\n"
+                "Gunakan: `/setpremium <user_id> [days]`\n\n"
                 "**Contoh:**\n"
-                "• `/grant_premium 123456789 30` - Premium 30 hari\n"
-                "• `/grant_premium 123456789 0` - Premium permanent (Lifetime)\n"
-                "• `/grant_premium 123456789` - Premium 30 hari (default)",
+                "• `/setpremium 123456789 30` - Premium 30 hari\n"
+                "• `/setpremium 123456789 0` - Premium permanent (Lifetime)\n"
+                "• `/setpremium 123456789 30d` - Premium 1 bulan (dengan 'd' atau tanpa)\n"
+                "• `/setpremium 123456789 180d` - Premium 6 bulan\n"
+                "• `/setpremium 123456789 365d` - Premium 1 tahun\n"
+                "• `/setpremium 123456789` - Premium 30 hari (default)",
                 parse_mode='Markdown'
             )
             return
 
         try:
             target_user_id = int(context.args[0])
-            days = int(context.args[1]) if len(context.args) > 1 else 30
+            days_str = context.args[1].lower() if len(context.args) > 1 else '30'
+
+            if days_str == '0' or days_str == 'lifetime' or days_str == 'permanent':
+                days = 0  # Lifetime
+            elif days_str.endswith('d'):
+                days = int(days_str[:-1])
+            else:
+                days = int(days_str)
+
+            if days < 0:
+                await update.message.reply_text("❌ Jumlah hari tidak boleh negatif.")
+                return
+
         except ValueError:
-            await update.message.reply_text("❌ User ID dan days harus berupa angka!\n\nContoh: `/grant_premium 123456789 30`")
+            await update.message.reply_text("❌ User ID dan jumlah hari harus berupa angka!\n\nContoh: `/setpremium 123456789 30`")
             return
 
         # Check if user exists in database
@@ -1985,21 +2009,9 @@ Gunakan `/subscribe` untuk upgrade!
             if days == 0:
                 success = self.db.grant_permanent_premium(target_user_id)
                 premium_type = "LIFETIME (Auto Signals Access)"
-                package_amount = 5000000  # Rp 5 juta for lifetime
             else:
                 success = self.db.grant_premium(target_user_id, days)
                 premium_type = f"{days} hari"
-                # Calculate package amount based on days
-                if days == 30:
-                    package_amount = 320000
-                elif days == 60:
-                    package_amount = 600000
-                elif days == 180:
-                    package_amount = 1800000
-                elif days == 365:
-                    package_amount = 3000000
-                else:
-                    package_amount = days * 10000  # Default calculation
 
             if success:
                 user_info = self.db.get_user(target_user_id)
@@ -2011,16 +2023,17 @@ Gunakan `/subscribe` untuk upgrade!
                 referral_reward_msg = ""
 
                 if referrer_id and self.db.is_user_premium(referrer_id):
-                    # Give premium referral reward
+                    # Give premium referral reward (assume a fixed reward for simplicity)
+                    reward_amount = 10000 # Rp 10,000
                     reward_success = self.db.record_premium_referral_reward(
-                        referrer_id, target_user_id, premium_type, package_amount
+                        referrer_id, target_user_id, premium_type, reward_amount
                     )
                     if reward_success:
                         referrer_info = self.db.get_user(referrer_id)
                         referrer_name = referrer_info.get('first_name', 'Unknown') if referrer_info else 'Unknown'
-                        referral_reward_msg = f"\n💰 **Premium Referral Reward**: Rp 10,000 diberikan ke {referrer_name} (ID: {referrer_id})"
+                        referral_reward_msg = f"\n💰 **Premium Referral Reward**: Rp {reward_amount:,} diberikan ke {referrer_name} (ID: {referrer_id})"
 
-                message = f"""✅ **Premium berhasil diberikan!**
+                message = f"""✅ **Premium berhasil diatur!**
 
 👤 **User Info:**
 • **ID**: {target_user_id}
@@ -2038,18 +2051,79 @@ Gunakan `/subscribe` untuk upgrade!
                 # Log admin action
                 self.db.log_user_activity(
                     user_id,
-                    "admin_grant_premium",
-                    f"Granted {premium_type} premium to user {target_user_id}"
+                    "admin_set_premium",
+                    f"Set premium to '{premium_type}' for user {target_user_id}"
                 )
 
             else:
-                message = f"❌ **Gagal memberikan premium!** Coba lagi atau hubungi developer."
+                message = f"❌ **Gagal mengatur premium!** Coba lagi atau hubungi developer."
 
         except Exception as e:
-            message = f"❌ **Error sistem saat memberikan premium!**\n\n**Error**: {str(e)}"
-            print(f"Error in grant_premium_command: {e}")
+            message = f"❌ **Error sistem saat mengatur premium!**\n\n**Error**: {str(e)}"
+            print(f"Error in set_premium_command: {e}")
 
         await update.message.reply_text(message, parse_mode='Markdown')
+
+    async def remove_premium_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /remove_premium command"""
+        user_id = update.message.from_user.id
+
+        if not self.is_admin(user_id):
+            await update.message.reply_text("❌ Access denied. Admin only command.")
+            return
+
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Gunakan format: `/remove_premium <user_id>`\nContoh: `/remove_premium 123456789`")
+            return
+
+        try:
+            target_user_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("❌ User ID harus berupa angka!")
+            return
+
+        # Check if user exists
+        existing_user = self.db.get_user(target_user_id)
+        if not existing_user:
+            await update.message.reply_text(f"❌ User {target_user_id} tidak ditemukan dalam database.")
+            return
+
+        # Revoke premium status
+        try:
+            success = self.db.revoke_premium(target_user_id)
+
+            if success:
+                user_info = self.db.get_user(target_user_id)
+                username = user_info.get('username', 'No username')
+                first_name = user_info.get('first_name', 'Unknown')
+
+                message = f"""✅ **Premium berhasil dicabut!**
+
+👤 **User Info:**
+• **ID**: {target_user_id}
+• **Name**: {first_name}
+• **Username**: @{username}
+
+❌ **Status**: Premium access removed
+💳 **Credits**: User akan menggunakan sistem credit normal
+
+🔄 User sekarang kembali ke akun free dengan sistem credit."""
+
+                # Log admin action
+                self.db.log_user_activity(
+                    user_id,
+                    "admin_remove_premium",
+                    f"Removed premium from user {target_user_id}"
+                )
+            else:
+                message = f"❌ **Gagal mencabut premium!** User mungkin sudah tidak premium."
+
+        except Exception as e:
+            message = f"❌ **Error sistem saat mencabut premium!**\n\n**Error**: {str(e)}"
+            print(f"Error in remove_premium_command: {e}")
+
+        await update.message.reply_text(message, parse_mode='Markdown')
+
 
     async def grant_credits_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /grant_credits command"""
@@ -2107,66 +2181,6 @@ Gunakan `/subscribe` untuk upgrade!
             )
         else:
             message = f"❌ **Gagal menambahkan credit!** User {target_user_id} tidak ditemukan."
-
-        await update.message.reply_text(message, parse_mode='Markdown')
-
-    async def revoke_premium_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /revoke_premium command"""
-        user_id = update.message.from_user.id
-
-        if not self.is_admin(user_id):
-            await update.message.reply_text("❌ Access denied. Admin only command.")
-            return
-
-        if len(context.args) < 1:
-            await update.message.reply_text("❌ Gunakan format: `/revoke_premium <user_id>`\nContoh: `/revoke_premium 123456789`")
-            return
-
-        try:
-            target_user_id = int(context.args[0])
-        except ValueError:
-            await update.message.reply_text("❌ User ID harus berupa angka!")
-            return
-
-        # Check if user exists
-        existing_user = self.db.get_user(target_user_id)
-        if not existing_user:
-            await update.message.reply_text(f"❌ User {target_user_id} tidak ditemukan dalam database.")
-            return
-
-        # Revoke premium status
-        try:
-            success = self.db.revoke_premium(target_user_id)
-
-            if success:
-                user_info = self.db.get_user(target_user_id)
-                username = user_info.get('username', 'No username')
-                first_name = user_info.get('first_name', 'Unknown')
-
-                message = f"""✅ **Premium berhasil dicabut!**
-
-👤 **User Info:**
-• **ID**: {target_user_id}
-• **Name**: {first_name}
-• **Username**: @{username}
-
-❌ **Status**: Premium access removed
-💳 **Credits**: User akan menggunakan sistem credit normal
-
-🔄 User sekarang kembali ke akun free dengan sistem credit."""
-
-                # Log admin action
-                self.db.log_user_activity(
-                    user_id,
-                    "admin_revoke_premium",
-                    f"Revoked premium from user {target_user_id}"
-                )
-            else:
-                message = f"❌ **Gagal mencabut premium!** User mungkin sudah tidak premium."
-
-        except Exception as e:
-            message = f"❌ **Error sistem saat mencabut premium!**\n\n**Error**: {str(e)}"
-            print(f"Error in revoke_premium_command: {e}")
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
