@@ -1012,8 +1012,9 @@ class TelegramBot:
 
         try:
             print(f"🔄 Starting futures signals generation for user {user_id}")
+            # Import safe reply helper
+            from app.utils.telegram_safe import safe_edit
 
-            # Generate signals using new async method with query args
             signals = await self.ai.generate_futures_signals('id', self.crypto_api, context.args)
 
             if not signals or len(signals.strip()) < 50:
@@ -1046,19 +1047,31 @@ class TelegramBot:
             if len(signals) > 4000:
                 chunks = [signals[i:i+4000] for i in range(0, len(signals), 4000)]
                 try:
-                    await loading_msg.edit_text(chunks[0], parse_mode='MarkdownV2')
+                    await safe_edit(
+                        self.application.bot,
+                        loading_msg.chat_id,
+                        loading_msg.message_id,
+                        chunks[0]
+                    )
                     for chunk in chunks[1:]:
                         await update.message.reply_text(chunk, parse_mode='MarkdownV2')
                 except Exception as e:
-                    print(f"⚠️ Markdown error, sending as plain text: {e}")
+                    print(f"⚠️ Error editing message: {e}")
+                    # Fallback to plain text
                     await loading_msg.edit_text(chunks[0], parse_mode=None)
                     for chunk in chunks[1:]:
                         await update.message.reply_text(chunk, parse_mode=None)
             else:
                 try:
-                    await loading_msg.edit_text(signals, parse_mode='MarkdownV2')
+                    await safe_edit(
+                        self.application.bot,
+                        loading_msg.chat_id,
+                        loading_msg.message_id,
+                        signals
+                    )
                 except Exception as e:
-                    print(f"⚠️ Markdown error, sending as plain text: {e}")
+                    print(f"⚠️ Error editing message: {e}")
+                    # Fallback to plain text
                     await loading_msg.edit_text(signals, parse_mode=None)
 
         except Exception as e:
@@ -1350,8 +1363,9 @@ Terima kasih telah menjadi member premium!"""
 
 🎯 **Rekomendasi untuk Pemula:**
 • Mulai dengan `/price btc` (GRATIS - CoinAPI)
-• Coba `/analyze btc` (20 credit) - CoinAPI analysis!
-• Test `/futures btc` (20 credit) - SnD signals untuk trading
+• Coba `/market` (20 credit) - overview pasar global CoinAPI
+• Test `/analyze btc` (20 credit) - CoinAPI analysis!
+• Coba `/futures btc` (20 credit) - SnD signals untuk trading
 
 💡 **Cara Mendapat Credit:**
 • `/referral` - Ajak teman (10 credit/referral)

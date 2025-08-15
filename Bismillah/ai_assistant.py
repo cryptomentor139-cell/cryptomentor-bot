@@ -884,7 +884,7 @@ class AIAssistant:
                 import os
                 sys.path.append(os.path.join(os.path.dirname(__file__), 'app', 'formatters'))
                 from trade_setup import format_detailed_setup
-                
+
                 # Prepare setup data
                 setup_data = {
                     "entry": trading_levels.get('entry'),
@@ -896,10 +896,10 @@ class AIAssistant:
                     "rr": trading_levels.get('rr_ratio'),
                     "max_risk_pct": trading_levels.get('risk_percentage', 2.0)
                 }
-                
+
                 trading_setup_section = format_detailed_setup(setup_data, title="💰 TRADING SETUP")
                 analysis += f"\n\n{trading_setup_section}"
-                
+
             except ImportError:
                 # Fallback format
                 analysis += f"""
@@ -1071,7 +1071,7 @@ class AIAssistant:
                 import os
                 sys.path.append(os.path.join(os.path.dirname(__file__), 'app', 'formatters'))
                 from trade_setup import format_detailed_setup
-                
+
                 # Prepare setup data untuk formatter
                 setup_data = {
                     "entry": trading_levels.get('entry'),
@@ -1083,9 +1083,9 @@ class AIAssistant:
                     "rr": trading_levels.get('rr_ratio'),
                     "max_risk_pct": trading_levels.get('risk_percentage', 2.0)
                 }
-                
+
                 trading_setup_text = format_detailed_setup(setup_data, title="💰 DETAILED TRADING SETUP")
-                
+
             except ImportError:
                 # Fallback jika formatter belum tersedia
                 trading_setup_text = f"""💰 DETAILED TRADING SETUP:
@@ -1245,16 +1245,10 @@ class AIAssistant:
                         continue
 
                     # Process OHLCV data - convert list to DataFrame
-                    raw_data = ohlcv_data.get('data', [])
-                    if not raw_data or len(raw_data) == 0:
-                        print(f"⚠️ Empty OHLCV data for {symbol}")
-                        continue
-                    
-                    # Convert to DataFrame for technical analysis
                     try:
                         import pandas as pd
-                        ohlcv_df = pd.DataFrame(raw_data)
-                        
+                        ohlcv_df = pd.DataFrame(ohlcv_data.get('data', []))
+
                         # Rename columns to match expected format
                         column_mapping = {
                             'close': 'price_close',
@@ -1264,11 +1258,11 @@ class AIAssistant:
                             'volume': 'volume_traded'
                         }
                         ohlcv_df = ohlcv_df.rename(columns=column_mapping)
-                        
+
                         if ohlcv_df.empty or len(ohlcv_df) < 20:
                             print(f"⚠️ Insufficient OHLCV data for {symbol}: {len(ohlcv_df)} rows")
                             continue
-                            
+
                     except Exception as df_error:
                         print(f"⚠️ DataFrame conversion error for {symbol}: {df_error}")
                         continue
@@ -1278,7 +1272,7 @@ class AIAssistant:
                     if 'error' in indicators:
                         print(f"⚠️ Error calculating indicators for {symbol}: {indicators['error']}")
                         continue
-                    
+
                     # Get futures and price data
                     futures_data = crypto_api.get_futures_data(symbol)
                     price_data = crypto_api.get_crypto_price(symbol, force_refresh=True)
@@ -1291,8 +1285,8 @@ class AIAssistant:
                         continue
 
                     # Generate signal
-                    signal = self._enhanced_scan_symbol_for_signal(symbol, crypto_api)
-                    
+                    signal = await self._enhanced_scan_symbol_for_signal(symbol, crypto_api)
+
                     if signal:
                         all_signals.append(signal)
                         print(f"✅ Found signal: {symbol} - {signal['confidence']:.2f}% ({signal['direction']})")
@@ -1349,7 +1343,7 @@ class AIAssistant:
                     import os
                     sys.path.append(os.path.join(os.path.dirname(__file__), 'app', 'formatters'))
                     from trade_setup import format_detailed_setup
-                    
+
                     # Prepare setup data
                     setup_data = {
                         "entry": signal.get('entry'),
@@ -1359,9 +1353,9 @@ class AIAssistant:
                         "rr": float(signal.get('rr_ratio', '2.0').split(':')[0]) if isinstance(signal.get('rr_ratio'), str) else signal.get('rr_ratio', 2.0),
                         "max_risk_pct": 2.0
                     }
-                    
+
                     mini_setup = format_detailed_setup(setup_data, title=f"{i}. {signal['symbol']} {direction_emoji} {signal['direction']}")
-                    
+
                     message += f"""{mini_setup}
 ⭐️ Confidence: {signal['confidence']:.2f}%
 🔄 Trend: {signal['trend']}
@@ -1820,7 +1814,7 @@ class AIAssistant:
             return None
 
     async def _enhanced_scan_symbol_for_signal(self, symbol, crypto_api):
-        """Enhanced scan for trading signal with more detailed logic"""
+        """Generate enhanced trading signal for a symbol"""
         try:
             if not crypto_api:
                 return None
@@ -2333,374 +2327,6 @@ Saya menggunakan:
 • ⏰ **Multi-TF Confirmation**: 1h, 4h, Daily alignment
 
 Coba `/analyze btc` untuk analisis komprehensif!"""
-
-    def get_market_sentiment(self, language='id', crypto_api=None):
-        """Get comprehensive market sentiment and overview with CoinAPI data"""
-        try:
-            print(f"📊 Starting market sentiment analysis...")
-
-            # Get top cryptocurrencies data
-            top_cryptos = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA']
-            market_data = []
-
-            for symbol in top_cryptos:
-                try:
-                    price_data = crypto_api.get_crypto_price(symbol, force_refresh=True)
-
-                    # Try to get OHLCV for technical analysis
-                    try:
-                        import asyncio
-                        ohlcv_data = asyncio.run(crypto_api.get_ohlcv_data(symbol, period="5MIN", limit=50, market="spot"))
-                        if not ohlcv_data.get('success'):
-                            ohlcv_data = {'success': False}
-                    except Exception as e:
-                        ohlcv_data = {'success': False}
-
-                    if price_data and price_data.get('success'):
-                        market_data.append({
-                            'symbol': symbol,
-                            'price_data': price_data,
-                            'ohlcv_data': ohlcv_data
-                        })
-                except Exception as e:
-                    print(f"Error fetching data for {symbol}: {e}")
-                    continue
-
-            if not market_data:
-                return self._error_fallback("MARKET", "top crypto data unavailable")
-
-            # Aggregate global metrics
-            global_metrics = self.get_cmc_global_metrics()
-            if not global_metrics.get('success'):
-                return self._error_fallback("MARKET", "global metrics unavailable")
-
-            market_cap_change = global_metrics.get('market_cap_change_24h', 0)
-            btc_dominance = global_metrics.get('btc_dominance', 0)
-            eth_dominance = global_metrics.get('eth_dominance', 0)
-            total_market_cap = global_metrics.get('total_market_cap', 0)
-            total_volume = global_metrics.get('total_volume_24h', 0)
-            active_cryptos = global_metrics.get('active_cryptocurrencies', 0)
-
-            # Determine sentiment with confidence
-            confidence = 75
-            if market_cap_change > 3:
-                sentiment = "🚀 VERY BULLISH"
-                confidence = 90
-                trend = "Strong Uptrend"
-            elif market_cap_change > 1:
-                sentiment = "📈 BULLISH"
-                confidence = 80
-                trend = "Bullish Momentum"
-            elif market_cap_change > -1:
-                sentiment = "😐 NEUTRAL"
-                confidence = 60
-                trend = "Sideways Consolidation"
-            elif market_cap_change > -3:
-                sentiment = "📉 BEARISH"
-                confidence = 80
-                trend = "Bearish Pressure"
-            else:
-                sentiment = "💥 VERY BEARISH"
-                confidence = 90
-                trend = "Strong Downtrend"
-
-            # Get top crypto analysis
-            top_cryptos_analysis = self._get_top_cryptos_analysis(crypto_api)
-
-            # Fear & Greed equivalent based on metrics
-            fear_greed_score = self._calculate_fear_greed_score(market_cap_change, btc_dominance, total_volume)
-
-            # Market structure analysis
-            market_structure = self._analyze_market_structure(btc_dominance, eth_dominance, market_cap_change)
-
-            # Create comprehensive analysis
-            analysis = f"""🌍 **COMPREHENSIVE MARKET ANALYSIS**
-
-🕐 **Analysis Time**: {self._get_wib_time()}
-📊 **Global Sentiment**: {sentiment}
-⭐ **Confidence**: {confidence}%
-
-```
-💰 GLOBAL METRICS:
-• Total Market Cap: ${total_market_cap/1e12:.2f}T
-• 24h Market Change: {self._format_percentage(market_cap_change)}
-• Total Volume 24h: ${total_volume/1e9:.1f}B
-• Active Cryptocurrencies: {active_cryptos:,}
-• BTC Dominance: {btc_dominance:.1f}%
-• ETH Dominance: {eth_dominance:.1f}%
-```
-
-🔬 **MARKET STRUCTURE ANALYSIS**:
-🔄 **Trend**: {trend}
-⚡ **Structure**: {market_structure['structure']}
-🧠 **Reasoning**: {market_structure['reasoning']}
-📊 **Fear & Greed**: {fear_greed_score['level']} ({fear_greed_score['score']}/100)
-
-📈 **TOP CRYPTOCURRENCIES PERFORMANCE**:
-
-{top_cryptos_analysis}
-
-💡 **TRADING IMPLICATIONS**:
-{self._get_enhanced_trading_implications(market_cap_change, btc_dominance, eth_dominance, confidence)}
-
-🎯 **MARKET OPPORTUNITIES**:
-{self._get_market_opportunities(market_cap_change, btc_dominance)}
-
-⚠️ **RISK ASSESSMENT**:
-{self._get_risk_assessment(market_cap_change, confidence)}
-
-🚨 **KEY LEVELS TO WATCH**:
-• BTC Dominance Support: {btc_dominance-2:.1f}%
-• BTC Dominance Resistance: {btc_dominance+2:.1f}%
-• Market Cap Key Level: ${(total_market_cap*0.95)/1e12:.2f}T - ${(total_market_cap*1.05)/1e12:.2f}T
-
-📡 **Data Sources**: CoinMarketCap Global Metrics + Multi-API Analysis
-⏰ **Next Update**: Setiap 15 menit untuk data real-time"""
-
-            return analysis
-
-        except Exception as e:
-            return self._error_fallback("MARKET", f"comprehensive analysis: {str(e)[:50]}")
-
-    def _get_trading_implications(self, market_cap_change, btc_dominance):
-        """Get trading implications from market data"""
-        implications = []
-
-        if market_cap_change > 1:
-            implications.append("• 🟢 Strong momentum - Consider LONG positions")
-        elif market_cap_change < -1:
-            implications.append("• 🔴 Bearish pressure - Be cautious with LONG")
-        else:
-            implications.append("• 🟡 Sideways market - Wait for clear direction")
-
-        if btc_dominance > 45:
-            implications.append(f"• 🪙 BTC dominance high - Money flowing to BTC")
-        else:
-            implications.append(f"• 🏛️ Alt season potential - BTC dominance low")
-
-        return "\n".join(implications)
-
-    def _get_enhanced_trading_implications(self, market_cap_change, btc_dominance, eth_dominance, confidence):
-        """Get enhanced trading implications with detailed analysis"""
-        implications = []
-
-        # Market momentum analysis
-        if market_cap_change > 3:
-            implications.append("• 🚀 Extremely bullish conditions - High probability LONG setups")
-            implications.append("• 💰 Consider increasing position sizes (within risk limits)")
-        elif market_cap_change > 1:
-            implications.append("• 📈 Bullish momentum confirmed - Look for LONG opportunities")
-            implications.append("• ⚡ Scalping and swing trades favorable")
-        elif market_cap_change > -1:
-            implications.append("• 😐 Neutral market - Range trading strategies optimal")
-            implications.append("• 🎯 Focus on support/resistance levels")
-        elif market_cap_change > -3:
-            implications.append("• 📉 Bearish pressure building - SHORT bias recommended")
-            implications.append("• 🛡️ Reduce LONG exposure, tighten stop losses")
-        else:
-            implications.append("• 💥 Severe bearish conditions - Avoid LONG positions")
-            implications.append("• 🔴 Focus on SHORT opportunities with tight risk management")
-
-        # Dominance analysis
-        if btc_dominance > 50:
-            implications.append("• 🟠 BTC leading market - Trade major pairs (BTC, ETH)")
-            implications.append("• ⚠️ Altcoins may underperform - Be selective")
-        elif btc_dominance < 40:
-            implications.append("• 🌟 Altcoin season active - Diversify into quality alts")
-            implications.append("• 💎 DeFi and Layer-1 tokens may outperform")
-        else:
-            implications.append("• ⚖️ Balanced market - Both BTC and alts showing strength")
-
-        # ETH dominance insights
-        if eth_dominance > 18:
-            implications.append("• 🔷 Ethereum ecosystem strong - Consider ETH and ERC-20 tokens")
-        elif eth_dominance < 12:
-            implications.append("• 🔻 ETH weakness - Monitor for reversal opportunities")
-
-        # Confidence-based recommendations
-        if confidence > 85:
-            implications.append("• ✅ High confidence signals - Increase position sizing")
-        elif confidence < 60:
-            implications.append("• ⚠️ Low confidence period - Reduce risk exposure")
-
-        return "\n".join(implications)
-
-    def _get_market_opportunities(self, market_cap_change, btc_dominance):
-        """Identify specific market opportunities"""
-        opportunities = []
-
-        if market_cap_change > 2:
-            opportunities.append("• 🎯 Momentum breakout trades in major cryptos")
-            opportunities.append("• 📊 Long positions in DeFi and Layer-1 tokens")
-        elif market_cap_change < -2:
-            opportunities.append("• 🔻 Short selling opportunities in overbought assets")
-            opportunities.append("• 💰 Value accumulation for long-term positions")
-        else:
-            opportunities.append("• 🏃 Range trading between key support/resistance")
-            opportunities.append("• ⚡ Scalping opportunities in high-volume pairs")
-
-        if btc_dominance > 55:
-            opportunities.append("• 🟠 Bitcoin maximalist strategy - Focus on BTC/ETH")
-        elif btc_dominance < 35:
-            opportunities.append("• 🌈 Altcoin diversification strategy optimal")
-
-        opportunities.append("• 🔄 Cross-exchange arbitrage opportunities")
-        opportunities.append("• 📈 Futures vs spot price discrepancies")
-
-        return "\n".join(opportunities)
-
-    def _get_risk_assessment(self, market_cap_change, confidence):
-        """Provide risk assessment based on market conditions"""
-        risks = []
-
-        if abs(market_cap_change) > 3:
-            risks.append("• ⚠️ HIGH VOLATILITY - Use smaller position sizes")
-            risks.append("• 🛑 Set tight stop losses (2-3% maximum)")
-        elif abs(market_cap_change) > 1:
-            risks.append("• ⚡ MODERATE VOLATILITY - Standard risk management")
-            risks.append("• 🎯 Stop losses at 3-5% from entry")
-        else:
-            risks.append("• 😴 LOW VOLATILITY - May increase position sizes slightly")
-            risks.append("• 📊 Wider stops acceptable (5-7%)")
-
-        if confidence < 70:
-            risks.append("• 🔍 Uncertain market conditions - Wait for clarity")
-            risks.append("• 💡 Paper trade strategies before live execution")
-
-        risks.append("• 📱 Monitor news and regulatory developments")
-        risks.append("• ⏰ Set alerts for key support/resistance breaks")
-
-        return "\n".join(risks)
-
-    def _calculate_fear_greed_score(self, market_cap_change, btc_dominance, volume):
-        """Calculate a fear & greed equivalent score"""
-        score = 50  # Neutral starting point
-
-        # Market cap change influence (40% weight)
-        if market_cap_change > 5:
-            score += 25
-        elif market_cap_change > 2:
-            score += 15
-        elif market_cap_change > 0:
-            score += 5
-        elif market_cap_change > -2:
-            score -= 5
-        elif market_cap_change > -5:
-            score -= 15
-        else:
-            score -= 25
-
-        # BTC dominance influence (30% weight)
-        if btc_dominance > 55:
-            score -= 10  # High dominance can indicate fear in alts
-        elif btc_dominance < 40:
-            score += 15  # Low dominance indicates greed in alts
-
-        # Volume influence (30% weight)
-        if volume > 100e9:  # High volume
-            score += 10
-        elif volume < 50e9:  # Low volume
-            score -= 10
-
-        score = max(0, min(100, score))
-
-        if score >= 80:
-            level = "🔥 Extreme Greed"
-        elif score >= 65:
-            level = "😤 Greed"
-        elif score >= 45:
-            level = "😐 Neutral"
-        elif score >= 25:
-            level = "😨 Fear"
-        else:
-            level = "💀 Extreme Fear"
-
-        return {"score": score, "level": level}
-
-    def _analyze_market_structure(self, btc_dominance, eth_dominance, market_cap_change):
-        """Analyze overall market structure"""
-        if market_cap_change > 2 and btc_dominance < 45:
-            structure = "Altcoin Bull Market"
-            reasoning = "Strong market growth with declining BTC dominance indicates altcoin season"
-        elif market_cap_change > 2 and btc_dominance > 50:
-            structure = "Bitcoin-Led Bull Market" 
-            reasoning = "Market growth driven primarily by Bitcoin strength"
-        elif market_cap_change < -2 and btc_dominance > 50:
-            structure = "Flight to BTC Safety"
-            reasoning = "Market decline with BTC dominance increase shows risk-off behavior"
-        elif market_cap_change < -2:
-            structure = "Bear Market Conditions"
-            reasoning = "Broad market decline affecting all cryptocurrencies"
-        elif btc_dominance > 55:
-            structure = "BTC Dominance Phase"
-            reasoning = "Bitcoin consolidating market share, alts underperforming"
-        elif btc_dominance < 40:
-            structure = "Altcoin Rotation Phase" 
-            reasoning = "Capital flowing from BTC to alternative cryptocurrencies"
-        else:
-            structure = "Balanced Market"
-            reasoning = "Healthy distribution of capital across crypto ecosystem"
-
-        return {"structure": structure, "reasoning": reasoning}
-
-    def _get_top_cryptos_analysis(self, crypto_api):
-        """Get analysis of top cryptocurrencies performance"""
-        if not crypto_api:
-            return "• Top crypto data temporarily unavailable"
-
-        top_symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP']
-        analysis_lines = []
-
-        try:
-            for i, symbol in enumerate(top_symbols[:5], 1):
-                price_data = crypto_api.get_crypto_price(symbol)
-                if price_data.get('success'):
-                    price = price_data.get('price', 0)
-                    change_24h = price_data.get('change_24h', 0)
-
-                    if change_24h > 5:
-                        emoji = "🚀"
-                        trend = "Strong Bull"
-                    elif change_24h > 2:
-                        emoji = "📈" 
-                        trend = "Bullish"
-                    elif change_24h > -2:
-                        emoji = "😐"
-                        trend = "Neutral"
-                    elif change_24h > -5:
-                        emoji = "📉"
-                        trend = "Bearish"
-                    else:
-                        emoji = "💥"
-                        trend = "Strong Bear"
-
-                    analysis_lines.append(f"{i}. {symbol} {emoji} ${price:,.2f} ({change_24h:+.1f}%) - {trend}")
-                else:
-                    analysis_lines.append(f"{i}. {symbol} - Data unavailable")
-
-        except Exception as e:
-            return f"• Top crypto analysis error: {str(e)[:50]}"
-
-        return "\n".join(analysis_lines) if analysis_lines else "• Top crypto data processing..."
-
-    def get_admin_logs(self, last_n=10):
-        """Get recent admin logs for debugging"""
-        return self.admin_log[-last_n:] if self.admin_log else []
-
-    def get_system_status(self):
-        """Get system status for admin"""
-        return {
-            'supabase_connected': self.supabase_connected,
-            'coinapi_key_available': bool(self.coinapi_key),
-            'cmc_key_available': bool(self.cmc_api_key),
-            'recent_errors': len(self.admin_log),
-            'last_error': self.admin_log[-1] if self.admin_log else None
-        }
-
-    # Compatibility aliases for bot.py
-    def analyze_text(self, text):
-        """Simple text analysis"""
-        return self.get_ai_response(text)
 
     async def analyze_futures_enhanced(self, symbol, user_id=None):
         """Enhanced futures analysis wrapper"""
