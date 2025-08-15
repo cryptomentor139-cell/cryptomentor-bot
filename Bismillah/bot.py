@@ -12,6 +12,7 @@ load_dotenv()
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode
+from typing import Optional, Dict, Any, Tuple, List # Ensure Dict is imported from typing
 
 # Import required modules for database operations
 from database import Database
@@ -2287,12 +2288,12 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
 • Average Credits/User: {stats['avg_credits']:.1f}
 
 📈 **Activity Stats:**
-• Commands Today: {stats['commands_today']}
+• Total Commands Executed: {stats['total_commands']}
 • Total Analyses: {stats['analyses_count']}
 
 🔧 **System Health:**
 • Database: ✅ Online
-• CoinAPI: ✅ Active
+• CoinAPI: {'✅ Active' if hasattr(self.crypto_api, 'data_provider') and self.crypto_api.data_provider else '❌ No Provider'}
 • Auto Signals: {'🟢 Running' if self.auto_signals and self.auto_signals.is_running else '🔴 Stopped'}
 
 ⏰ **Last Update**: {datetime.now().strftime('%H:%M:%S WIB')}"""
