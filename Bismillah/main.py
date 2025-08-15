@@ -33,7 +33,7 @@ if is_deployment:
 
 print("🚀 CryptoMentor AI Bot Starting...")
 print("=" * 50)
-print(f"📅 Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+print(f"📅 Start Time: {datetime.now().strftime('%d-%m-%Y %H:%M:%S WIB')}")
 
 print("🔍 Bot Deployment Detection:")
 for check, result in deployment_indicators.items():
