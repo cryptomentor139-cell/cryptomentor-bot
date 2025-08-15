@@ -35,11 +35,11 @@ except ImportError as e:
     print(f"❌ Failed to import AIAssistant: {e}")
     sys.exit(1)
 try:
-    from snd_auto_signals import initialize_auto_signals
+    from snd_auto_signals import initialize_auto_signals, AUTO_SIGNALS_ENABLED
     print("✅ snd_auto_signals module imported successfully")
 except ImportError as e:
     print(f"⚠️ snd_auto_signals module not found: {e}")
-    
+
     class MockAutoSignals:
         def __init__(self, bot_instance):
             self.bot_instance = bot_instance
@@ -65,6 +65,9 @@ except ImportError as e:
     def initialize_auto_signals(bot_instance):
         print("[AUTO-SIGNAL] Using mock Auto Signal Scanner (snd_auto_signals not available)")
         return MockAutoSignals(bot_instance)
+    
+    # Define AUTO_SIGNALS_ENABLED as False if module is not found
+    AUTO_SIGNALS_ENABLED = False
 
 
 # Enhanced deployment detection with verification
@@ -108,7 +111,7 @@ class TelegramBot:
 
         # Get all admin IDs with better error handling
         self.admin_ids = set()
-        
+
         # Primary admin
         admin_id_str = os.getenv('ADMIN_USER_ID', '0')
         try:
@@ -118,7 +121,7 @@ class TelegramBot:
                 logger.info(f"✅ Primary Admin ID configured: {admin_id}")
         except ValueError:
             logger.warning(f"Invalid ADMIN_USER_ID: {admin_id_str}")
-        
+
         # Secondary admin
         admin2_id_str = os.getenv('ADMIN2_USER_ID', '0')
         try:
@@ -129,7 +132,7 @@ class TelegramBot:
         except ValueError:
             if admin2_id_str != '0':
                 logger.warning(f"Invalid ADMIN2_USER_ID: {admin2_id_str}")
-        
+
         # Support for future admin IDs (ADMIN3_USER_ID, ADMIN4_USER_ID, etc.)
         for i in range(3, 10):  # Support up to ADMIN9_USER_ID
             admin_key = f'ADMIN{i}_USER_ID'
@@ -142,10 +145,10 @@ class TelegramBot:
             except ValueError:
                 if admin_id_str != '0':
                     logger.warning(f"Invalid {admin_key}: {admin_id_str}")
-        
+
         # Backward compatibility
         self.admin_id = min(self.admin_ids) if self.admin_ids else 0
-        
+
         logger.info(f"✅ Total configured admins: {len(self.admin_ids)} - IDs: {sorted(list(self.admin_ids))}")
 
         # Initialize components with CoinAPI integration
@@ -227,6 +230,11 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("enable_auto_signal_ai", self.start_auto_signals_command))
             self.application.add_handler(CommandHandler("disable_auto_signal_ai", self.stop_auto_signals_command))
 
+            # Add new auto signals admin commands
+            self.application.add_handler(CommandHandler("autosignal_status", self.auto_signals_status_command))
+            self.application.add_handler(CommandHandler("autosignal_force_off", self.stop_auto_signals_command)) # Assuming stop is the desired action
+            self.application.add_handler(CommandHandler("autosignal_temp_on", self.start_auto_signals_command)) # Assuming start is the desired action
+
 
             # Add callback query handler
             self.application.add_handler(CallbackQueryHandler(self.handle_callback_query))
@@ -266,8 +274,8 @@ class TelegramBot:
             try:
                 print("[AUTO-SIGNAL] Initializing auto signals system...")
                 self.auto_signals = initialize_auto_signals(self)
-                if self.auto_signals:
-                    # Start auto signals in BOTH modes
+                if self.auto_signals and AUTO_SIGNALS_ENABLED:
+                    # Start auto signals in BOTH modes if feature flag is ON
                     asyncio.create_task(self.auto_signals.start_auto_scanner())
                     mode_text = "DEPLOYMENT" if IS_DEPLOYMENT else "DEVELOPMENT"
                     print(f"[AUTO-SIGNAL] ✅ Auto signals scanner started in {mode_text} mode")
@@ -278,8 +286,10 @@ class TelegramBot:
                     # Check if signal_cooldown attribute exists
                     cooldown_hours = getattr(self.auto_signals, 'signal_cooldown', 3600) // 3600
                     print(f"[AUTO-SIGNAL] 🛡️ Anti-spam: {cooldown_hours}h cooldown")
+                elif not AUTO_SIGNALS_ENABLED:
+                    print("[AUTO-SIGNAL] ⚠️ Auto signals system is disabled via feature flag.")
                 else:
-                    print("[AUTO-SIGNAL] ❌ Auto signals system failed to initialize")
+                    print("[AUTO-SIGNAL] ❌ Auto signals system failed to initialize or is disabled.")
             except Exception as e:
                 print(f"⚠️ Auto signals initialization failed: {e}")
                 import traceback
@@ -1351,21 +1361,28 @@ Gunakan credit dengan bijak!"""
 
         status = "🟢 RUNNING" if self.auto_signals.is_running else "🔴 STOPPED"
         eligible_users = self.db.get_eligible_auto_signal_users()
+        deployment_mode = "🚀 DEPLOYMENT" if IS_DEPLOYMENT else "🔧 DEVELOPMENT"
 
-        message = f"""🎯 **Auto SnD Signals Status**
 
-📊 **Status**: {status}
-👥 **Eligible Users**: {len(eligible_users)} (Admin + Lifetime)
-⏰ **Scan Interval**: {self.auto_signals.scan_interval // 60} minutes
-🎯 **Target Coins**: {len(self.auto_signals.target_symbols)} altcoins
-📈 **Min Confidence**: {self.auto_signals.min_confidence}%
-🕐 **Last Scan**: {datetime.fromtimestamp(self.auto_signals.last_scan_time).strftime('%H:%M:%S') if self.auto_signals.last_scan_time > 0 else 'Never'}
-
-🔧 **Commands:**
-• `/enable_auto_signal_ai` - Start momentum signals scanner
-• `/disable_auto_signal_ai` - Stop momentum signals scanner
-
-💡 **Target**: Admin & Lifetime premium users only"""
+        message = f"""🎯 **Auto SnD Signals (Enhanced Control):**
+        • Feature Flag: {'✅ ON' if AUTO_SIGNALS_ENABLED else '❌ OFF'}
+        • Runtime Status: {status}
+        • Mode: Works in {deployment_mode} mode
+        • Eligible Users: {len(eligible_users)} (Admin + Lifetime)
+        • Target Coins: {len(self.auto_signals.target_symbols)} top coins
+        • Scan Interval: {self.auto_signals.scan_interval // 60} minutes
+        
+        🔧 **Admin Commands:**
+        • `/grant_premium <user_id> <days>` - Grant premium
+        • `/revoke_premium <user_id>` - Revoke premium
+        • `/grant_credits <user_id> <amount>` - Add credits
+        • `/autosignal_status` - Enhanced auto signals status
+        • `/autosignal_force_off` - Force stop all auto signals
+        • `/autosignal_temp_on` - Temporary enable (session only)
+        • `/enable_auto_signal_ai` - Start signals (legacy)
+        • `/disable_auto_signal_ai` - Stop signals (legacy)
+        • `/broadcast <message>` - Send broadcast
+"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
@@ -1379,6 +1396,10 @@ Gunakan credit dengan bijak!"""
 
         if not self.auto_signals:
             await update.message.reply_text("❌ Auto signals system tidak tersedia.")
+            return
+
+        if not AUTO_SIGNALS_ENABLED:
+            await update.message.reply_text("⚠️ Auto SnD Signals feature flag is OFF. Cannot start.")
             return
 
         if self.auto_signals.is_running:
@@ -1509,7 +1530,6 @@ Harga akan diambil real-time dari CoinAPI."""
 
 🚀 **Keuntungan yang Anda nikmati:**
 • ♾️ Unlimited analisis CoinAPI + SnD
-• 🎯 Akses prioritas ke semua fitur
 • 📊 Data real-time CoinAPI tanpa batas
 • {auto_signals_status}
 • 🛡️ Support premium
@@ -1842,21 +1862,24 @@ Gunakan `/subscribe` untuk upgrade!
 • Active Today: {stats['active_today']}
 • Total Credits: {stats['total_credits']:,}
 
-🎯 **Auto SnD Signals:**
-• Status: {auto_status}
-• Mode: Works in {deployment_mode} mode
-• Eligible Users: {len(eligible_auto_users)} (Admin + Lifetime)
-• Target Coins: {len(self.auto_signals.target_symbols) if self.auto_signals else 0} top coins
-• Scan Interval: {(self.auto_signals.scan_interval // 60) if self.auto_signals else 'N/A'} minutes
-
+🎯 **Auto SnD Signals (Enhanced Control):**
+        • Feature Flag: {'✅ ON' if AUTO_SIGNALS_ENABLED else '❌ OFF'}
+        • Runtime Status: {auto_status}
+        • Mode: Works in {deployment_mode} mode
+        • Eligible Users: {len(eligible_auto_users)} (Admin + Lifetime)
+        • Target Coins: {len(self.auto_signals.target_symbols) if self.auto_signals else 0} top coins
+        • Scan Interval: {(self.auto_signals.scan_interval // 60) if self.auto_signals else 'N/A'} minutes
+        
 🔧 **Admin Commands:**
-• `/grant_premium <user_id> <days>` - Grant premium
-• `/revoke_premium <user_id>` - Revoke premium
-• `/grant_credits <user_id> <amount>` - Add credits
-• `/auto_signals_status` - SnD signals status
-• `/enable_auto_signal_ai` - Start momentum signals scanner
-• `/disable_auto_signal_ai` - Stop momentum signals scanner
-• `/broadcast <message>` - Send broadcast
+        • `/grant_premium <user_id> <days>` - Grant premium
+        • `/revoke_premium <user_id>` - Revoke premium
+        • `/grant_credits <user_id> <amount>` - Add credits
+        • `/autosignal_status` - Enhanced auto signals status
+        • `/autosignal_force_off` - Force stop all auto signals
+        • `/autosignal_temp_on` - Temporary enable (session only)
+        • `/enable_auto_signal_ai` - Start signals (legacy)
+        • `/disable_auto_signal_ai` - Stop signals (legacy)
+        • `/broadcast <message>` - Send broadcast
 
 🌐 **API Status:**
 • CoinAPI: {'✅ Active' if hasattr(self.crypto_api, 'data_provider') and self.crypto_api.data_provider else '❌ No Provider'}
