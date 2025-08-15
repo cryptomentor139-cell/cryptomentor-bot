@@ -3,54 +3,67 @@ import logging
 import sys
 import asyncio
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
 
-# Load environment variables from .env file (if exists) and system environment
+# Load environment variables first
+from dotenv import load_dotenv
 load_dotenv()
 
-# Add missing imports
+# Telegram bot imports
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode
 
-from database import Database
-from crypto_api import CryptoAPI
-from ai_assistant import AIAssistant
-# Assuming snd_auto_signals.py contains the AutoSignalScanner class and initialize_auto_signals function
-# If not, the relevant logic needs to be incorporated.
-# For now, assuming the import path is correct.
+# Local imports with error handling
+try:
+    from database import Database
+    print("✅ Database module imported successfully")
+except ImportError as e:
+    print(f"❌ Failed to import Database: {e}")
+    sys.exit(1)
+
+try:
+    from crypto_api import CryptoAPI
+    print("✅ CryptoAPI module imported successfully")
+except ImportError as e:
+    print(f"❌ Failed to import CryptoAPI: {e}")
+    sys.exit(1)
+
+try:
+    from ai_assistant import AIAssistant
+    print("✅ AIAssistant module imported successfully")
+except ImportError as e:
+    print(f"❌ Failed to import AIAssistant: {e}")
+    sys.exit(1)
 try:
     from snd_auto_signals import initialize_auto_signals
-except ImportError:
-    logging.error("Could not import 'initialize_auto_signals' from 'snd_auto_signals'. Please ensure the file exists and is correctly placed.")
-    # Provide a mock or placeholder if the module is not available to prevent startup failure
+    print("✅ snd_auto_signals module imported successfully")
+except ImportError as e:
+    print(f"⚠️ snd_auto_signals module not found: {e}")
+    
     class MockAutoSignals:
         def __init__(self, bot_instance):
             self.bot_instance = bot_instance
             self.is_running = False
-            self.target_symbols = []
-            self.scan_interval = 300 # 5 minutes
+            self.target_symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'MATIC', 'DOT', 'LINK']
+            self.scan_interval = 300  # 5 minutes
             self.min_confidence = 75
             self.last_scan_time = 0
-            self.signal_cooldown = 1800 # 30 minutes
+            self.signal_cooldown = 1800  # 30 minutes
             self.last_signal_sent_time = 0
             self.active_scanner_task = None
 
         async def start_auto_scanner(self):
-            logging.warning("Auto Signal Scanner is not fully implemented. Running in mock mode.")
+            print("[AUTO-SIGNAL] Starting mock Auto Signal Scanner...")
             self.is_running = True
-            # In a real scenario, this would start the loop.
-            # For mock, we just set the flag.
-            pass
+            return True
 
         async def stop_auto_scanner(self):
-            logging.warning("Stopping mock Auto Signal Scanner.")
+            print("[AUTO-SIGNAL] Stopping mock Auto Signal Scanner...")
             self.is_running = False
-            # In a real scenario, this would cancel the task.
-            pass
+            return True
 
     def initialize_auto_signals(bot_instance):
-        logging.warning("Using mock Auto Signal Scanner.")
+        print("[AUTO-SIGNAL] Using mock Auto Signal Scanner (snd_auto_signals not available)")
         return MockAutoSignals(bot_instance)
 
 
