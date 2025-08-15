@@ -786,9 +786,12 @@ class AIAssistant:
             try:
                 import asyncio
                 ohlcv_data = asyncio.run(crypto_api.get_ohlcv_data(symbol, period="5MIN", limit=100, market="spot"))
+                if not ohlcv_data.get('success'):
+                    print(f"⚠️ OHLCV data failed: {ohlcv_data.get('error', 'Unknown error')}")
+                    ohlcv_data = {'success': False}
             except Exception as e:
                 print(f"⚠️ OHLCV data unavailable: {e}")
-                ohlcv_data = []
+                ohlcv_data = {'success': False}
 
             if 'error' in price_data or not price_data.get('success'):
                 return self._error_fallback(symbol, "price data")
@@ -1179,17 +1182,37 @@ class AIAssistant:
                     # Get OHLCV data with perp market for futures
                     ohlcv_data = await crypto_api.get_ohlcv_data(symbol, period="5MIN", limit=300, market="perp")
 
-                    if not ohlcv_data:
+                    if not ohlcv_data or not ohlcv_data.get('success'):
+                        print(f"⚠️ OHLCV data failed for {symbol}: {ohlcv_data.get('error', 'Unknown error') if ohlcv_data else 'No data'}")
                         continue
 
-                    # Process OHLCV data into a pandas DataFrame
-                    if not isinstance(ohlcv_data, dict) or not ohlcv_data.get('success'):
-                        print(f"⚠️ Invalid OHLCV data for {symbol}")
-                        continue
-                        
-                    ohlcv_df = ohlcv_data.get('data')
-                    if ohlcv_df is None or ohlcv_df.empty:
+                    # Process OHLCV data - convert list to DataFrame
+                    raw_data = ohlcv_data.get('data', [])
+                    if not raw_data or len(raw_data) == 0:
                         print(f"⚠️ Empty OHLCV data for {symbol}")
+                        continue
+                    
+                    # Convert to DataFrame for technical analysis
+                    try:
+                        import pandas as pd
+                        ohlcv_df = pd.DataFrame(raw_data)
+                        
+                        # Rename columns to match expected format
+                        column_mapping = {
+                            'close': 'price_close',
+                            'high': 'price_high', 
+                            'low': 'price_low',
+                            'open': 'price_open',
+                            'volume': 'volume_traded'
+                        }
+                        ohlcv_df = ohlcv_df.rename(columns=column_mapping)
+                        
+                        if ohlcv_df.empty or len(ohlcv_df) < 20:
+                            print(f"⚠️ Insufficient OHLCV data for {symbol}: {len(ohlcv_df)} rows")
+                            continue
+                            
+                    except Exception as df_error:
+                        print(f"⚠️ DataFrame conversion error for {symbol}: {df_error}")
                         continue
 
                     # Calculate technical indicators
@@ -2241,8 +2264,10 @@ Coba `/analyze btc` untuk analisis komprehensif!"""
                     try:
                         import asyncio
                         ohlcv_data = asyncio.run(crypto_api.get_ohlcv_data(symbol, period="5MIN", limit=50, market="spot"))
+                        if not ohlcv_data.get('success'):
+                            ohlcv_data = {'success': False}
                     except Exception as e:
-                        ohlcv_data = []
+                        ohlcv_data = {'success': False}
 
                     if price_data and price_data.get('success'):
                         market_data.append({
