@@ -1876,24 +1876,15 @@ Gunakan `/subscribe` untuk upgrade!
             print(f"Error in ask_ai command: {e}")
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /status and /system commands - System status with dual counters"""
-        from app.stats import build_system_status
+        """Handle /status and /system commands - Alias for admin panel"""
+        from app.admin import get_admin_panel_text
         from app.users_repo import touch_user_from_update
 
         # Auto-upsert user to Supabase
         touch_user_from_update(update)
 
-        # Check if auto signals are running
-        auto_signals_running = self.auto_signals and self.auto_signals.is_running if self.auto_signals else False
-        
-        # Path to legacy JSON (adjust path if needed)
-        legacy_json_path = "Bismillah/data/users_local.json" if os.path.exists("Bismillah/data/users_local.json") else None
-
-        # Build status message
-        status_text = build_system_status(
-            auto_signals_running=auto_signals_running,
-            legacy_json_path=legacy_json_path
-        )
+        # Get admin panel text (same as /admin command)
+        status_text = get_admin_panel_text()
 
         await update.message.reply_text(status_text, parse_mode='Markdown')
 
@@ -1992,33 +1983,21 @@ Gunakan `/subscribe` untuk upgrade!
             return
 
         try:
-            # Get system stats
-            from app.db_router import db_status
-            db_info = db_status()
-
-            # Get user stats
-            all_users = self.db.get_all_users() if hasattr(self.db, 'get_all_users') else []
-            premium_users = [u for u in all_users if u.get('is_premium')] if all_users else []
-
-            # Auto signals status
-            auto_status = "🟢 RUNNING" if (self.auto_signals and self.auto_signals.is_running) else "🔴 STOPPED"
-
-            # Admin info
-            admin_ids = list(self.ADMIN_IDS) if hasattr(self, 'ADMIN_IDS') else [self.admin_id] if hasattr(self, 'admin_id') else []
-
-            # Check admin hierarchy
+            # Import the new admin panel
+            from app.admin import get_admin_panel_text
             from app.lib.auth import get_admin_hierarchy, is_super_admin
+            
+            # Get system status from new admin panel
+            system_status = get_admin_panel_text()
+            
+            # Check admin hierarchy
             hierarchy = get_admin_hierarchy()
             is_user_super_admin = is_super_admin(user_id)
 
             message = f"""👑 **CryptoMentor AI - Admin Panel**
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📊 **System Status**
-• **Database**: {db_info.get('mode', 'Unknown').upper()} - {'✅' if db_info.get('ready') else '❌'}
-• **Auto Signals**: {auto_status}
-• **Total Users**: {len(all_users)}
-• **Premium Users**: {len(premium_users)}
+{system_status}
 
 👥 **User Management**
 • `/setpremium <user_id> <days|lifetime>` - Set premium
