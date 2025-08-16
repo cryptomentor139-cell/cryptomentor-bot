@@ -145,12 +145,34 @@ def get_supabase_totals() -> Tuple[int, int]:
         print(f"Error getting Supabase totals: {e}")
         return 0, 0
 
+def get_legacy_json_totals(path: Optional[str]=None, data_obj: Optional[dict]=None) -> Tuple[int,int]:
+    """Get user counts from legacy JSON storage"""
+
+    if data_obj:
+        users = data_obj.get("users", [])
+        total = len(users)
+        premium = sum(1 for u in users if u.get("is_premium"))
+        return total, premium
+
+    # No default fallback - use provided path only
+    if not path:
+        return 0, 0
+    
+    payload, how = _load_json_payload(path)
+    if payload is None:
+        return 0, 0
+    users = _parse_users_from_json_payload(payload)
+    total = len(users)
+    premium = sum(1 for u in users if u.get("is_premium"))
+    return total, premium
+
 def build_system_status(auto_signals_running: bool,
                         legacy_json_path: Optional[str]=None,
                         legacy_data: Optional[dict]=None) -> str:
-    legacy_total, legacy_premium, legacy_path, legacy_detail = legacy_json_totals_with_status(
-        explicit_path=legacy_json_path, data_obj=legacy_data
-    )
+    """Build comprehensive system status"""
+
+    # Get legacy JSON counts - use the provided path parameter
+    legacy_total, legacy_premium = get_legacy_json_totals(legacy_json_path, legacy_data)
     ok, db_detail = health()
     supa_total, supa_premium = (0, 0)
     if ok:
@@ -165,12 +187,13 @@ def build_system_status(auto_signals_running: bool,
     svc_block = "🔌 Integrations:\n" + "\n".join(f"• {line}" for line in svc_lines) + "\n\n" if svc_lines else ""
 
     # Build final status message
+    json_path_display = legacy_json_path or "no path specified"
     return (
         "📊 System Status\n\n"
         f"🗄️ Database: SUPABASE - {db_text}\n"
         f"🎯 Auto Signals: {auto_text}\n\n"
         "📊 User Statistics:\n"
-        f"• Local JSON - Total Users: {legacy_total} | Premium: {legacy_premium} (path: {legacy_path})\n"
+        f"• Local JSON - Total Users: {legacy_total} | Premium: {legacy_premium} (path: {json_path_display})\n"
         f"• Supabase  - Total Users: {supa_total} | Premium: {supa_premium}\n\n"
         f"{svc_block}"
         f"⏰ Last Update: {now_utc}\n"

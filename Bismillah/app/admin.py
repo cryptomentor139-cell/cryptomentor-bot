@@ -2,18 +2,19 @@
 import os
 from .stats import build_system_status
 
-# Coba ambil status dari autosignal; fallback ke env agar tidak crash
+# Default ke file backup yang benar; bisa di-override via Secrets: LEGACY_JSON_PATH
+DEFAULT_LEGACY_PATH = "premium_users_backup_20250802_130229.json"
+LEGACY_JSON_PATH = os.getenv("LEGACY_JSON_PATH", DEFAULT_LEGACY_PATH)
+
+# Jika kamu punya is_auto_signal_running(), pakai itu. Kalau tidak, biarkan True atau import dari autosignal.
 try:
     from .autosignal import is_auto_signal_running
+    _auto = is_auto_signal_running()
 except Exception:
-    def is_auto_signal_running() -> bool:
-        return os.getenv("AUTO_SIGNALS_DEFAULT", "1") == "1"
-
-# Jika masih memakai data JSON lama, isi path; biarkan None untuk auto-detect di stats
-LEGACY_JSON_PATH = None  # contoh: "data/users.json"
+    _auto = True
 
 def get_admin_panel_text():
     return build_system_status(
-        auto_signals_running=is_auto_signal_running(),
+        auto_signals_running=_auto,
         legacy_json_path=LEGACY_JSON_PATH
     )
