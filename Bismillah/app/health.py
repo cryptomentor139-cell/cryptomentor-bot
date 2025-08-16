@@ -19,15 +19,15 @@ def check_supabase() -> Tuple[bool, str]:
 
 def check_coinapi() -> Tuple[bool, str]:
     base = os.getenv("COINAPI_BASE_URL", "https://rest.coinapi.io")
-    key = os.getenv("COINAPI_KEY")
+    # PRIORITAS BARU: COINAPI_API_KEY, fallback COINAPI_KEY
+    key = os.getenv("COINAPI_API_KEY") or os.getenv("COINAPI_KEY")
     if not key:
-        return False, "missing COINAPI_KEY"
+        return False, "missing COINAPI_API_KEY"
     url = f"{base.rstrip('/')}/v1/assets?limit=1"
     try:
         with httpx.Client(timeout=TIMEOUT) as client:
             r = client.get(url, headers={"X-CoinAPI-Key": key})
         if r.status_code == 200:
-            # format JSON tidak krusial untuk health, 200 sudah cukup
             return True, "200 OK"
         return False, f"{r.status_code} {_short(r.text, 80)}"
     except Exception as e:
@@ -38,7 +38,6 @@ def check_cmc() -> Tuple[bool, str]:
     key = os.getenv("CMC_API_KEY") or os.getenv("CMC_PRO_API_KEY")
     if not key:
         return False, "missing CMC_API_KEY"
-    # endpoint ringan; 200 + status.error_code==0 → sehat
     url = f"{base.rstrip('/')}/v1/cryptocurrency/map?limit=1"
     headers = {"X-CMC_PRO_API_KEY": key}
     try:
@@ -62,14 +61,30 @@ def check_cryptonews() -> Tuple[bool, str]:
     key = os.getenv("CRYPTONEWS_API_KEY")
     if not key:
         return False, "missing CRYPTONEWS_API_KEY"
-    # ping ringan: 1 item BTC; cryptonews gunakan query token=API_KEY
     url = f"{base.rstrip('/')}/api/v1?tickers=BTC&items=1&token={key}"
     try:
         with httpx.Client(timeout=TIMEOUT) as client:
             r = client.get(url)
         if r.status_code == 200:
-            # Banyak variasi output; cukup 200 sebagai indikator koneksi OK
             return True, "200 OK"
+        return False, f"{r.status_code} {_short(r.text, 80)}"
+    except Exception as e:
+        return False, f"request_error: {e}"
+
+# === NEW: OpenAI ===
+def check_openai() -> Tuple[bool, str]:
+    base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        return False, "missing OPENAI_API_KEY"
+    url = f"{base.rstrip('/')}/v1/models"
+    headers = {"Authorization": f"Bearer {key}"}
+    try:
+        with httpx.Client(timeout=TIMEOUT) as client:
+            r = client.get(url, headers=headers)
+        if r.status_code == 200:
+            return True, "200 OK"
+        # Banyak kasus 401/403 kalau key salah/expired
         return False, f"{r.status_code} {_short(r.text, 80)}"
     except Exception as e:
         return False, f"request_error: {e}"
@@ -80,6 +95,7 @@ def services_status_lines() -> List[str]:
         ("CoinAPI", check_coinapi),
         ("CoinMarketCap", check_cmc),
         ("CryptoNews", check_cryptonews),
+        ("OpenAI", check_openai),  # <--- NEW
     ]
     lines: List[str] = []
     for name, fn in SERVICES:
