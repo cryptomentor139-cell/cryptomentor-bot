@@ -1,4 +1,3 @@
-
 # app/storage_local.py
 import os
 import json
@@ -65,9 +64,9 @@ def update_user(users: Dict[str, Any], telegram_id: int, fields: Dict[str, Any])
             "banned": False,
             "created_at": datetime.now().isoformat()
         }
-    
+
     # Update fields
     users[user_key].update(fields)
     users[user_key]["updated_at"] = datetime.now().isoformat()
-    
+
     return users[user_key]
