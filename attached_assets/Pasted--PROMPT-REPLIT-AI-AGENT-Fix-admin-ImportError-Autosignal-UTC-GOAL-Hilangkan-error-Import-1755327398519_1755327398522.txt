@@ -1,0 +1,119 @@
+🚀 PROMPT REPLIT AI AGENT — Fix /admin ImportError + Autosignal + UTC
+
+GOAL
+
+Hilangkan error: ImportError("cannot import name 'is_auto_signal_running' from 'app.autosignal' ...").
+
+Buat modul app/autosignal.py yang menjadi “sumber kebenaran” status Auto Signals.
+
+Update app/admin.py supaya:
+
+impor is_auto_signal_running dengan try/except (fallback ke env),
+
+gunakan timestamp UTC,
+
+panggil builder panel yang sudah ada (build_system_status).
+
+Jangan ubah file lain dan jangan rusak logic bot.
+
+TASKS
+
+Buat file baru app/autosignal.py dengan isi berikut:
+
+# app/autosignal.py
+"""
+Sumber kebenaran status Auto Signals di runtime.
+Dipakai oleh panel /admin untuk menampilkan ON/OFF.
+"""
+
+import os
+from threading import Event
+
+# default ON jika env AUTO_SIGNALS_DEFAULT=1, selain itu OFF
+_default_on = os.getenv("AUTO_SIGNALS_DEFAULT", "1") == "1"
+_state = Event()
+if _default_on:
+    _state.set()
+else:
+    _state.clear()
+
+def is_auto_signal_running() -> bool:
+    """Kembalikan True jika Auto Signals sedang aktif."""
+    return _state.is_set()
+
+def start_auto_signals() -> None:
+    """Nyalakan Auto Signals (hanya flag status; worker dijalankan di tempat lain)."""
+    _state.set()
+
+def stop_auto_signals() -> None:
+    """Matikan Auto Signals (flag status)."""
+    _state.clear()
+
+def set_auto_signal_running(flag: bool) -> None:
+    _state.set() if flag else _state.clear()
+
+
+Update app/admin.py agar robust terhadap impor & gunakan UTC:
+
+# app/admin.py
+import os
+from .stats import build_system_status
+
+# Coba ambil status dari autosignal; fallback ke env agar tidak crash
+try:
+    from .autosignal import is_auto_signal_running
+except Exception:
+    def is_auto_signal_running() -> bool:
+        return os.getenv("AUTO_SIGNALS_DEFAULT", "1") == "1"
+
+# Jika masih memakai data JSON lama, isi path; biarkan None untuk auto-detect di stats
+LEGACY_JSON_PATH = None  # contoh: "data/users.json"
+
+def get_admin_panel_text():
+    return build_system_status(
+        auto_signals_running=is_auto_signal_running(),
+        legacy_json_path=LEGACY_JSON_PATH
+    )
+
+
+Cari & selaraskan impor di repo:
+
+Cari string: is_auto_signal_running
+
+Jika ada impor selain from app.autosignal import is_auto_signal_running atau from .autosignal import is_auto_signal_running, samakan menjadi salah satu bentuk itu.
+
+Pastikan tidak ada salah ketik (is_auto_signals_running, dll).
+
+Pastikan handler /admin (atau alias /status) memanggil get_admin_panel_text() dari app/admin.py.
+
+aiogram: pastikan router /admin existing memanggil await msg.answer(get_admin_panel_text()).
+
+telebot: pastikan handler /admin memanggil bot.reply_to(message, get_admin_panel_text()).
+
+Jangan mengubah file lain (stats.py, sb_client.py, dll) kecuali diperlukan untuk impor yang konsisten. Timestamp UTC sudah ditangani oleh build_system_status(); jangan ubah kembali ke WIB.
+
+ACCEPTANCE
+
+Menjalankan /admin tidak lagi memunculkan ImportError.
+
+Panel menampilkan:
+
+Baris “Auto Signals” sesuai env:
+
+Set secret/env AUTO_SIGNALS_DEFAULT="0" → tampil 🔴 STOPPED.
+
+Set "1" → tampil 🟢 RUNNING.
+
+Timestamp “Last Update” dalam format HH:MM:SS UTC.
+
+Tidak ada perubahan pada fitur lain.
+
+(Opsional) QUICK TEST
+
+Set Replit Secrets:
+
+AUTO_SIGNALS_DEFAULT="1" (atau "0" untuk menguji STOPPED)
+
+Jalankan bot, kirim /admin.
+
+Ubah AUTO_SIGNALS_DEFAULT → restart → /admin harus berubah sesuai.
