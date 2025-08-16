@@ -1510,7 +1510,7 @@ Gunakan credit dengan bijak!"""
             # Update status in autosignal module
             from app.autosignal import start_auto_signals
             start_auto_signals()
-
+            
             asyncio.create_task(self.auto_signals.start_auto_scanner())
             await update.message.reply_text(
                 f"✅ **Auto SnD Signals Enabled**\n\n"
@@ -1547,7 +1547,7 @@ Gunakan credit dengan bijak!"""
             # Update status in autosignal module
             from app.autosignal import stop_auto_signals
             stop_auto_signals()
-
+            
             await self.auto_signals.stop_auto_scanner()
             await update.message.reply_text("🛑 **Auto SnD Signals Disabled**\n\nScanner has been stopped.", parse_mode='Markdown')
             self.db.log_user_activity(user_id, "admin_disable_auto_signals", "Disabled Auto SnD Signals")
@@ -1983,31 +1983,98 @@ Gunakan `/subscribe` untuk upgrade!
 
     # Essential admin commands
     async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /admin command - shows system status dashboard"""
-        user_id = update.effective_user.id
+        """Handle /admin command - Enhanced admin panel with system status"""
+        from app.admin import get_admin_panel_text
+        from app.users_repo import touch_user_from_update
+        
+        user_id = update.message.from_user.id
+
+        # Auto-upsert user to Supabase
+        touch_user_from_update(update)
 
         if not self.is_admin(user_id):
-            await update.message.reply_text("❌ Access denied. Admin only command.")
+            await update.message.reply_text("❌ Access denied. You are not an admin.")
             return
 
         try:
-            from app.admin import get_admin_panel_text
-            from app.utils.safe_text import to_html, chunk
+            # Get system status from new admin panel
+            system_status = get_admin_panel_text()
+            
+            # Check admin hierarchy
+            from app.lib.auth import get_admin_hierarchy, is_super_admin
+            hierarchy = get_admin_hierarchy()
+            is_user_super_admin = is_super_admin(user_id)
 
-            admin_text = get_admin_panel_text()
-            html_text = to_html(admin_text)
+            message = f"""👑 **CryptoMentor AI - Admin Panel**
+━━━━━━━━━━━━━━━━━━━━━━━━━
 
-            # Send in chunks with HTML parsing
-            for part in chunk(html_text):
-                await update.message.reply_text(
-                    part,
-                    parse_mode='HTML',  # Force HTML instead of Markdown
-                    disable_web_page_preview=True
-                )
+{system_status}
+
+👥 **User Management**
+• `/setpremium <user_id> <days|lifetime>` - Set premium
+• `/remove_premium <user_id>` - Remove premium
+• `/grant_credits <user_id> <amount>` - Grant credits
+• `/check_user_status <user_id>` - Check user info
+
+🛠️ **System Commands**
+• `/sb_status` - Supabase connection status
+• `/db_status` - Database health check
+• `/recovery_stats` - System statistics
+• `/restart` - Restart bot service
+
+📢 **Broadcasting**
+• `/broadcast <message>` - Send to all users
+• `/broadcast_welcome` - Send welcome broadcast
+• `/confirm_broadcast` - Confirm pending broadcast
+• `/cancel_broadcast` - Cancel pending broadcast
+
+🎯 **Auto Signals (Lifetime Users Only)**
+• `/auto_signal_ai_status` - Check auto signals status
+• `/enable_auto_signal_ai` - Start auto signals
+• `/disable_auto_signal_ai` - Stop auto signals
+
+{'👑 **Super Admin Commands (ADMIN Secret Only)**' if is_user_super_admin else '🔧 **Debug & Diagnostics**'}
+{'• `/add_admin <user_id>` - Add new admin' if is_user_super_admin else '• `/whoami` - Your admin info'}
+{'• `/remove_admin <user_id>` - Remove admin' if is_user_super_admin else '• `/admin_debug` - Admin configuration debug'}
+{'• `/list_admins` - List all admins' if is_user_super_admin else '• `/sb_diag` - Supabase diagnostics'}
+{'• `/whoami` - Your admin info' if is_user_super_admin else '• `/sb_repair` - Attempt Supabase repair'}
+{'• `/admin_debug` - Admin configuration debug' if is_user_super_admin else ''}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+👤 **Your Admin ID**: `{user_id}`
+{'👑 **Your Role**: SUPER ADMIN' if is_user_super_admin else '⚡ **Your Role**: ADMIN'}
+🔑 **Total Admins**: {hierarchy['total_admins']}
+
+⚠️ **Use admin commands responsibly!**"""
 
         except Exception as e:
-            print(f"❌ Admin command error: {e}")
-            await update.message.reply_text(f"❌ Error loading admin panel: {str(e)}")
+            message = f"""👑 **CryptoMentor AI - Admin Panel**
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ **Error loading system stats**: {str(e)}
+
+📋 **Core Admin Commands**
+• `/setpremium <user_id> <days|lifetime>` - Set premium
+• `/remove_premium <user_id>` - Remove premium
+• `/grant_credits <user_id> <amount>` - Grant credits
+• `/check_user_status <user_id>` - Check user status
+• `/broadcast <message>` - Broadcast to all users
+• `/recovery_stats` - System statistics
+• `/sb_status` - Database status
+• `/restart` - Restart bot
+
+🔧 **Debug Commands**
+• `/whoami` - Your info
+• `/admin_debug` - Debug admin config
+• `/db_status` - Database health
+
+👤 **Your Admin ID**: `{user_id}`"""
+
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+
+
+
 
     async def setpremium_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Admin command untuk set premium user dengan Database Router"""
@@ -2262,7 +2329,6 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
             return
 
         try:
-            from app.utils.safe_text import to_html, chunk
             stats = self.db.get_bot_statistics()
 
             message = f"""📊 **Recovery & Database Stats**
@@ -2286,21 +2352,13 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
 • CoinAPI: {'✅ Active' if hasattr(self.crypto_api, 'data_provider') and self.crypto_api.data_provider else '❌ No Provider'}
 • Auto Signals: {'🟢 Running' if self.auto_signals and self.auto_signals.is_running else '🔴 Stopped'}
 
-⏰ **Last Update:** {datetime.now().strftime('%H:%M:%S UTC')}"""
-
-            html_message = to_html(message)
-            for part in chunk(html_message):
-                await update.message.reply_text(
-                    part,
-                    parse_mode='HTML',
-                    disable_web_page_preview=True
-                )
+⏰ **Last Update**: {datetime.now().strftime('%H:%M:%S WIB')}"""
 
         except Exception as e:
             message = f"❌ **Error getting recovery stats!**\n\n**Error**: {str(e)}"
             print(f"Error in recovery_stats_command: {e}")
-            await update.message.reply_text(message, parse_mode='Markdown')
 
+        await update.message.reply_text(message, parse_mode='Markdown')
 
     async def check_admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /check_admin command"""
@@ -2645,6 +2703,27 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
     async def setup_admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /setup_admin command - Shows admin setup instructions"""
 
+    async def db_status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /db_status command"""
+        from app.db_router import db_status
+        from app.safe_send import safe_reply
+
+        status = db_status()
+        message = f"🗄️ **Database Status**\n\n"
+        message += f"• **Mode**: {status['mode']}\n"
+        message += f"• **Ready**: {status['ready']}\n"
+        message += f"• **Note**: {status['note']}\n\n"
+
+        if status['mode'] == 'supabase':
+            message += "📊 **Backend**: Supabase Cloud Database\n"
+        elif status['mode'] == 'local':
+            message += "📁 **Backend**: Local JSON Storage\n"
+        else:
+            message += "❌ **Backend**: No database available\n"
+
+        await safe_reply(update.effective_message, message)
+
+
         user_id = update.message.from_user.id
         first_name = update.message.from_user.first_name or "User"
 
@@ -2704,53 +2783,6 @@ ADMIN2 = [optional_second_admin_id]
 • Restart diperlukan setelah mengubah environment variables"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
-
-    async def test_admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /test_admin command - Test admin access"""
-        user_id = update.message.from_user.id
-        
-        if not self.is_admin(user_id):
-            await update.message.reply_text("❌ Access denied. Admin only command.")
-            return
-            
-        message = f"""✅ **Admin Test Successful!**
-
-👤 **Your Info:**
-• **User ID**: `{user_id}`
-• **Admin Status**: ✅ CONFIRMED
-• **System**: All admin commands should work
-
-🎯 **Available Commands:**
-• `/admin` - Admin panel
-• `/setpremium` - Set user premium
-• `/grant_credits` - Grant credits
-• `/sb_status` - Supabase status
-• `/broadcast` - Send broadcast
-
-💡 **Kalo command lain gak work, restart bot dulu!**"""
-        
-        await update.message.reply_text(message, parse_mode='Markdown')
-
-    async def db_status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /db_status command"""
-        from app.db_router import db_status
-        from app.safe_send import safe_reply
-
-        status = db_status()
-        message = f"🗄️ **Database Status**\n\n"
-        message += f"• **Mode**: {status['mode']}\n"
-        message += f"• **Ready**: {status['ready']}\n"
-        message += f"• **Note**: {status['note']}\n\n"
-
-        if status['mode'] == 'supabase':
-            message += "📊 **Backend**: Supabase Cloud Database\n"
-        elif status['mode'] == 'local':
-            message += "📁 **Backend**: Local JSON Storage\n"
-        else:
-            message += "❌ **Backend**: No database available\n"
-
-        await safe_reply(update.effective_message, message)
-
 
     async def banned_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /banned command with Database Router"""
@@ -2862,6 +2894,21 @@ ADMIN2 = [optional_second_admin_id]
             await safe_reply(update.message, f"❌ Error sistem: {str(e)}")
             print(f"Error in banned_command: {e}")
 
+    async def cancel_broadcast_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /cancel_broadcast command"""
+        user_id = update.message.from_user.id
+
+        if not self.is_admin(user_id):
+            await update.message.reply_text("❌ Access denied. Admin only command.")
+            return
+
+        if not self.pending_broadcast:
+            await update.message.reply_text("❌ Tidak ada broadcast yang pending.")
+            return
+
+        self.pending_broadcast = None
+        await update.message.reply_text("✅ Broadcast dibatalkan.")
+
     async def whoami_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /whoami command - shows user ID"""
         user_id = update.effective_user.id if update.effective_user else None
@@ -2893,13 +2940,13 @@ ADMIN2 = [optional_second_admin_id]
         message += f"🏛️ **Admin Hierarchy:**\n"
         if hierarchy['super_admin']:
             message += f"• **Super Admin**: {hierarchy['super_admin']} 👑\n"
-
+        
         if hierarchy['dynamic_admins']:
             message += f"• **Dynamic Admins**: {', '.join(hierarchy['dynamic_admins'])}\n"
-
+        
         if hierarchy['static_admins']:
             message += f"• **Static Admins**: {', '.join(hierarchy['static_admins'])}\n"
-
+        
         message += f"• **Total Admins**: {hierarchy['total_admins']}\n\n"
 
         if ADMIN_SYSTEM_AVAILABLE:
@@ -3130,14 +3177,12 @@ ADMIN2 = [optional_second_admin_id]
 
     def _register_handlers(self):
         """Register all bot handlers"""
-        print("🔧 Registering bot handlers...")
-        
         # Add command handlers with proper async functions
         self.application.add_handler(CommandHandler("start", self.start))
         self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(CommandHandler("price", self.price_command))
         self.application.add_handler(CommandHandler("analyze", self.analyze_command))
-
+        
         # System status commands (dual counter)
         self.application.add_handler(CommandHandler("status", self.status_command))
         self.application.add_handler(CommandHandler("system", self.status_command))
@@ -3154,46 +3199,25 @@ ADMIN2 = [optional_second_admin_id]
         self.application.add_handler(CommandHandler("whoami", self.whoami_command))
         self.application.add_handler(CommandHandler("admin_debug", self.admin_debug_command))
 
-        # Admin commands - Core functionality
+        # Admin commands
         self.application.add_handler(CommandHandler("admin", self.admin_command))
-        self.application.add_handler(CommandHandler("setpremium", self.setpremium_command))
         self.application.add_handler(CommandHandler("revoke_premium", self.revoke_premium_command))
-        self.application.add_handler(CommandHandler("remove_premium", self.revoke_premium_command))  # Alias
+        self.application.add_handler(CommandHandler("setpremium", self.setpremium_command))
         self.application.add_handler(CommandHandler("grant_credits", self.grant_credits_command))
         self.application.add_handler(CommandHandler("check_user_status", self.check_user_status_command))
-        
-        # Admin commands - System management
-        self.application.add_handler(CommandHandler("recovery_stats", self.recovery_stats_command))
-        self.application.add_handler(CommandHandler("restart", self.restart_command))
-        self.application.add_handler(CommandHandler("db_status", self.db_status_command))
-        
-        # Admin commands - Broadcasting
+        self.application.add_handler(CommandHandler("fix_all_credits", self.fix_all_credits_command))
         self.application.add_handler(CommandHandler("broadcast", self.broadcast_command))
         self.application.add_handler(CommandHandler("confirm_broadcast", self.confirm_broadcast_command))
         self.application.add_handler(CommandHandler("cancel_broadcast", self.cancel_broadcast_command))
         self.application.add_handler(CommandHandler("broadcast_welcome", self.broadcast_welcome_command))
-        
-        # Admin commands - Auto Signals
-        self.application.add_handler(CommandHandler("auto_signal_ai_status", self.auto_signals_status_command))
-        self.application.add_handler(CommandHandler("enable_auto_signal_ai", self.start_auto_signals_command))
-        self.application.add_handler(CommandHandler("disable_auto_signal_ai", self.stop_auto_signals_command))
-        
-        # Admin commands - Utilities
-        self.application.add_handler(CommandHandler("fix_all_credits", self.fix_all_credits_command))
+        self.application.add_handler(CommandHandler("recovery_stats", self.recovery_stats_command))
         self.application.add_handler(CommandHandler("check_admin", self.check_admin_command))
+        self.application.add_handler(CommandHandler("restart", self.restart_command))
         self.application.add_handler(CommandHandler("refresh_credits", self.refresh_credits_command))
         self.application.add_handler(CommandHandler("premium_earnings", self.premium_earnings_command))
         self.application.add_handler(CommandHandler("grant_package", self.grant_package_command))
-        self.application.add_handler(CommandHandler("setup_admin", self.setup_admin_command))
+        self.application.add_handler(CommandHandler("setup_admin", self.setup_admin_command)) # Added setup_admin command
         self.application.add_handler(CommandHandler("banned", self.banned_command))
-        self.application.add_handler(CommandHandler("test_admin", self.test_admin_command))
-
-        # Super Admin commands
-        self.application.add_handler(CommandHandler("add_admin", self.add_admin_command))
-        self.application.add_handler(CommandHandler("remove_admin", self.remove_admin_command))
-        self.application.add_handler(CommandHandler("list_admins", self.list_admins_command))
-        
-        print("✅ Core admin commands registered")
 
         # Supabase health check command
         try:
@@ -3214,23 +3238,22 @@ ADMIN2 = [optional_second_admin_id]
         # Add database status command
         self.application.add_handler(CommandHandler("db_status", self.db_status_command))
 
-        # Add Supabase repair and diagnostic commands (with unique names to avoid conflicts)
+        # Add Supabase repair and diagnostic commands
         try:
             from app.handlers_sb_repair import cmd_sb_repair
-            from app.handlers_admin_premium import cmd_setpremium as sb_setpremium, cmd_remove_premium as sb_remove_premium, cmd_grant_credits as sb_grant_credits
+            from app.handlers_admin_premium import cmd_setpremium, cmd_remove_premium, cmd_grant_credits
             from app.handlers_user_set import cmd_user_set
             from app.handlers_sb_diag import cmd_sb_status, cmd_sb_diag
 
             self.application.add_handler(CommandHandler("sb_repair", cmd_sb_repair))
-            # Use different command names to avoid conflicts with main bot commands
-            self.application.add_handler(CommandHandler("sb_setpremium", sb_setpremium))
-            self.application.add_handler(CommandHandler("sb_remove_premium", sb_remove_premium))
-            self.application.add_handler(CommandHandler("sb_grant_credits", sb_grant_credits))
+            self.application.add_handler(CommandHandler("setpremium", cmd_setpremium))
+            self.application.add_handler(CommandHandler("remove_premium", cmd_remove_premium))
+            self.application.add_handler(CommandHandler("grant_credits", cmd_grant_credits))
             self.application.add_handler(CommandHandler("user_set", cmd_user_set))
             self.application.add_handler(CommandHandler("sb_status", cmd_sb_status))
             self.application.add_handler(CommandHandler("sb_diag", cmd_sb_diag))
 
-            print("✅ Supabase admin commands registered with sb_ prefix")
+            print("✅ Supabase admin commands registered")
         except ImportError as e:
             print(f"⚠️ Could not register Supabase commands: {e}")
 
