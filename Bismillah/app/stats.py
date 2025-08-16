@@ -15,7 +15,7 @@ except ImportError:
     SUPABASE_AVAILABLE = False
     print("⚠️ Supabase connection not available for stats")
 
-TZ = timezone.utc
+UTC = timezone.utc
 ALLOWED_USER_FIELDS = {"telegram_id", "username", "first_name", "last_name", "is_premium", "is_lifetime", "premium_until", "credits"}
 
 def _parse_users_from_json_payload(payload) -> list:
@@ -43,10 +43,10 @@ def _is_premium_active_local(u: dict) -> bool:
         try:
             val = u["premium_until"]
             if isinstance(val, (int, float)):
-                dt = datetime.fromtimestamp(val, tz=TZ)
+                dt = datetime.fromtimestamp(val, tz=UTC)
             else:
                 dt = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
-            return dt > datetime.now(TZ)
+            return dt > datetime.now(UTC)
         except Exception:
             return False
     return False
@@ -86,24 +86,35 @@ def get_supabase_totals() -> Tuple[int, int]:
         print(f"Error getting Supabase totals: {e}")
         return 0, 0
 
-def ping_supabase_ok() -> bool:
-    """Check if Supabase connection is working"""
+def ping_supabase() -> Tuple[bool, str]:
+    """Check Supabase connection using hc() RPC. Returns (success, message)"""
     if not SUPABASE_AVAILABLE:
-        return False
+        return False, "Supabase client not available"
     
     try:
         supabase = get_supabase_client()
-        supabase.table("users").select("id").limit(1).execute()
-        return True
-    except Exception:
-        return False
+        res = supabase.rpc("hc").execute()
+        return True, f"OK {res.data}"
+    except Exception as e:
+        return False, f"ERR: {str(e)[:100]}"
+
+def ping_supabase_ok() -> bool:
+    """Legacy function for backward compatibility"""
+    success, _ = ping_supabase()
+    return success
 
 def build_system_status(auto_signals_running: bool, legacy_json_path: Optional[str]=None, legacy_data: Optional[dict]=None) -> str:
     """Build comprehensive system status message"""
     legacy_total, legacy_premium = get_legacy_json_totals(legacy_json_path, legacy_data)
-    supa_total, supa_premium = get_supabase_totals()
-    db_text = "✅" if ping_supabase_ok() else "❌"
+    supa_total, supa_premium = (0, 0)
+    db_ok, db_msg = ping_supabase()
+    
+    if db_ok:
+        supa_total, supa_premium = get_supabase_totals()
+
+    db_text = "✅" if db_ok else "❌"
     auto_text = "🟢 RUNNING" if auto_signals_running else "🔴 STOPPED"
+    now_utc = datetime.now(UTC).strftime("%H:%M:%S UTC")
 
     return f"""📊 **System Status**
 
@@ -114,4 +125,5 @@ def build_system_status(auto_signals_running: bool, legacy_json_path: Optional[s
 • **Local JSON** - Total Users: {legacy_total} | Premium: {legacy_premium}
 • **Supabase**  - Total Users: {supa_total} | Premium: {supa_premium}
 
-⏰ **Last Update**: {datetime.now().strftime('%H:%M:%S WIB')}"""
+⏰ **Last Update**: {now_utc}
+ℹ️ **DB Detail**: {db_msg[:180]}"""
