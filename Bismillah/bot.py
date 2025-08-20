@@ -2487,30 +2487,6 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
         # Log admin action
         self.db.log_user_activity(user_id, "admin_manual_refresh", f"Manual credit refresh: Set {updated_count} free users to 100 credits")
 
-            message = f"""✅ **Credit Refresh Completed!**
-
-🎁 **Bonus Credits Distributed:**
-• **Users Updated**: {refreshed_count}
-• **Bonus Given**: +50 credits to all free users
-• **Premium Users**: Unaffected (unlimited access)
-
-💡 **Purpose**: Help free users try CoinAPI features
-
-📊 **Next**: Monitor usage and engagement"""
-
-            # Log admin action
-            self.db.log_user_activity(
-                user_id,
-                "admin_refresh_credits",
-                f"Gave +50 credits to {refreshed_count} free users"
-            )
-
-        except Exception as e:
-            message = f"❌ **Error in credit refresh!**\n\n**Error**: {str(e)}"
-            print(f"Error in refresh_credits_command: {e}")
-
-        await update.message.reply_text(message, parse_mode='Markdown')
-
     async def premium_earnings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /premium_earnings command"""
         user_id = update.message.from_user.id
