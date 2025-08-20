@@ -1479,7 +1479,7 @@ Gunakan credit dengan bijak!"""
 • `/enable_auto_signal_ai` - Start momentum signals scanner
 • `/disable_auto_signal_ai` - Stop momentum signals scanner
 
-💡 **Target**: Admin & Lifetime premium users only"""
+💡 **Target**: Admin & Lifetime users only"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
@@ -1824,58 +1824,72 @@ Gunakan `/subscribe` untuk upgrade!
             parse_mode='Markdown'
         )
 
-    async def handle_ask_ai(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /ask_ai command - Free AI questions"""
-        if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/ask_ai <pertanyaan>`\n\n"
-                "Contoh: `/ask_ai apa itu DeFi?`\n"
-                "Contoh: `/ask_ai explain bitcoin halving`",
-                parse_mode='Markdown'
-            )
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle regular text messages (non-commands)"""
+        from app.users_repo import touch_user_from_update, is_premium_active
+        from app.safe_send import safe_reply
+
+        # Auto-upsert user to Supabase
+        touch_user_from_update(update)
+
+        user_id = update.effective_user.id if update.effective_user else None
+        message_text = update.message.text if update.message else ""
+
+        # Check if user needs restart
+        if await self._check_user_restart_required(update):
             return
 
-        question = ' '.join(context.args)
-        user_id = update.message.from_user.id
+        # Handle general chat - provide helpful suggestions
+        if message_text and len(message_text.strip()) > 0:
+            # Check if it looks like a crypto symbol query
+            text_upper = message_text.upper().strip()
 
-        # Show loading
-        loading_msg = await update.message.reply_text("🤖 AI sedang memproses pertanyaan Anda...")
+            # Common crypto symbols that users might type directly
+            crypto_symbols = ['BTC', 'ETH', 'SOL', 'ADA', 'DOT', 'MATIC', 'AVAX', 'UNI', 'LINK', 'LTC']
 
-        try:
-            # Get AI response
-            response = self.ai.get_ai_response(question, 'id')
-            # Premium access check using Supabase
-            try:
-                from app.premium_check import is_premium as sb_is_premium_ask_ai
-                if not sb_is_premium_ask_ai(user_id):
-                    await update.effective_message.reply_text(
-                        "⚠️ **Premium Required**\n\n"
-                        "This command requires premium access. Upgrade to premium for unlimited access to advanced features!\n\n"
-                        "💎 Contact admin to upgrade your account.",
-                        parse_mode='Markdown'
-                    )
-                    return
-            except Exception as e:
-                print(f"⚠️ Supabase premium check failed for ask_ai, using fallback: {e}")
-                # Fallback to local db check if Supabase fails
-                if not self.db.is_user_premium(user_id):
-                    await update.effective_message.reply_text(
-                        "⚠️ **Premium Required**\n\n"
-                        "This command requires premium access. Upgrade to premium for unlimited access to advanced features!\n\n"
-                        "💎 Contact admin to upgrade your account.",
-                        parse_mode='Markdown'
-                    )
-                    return
+            if text_upper in crypto_symbols or (len(text_upper) <= 6 and text_upper.isalpha()):
+                # User might be asking for a price check
+                await safe_reply(
+                    update.message,
+                    f"💡 Sepertinya Anda ingin cek harga {text_upper}?\n\n"
+                    f"Gunakan command:\n"
+                    f"• `/price {text_upper.lower()}` - Harga real-time dari CoinAPI\n"
+                    f"• `/analyze {text_upper.lower()}` - Analisis lengkap (20 credit)\n"
+                    f"• `/futures {text_upper.lower()}` - Analisis futures dengan SnD (20 credit)\n\n"
+                    f"Atau ketik `/help` untuk panduan lengkap!"
+                )
+                return
 
+            # Generic helpful response for other messages
+            await safe_reply(
+                update.message,
+                "🤖 **Halo! Saya CryptoMentor AI**\n\n"
+                "💡 **Untuk menggunakan bot, gunakan command:**\n"
+                "• `/help` - Panduan lengkap\n"
+                "• `/price btc` - Cek harga Bitcoin\n"
+                "• `/analyze eth` - Analisis Ethereum\n"
+                "• `/market` - Overview pasar crypto\n\n"
+                "📊 **Semua data real-time dari CoinAPI!**"
+            )
 
-            # Log activity
-            self.db.log_user_activity(user_id, "ask_ai", f"Question: {question[:50]}...")
+    async def _check_user_restart_required(self, update: Update):
+        """Check if user needs restart"""
+        user_id = update.effective_user.id if update.effective_user else None
+        if not user_id:
+            return False
 
-            await loading_msg.edit_text(response, parse_mode='Markdown')
-
-        except Exception as e:
-            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
-            print(f"Error in ask_ai command: {e}")
+        # Check if user needs restart after admin restart
+        user_data = self.db.get_user(user_id)
+        if user_data and user_data.get('needs_restart', False):
+            # Clear restart flag
+            self.db.clear_restart_flag(user_id)
+            await update.message.reply_text(
+                "🔄 **Bot telah direstart oleh admin**\n\n"
+                "Gunakan `/start` untuk mengaktifkan kembali semua fitur bot.",
+                parse_mode='Markdown'
+            )
+            return True
+        return False
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /status and /system commands - Alias for admin panel"""
