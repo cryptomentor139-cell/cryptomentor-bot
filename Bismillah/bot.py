@@ -193,20 +193,20 @@ class TelegramBot:
 
         logger.debug(f"Bot token found: {'YES' if self.token else 'NO'}")
 
-        # Get all admin IDs with better error handling
-        # Check admin status - support multiple admin environment variables
-        admin_ids = set()
-        # Check ADMIN_IDS first (comma separated)
-        if os.getenv("ADMIN_IDS"):
-            admin_ids.update({int(x.strip()) for x in os.getenv("ADMIN_IDS").split(",") if x.strip().isdigit()})
+        # Get admin IDs using the fixed admin system
+        if ADMIN_SYSTEM_AVAILABLE:
+            from app.lib.auth import refresh_admin_ids
+            self.admin_ids = set(refresh_admin_ids())
+        else:
+            # Fallback admin system
+            admin_ids = set()
+            # Check ADMIN1 and ADMIN2 first
+            for key in ["ADMIN1", "ADMIN2", "ADMIN", "ADMIN_USER_ID", "ADMIN2_USER_ID"]:
+                admin_value = os.getenv(key, "").strip()
+                if admin_value.isdigit():
+                    admin_ids.add(int(admin_value))
+            self.admin_ids = admin_ids
 
-        # Check individual ADMIN variables (ADMIN, ADMIN1, ADMIN2, etc.)
-        for key in ["ADMIN", "ADMIN1", "ADMIN2", "ADMIN3", "ADMIN4", "ADMIN5"]:
-            admin_value = os.getenv(key, "").strip()
-            if admin_value.isdigit():
-                admin_ids.add(int(admin_value))
-
-        self.admin_ids = admin_ids if ADMIN_SYSTEM_AVAILABLE else set()
         self.admin_id = min(self.admin_ids) if self.admin_ids else 0
 
         logger.info(f"✅ Total configured admins: {len(self.admin_ids)} - IDs: {sorted(list(self.admin_ids))}")
@@ -247,7 +247,7 @@ class TelegramBot:
         if ADMIN_SYSTEM_AVAILABLE:
             return is_admin(user_id)
         else:
-            return str(user_id) in self.admin_ids
+            return user_id in self.admin_ids
 
     def register_user_supabase(self, user):
         """TODO: Register new user in database after setup"""
