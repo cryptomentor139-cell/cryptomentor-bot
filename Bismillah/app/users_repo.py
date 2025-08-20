@@ -1,172 +1,172 @@
 
-"""
-Shim/adapter untuk kompatibilitas kode lama.
-Mengekspor nama-nama fungsi yang biasa diimport modul lain:
-- get_user_by_telegram_id
-- get_user
-- ensure_user_registered (alias upsert untuk /start)
-- upsert_user
-- set_premium
-- revoke_premium
-- set_credits / set_user_credits
-- stats_totals
-- is_premium_active
-Semuanya diarahkan ke implementasi Supabase di app.supabase_conn
-"""
-
 from typing import Optional, Dict, Any, Tuple
-from .supabase_conn import (
-    get_user_by_tid as _get_user_by_tid,
-    upsert_user_via_rpc as _upsert_user_via_rpc,
-    set_premium_via_rpc as _set_premium_via_rpc,
-    revoke_premium as _revoke_premium,
-    set_credits as _set_credits,
-    stats_totals as _stats_totals,
-    is_premium_active as _is_premium_active,
-    get_supabase_client,
-)
+import os, time
+from datetime import datetime, timezone
+from .supabase_conn import get_supabase_client, _san
 
-# --- Readers ---
+WELCOME_CREDITS = int(os.getenv("WELCOME_CREDITS", "100"))
+
 def get_user_by_telegram_id(tg_id: int) -> Optional[Dict[str, Any]]:
-    """Nama yang dicari kode lama. Ambil row user langsung dari Supabase."""
-    return _get_user_by_tid(tg_id)
+    """Get user by telegram_id from Supabase"""
+    s = get_supabase_client()
+    res = s.table("users").select("*").eq("telegram_id", int(tg_id)).limit(1).execute()
+    return res.data[0] if res.data else None
 
-def get_user(tg_id: int) -> Optional[Dict[str, Any]]:
-    """Alias yang kadang dipakai kode lama."""
-    return _get_user_by_tid(tg_id)
-
-# --- Writers / Mutators ---
 def ensure_user_registered(
-    tg_id: int,
-    username: Optional[str],
-    first_name: Optional[str],
+    tg_id: int, 
+    username: Optional[str], 
+    first_name: Optional[str], 
     last_name: Optional[str],
-    referred_by: Optional[int] = None,
-    welcome_quota: Optional[int] = None,
+    referred_by: Optional[int] = None, 
+    welcome_quota: Optional[int] = None
 ) -> Dict[str, Any]:
-    """
-    Dipanggil dari /start untuk memastikan user terdaftar dan (jika baru) dapat welcome credits.
-    """
-    return _upsert_user_via_rpc(
-        tg_id=tg_id,
-        username=username,
-        first_name=first_name,
-        last_name=last_name,
-        referred_by=referred_by,
-        welcome_quota=welcome_quota,
-    )
-
-def upsert_user(
-    tg_id: int,
-    username: Optional[str],
-    first_name: Optional[str],
-    last_name: Optional[str],
-    referred_by: Optional[int] = None,
-    welcome_quota: Optional[int] = None,
-) -> Dict[str, Any]:
-    """Alias nama fungsi lain di kode lama."""
-    return ensure_user_registered(tg_id, username, first_name, last_name, referred_by, welcome_quota)
+    """Register user with welcome credits using RPC"""
+    s = get_supabase_client()
+    payload = {
+        "p_telegram_id": int(tg_id),
+        "p_username": _san(username),
+        "p_first_name": first_name,
+        "p_last_name": last_name,
+        "p_welcome_quota": int(welcome_quota if welcome_quota is not None else WELCOME_CREDITS),
+        "p_referred_by": int(referred_by) if referred_by else None,
+    }
+    data = s.rpc("upsert_user_with_welcome", payload).execute().data
+    if not data:
+        raise RuntimeError("upsert_user_with_welcome returned empty")
+    return data
 
 def set_premium(tg_id: int, duration_type: str, duration_value: int = 0) -> None:
-    """
-    Set premium user: duration_type = 'lifetime' | 'days' | 'months'
-    Untuk days/months, duration_value wajib > 0.
-    """
-    _set_premium_via_rpc(tg_id, duration_type, duration_value)
+    """Set premium status via RPC"""
+    s = get_supabase_client()
+    s.rpc("set_premium", {
+        "p_telegram_id": int(tg_id),
+        "p_duration_value": int(duration_value),
+        "p_duration_type": duration_type,  # 'days'|'months'|'lifetime'
+    }).execute()
 
 def revoke_premium(tg_id: int) -> None:
-    """Cabut premium user (is_premium=false, is_lifetime=false, premium_until=null)."""
-    _revoke_premium(tg_id)
+    """Revoke premium status"""
+    s = get_supabase_client()
+    s.table("users").update({
+        "is_premium": False, 
+        "is_lifetime": False, 
+        "premium_until": None
+    }).eq("telegram_id", int(tg_id)).execute()
 
-def set_credits(tg_id: int, amount: int) -> None:
-    """Set credits user langsung di Supabase."""
-    _set_credits(tg_id, amount)
+def get_credits(tg_id: int) -> int:
+    """Get user credits"""
+    row = get_user_by_telegram_id(tg_id)
+    if row is None: 
+        raise RuntimeError("User not found in DB")
+    return int(row.get("credits") or 0)
 
-def set_user_credits(tg_id: int, amount: int) -> None:
-    """Alias tambahan yang kadang dipakai kode lama."""
-    _set_credits(tg_id, amount)
+def set_user_credits(tg_id: int, amount: int) -> int:
+    """Set user credits directly"""
+    s = get_supabase_client()
+    data = s.table("users").update({"credits": int(amount)}).eq("telegram_id", int(tg_id)).execute().data
+    row = data[0] if data else get_user_by_telegram_id(tg_id)
+    return int((row or {}).get("credits") or 0)
 
-# --- Stats / Flags ---
-def stats_totals() -> Tuple[int, int]:
-    return _stats_totals()
+def debit_credits(tg_id: int, amount: int) -> int:
+    """
+    Debit atomic: try RPC debit_credits if available, fallback to CAS
+    """
+    s = get_supabase_client()
+    # 1) Try RPC if function exists
+    try:
+        res = s.rpc("debit_credits", {"p_telegram_id": int(tg_id), "p_amount": int(amount)}).execute()
+        if hasattr(res, "data") and res.data is not None:
+            return int(res.data)
+    except Exception:
+        pass
+    
+    # 2) Fallback CAS (optimistic concurrency)
+    for _ in range(3):
+        row = get_user_by_telegram_id(tg_id)
+        if not row: 
+            raise RuntimeError("User not found in DB")
+        old = int(row.get("credits") or 0)
+        new = max(0, old - int(amount))
+        upd = s.table("users").update({"credits": new})\
+              .eq("telegram_id", int(tg_id)).eq("updated_at", row["updated_at"]).execute()
+        if upd.data: 
+            return new
+        time.sleep(0.05)  # Small retry delay
+    
+    # Last resort: direct write
+    s.table("users").update({"credits": new}).eq("telegram_id", int(tg_id)).execute()
+    return new
 
 def is_premium_active(tg_id: int) -> bool:
-    return _is_premium_active(tg_id)
-
-def update_user_premium(tg_id: int, is_premium: bool, premium_until: Optional[str] = None) -> None:
-    """Update user premium status - compatibility function for legacy code"""
+    """Check if user has active premium"""
+    row = get_user_by_telegram_id(tg_id) or {}
+    if row.get("is_lifetime"): 
+        return True
+    if not row.get("is_premium"): 
+        return False
+    
+    pu = row.get("premium_until")
+    if not pu: 
+        return False
+    
     try:
-        supabase = get_supabase_client()
-        
-        update_data = {
-            "is_premium": is_premium,
-            "premium_until": premium_until
-        }
-        
-        result = supabase.table("users").update(update_data).eq("telegram_id", int(tg_id)).execute()
-        print(f"✅ Updated premium status for user {tg_id}: is_premium={is_premium}")
-        
-    except Exception as e:
-        print(f"❌ Error updating premium for user {tg_id}: {e}")
-        raise
+        s = str(pu)
+        if s.endswith("Z"): 
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        return dt > datetime.now(timezone.utc)
+    except Exception:
+        return False
+
+def stats_totals() -> Tuple[int, int]:
+    """Get total users and premium users count"""
+    s = get_supabase_client()
+    res = s.rpc("stats_totals").execute()
+    row = res.data[0] if isinstance(res.data, list) else res.data
+    return int(row.get("total_users", 0)), int(row.get("premium_users", 0))
+
+# Legacy compatibility aliases
+get_user = get_user_by_telegram_id
+upsert_user = ensure_user_registered
+set_credits = set_user_credits
+
+# Legacy functions for backward compatibility
+def update_user_premium(tg_id: int, is_premium: bool, premium_until: Optional[str] = None) -> None:
+    """Legacy compatibility function"""
+    s = get_supabase_client()
+    update_data = {
+        "is_premium": is_premium,
+        "premium_until": premium_until
+    }
+    s.table("users").update(update_data).eq("telegram_id", int(tg_id)).execute()
 
 def add_user_credits(tg_id: int, amount: int) -> None:
-    """Add credits to user - compatibility function"""
-    try:
-        user = get_user_by_telegram_id(tg_id)
-        if user:
-            current_credits = user.get('credits', 0)
-            new_credits = current_credits + amount
-            set_credits(tg_id, new_credits)
-        else:
-            print(f"❌ User {tg_id} not found for credit addition")
-    except Exception as e:
-        print(f"❌ Error adding credits to user {tg_id}: {e}")
-        raise
+    """Add credits to user"""
+    current = get_credits(tg_id)
+    set_user_credits(tg_id, current + amount)
 
 def deduct_user_credits(tg_id: int, amount: int) -> bool:
-    """Deduct credits from user - compatibility function"""
+    """Deduct credits from user"""
     try:
-        user = get_user_by_telegram_id(tg_id)
-        if user:
-            current_credits = user.get('credits', 0)
-            if current_credits >= amount:
-                new_credits = current_credits - amount
-                set_credits(tg_id, new_credits)
-                return True
-            else:
-                print(f"❌ Insufficient credits for user {tg_id}: {current_credits} < {amount}")
-                return False
-        else:
-            print(f"❌ User {tg_id} not found for credit deduction")
-            return False
-    except Exception as e:
-        print(f"❌ Error deducting credits from user {tg_id}: {e}")
+        remaining = debit_credits(tg_id, amount)
+        return remaining >= 0
+    except Exception:
         return False
 
 def touch_user_from_update(update):
-    """Auto-upsert user to Supabase from Telegram update object"""
+    """Auto-upsert user from Telegram update object"""
     try:
         user = update.effective_user
         if not user:
             return
-
-        # Try new sb_client first
-        try:
-            from .supabase_conn import upsert_user_via_rpc
-            upsert_user_via_rpc(
-                tg_id=user.id,
-                username=getattr(user, 'username', None),
-                first_name=getattr(user, 'first_name', None),
-                last_name=getattr(user, 'last_name', None)
-            )
-            print(f"✅ User {user.id} upserted via RPC")
-            return
-        except ImportError:
-            print("ℹ️ supabase_conn not found, falling back.")
-            pass
-        except Exception as e:
-            print(f"⚠️ Error calling upsert_user_via_rpc for user {user.id}: {e}")
-
+        
+        ensure_user_registered(
+            tg_id=user.id,
+            username=getattr(user, 'username', None),
+            first_name=getattr(user, 'first_name', None),
+            last_name=getattr(user, 'last_name', None)
+        )
+        print(f"✅ User {user.id} upserted")
+        
     except Exception as e:
         print(f"❌ Error in touch_user_from_update: {e}")

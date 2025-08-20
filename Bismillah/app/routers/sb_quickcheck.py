@@ -170,3 +170,141 @@ def get_handlers():
         CommandHandler("revoke_premium_quick", revoke_premium_quick),
         CommandHandler("setcredits_quick", setcredits_quick),
     ]
+from telegram import Update
+from telegram.ext import ContextTypes, CommandHandler
+import os
+from ..users_repo import (
+    ensure_user_registered, get_user_by_telegram_id,
+    set_premium, revoke_premium, set_user_credits,
+    stats_totals
+)
+from ..credits_guard import require_credits
+from ..supabase_conn import health
+
+ADMINS = {int(x.strip()) for x in (os.getenv("ADMIN_IDS", "").split(",") if os.getenv("ADMIN_IDS") else [])}
+
+def _ref(update: Update):
+    """Extract referral ID from /start command"""
+    if not update.message or not update.message.text:
+        return None
+    parts = update.message.text.split(maxsplit=1)
+    if len(parts) == 2:
+        try:
+            return int(parts[1])
+        except:
+            return None
+    return None
+
+async def diag_supabase(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Diagnose Supabase connection"""
+    ok, detail = health()
+    tot = prem = 0
+    if ok:
+        try:
+            tot, prem = stats_totals()
+        except Exception as e:
+            detail = f"stats_totals error: {e}"
+    
+    await update.message.reply_text(
+        f"🔧 Supabase: {'✅' if ok else '❌'} {detail}\nTotals: users={tot}, premium={prem}"
+    )
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start command with user registration"""
+    user = update.effective_user
+    row = ensure_user_registered(
+        user.id, user.username, user.first_name, user.last_name, 
+        referred_by=_ref(update)
+    )
+    fresh = get_user_by_telegram_id(user.id) or {}
+    
+    await update.message.reply_text(
+        "👋 Registered\n"
+        f"credits={fresh.get('credits')}, premium={fresh.get('is_premium')}, "
+        f"lifetime={fresh.get('is_lifetime')}"
+    )
+
+async def try_cost(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Test credit deduction"""
+    parts = (update.message.text or "").split()
+    if len(parts) < 2:
+        return await update.message.reply_text("Usage: /try_cost <amount>")
+    
+    try:
+        amount = int(parts[1])
+        ok, remain, msg = require_credits(update.effective_user.id, amount)
+        await update.message.reply_text(msg)
+    except ValueError:
+        await update.message.reply_text("❌ Amount must be a number")
+
+async def setpremium(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin: Set premium status"""
+    if update.effective_user.id not in ADMINS:
+        return await update.message.reply_text("❌ Admin only.")
+    
+    parts = (update.message.text or "").split()
+    if len(parts) < 3:
+        return await update.message.reply_text("Usage: /setpremium <tg_id> <lifetime|days|months> [value]")
+    
+    try:
+        tg_id = int(parts[1])
+        dtype = parts[2].lower()
+        dval = int(parts[3]) if len(parts) >= 4 and dtype in ("days", "months") else 0
+        
+        set_premium(tg_id, dtype, dval)
+        row = get_user_by_telegram_id(tg_id) or {}
+        
+        await update.message.reply_text(
+            f"✅ Premium set. premium={row.get('is_premium')}, "
+            f"lifetime={row.get('is_lifetime')}, until={row.get('premium_until')}"
+        )
+    except ValueError:
+        await update.message.reply_text("❌ Invalid telegram_id or duration value")
+
+async def revoke_premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin: Revoke premium status"""
+    if update.effective_user.id not in ADMINS:
+        return await update.message.reply_text("❌ Admin only.")
+    
+    parts = (update.message.text or "").split()
+    if len(parts) < 2:
+        return await update.message.reply_text("Usage: /revoke_premium <tg_id>")
+    
+    try:
+        tg_id = int(parts[1])
+        revoke_premium(tg_id)
+        row = get_user_by_telegram_id(tg_id) or {}
+        
+        await update.message.reply_text(
+            f"✅ Premium revoked. premium={row.get('is_premium')}, "
+            f"lifetime={row.get('is_lifetime')}"
+        )
+    except ValueError:
+        await update.message.reply_text("❌ Invalid telegram_id")
+
+async def setcredits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin: Set user credits"""
+    if update.effective_user.id not in ADMINS:
+        return await update.message.reply_text("❌ Admin only.")
+    
+    parts = (update.message.text or "").split()
+    if len(parts) < 3:
+        return await update.message.reply_text("Usage: /setcredits <tg_id> <amount>")
+    
+    try:
+        tg_id = int(parts[1])
+        amount = int(parts[2])
+        now = set_user_credits(tg_id, amount)
+        await update.message.reply_text(f"✅ credits now: {now}")
+    except ValueError:
+        await update.message.reply_text("❌ Invalid telegram_id or amount")
+
+# Command handlers
+handlers = [
+    CommandHandler("diag_supabase", diag_supabase),
+    CommandHandler("start", start_command),
+    CommandHandler("try_cost", try_cost),
+    CommandHandler("setpremium", setpremium),
+    CommandHandler("revoke_premium", revoke_premium_cmd),
+    CommandHandler("setcredits", setcredits),
+]
