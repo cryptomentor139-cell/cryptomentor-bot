@@ -1,55 +1,73 @@
 
-# app/sb_client.py
-import os, httpx
-from typing import Optional, Tuple
-from supabase import create_client, Client
+import os
+from typing import Tuple, Dict, Any
 
-SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+try:
+    from supabase import create_client, Client
+except Exception as e:
+    create_client = None
+    Client = None
+    _import_error = str(e)
 
-_client: Optional[Client] = None
+def _getenv(k: str) -> str:
+    return os.getenv(k) or os.environ.get(k)
 
-def supabase() -> Client:
-    global _client
-    if _client is None:
-        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-            raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY (Service role secret)")
-        _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    return _client
+SUPABASE_URL = _getenv("SUPABASE_URL")
+# Utamakan SERVICE KEY; fallback ke ANON agar tetap bisa tes minimal
+SUPABASE_KEY = _getenv("SUPABASE_SERVICE_KEY") or _getenv("SUPABASE_ANON_KEY")
+
+diagnostics: Dict[str, Any] = {}
+supabase = None  # type: ignore
+
+def _validate_env():
+    if not SUPABASE_URL:
+        diagnostics["missing_SUPABASE_URL"] = True
+    if not SUPABASE_KEY:
+        diagnostics["missing_SUPABASE_KEY"] = True
+    if SUPABASE_URL and not SUPABASE_URL.startswith("http"):
+        diagnostics["invalid_url"] = SUPABASE_URL
+
+def init_client():
+    global supabase
+    _validate_env()
+    if create_client is None:
+        diagnostics["import_error"] = _import_error
+        supabase = None
+        return
+    if diagnostics.get("missing_SUPABASE_URL") or diagnostics.get("missing_SUPABASE_KEY"):
+        supabase = None
+        return
+    try:
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        supabase = client
+    except Exception as e:
+        diagnostics["init_error"] = str(e)
+        supabase = None
+
+init_client()
+
+def available() -> bool:
+    return supabase is not None
 
 def health() -> Tuple[bool, str]:
+    """Pakai RPC hc() agar error jelas."""
+    if not available():
+        return False, f"client_not_initialized | diag={diagnostics}"
     try:
-        # coba RPC 'hc' (opsional)
-        try:
-            supabase().rpc("hc").execute()
-            return True, "rpc(hc): OK"
-        except Exception:
-            # fallback ping REST
-            r = httpx.get(f"{SUPABASE_URL}/rest/v1/", headers={
-                "apikey": SUPABASE_SERVICE_KEY,
-                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-            }, timeout=6.0)
-            if r.status_code in (200, 404):
-                return True, f"rest ping {r.status_code}"
-            if r.status_code in (401, 403):
-                return False, f"{r.status_code} unauthorized (use Service role key)"
-            return False, f"{r.status_code} {r.text[:100]}"
+        res = supabase.rpc("hc").execute()  # type: ignore
+        return True, f"OK {res.data}"
     except Exception as e:
-        return False, f"{type(e).__name__}: {e}"
+        return False, f"rpc_hc_failed: {e} | diag={diagnostics}"
 
-# ====== WEEKLY CREDITS RPC WRAPPERS (dipakai bot) ======
-WEEKLY_FREE_CREDITS = int(os.getenv("WEEKLY_FREE_CREDITS", "100"))
-
-def upsert_user_with_weekly_reset_rpc(telegram_id: int, username: str=None, first_name: str=None, last_name: str=None):
+def upsert_user_via_rpc(telegram_id: int, username: str=None, first_name: str=None, last_name: str=None) -> Dict[str, Any]:
+    """Gunakan RPC server-side untuk upsert (aman terhadap RLS & skema)."""
+    if not available():
+        raise RuntimeError(f"Supabase client not available: {diagnostics}")
     payload = {
         "p_telegram_id": int(telegram_id),
         "p_username": username,
         "p_first_name": first_name,
-        "p_last_name": last_name,
-        "p_weekly_quota": WEEKLY_FREE_CREDITS,
+        "p_last_name": last_name
     }
-    return supabase().rpc("upsert_user_with_weekly_reset", payload).execute().data
-
-def enforce_weekly_reset_calendar_rpc(telegram_id: int):
-    payload = { "p_telegram_id": int(telegram_id), "p_weekly_quota": WEEKLY_FREE_CREDITS }
-    return supabase().rpc("enforce_weekly_reset_calendar", payload).execute().data
+    res = supabase.rpc("upsert_user_rpc", payload).execute()  # type: ignore
+    return res.data or {}
