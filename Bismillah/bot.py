@@ -148,7 +148,7 @@ except ImportError as e:
 ADMIN_IDS = set(get_admin_ids()) if ADMIN_SYSTEM_AVAILABLE else set()
 
 if not ADMIN_IDS:
-    logger.warning("No ADMIN1, ADMIN2 or fallback admin environment variables found. Admin commands will be inaccessible.")
+    logger.warning("No ADMIN, ADMIN1, ADMIN2 or fallback admin environment variables found. Admin commands will be inaccessible.")
 
 class TelegramBot:
     def __init__(self):
@@ -194,7 +194,19 @@ class TelegramBot:
         logger.debug(f"Bot token found: {'YES' if self.token else 'NO'}")
 
         # Get all admin IDs with better error handling
-        self.admin_ids = ADMIN_IDS if ADMIN_SYSTEM_AVAILABLE else set()
+        # Check admin status - support multiple admin environment variables
+        admin_ids = set()
+        # Check ADMIN_IDS first (comma separated)
+        if os.getenv("ADMIN_IDS"):
+            admin_ids.update({int(x.strip()) for x in os.getenv("ADMIN_IDS").split(",") if x.strip().isdigit()})
+
+        # Check individual ADMIN variables (ADMIN, ADMIN1, ADMIN2, etc.)
+        for key in ["ADMIN", "ADMIN1", "ADMIN2", "ADMIN3", "ADMIN4", "ADMIN5"]:
+            admin_value = os.getenv(key, "").strip()
+            if admin_value.isdigit():
+                admin_ids.add(int(admin_value))
+
+        self.admin_ids = admin_ids if ADMIN_SYSTEM_AVAILABLE else set()
         self.admin_id = min(self.admin_ids) if self.admin_ids else 0
 
         logger.info(f"✅ Total configured admins: {len(self.admin_ids)} - IDs: {sorted(list(self.admin_ids))}")
@@ -910,7 +922,7 @@ class TelegramBot:
 
         # STRICT SUPABASE CREDIT CHECK BEFORE ANY OPERATION
         allowed, remaining, guard_message = require_credits(user_id, 20)
-        
+
         if not allowed:
             print(f"❌ BLOCKED: User {user_id} insufficient credits for analyze command - {guard_message}")
             await update.message.reply_text(guard_message, parse_mode='Markdown')
@@ -963,7 +975,7 @@ class TelegramBot:
 
         # STRICT SUPABASE CREDIT CHECK BEFORE ANY OPERATION
         allowed, remaining, guard_message = require_credits(user_id, 20)
-        
+
         if not allowed:
             print(f"❌ BLOCKED: User {user_id} insufficient credits for market command - {guard_message}")
             await safe_reply(message, guard_message)
@@ -1365,7 +1377,6 @@ class TelegramBot:
     async def credits_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /credits command"""
         user_id = update.message.from_user.id
-
         # Use Supabase for premium checks
         try:
             from app.premium_check import is_premium as sb_is_premium, get_user_credits as sb_get_credits
