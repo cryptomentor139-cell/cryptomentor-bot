@@ -1,4 +1,3 @@
-
 import os, httpx
 from functools import lru_cache
 from typing import Tuple, Optional, Dict, Any
@@ -9,7 +8,6 @@ SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 WELCOME_CREDITS = int(os.getenv("WELCOME_CREDITS", "100"))
 
-# ---------- Core client & health ----------
 def _assert_env():
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise RuntimeError("Set SUPABASE_URL & SUPABASE_SERVICE_KEY (Service role).")
@@ -30,15 +28,14 @@ def health() -> Tuple[bool, str]:
         r = httpx.get(
             f"{SUPABASE_URL}/rest/v1/",
             headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
-            timeout=6.0,
+            timeout=6.0
         )
         if r.status_code in (200, 404): return True, f"rest {r.status_code}"
-        if r.status_code in (401, 403): return False, f"{r.status_code} unauthorized (Service role?)"
+        if r.status_code in (401, 403): return False, f"{r.status_code} unauthorized"
         return False, f"{r.status_code} {r.text[:120]}"
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
 
-# ---------- Helpers ----------
 def _san(u: Optional[str]) -> Optional[str]:
     if not u: return None
     return u.strip().lstrip("@").lower() or None
@@ -128,11 +125,11 @@ def is_premium_active(tg_id: int) -> bool:
 def update_user_tid(tg_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
     """Update user by telegram_id - compatibility function"""
     s = get_supabase_client()
-    
+
     # Sanitize username if provided
     if "username" in updates:
         updates["username"] = _san(updates["username"])
-    
+
     # Ensure telegram_id is integer
     result = s.table("users").update(updates).eq("telegram_id", int(tg_id)).execute()
     return result.data[0] if result.data else updates
@@ -140,7 +137,7 @@ def update_user_tid(tg_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
 def upsert_user_tid(tg_id: int, test_probe: bool = False, credits: int = 100, **kwargs) -> Dict[str, Any]:
     """Legacy compatibility: upsert user with minimal data"""
     s = get_supabase_client()
-    
+
     # For test probe, use dummy data
     if test_probe:
         username = f"test_user_{tg_id}"
@@ -150,10 +147,10 @@ def upsert_user_tid(tg_id: int, test_probe: bool = False, credits: int = 100, **
         username = kwargs.get("username")
         first_name = kwargs.get("first_name", "Unknown")
         last_name = kwargs.get("last_name")
-    
+
     # Try to get existing user first
     existing = get_user_by_tid(tg_id)
-    
+
     if existing:
         # Update existing user
         update_data = {"credits": credits}
@@ -163,7 +160,7 @@ def upsert_user_tid(tg_id: int, test_probe: bool = False, credits: int = 100, **
             update_data["first_name"] = first_name
         if last_name:
             update_data["last_name"] = last_name
-            
+
         result = s.table("users").update(update_data).eq("telegram_id", int(tg_id)).execute()
         return result.data[0] if result.data else existing
     else:
@@ -177,6 +174,6 @@ def upsert_user_tid(tg_id: int, test_probe: bool = False, credits: int = 100, **
             "is_premium": False,
             "is_lifetime": False
         }
-        
+
         result = s.table("users").insert(insert_data).execute()
         return result.data[0] if result.data else insert_data
