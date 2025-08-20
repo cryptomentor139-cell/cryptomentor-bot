@@ -14,35 +14,39 @@ BEGIN
     WHEN 'lifetime' THEN
       premium_until_ts := NULL;
     WHEN 'days' THEN
-      premium_until_ts := NOW() + (p_duration_value || ' days')::INTERVAL;
+      premium_until_ts := NOW() AT TIME ZONE 'UTC' + (p_duration_value || ' days')::INTERVAL;
     WHEN 'months' THEN
-      premium_until_ts := NOW() + (p_duration_value || ' months')::INTERVAL;
+      premium_until_ts := NOW() AT TIME ZONE 'UTC' + (p_duration_value || ' months')::INTERVAL;
     ELSE
-      RAISE EXCEPTION 'Invalid duration_type: %', p_duration_type;
+      RAISE EXCEPTION 'Invalid duration_type: %. Use lifetime, days, or months', p_duration_type;
   END CASE;
 
-  -- Update user premium status
-  UPDATE users 
-  SET 
+  -- Upsert user if not exists, then update premium status
+  INSERT INTO users (telegram_id, is_premium, is_lifetime, premium_until, created_at, updated_at)
+  VALUES (p_telegram_id, TRUE, (p_duration_type = 'lifetime'), premium_until_ts, NOW(), NOW())
+  ON CONFLICT (telegram_id) 
+  DO UPDATE SET 
     is_premium = TRUE,
-    is_lifetime = CASE WHEN p_duration_type = 'lifetime' THEN TRUE ELSE FALSE END,
+    is_lifetime = (p_duration_type = 'lifetime'),
     premium_until = premium_until_ts,
     updated_at = NOW()
-  WHERE telegram_id = p_telegram_id
   RETURNING * INTO result_row;
 
-  -- Check if user was found and updated
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'User with telegram_id % not found', p_telegram_id;
-  END IF;
-
-  -- Return success response
+  -- Return success response with user data
   RETURN json_build_object(
     'success', true,
     'telegram_id', result_row.telegram_id,
     'is_premium', result_row.is_premium,
     'is_lifetime', result_row.is_lifetime,
-    'premium_until', result_row.premium_until
+    'premium_until', result_row.premium_until,
+    'updated_at', result_row.updated_at
   );
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', SQLERRM,
+      'telegram_id', p_telegram_id
+    );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
