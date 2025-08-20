@@ -124,3 +124,47 @@ def is_premium_active(tg_id: int) -> bool:
     """Legacy compatibility: compute premium-active using current DB row."""
     row = get_user_by_tid(tg_id)
     return _is_premium_active_row(row or {})
+
+def upsert_user_tid(tg_id: int, test_probe: bool = False, credits: int = 100, **kwargs) -> Dict[str, Any]:
+    """Legacy compatibility: upsert user with minimal data"""
+    s = get_supabase_client()
+    
+    # For test probe, use dummy data
+    if test_probe:
+        username = f"test_user_{tg_id}"
+        first_name = "Test"
+        last_name = "User"
+    else:
+        username = kwargs.get("username")
+        first_name = kwargs.get("first_name", "Unknown")
+        last_name = kwargs.get("last_name")
+    
+    # Try to get existing user first
+    existing = get_user_by_tid(tg_id)
+    
+    if existing:
+        # Update existing user
+        update_data = {"credits": credits}
+        if username:
+            update_data["username"] = _san(username)
+        if first_name:
+            update_data["first_name"] = first_name
+        if last_name:
+            update_data["last_name"] = last_name
+            
+        result = s.table("users").update(update_data).eq("telegram_id", int(tg_id)).execute()
+        return result.data[0] if result.data else existing
+    else:
+        # Insert new user
+        insert_data = {
+            "telegram_id": int(tg_id),
+            "username": _san(username),
+            "first_name": first_name,
+            "last_name": last_name,
+            "credits": credits,
+            "is_premium": False,
+            "is_lifetime": False
+        }
+        
+        result = s.table("users").insert(insert_data).execute()
+        return result.data[0] if result.data else insert_data

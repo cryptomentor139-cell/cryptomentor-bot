@@ -604,7 +604,6 @@ class TelegramBot:
                     # Also register in Supabase
                     self.register_user_supabase(user)
 
-            # Generate response message
         except Exception as e:
             print(f"❌ Error in start command: {e}")
             # Log the error but continue to show welcome message
@@ -2292,7 +2291,7 @@ Gunakan `/subscribe` untuk upgrade!
 
 📊 **Database Health**: All users now have valid credits
 
-💡 **Next Steps**: Monitor for any remaining issues."""
+💡 **Next Steps**: Monitor for any remaining issues"""
 
             # Log admin action
             self.db.log_user_activity(
@@ -2598,7 +2597,7 @@ Gunakan `/referral` untuk mendapatkan link premium referral Anda!"""
 📦 **Package**: {package_name}
 🎉 **Status**: Activated
 
-💡 User sekarang dapat menikmati benefit package ini!"""
+💡 **User sekarang dapat menikmati benefit package ini!**"""
 
                 # Log admin action
                 self.db.log_user_activity(
@@ -3242,9 +3241,9 @@ ADMIN2 = [optional_second_admin_id]
 
         # Supabase health check command
         try:
-            from handlers_sb import cmd_sb_status
-            self.application.add_handler(CommandHandler("sb_status", cmd_sb_status))
-            print("✅ Supabase status command registered")
+            # This block was removed as per the instruction to remove the broken Supabase registration.
+            # If specific Supabase commands are needed, they should be imported and registered separately.
+            pass
         except ImportError as e:
             print(f"⚠️ Supabase handler not available: {e}")
         # Renamed for clarity and consistency with user request
@@ -3267,9 +3266,10 @@ ADMIN2 = [optional_second_admin_id]
             from app.handlers_sb_diag import cmd_sb_status, cmd_sb_diag
 
             self.application.add_handler(CommandHandler("sb_repair", cmd_sb_repair))
-            self.application.add_handler(CommandHandler("setpremium", cmd_setpremium))
-            self.application.add_handler(CommandHandler("remove_premium", cmd_remove_premium))
-            self.application.add_handler(CommandHandler("grant_credits", cmd_grant_credits))
+            # These commands are already handled by class methods, so avoid re-registering if they conflict.
+            # self.application.add_handler(CommandHandler("setpremium", cmd_setpremium))
+            # self.application.add_handler(CommandHandler("remove_premium", cmd_remove_premium))
+            # self.application.add_handler(CommandHandler("grant_credits", cmd_grant_credits))
             self.application.add_handler(CommandHandler("user_set", cmd_user_set))
             self.application.add_handler(CommandHandler("sb_status", cmd_sb_status))
             self.application.add_handler(CommandHandler("sb_diag", cmd_sb_diag))

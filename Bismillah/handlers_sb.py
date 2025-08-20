@@ -105,6 +105,41 @@ async def handle_supabase_diag(update: Update, context: ContextTypes.DEFAULT_TYP
 
     await update.effective_message.reply_text(status_msg, parse_mode='Markdown')
 
+async def cmd_sb_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /sb_status command for Supabase diagnostics"""
+    user_id = update.effective_user.id if update.effective_user else 0
+    
+    # Check if user is admin
+    if user_id not in ADMIN_IDS:
+        await update.effective_message.reply_text(f"❌ Admin only. Your ID: {user_id}")
+        return
+    
+    # Check Supabase health
+    ok, detail = health()
+    
+    # Get stats if connection is healthy
+    total_users = premium_users = 0
+    if ok:
+        try:
+            total_users, premium_users = stats_totals()
+        except Exception as e:
+            detail = f"stats_totals error: {e}"
+    
+    status_msg = f"""🔧 **Supabase Status**
+
+**Connection**: {'✅ Healthy' if ok else '❌ Failed'}
+**Details**: {detail}
+
+**Stats**:
+• Total Users: {total_users:,}
+• Premium Users: {premium_users:,}
+
+**Environment**:
+• SUPABASE_URL: {'✅ Set' if os.getenv('SUPABASE_URL') else '❌ Missing'}
+• SERVICE_KEY: {'✅ Set' if os.getenv('SUPABASE_SERVICE_KEY') else '❌ Missing'}"""
+
+    await update.effective_message.reply_text(status_msg, parse_mode='Markdown')
+
 async def handle_admin_set_premium_sb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /set_premium command with Supabase"""
     user_id = update.effective_user.id if update.effective_user else 0
