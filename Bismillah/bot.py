@@ -1279,24 +1279,6 @@ class TelegramBot:
                     import traceback
                     traceback.print_exc()
 
-            elif callback_data.startswith('futures_analysis_'):
-                # Existing futures analysis logic
-                parts = callback_data.split('_')
-                if len(parts) >= 4:
-                    symbol = parts[2]
-                    timeframe = parts[3]
-
-                    # Show loading
-                    await query.edit_message_text(
-                        f"⏳ Menganalisis {symbol} {timeframe}...",
-                        parse_mode='Markdown'
-                    )
-
-                    # Get analysis with SnD enhancement
-                    analysis = self.ai.get_futures_analysis(symbol, timeframe, 'id', self.crypto_api)
-
-                    await query.edit_message_text(analysis, parse_mode='Markdown')
-
             elif callback_data.startswith('lang_'):
                 # Language selection
                 language = callback_data.split('_')[1]
@@ -1821,71 +1803,67 @@ Gunakan `/subscribe` untuk upgrade!
             parse_mode='Markdown'
         )
 
-    async def handle_ask_ai(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /ask_ai command - Free AI questions"""
-        if not context.args:
-            await update.message.reply_text(
-                "❌ Gunakan format: `/ask_ai <pertanyaan>`\n\n"
-                "Contoh: `/ask_ai apa itu DeFi?`\n"
-                "Contoh: `/ask_ai explain bitcoin halving`",
-                parse_mode='Markdown'
-            )
-            return
-
-        question = ' '.join(context.args)
-        user_id = update.message.from_user.id
-
-        # Show loading
-        loading_msg = await update.message.reply_text("🤖 AI sedang memproses pertanyaan Anda...")
-
-        try:
-            # Get AI response
-            response = self.ai.get_ai_response(question, 'id')
-            # Premium access check using Supabase
-            try:
-                from app.premium_check import is_premium as sb_is_premium_ask_ai
-                if not sb_is_premium_ask_ai(user_id):
-                    await update.effective_message.reply_text(
-                        "⚠️ **Premium Required**\n\n"
-                        "This command requires premium access. Upgrade to premium for unlimited access to advanced features!\n\n"
-                        "💎 Contact admin to upgrade your account.",
-                        parse_mode='Markdown'
-                    )
-                    return
-            except Exception as e:
-                print(f"⚠️ Supabase premium check failed for ask_ai, using fallback: {e}")
-                # Fallback to local db check if Supabase fails
-                if not self.db.is_user_premium(user_id):
-                    await update.effective_message.reply_text(
-                        "⚠️ **Premium Required**\n\n"
-                        "This command requires premium access. Upgrade to premium for unlimited access to advanced features!\n\n"
-                        "💎 Contact admin to upgrade your account.",
-                        parse_mode='Markdown'
-                    )
-                    return
-
-
-            # Log activity
-            self.db.log_user_activity(user_id, "ask_ai", f"Question: {question[:50]}...")
-
-            await loading_msg.edit_text(response, parse_mode='Markdown')
-
-        except Exception as e:
-            await loading_msg.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
-            print(f"Error in ask_ai command: {e}")
-
-    async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /status and /system commands - Alias for admin panel"""
-        from app.admin import get_admin_panel_text
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle regular text messages"""
         from app.users_repo import touch_user_from_update
 
-        # Auto-upsert user to Supabase
+        # Auto-upsert user to Supabase for any message
         touch_user_from_update(update)
 
-        # Get admin panel text (same as /admin command)
-        status_text = get_admin_panel_text()
+        text = update.message.text.lower().strip()
+        user_id = update.message.from_user.id
 
-        await update.message.reply_text(status_text, parse_mode='Markdown')
+        print(f"📝 Message received from user {user_id}: '{text[:20]}...'")
+        logger.info(f"Message from user {user_id}: {text[:50]}")
+
+        # Quick price check for popular symbols
+        popular_symbols = ['btc', 'eth', 'bnb', 'sol', 'ada', 'doge', 'avax', 'matic', 'dot', 'link']
+
+        if text in popular_symbols:
+            # Quick price check using CoinAPI
+            symbol = text.upper()
+            loading_msg = await update.message.reply_text(f"⏳ Cek harga {symbol} dari CoinAPI...")
+
+            price_data = self.crypto_api.get_crypto_price(symbol, force_refresh=True)
+
+            if price_data and 'error' not in price_data and price_data.get('price', 0) > 0:
+                current_price = price_data.get('price', 0)
+                if current_price < 1:
+                    price_format = f"${current_price:.8f}"
+                elif current_price < 100:
+                    price_format = f"${current_price:.4f}"
+                else:
+                    price_format = f"${current_price:,.2f}"
+
+                change_24h = price_data.get('change_24h', 0)
+                change_emoji = "📈" if change_24h >= 0 else "📉"
+                change_color = "+" if change_24h >= 0 else ""
+
+                message = f"""💰 **{symbol} Quick Price**
+
+{price_format} {change_emoji} {change_color}{change_24h:.2f}%
+
+🔄 Source: CoinAPI Real-time
+💡 Ketik `/price {symbol.lower()}` untuk detail lengkap
+📊 Ketik `/analyze {symbol.lower()}` untuk analisis mendalam"""
+
+                await loading_msg.edit_text(message, parse_mode='Markdown')
+            else:
+                await loading_msg.edit_text(f"❌ Tidak dapat menemukan data CoinAPI untuk {symbol}")
+
+            return
+
+        # Default AI response for other questions
+        if len(text) > 10:  # Only respond to meaningful questions
+            try:
+                response = self.ai.get_ai_response(text, 'id')
+                await update.message.reply_text(response, parse_mode='Markdown')
+
+                # Log activity
+                self.db.log_user_activity(user_id, "ai_chat", f"Message: {text[:50]}...")
+
+            except Exception as e:
+                print(f"Error in AI response: {e}")
 
     async def _check_user_restart_required(self, update: Update):
         """Check if user needs to restart after admin restart"""
