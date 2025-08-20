@@ -1,7 +1,7 @@
 import os, glob, json
 from datetime import datetime, timezone
 from typing import Tuple, Optional, Any
-from .sb_client import supabase, available as sb_available, health as sb_health, diagnostics as sb_diag
+from .sb_client import supabase, available as sb_available
 from .health import services_status_lines
 
 UTC = timezone.utc
@@ -92,7 +92,17 @@ def _is_premium_active_local(u: dict) -> bool:
 
 def health() -> Tuple[bool, str]:
     """Health check for Supabase connection"""
-    return sb_health()
+    if not sb_available():
+        return False, "Supabase client not available"
+
+    try:
+        # Use hc() RPC for health check
+        result = supabase.rpc("hc").execute()
+        if result.data:
+            return True, "Connected via RPC hc()"
+        return False, "RPC hc() returned empty"
+    except Exception as e:
+        return False, f"RPC error: {str(e)}"
 
 def get_supabase_totals() -> Tuple[int, int]:
     if not sb_available():
@@ -145,7 +155,7 @@ def build_system_status(auto_signals_running: bool,
         legacy_total, legacy_premium = 0, 0
         legacy_err = f"(local-error: {e})"
 
-    ok, db_detail = sb_health()
+    ok, db_detail = health()
     supa_total, supa_premium = (0, 0)
     if ok:
         supa_total, supa_premium = get_supabase_totals()
@@ -174,25 +184,3 @@ def build_system_status(auto_signals_running: bool,
         f"⏰ Last Update: {now_utc}\n"
         f"ℹ️ DB Detail: {db_detail[:220]}"
     )
-
-def build_admin_stats_block() -> dict:
-    """Build admin stats block for reporting"""
-    stats = {}
-
-    # Database Health
-    db_stat = db_status()
-    db_icon = "✅" if db_stat['ready'] else "❌"
-    stats['database'] = f"{db_icon} {db_stat['mode'].upper()}: {db_stat['note']}"
-
-    # Supabase Specific Diagnostics
-    if db_stat['mode'] == 'supabase':
-        sb_ok, _ = sb_health()
-        sb_icon = "✅" if sb_ok else "❌"
-        stats['supabase_detail'] = f"🔎 Supabase: {sb_diag()}"
-
-    # Other services
-    stats['coinapi'] = check_coinapi_health()
-    stats['cryptonews'] = check_cryptonews_health()
-    stats['openai'] = check_openai_health()
-
-    return stats
