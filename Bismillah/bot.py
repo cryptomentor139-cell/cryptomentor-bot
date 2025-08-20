@@ -952,7 +952,7 @@ class TelegramBot:
 
         except Exception as e:
             # Credits were already debited atomically, no manual refund needed
-            error_msg = f"❌ Terjadi kesalahan dalam analisis.\n\n**Error**: {str(e)[:100]}...\n\n💡 **Coba alternatif:**\n• `/price {symbol.lower()}` untuk harga basic (CoinAPI)\n• `/futures {symbol.lower()}` untuk analisis SnD futures\n• Contact admin jika masalah berlanjut"
+            error_msg = f"❌ Terjadi kesalahan dalam analisis.\n\n**Error**: {str(e)[:100]}...\n\n💡 **Coba alternatif:**\n• `/price {symbol.lower()}` untuk harga basic\n• `/futures {symbol.lower()}` untuk analisis SnD futures\n• Contact admin jika masalah berlanjut"
             await loading_msg.edit_text(error_msg, parse_mode='Markdown')
             print(f"Error in analyze command: {e}")
             import traceback
@@ -1271,13 +1271,13 @@ class TelegramBot:
 
                         print(f"✅ Successfully sent futures analysis to user {user_id}")
 
-                    except Exception as e:
-                        # Create safe error message without problematic characters
-                        error_msg = f"❌ Error dalam analisis futures: {str(e)[:100]}...\n\n💡 Solusi:\n• Coba /price {symbol} untuk harga basic\n• Gunakan /futures_signals untuk multiple signals\n• Contact admin jika masalah berlanjut"
-                        await query.edit_message_text(error_msg, parse_mode=None)
-                        print(f"❌ Error in futures callback: {e}")
-                        import traceback
-                        traceback.print_exc()
+                except Exception as e:
+                    # Create safe error message without problematic characters
+                    error_msg = f"❌ Error dalam analisis futures: {str(e)[:100]}...\n\n💡 Solusi:\n• Coba /price {symbol} untuk harga basic\n• Gunakan /futures_signals untuk multiple signals\n• Contact admin jika masalah berlanjut"
+                    await query.edit_message_text(error_msg, parse_mode=None)
+                    print(f"❌ Error in futures callback: {e}")
+                    import traceback
+                    traceback.print_exc()
 
             elif callback_data.startswith('futures_analysis_'):
                 # Existing futures analysis logic
@@ -1887,68 +1887,6 @@ Gunakan `/subscribe` untuk upgrade!
 
         await update.message.reply_text(status_text, parse_mode='Markdown')
 
-    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle regular text messages"""
-        from app.users_repo import touch_user_from_update
-
-        # Auto-upsert user to Supabase for any message
-        touch_user_from_update(update)
-
-        text = update.message.text.lower().strip()
-        user_id = update.message.from_user.id
-
-        print(f"📝 Message received from user {user_id}: '{text[:20]}...'")
-        logger.info(f"Message from user {user_id}: {text[:50]}")
-
-        # Quick price check for popular symbols
-        popular_symbols = ['btc', 'eth', 'bnb', 'sol', 'ada', 'doge', 'avax', 'matic', 'dot', 'link']
-
-        if text in popular_symbols:
-            # Quick price check using CoinAPI
-            symbol = text.upper()
-            loading_msg = await update.message.reply_text(f"⏳ Cek harga {symbol} dari CoinAPI...")
-
-            price_data = self.crypto_api.get_crypto_price(symbol, force_refresh=True)
-
-            if price_data and 'error' not in price_data and price_data.get('price', 0) > 0:
-                current_price = price_data.get('price', 0)
-                if current_price < 1:
-                    price_format = f"${current_price:.8f}"
-                elif current_price < 100:
-                    price_format = f"${current_price:.4f}"
-                else:
-                    price_format = f"${current_price:,.2f}"
-
-                change_24h = price_data.get('change_24h', 0)
-                change_emoji = "📈" if change_24h >= 0 else "📉"
-                change_color = "+" if change_24h >= 0 else ""
-
-                message = f"""💰 **{symbol} Quick Price**
-
-{price_format} {change_emoji} {change_color}{change_24h:.2f}%
-
-🔄 Source: CoinAPI Real-time
-💡 Ketik `/price {symbol.lower()}` untuk detail lengkap
-📊 Ketik `/analyze {symbol.lower()}` untuk analisis mendalam"""
-
-                await loading_msg.edit_text(message, parse_mode='Markdown')
-            else:
-                await loading_msg.edit_text(f"❌ Tidak dapat menemukan data CoinAPI untuk {symbol}")
-
-            return
-
-        # Default AI response for other questions
-        if len(text) > 10:  # Only respond to meaningful questions
-            try:
-                response = self.ai.get_ai_response(text, 'id')
-                await update.message.reply_text(response, parse_mode='Markdown')
-
-                # Log activity
-                self.db.log_user_activity(user_id, "ai_chat", f"Message: {text[:50]}...")
-
-            except Exception as e:
-                print(f"Error in AI response: {e}")
-
     async def _check_user_restart_required(self, update: Update):
         """Check if user needs to restart after admin restart"""
         user_id = update.message.from_user.id
@@ -2501,8 +2439,7 @@ Semua user dapat 100 credit gratis untuk mencoba fitur CoinAPI baru!
         except Exception as e:
             await update.message.reply_text(
                 f"❌ **Credit Refresh Failed**\n\n"
-                f"Error: {str(e)[:200]}...\n"
-                f"Check console for details",
+                f"Error: {str(e)[:200]}...",
                 parse_mode='Markdown'
             )
             print(f"❌ Error in refresh_credits_command: {e}")
@@ -3171,7 +3108,8 @@ ADMIN2 = [optional_second_admin_id]
 
 ⚠️ **User {target_admin_id} tidak lagi memiliki akses admin.**
 
-💡 **Note:** User masih dapat menggunakan bot sebagai user biasa."""
+💡 **Next Steps:**
+• User {target_admin_id} masih dapat menggunakan bot sebagai user biasa."""
 
             # Log admin action
             self.db.log_user_activity(
