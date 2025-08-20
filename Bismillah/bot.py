@@ -1106,7 +1106,7 @@ class TelegramBot:
                 try:
                     await loading_msg.edit_text(signals, parse_mode='MarkdownV2')
                 except Exception as e:
-                    print(f"⚠️ Markdown error, sending as plain text: {e}")
+                    print(f"⚠️ MarkdownV2 error, sending as plain text: {e}")
                     # Remove escape characters for plain text
                     plain_text = signals.replace('\\', '')
                     await loading_msg.edit_text(plain_text, parse_mode=None)
@@ -1187,7 +1187,7 @@ class TelegramBot:
         if is_admin:
             display_text += f"\n\n👑 **Status**: Admin - Unlimited Access"
         elif is_premium:
-            display_text += f"\n\n⭐ **Status**: Premium - Unlimited Access"  
+            display_text += f"\n\n⭐ **Status**: Premium - Unlimited Access"
         else:
             display_text += f"\n\n💳 **Status**: {current_credits} credits (20 akan dipotong saat dipilih)"
 
@@ -2042,7 +2042,7 @@ Gunakan `/subscribe` untuk upgrade!
 • /disable_auto_signal_ai - Stop auto signals
 
 {'👑 Super Admin Commands (ADMIN Secret Only)' if is_user_super_admin else '🔧 Debug & Diagnostics'}
-{'• /add_admin <user_id> - Add new admin' if is_user_super_admin else '• /whoami - Your admin info'}
+{'• /add_admin <user_id> - Add new admin' if is_super_admin else '• /whoami - Your admin info'}
 {'• /remove_admin <user_id> - Remove admin' if is_super_admin else '• /admin_debug - Admin configuration debug'}
 {'• /list_admins - List all admins' if is_super_admin else '• /sb_diag - Supabase diagnostics'}
 {'• /whoami - Your admin info' if is_super_admin else '• /sb_repair - Attempt Supabase repair'}
@@ -2085,10 +2085,6 @@ Gunakan `/subscribe` untuk upgrade!
                 parse_mode='HTML',
                 disable_web_page_preview=True
             )
-
-
-
-
 
     async def setpremium_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Admin command untuk set premium user dengan Database Router"""
@@ -2183,7 +2179,6 @@ Gunakan `/subscribe` untuk upgrade!
             await safe_reply(update.message, f"❌ Gagal: {e}")
             print(f"❌ Error in grant_credits command: {e}")
 
-
     async def check_user_status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /check_user_status command - Admin only"""
         user_id = update.message.from_user.id
@@ -2233,7 +2228,6 @@ Gunakan `/subscribe` untuk upgrade!
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
-
     async def revoke_premium_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Admin command untuk revoke premium user dengan Database Router"""
         from app.db_router import remove_premium
@@ -2263,7 +2257,6 @@ Gunakan `/subscribe` untuk upgrade!
         except Exception as e:
             await safe_reply(update.effective_message, f"❌ Gagal: {e}")
             print(f"❌ Error in revoke_premium command: {e}")
-
 
     async def fix_all_credits_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /fix_all_credits command"""
@@ -3407,12 +3400,12 @@ ADMIN2 = [optional_second_admin_id]
             # These commands are already handled by class methods, so avoid re-registering if they conflict.
             # If specific Supabase commands are needed, they should be imported and registered separately.
             # from app.handlers_sb_repair import cmd_sb_repair
-            # from app.handlers_admin_premium import cmd_setpremium, cmd_revoke_premium, cmd_grant_credits
+            # from app.handlers_admin_premium import cmd_set_premium, cmd_revoke_premium, cmd_grant_credits
             # from app.handlers_user_set import cmd_user_set
             # from app.handlers_sb_diag import cmd_sb_status, cmd_sb_diag
 
             # self.application.add_handler(CommandHandler("sb_repair", cmd_sb_repair))
-            # self.application.add_handler(CommandHandler("setpremium", cmd_setpremium))
+            # self.application.add_handler(CommandHandler("setpremium", cmd_set_premium))
             # self.application.add_handler(CommandHandler("revoke_premium", cmd_revoke_premium))
             # self.application.add_handler(CommandHandler("grant_credits", cmd_grant_credits))
             # self.application.add_handler(CommandHandler("user_set", cmd_user_set))

@@ -49,14 +49,21 @@ def ensure_user_registered(
     print(f"✅ New user {tg_id} registered with {WELCOME_CREDITS} welcome credits")
     return data
 
-def set_premium(tg_id: int, duration_type: str, duration_value: int = 0) -> None:
+def set_premium(tg_id: int, duration_type: str, duration_value: int = 0) -> dict:
     """Set premium status via RPC"""
     s = get_supabase_client()
-    s.rpc("set_premium", {
+    result = s.rpc("set_premium", {
         "p_telegram_id": int(tg_id),
         "p_duration_value": int(duration_value),
         "p_duration_type": duration_type,  # 'days'|'months'|'lifetime'
     }).execute()
+    
+    if result.data:
+        print(f"✅ Premium set for user {tg_id}: {result.data}")
+        return result.data
+    else:
+        print(f"❌ Failed to set premium for user {tg_id}")
+        return {"success": False, "error": "No response from RPC"}
 
 def revoke_premium(tg_id: int) -> None:
     """Revoke premium status"""

@@ -29,15 +29,22 @@ async def cmd_set_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         async with _lock(tid):
-            # Check if user exists
-            existing = get_user_by_telegram_id(tid)
-            if not existing:
-                return await safe_reply(msg, f"❌ User {tid} tidak ditemukan di database")
-
+            s = get_supabase_client()
+            
             # Parse duration and set premium using RPC
             if dur_arg.lower() == "lifetime":
-                set_premium(tid, "lifetime", 0)
-                return await safe_reply(msg, f"✅ Premium LIFETIME set untuk user {tid}")
+                # Call RPC with lifetime
+                result = s.rpc("set_premium", {
+                    "p_telegram_id": tid,
+                    "p_duration_type": "lifetime",
+                    "p_duration_value": 0
+                }).execute()
+                
+                if result.data and result.data.get('success'):
+                    return await safe_reply(msg, f"✅ Premium LIFETIME set untuk user {tid}")
+                else:
+                    error = result.data.get('error', 'Unknown error') if result.data else 'No response'
+                    return await safe_reply(msg, f"❌ Failed to set lifetime premium: {error}")
             else:
                 # Parse days (support "30d" or "30" format)
                 days_str = dur_arg.replace('d', '')
@@ -45,16 +52,25 @@ async def cmd_set_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return await safe_reply(msg, "Format: angka positif atau 'lifetime'\nContoh: 30d, 30, lifetime")
 
                 days = int(days_str)
-                set_premium(tid, "days", days)
-
-                # Verify the update
-                updated_user = get_user_by_telegram_id(tid)
-                premium_until = updated_user.get('premium_until', 'N/A') if updated_user else 'N/A'
-
-                return await safe_reply(msg, f"✅ Premium {days} hari set untuk user {tid}\nBerlaku sampai: {premium_until}")
+                
+                # Call RPC with days
+                result = s.rpc("set_premium", {
+                    "p_telegram_id": tid,
+                    "p_duration_type": "days",
+                    "p_duration_value": days
+                }).execute()
+                
+                if result.data and result.data.get('success'):
+                    premium_until = result.data.get('premium_until', 'N/A')
+                    return await safe_reply(msg, f"✅ Premium {days} hari set untuk user {tid}\nBerlaku sampai: {premium_until}")
+                else:
+                    error = result.data.get('error', 'Unknown error') if result.data else 'No response'
+                    return await safe_reply(msg, f"❌ Failed to set {days}d premium: {error}")
 
     except Exception as e:
         return await safe_reply(msg, f"❌ Error setpremium: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @admin_guard
 async def cmd_revoke_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
