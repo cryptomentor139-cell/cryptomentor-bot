@@ -1,6 +1,6 @@
 import os
 from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from supabase import create_client, Client
 
 def get_supabase_client() -> Client:
@@ -16,6 +16,60 @@ def get_supabase_client() -> Client:
             raise Exception("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY")
         return create_client(url, key)
 
+def get_vuser_by_telegram_id(tg_id: int) -> Optional[Dict[str, Any]]:
+    s = get_supabase_client()
+    res = s.table("v_users").select("*").eq("telegram_id", int(tg_id)).limit(1).execute()
+    return res.data[0] if res.data else None
+
+def is_premium_active(tg_id: int) -> bool:
+    s = get_supabase_client()
+    # 1) Pakai view v_users.premium_active (sumber kebenaran)
+    try:
+        res = s.table("v_users").select("premium_active").eq("telegram_id", int(tg_id)).limit(1).execute()
+        if res.data:
+            return bool(res.data[0].get("premium_active"))
+    except Exception as e:
+        print("[is_premium_active] v_users failed ->", e)
+
+    # 2) Fallback langsung dari tabel 'users' + parser toleran
+    try:
+        r = s.table("users").select("is_premium,is_lifetime,premium_until")\
+                .eq("telegram_id", int(tg_id)).limit(1).execute().data
+        if not r:
+            return False
+        row = r[0]
+        if row.get("is_lifetime"):
+            return True
+        if not row.get("is_premium"):
+            return False
+        return _ts_in_future(row.get("premium_until"))
+    except Exception as e:
+        print("[is_premium_active] users fallback failed ->", e)
+        return False
+
+def _ts_in_future(pu) -> bool:
+    if not pu: return False
+    s = str(pu).strip()
+    # normalisasi format supabase agar ISO 8601
+    if " " in s and "T" not in s:
+        s = s.replace(" ", "T", 1)   # 'YYYY-MM-DD HH:MM' -> 'YYYY-MM-DDTHH:MM'
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    if s.endswith("+00"):
+        s = s + ":00"
+    try:
+        dt = datetime.fromisoformat(s)
+    except Exception:
+        try:
+            from dateutil import parser  # pastikan ada di requirements
+            dt = parser.parse(str(pu))
+        except Exception:
+            return False
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt > datetime.now(timezone.utc)
+
+
 def get_user_by_telegram_id(telegram_id: int) -> Optional[Dict[str, Any]]:
     """Get user by telegram ID from Supabase"""
     try:
@@ -29,6 +83,18 @@ def get_user_by_telegram_id(telegram_id: int) -> Optional[Dict[str, Any]]:
 def get_user_by_tid(telegram_id: int) -> Optional[Dict[str, Any]]:
     """Alias for get_user_by_telegram_id"""
     return get_user_by_telegram_id(telegram_id)
+
+def get_user_credits(telegram_id: int) -> int:
+    """Get user credits from Supabase"""
+    try:
+        user_data = get_vuser_by_telegram_id(telegram_id)
+        if user_data:
+            return int(user_data.get('credits', 0))
+        return 0
+    except Exception as e:
+        print(f"Error getting credits for user {telegram_id}: {e}")
+        return 0
+
 
 def create_user_if_not_exists(telegram_id: int, username: str = None, first_name: str = None) -> bool:
     """Create user in Supabase if not exists"""
@@ -81,6 +147,39 @@ def create_user_if_not_exists(telegram_id: int, username: str = None, first_name
             print(f"❌ Fallback also failed for user {telegram_id}: {e2}")
             return False
 
+
+def create_user(telegram_id: int, first_name: str = None, username: str = None,
+                last_name: str = None, language_code: str = "id", credits: int = 100) -> bool:
+    """Create a new user in Supabase"""
+    try:
+        supabase = get_supabase_client()
+
+        user_data = {
+            "telegram_id": telegram_id,
+            "first_name": first_name or "User",
+            "username": username,
+            "last_name": last_name,
+            "language_code": language_code,
+            "credits": credits,
+            "is_premium": False,
+            "banned": False
+        }
+
+        result = supabase.table("users").insert(user_data).execute()
+        return bool(result.data)
+    except Exception as e:
+        print(f"Error creating user {telegram_id}: {e}")
+        return False
+
+def update_user_credits(telegram_id: int, credits: int) -> bool:
+    """Update user credits in Supabase"""
+    try:
+        supabase = get_supabase_client()
+        result = supabase.table("users").update({"credits": credits}).eq("telegram_id", telegram_id).execute()
+        return bool(result.data)
+    except Exception as e:
+        print(f"Error updating credits for user {telegram_id}: {e}")
+        return False
 
 def set_premium(telegram_id: int, lifetime: bool = False, days: int = None) -> bool:
     """Set premium status for user in Supabase (auto-creates user if not exists)"""

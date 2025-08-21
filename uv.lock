@@ -434,11 +434,13 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "psutil" },
+    { name = "python-dateutil" },
     { name = "supabase" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "psutil", specifier = ">=7.0.0" },
+    { name = "python-dateutil", specifier = ">=2.9.0.post0" },
     { name = "supabase", specifier = ">=2.18.0" },
 ]
