@@ -1351,12 +1351,22 @@ class TelegramBot:
         # Use Supabase for premium checks
         try:
             from app.premium_check import is_premium as sb_is_premium, get_user_credits as sb_get_credits
+            from app.users_repo import get_user_by_telegram_id
+            
             is_premium = sb_is_premium(user_id)
             credits = sb_get_credits(user_id)
+            
+            # Get user data from Supabase for accurate premium type detection
+            user_data = get_user_by_telegram_id(user_id)
+            is_lifetime = user_data and user_data.get('is_lifetime', False) if user_data else False
+            premium_until = user_data.get('premium_until') if user_data else None
+            
         except Exception as e:
             print(f"⚠️ Supabase premium check failed, using fallback: {e}")
             is_premium = False  # Default to free if Supabase fails
             credits = 0
+            is_lifetime = False
+            premium_until = None
 
         is_admin = self.is_admin(user_id)
 
@@ -1374,19 +1384,48 @@ class TelegramBot:
 
 Selamat mengelola CryptoMentor AI!"""
         elif is_premium:
-            # Check if lifetime premium
-            user_data = self.db.get_user(user_id)
-            is_lifetime = user_data and user_data.get('subscription_end') is None if user_data else False
+            if is_lifetime:
+                message = f"""💳 **CryptoMentor AI Bot - Credit Information**
 
-            message = f"""💳 **CryptoMentor AI Bot - Credit Information**
-
-⭐ **Status**: **PREMIUM {'LIFETIME' if is_lifetime else ''}**
+⭐ **Status**: **PREMIUM LIFETIME**
 ♾️ **Credit**: **UNLIMITED**
 
 🚀 **Fitur Premium:**
 • Unlimited analisis CoinAPI + SnD
-• {'Auto SnD signals (Lifetime only)' if is_lifetime else 'Priority support'}
+• Auto SnD signals (Lifetime only)
 • Priority support
+
+Terima kasih telah menjadi member lifetime premium!"""
+            else:
+                # Timed premium - show expiry date
+                expiry_text = "Active"
+                if premium_until:
+                    try:
+                        from datetime import datetime
+                        if isinstance(premium_until, str):
+                            # Handle various timestamp formats
+                            s = premium_until.replace(' ', 'T', 1) if ' ' in premium_until else premium_until
+                            if s.endswith('Z'):
+                                s = s[:-1] + '+00:00'
+                            elif '+' not in s and 'Z' not in s:
+                                s = s + '+00:00'
+                            premium_dt = datetime.fromisoformat(s)
+                        else:
+                            premium_dt = premium_until
+                        expiry_text = f"sampai {premium_dt.strftime('%d %B %Y')}"
+                    except Exception as e:
+                        print(f"Error parsing premium_until: {e}")
+                        expiry_text = "Active"
+                
+                message = f"""💳 **CryptoMentor AI Bot - Credit Information**
+
+⭐ **Status**: **PREMIUM** ({expiry_text})
+♾️ **Credit**: **UNLIMITED**
+
+🚀 **Fitur Premium:**
+• Unlimited analisis CoinAPI + SnD
+• Priority support
+• No credit limits
 
 Terima kasih telah menjadi member premium!"""
         else:
@@ -1587,17 +1626,50 @@ Harga akan diambil real-time dari CoinAPI."""
         # Use Supabase for premium checks
         try:
             from app.premium_check import is_premium as sb_is_premium
+            from app.users_repo import get_user_by_telegram_id
+            
             is_premium = sb_is_premium(user_id)
+            
+            # Get accurate premium type from Supabase
+            user_data = get_user_by_telegram_id(user_id)
+            is_lifetime = user_data and user_data.get('is_lifetime', False) if user_data else False
+            premium_until = user_data.get('premium_until') if user_data else None
+            
         except Exception as e:
             print(f"⚠️ Supabase premium check failed, using fallback: {e}")
             is_premium = False  # Default to free if Supabase fails
-
-        user_data = self.db.get_user(user_id)
-        is_lifetime = user_data and user_data.get('subscription_end') is None if user_data else False
+            is_lifetime = False
+            premium_until = None
 
         if is_premium:
-            premium_type = "LIFETIME" if is_lifetime else "PREMIUM"
-            auto_signals_status = "✅ Auto SnD Signals Access" if is_lifetime else "❌ Auto Signals (Lifetime Only)"
+            if is_lifetime:
+                premium_type = "LIFETIME"
+                auto_signals_status = "✅ Auto SnD Signals Access"
+                expiry_info = "• Akses selamanya tanpa batas waktu"
+            else:
+                premium_type = "PREMIUM"
+                auto_signals_status = "❌ Auto Signals (Lifetime Only)"
+                
+                # Show expiry date for timed premium
+                if premium_until:
+                    try:
+                        from datetime import datetime
+                        if isinstance(premium_until, str):
+                            # Handle various timestamp formats
+                            s = premium_until.replace(' ', 'T', 1) if ' ' in premium_until else premium_until
+                            if s.endswith('Z'):
+                                s = s[:-1] + '+00:00'
+                            elif '+' not in s and 'Z' not in s:
+                                s = s + '+00:00'
+                            premium_dt = datetime.fromisoformat(s)
+                        else:
+                            premium_dt = premium_until
+                        expiry_info = f"• Berlaku sampai: {premium_dt.strftime('%d %B %Y - %H:%M WIB')}"
+                    except Exception as e:
+                        print(f"Error parsing premium_until: {e}")
+                        expiry_info = "• Premium aktif"
+                else:
+                    expiry_info = "• Premium aktif"
 
             message = f"""⭐ **Status {premium_type} Aktif**
 
@@ -1608,6 +1680,9 @@ Harga akan diambil real-time dari CoinAPI."""
 • 📊 Data real-time CoinAPI tanpa batas
 • {auto_signals_status}
 • 🛡️ Support premium
+
+📅 **Detail Langganan:**
+{expiry_info}
 
 ✨ **Terima kasih telah menjadi {premium_type} Member!**
 Nikmati semua fitur tanpa batasan credit."""
