@@ -472,36 +472,42 @@ class TelegramBot:
         print(f"🎯 /start command received from user {user.id if user else 'Unknown'}")
         logger.info(f"Start command from user {user.id}")
 
-        # Handle referral code from /start parameter
+        # Handle unified referral code from /start parameter
         referred_by = None
-        referral_type = 'free'  # default
+        referral_type = 'unified'  # default for new unified system
 
         if context.args:
             referral_code = context.args[0].strip()
-            print(f"🔗 Referral code detected: {referral_code}")
+            print(f"🔗 Unified referral code detected: {referral_code}")
 
-            # Find referrer by code
+            # Try to parse as user_id (new unified system)
             try:
-                from app.supabase_conn import get_supabase_client
-                s = get_supabase_client()
+                referred_by = int(referral_code)
+                referral_type = 'unified'
+                print(f"✅ Found unified referrer: {referred_by}")
+            except ValueError:
+                # Fallback to old system (legacy support)
+                try:
+                    from app.supabase_conn import get_supabase_client
+                    s = get_supabase_client()
 
-                # Check for free referral code
-                free_ref = s.table("users").select("telegram_id").eq("referral_code", referral_code).limit(1).execute()
-                if free_ref.data:
-                    referred_by = free_ref.data[0]['telegram_id']
-                    referral_type = 'free'
-                    print(f"✅ Found free referrer: {referred_by}")
-                else:
-                    # Check for premium referral code
-                    premium_ref = s.table("users").select("telegram_id").eq("premium_referral_code", referral_code).limit(1).execute()
-                    if premium_ref.data:
-                        referred_by = premium_ref.data[0]['telegram_id']
-                        referral_type = 'premium'
-                        print(f"✅ Found premium referrer: {referred_by}")
+                    # Check for old free referral code
+                    free_ref = s.table("users").select("telegram_id").eq("referral_code", referral_code).limit(1).execute()
+                    if free_ref.data:
+                        referred_by = free_ref.data[0]['telegram_id']
+                        referral_type = 'free'
+                        print(f"✅ Found legacy free referrer: {referred_by}")
                     else:
-                        print(f"⚠️ Invalid referral code: {referral_code}")
-            except Exception as e:
-                print(f"❌ Error checking referral code: {e}")
+                        # Check for old premium referral code
+                        premium_ref = s.table("users").select("telegram_id").eq("premium_referral_code", referral_code).limit(1).execute()
+                        if premium_ref.data:
+                            referred_by = premium_ref.data[0]['telegram_id']
+                            referral_type = 'premium'
+                            print(f"✅ Found legacy premium referrer: {referred_by}")
+                        else:
+                            print(f"⚠️ Invalid referral code: {referral_code}")
+                except Exception as e:
+                    print(f"❌ Error checking legacy referral code: {e}")
 
         # Create user in Supabase with welcome credits (only for /start)
         if user:
@@ -522,7 +528,7 @@ class TelegramBot:
             if is_new_user:
                 print(f"✅ NEW USER: {user.id} welcomed with 100 credits")
 
-                # Process referral bonus for new users only
+                # Process referral bonus for new users only (unified system)
                 if referred_by:
                     try:
                         s = get_supabase_client()
@@ -533,32 +539,32 @@ class TelegramBot:
                             "referral_type": referral_type
                         }).eq("telegram_id", user.id).execute()
 
-                        if referral_type == 'free':
-                            # Give 10 credits to referrer
-                            s.rpc("add_credits", {
-                                "p_telegram_id": referred_by,
-                                "p_amount": 10
-                            }).execute()
+                        # Always give 10 credits to referrer (unified system)
+                        s.rpc("add_credits", {
+                            "p_telegram_id": referred_by,
+                            "p_amount": 10
+                        }).execute()
 
-                            print(f"✅ Gave 10 credits to free referrer {referred_by}")
+                        print(f"✅ Gave 10 credits to referrer {referred_by} (unified system)")
 
-                            # Send notification to referrer
-                            try:
-                                await self.application.bot.send_message(
-                                    chat_id=referred_by,
-                                    text=f"🎉 **Referral Bonus!**\n\n"
-                                         f"✅ +10 credits dari referral {user.first_name}!\n"
-                                         f"💡 Gunakan `/referral` untuk link Anda.",
-                                    parse_mode='Markdown'
-                                )
-                            except Exception as dm_error:
-                                print(f"⚠️ Could not send referral notification to {referred_by}: {dm_error}")
+                        # Send notification to referrer
+                        try:
+                            await self.application.bot.send_message(
+                                chat_id=referred_by,
+                                text=f"🎉 **Referral Bonus!**\n\n"
+                                     f"✅ +10 credits dari {user.first_name}!\n"
+                                     f"💰 Money bonus akan diberikan jika mereka subscribe premium\n\n"
+                                     f"💡 Gunakan `/referral` untuk link unified Anda.",
+                                parse_mode='Markdown'
+                            )
+                        except Exception as dm_error:
+                            print(f"⚠️ Could not send referral notification to {referred_by}: {dm_error}")
 
-                        elif referral_type == 'premium':
-                            print(f"💎 Premium referral logged for {referred_by}, reward pending subscription")
+                        # Log for future money bonus when/if new user subscribes premium
+                        print(f"💎 Unified referral logged for {referred_by}, money reward pending if {user.id} subscribes premium")
 
                     except Exception as ref_error:
-                        print(f"❌ Error processing referral: {ref_error}")
+                        print(f"❌ Error processing unified referral: {ref_error}")
 
             else:
                 print(f"✅ RETURNING USER: {user.id} has {current_credits} credits")
@@ -1829,7 +1835,7 @@ Pastikan menyertakan User ID (`{user_id}`) dan paket yang dipilih untuk aktivasi
         await update.message.reply_text(message, parse_mode='Markdown')
 
     async def referral_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /referral command with dual system"""
+        """Handle /referral command with unified single link system"""
         user_id = update.message.from_user.id
         username = update.message.from_user.username or "no_username"
         
@@ -1849,11 +1855,14 @@ Pastikan menyertakan User ID (`{user_id}`) dan paket yang dipilih untuk aktivasi
             print(f"Error getting bot info: {e}")
             bot_username = "CryptoMentorAI_bot"  # Fallback username
 
-        # Initialize referral codes
-        free_code = None
-        premium_code = None
+        # Initialize unified referral code (use user_id as referral code for simplicity)
+        unified_referral_code = str(user_id)
 
-        # Try Supabase first, fallback to local DB
+        # Get referral statistics with better error handling
+        total_referrals = 0
+        credits_earned = 0
+        money_earned = 0
+        
         try:
             from app.supabase_conn import get_supabase_client
             s = get_supabase_client()
@@ -1861,115 +1870,17 @@ Pastikan menyertakan User ID (`{user_id}`) dan paket yang dipilih untuk aktivasi
             # Ensure user exists in Supabase first
             from app.users_repo import touch_user_from_update
             touch_user_from_update(update)
-
-            # Get user's referral codes
-            user_data = s.table("users").select("referral_code, premium_referral_code").eq("telegram_id", user_id).limit(1).execute()
-
-            if user_data.data:
-                user_record = user_data.data[0]
-                free_code = user_record.get('referral_code')
-                premium_code = user_record.get('premium_referral_code')
-
-                # Generate codes if missing
-                if not free_code or not premium_code:
-                    import random, string
-                    if not free_code:
-                        # Ensure unique code
-                        while True:
-                            free_code = f"REF{''.join(random.choices(string.ascii_uppercase + string.digits, k=7))}"
-                            # Check if code already exists
-                            existing = s.table("users").select("telegram_id").eq("referral_code", free_code).limit(1).execute()
-                            if not existing.data:
-                                break
-                    
-                    if not premium_code:
-                        # Ensure unique code
-                        while True:
-                            premium_code = f"PREP{''.join(random.choices(string.ascii_uppercase + string.digits, k=7))}"
-                            # Check if code already exists
-                            existing = s.table("users").select("telegram_id").eq("premium_referral_code", premium_code).limit(1).execute()
-                            if not existing.data:
-                                break
-
-                    # Update user with new codes
-                    update_result = s.table("users").update({
-                        "referral_code": free_code,
-                        "premium_referral_code": premium_code
-                    }).eq("telegram_id", user_id).execute()
-                    
-                    if not update_result.data:
-                        print(f"⚠️ Failed to update referral codes for user {user_id}")
-            else:
-                # User not found in Supabase, create with codes
-                import random, string
-                free_code = f"REF{''.join(random.choices(string.ascii_uppercase + string.digits, k=7))}"
-                premium_code = f"PREP{''.join(random.choices(string.ascii_uppercase + string.digits, k=7))}"
-                
-                # This should be handled by touch_user_from_update, but let's be safe
-                print(f"⚠️ User {user_id} not found in Supabase during referral command")
-
-        except Exception as e:
-            print(f"❌ Supabase error in referral command: {e}")
-            # Fallback to local database
-            try:
-                user_data = self.db.get_user(user_id)
-                if user_data:
-                    free_code = user_data.get('referral_code')
-                    premium_code = user_data.get('premium_referral_code')
-                    
-                    # Generate codes if missing
-                    if not free_code or not premium_code:
-                        import random, string
-                        if not free_code:
-                            free_code = f"REF{''.join(random.choices(string.ascii_uppercase + string.digits, k=7))}"
-                        if not premium_code:
-                            premium_code = f"PREP{''.join(random.choices(string.ascii_uppercase + string.digits, k=7))}"
-                        
-                        # Update local database
-                        self.db.cursor.execute("""
-                            UPDATE users 
-                            SET referral_code = COALESCE(referral_code, ?),
-                                premium_referral_code = COALESCE(premium_referral_code, ?)
-                            WHERE telegram_id = ?
-                        """, (free_code, premium_code, user_id))
-                        self.db.conn.commit()
-                else:
-                    await update.message.reply_text("❌ User tidak ditemukan. Silakan gunakan /start terlebih dahulu.")
-                    return
-            except Exception as local_e:
-                print(f"❌ Local DB error in referral command: {local_e}")
-                await update.message.reply_text("❌ Terjadi kesalahan sistem. Silakan coba lagi atau hubungi admin.")
-                return
-
-        # Ensure we have codes
-        if not free_code or not premium_code:
-            await update.message.reply_text("❌ Gagal mendapatkan kode referral. Silakan coba lagi atau hubungi admin.")
-            return
-
-        # Get free referral statistics with better error handling
-        total_free_referrals = 0
-        credits_earned = 0
-        premium_stats = {'total_referrals': 0, 'total_earnings': 0, 'recent_referrals': []}
-        
-        try:
-            from app.supabase_conn import get_supabase_client
-            s = get_supabase_client()
             
-            # Get free referrals
-            free_refs = s.table("users").select("telegram_id").eq("referred_by", user_id).execute()
-            total_free_referrals = len(free_refs.data) if free_refs.data else 0
-            credits_earned = total_free_referrals * 10  # 10 credits per referral
+            # Get all referrals (both free and premium)
+            all_refs = s.table("users").select("telegram_id, first_name, created_at, is_premium, is_lifetime").eq("referred_by", user_id).execute()
             
-            # Get premium referrals
-            premium_refs = s.table("users").select("telegram_id, first_name, created_at").eq("referred_by", user_id).eq("referral_type", "premium").execute()
-            premium_referrals = len(premium_refs.data) if premium_refs.data else 0
-            premium_earnings = premium_referrals * 10000  # Rp 10,000 per premium referral
+            total_referrals = len(all_refs.data) if all_refs.data else 0
+            credits_earned = total_referrals * 10  # 10 credits per referral
             
-            premium_stats = {
-                'total_referrals': premium_referrals,
-                'total_earnings': premium_earnings,
-                'recent_referrals': premium_refs.data[:5] if premium_refs.data else []
-            }
+            # Calculate money earnings (only from premium referrals if referrer is premium)
+            if is_premium and all_refs.data:
+                premium_referrals = [ref for ref in all_refs.data if ref.get('is_premium') or ref.get('is_lifetime')]
+                money_earned = len(premium_referrals) * 10000  # Rp 10,000 per premium referral
             
         except Exception as e:
             print(f"❌ Error getting referral statistics from Supabase: {e}")
@@ -1980,84 +1891,64 @@ Pastikan menyertakan User ID (`{user_id}`) dan paket yang dipilih untuk aktivasi
                     SELECT COUNT(*) FROM users WHERE referred_by = ?
                 """, (user_id,)).fetchone()
                 
-                total_free_referrals = local_refs[0] if local_refs else 0
-                credits_earned = total_free_referrals * 10
+                total_referrals = local_refs[0] if local_refs else 0
+                credits_earned = total_referrals * 10
                 
-                print(f"✅ Using local DB referral stats: {total_free_referrals} referrals")
+                print(f"✅ Using local DB referral stats: {total_referrals} referrals")
                 
             except Exception as local_e:
                 print(f"❌ Local DB referral stats also failed: {local_e}")
                 # Use default values (already set above)
 
-        message = f"""🎁 **Program Referral CryptoMentor (CoinAPI Edition)**
+        message = f"""🎁 **Program Referral CryptoMentor (Unified Link)**
 
-🔗 **Link Referral FREE (Credit Bonus):**
-`https://t.me/{bot_username}?start={free_code}`
+🔗 **Link Referral Anda:**
+`https://t.me/{bot_username}?start={unified_referral_code}`
 
-💰 **Keuntungan FREE:**
-• Anda dapat 10 credit per referral
-• Teman dapat 100 credit awal + 5 bonus
-• Instant reward untuk CoinAPI access!
+💰 **Sistem Reward Otomatis:**
+• **Credit Bonus**: +10 credit per referral (semua user)
+• **Money Bonus**: +Rp 10.000 per referral premium {'✅ AKTIF' if is_premium else '❌ Butuh Premium'}
 
-📊 **Status FREE Referral:**
-• Total Referrals: {total_free_referrals}
-• Credit Earned: {credits_earned}
-
-"""
+📊 **Status Referral Anda:**
+• **Total Referrals**: {total_referrals}
+• **Credit Earned**: {credits_earned}"""
 
         if is_premium:
-            message += f"""💎 **Link Referral PREMIUM (Uang Asli):**
-`https://t.me/{bot_username}?start={premium_code}`
+            message += f"""
+• **Money Earned**: **Rp {money_earned:,}**
 
-💵 **Keuntungan PREMIUM:**
-• Anda dapat **Rp 10.000** per user yang subscribe premium
-• Reward uang asli, bukan credit!
-• Withdraw earnings ke rekening/e-wallet
-
-📊 **Status PREMIUM Referral:**
-• Total Premium Referrals: {premium_stats['total_referrals']}
-• Total Earnings: **Rp {premium_stats['total_earnings']:,}**
-
-"""
-
-            # Show recent premium referrals
-            if premium_stats['recent_referrals']:
-                message += "📈 **Recent Premium Referrals:**\n"
-                for ref in premium_stats['recent_referrals']:
-                    # Assuming ref is a dictionary with keys like 'telegram_id', 'first_name', 'created_at'
-                    referred_name = ref.get('first_name', 'User')
-                    referred_name = referred_name[:15] + "..." if len(referred_name) > 15 else referred_name
-                    # subscription_type = ref.get('subscription_type', 'N/A') # Assuming this key exists if needed
-                    earnings = ref.get('earnings', 10000) # Default to 10k if not available
-                    date = ref.get('created_at', '')[:10] if ref.get('created_at') else ''
-                    message += f"• {referred_name} - Rp {earnings:,} ({date})\n"
-                message += "\n"
+💎 **Premium Benefits Active:**
+• Dapat credit + uang dari setiap referral
+• Uang diberikan saat referred user subscribe premium
+• Withdraw available ke rekening/e-wallet"""
         else:
-            message += f"""💎 **Ingin Earning Uang Asli?**
+            message += f"""
+• **Money Earned**: Rp 0 (Perlu Premium)
 
-Upgrade ke Premium untuk akses:
-• Link referral premium (Rp 10k/referral)
-• Withdraw ke rekening/e-wallet
+💡 **Upgrade ke Premium untuk:**
+• Unlock money earnings dari referral premium
 • Unlimited CoinAPI + SnD features
+• Withdraw earnings ke rekening Anda"""
 
-Gunakan `/subscribe` untuk upgrade!
+        message += f"""
 
-"""
+🔥 **Cara Kerja Unified System:**
+1. **Bagikan 1 link** ke siapa saja
+2. **Teman /start** → Anda dapat +10 credit
+3. **Teman subscribe premium** → Anda dapat +Rp 10.000 {'(jika Anda premium)' if not is_premium else '✅'}
 
-        message += f"""🔗 **Cara Menggunakan:**
+🚀 **Keuntungan Unified Link:**
+• Tidak perlu bingung 2 link berbeda
+• Otomatis detect type reward berdasarkan status
+• Satu link untuk semua sharing (sosmed, grup, dll)
+• Tracking lengkap dalam satu dashboard
 
-**FREE Referral:**
-1. Bagikan link FREE ke teman
-2. Mereka /start → Anda dapat 10 credit untuk CoinAPI
+💡 **Tips Maksimalkan Earnings:**
+• Share ke grup crypto & trading
+• Ajak teman yang tertarik premium features
+• Gunakan di bio sosial media Anda
 
-**PREMIUM Referral** {'(Tersedia)' if is_premium else '(Premium Only)'}:
-1. Bagikan link PREMIUM ke calon customer
-2. Mereka subscribe premium → Anda dapat Rp 10.000
-3. Withdraw earnings ke rekening Anda
-
-💡 **Tips:** Gunakan link FREE untuk sharing biasa, link PREMIUM untuk monetisasi!
-
-🚀 **New Features:** Referral members dapat akses CoinAPI real-time + SnD analysis!"""
+🎯 **Target terbaik**: User yang butuh analisis CoinAPI real-time!"""
 
         await update.message.reply_text(message, parse_mode='Markdown')
 
