@@ -86,6 +86,7 @@ class AIAssistant:
 
 📈 **SINYAL TRADING:**
 • **Arah**: {signal_data.get('direction', 'NEUTRAL')} {signal_data.get('emoji', '⚖️')}
+• **Confidence**: {signal_data.get('confidence', 50):.1f}%
 • **Kekuatan**: {signal_data.get('strength', 'Medium')}
 • **Entry Point**: ${signal_data.get('entry_price', current_price):,.6f}
 • **Take Profit**: ${signal_data.get('take_profit', current_price * 1.05):,.6f}
@@ -210,8 +211,25 @@ class AIAssistant:
         }
     
     def _generate_trading_signals(self, symbol: str, price: float, change_24h: float, volume: float) -> Dict:
-        """Generate trading signals based on price action"""
-        # Simple signal generation logic
+        """Generate trading signals based on price action with confidence scoring"""
+        # Calculate base confidence from price action and volume
+        base_confidence = 50
+        
+        # Price momentum factor
+        if abs(change_24h) > 10:
+            base_confidence += 25
+        elif abs(change_24h) > 5:
+            base_confidence += 15
+        elif abs(change_24h) > 2:
+            base_confidence += 8
+        
+        # Volume factor
+        if volume > 500000000:  # High volume
+            base_confidence += 10
+        elif volume > 100000000:  # Medium volume
+            base_confidence += 5
+        
+        # Direction and strength based on change
         if change_24h > 5:
             direction = "LONG"
             emoji = "🟢"
@@ -237,20 +255,30 @@ class AIAssistant:
             emoji = "⚖️"
             strength = "Weak"
             trend = "Sideways"
+            base_confidence = 35  # Lower confidence for sideways
         
-        # Calculate entry, TP, SL
-        if direction == "LONG":
+        # Apply confidence threshold - if below 65%, neutralize the signal
+        final_confidence = min(95, base_confidence)
+        if final_confidence < 65:
+            direction = "NEUTRAL"
+            emoji = "⚖️"
+            strength = "Weak Signal"
+            trend = "Uncertain"
+        
+        # Calculate entry, TP, SL - NEUTRAL uses same entry as current price
+        if direction == "LONG" and final_confidence >= 65:
             entry_price = price * 0.999  # Slight below current
             take_profit = price * 1.03   # 3% profit
             stop_loss = price * 0.98     # 2% loss
-        elif direction == "SHORT":
+        elif direction == "SHORT" and final_confidence >= 65:
             entry_price = price * 1.001  # Slight above current
             take_profit = price * 0.97   # 3% profit
             stop_loss = price * 1.02     # 2% loss
         else:
+            # NEUTRAL or low confidence - same entry as current price
             entry_price = price
-            take_profit = price * 1.02
-            stop_loss = price * 0.98
+            take_profit = price * 1.01   # Minimal target
+            stop_loss = price * 0.99     # Minimal stop
         
         return {
             'direction': direction,
@@ -260,7 +288,8 @@ class AIAssistant:
             'entry_price': entry_price,
             'take_profit': take_profit,
             'stop_loss': stop_loss,
-            'strategy': 'Momentum Trading',
+            'confidence': final_confidence,
+            'strategy': 'Momentum Trading' if final_confidence >= 65 else 'Wait for Confirmation',
             'time_horizon': '4-24 hours'
         }
     
@@ -557,14 +586,13 @@ class AIAssistant:
 
 🎯 **TRADING SETUP:**
 • **Direction**: {futures_signals['direction']} {futures_signals['emoji']}
+• **Confidence**: {confidence:.1f}%
 • **Entry**: ${futures_signals['entry']:,.6f}
 • **TP1** (50%): ${futures_signals['tp1']:,.6f}
 • **TP2** (30%): ${futures_signals['tp2']:,.6f}
 • **TP3** (20%): ${futures_signals['tp3']:,.6f}
 • **Stop Loss**: ${futures_signals['sl']:,.6f}
 • **Risk/Reward**: {futures_signals['rr']:.1f}:1
-
-📊 **CONFIDENCE LEVEL**: {confidence:.1f}%
 📈 **Strategy**: {futures_signals['strategy']}
 ⏰ **Timeframe**: {tf_display} ({futures_signals['time_horizon']})
 
@@ -642,6 +670,17 @@ class AIAssistant:
             sl = current_price * 0.98
             confidence = 45
             strategy = "Wait for SnD Confirmation"
+        
+        # Apply confidence threshold - if below 65%, neutralize signal
+        if confidence < 65:
+            direction = "NEUTRAL"
+            emoji = "⚖️"
+            entry = current_price  # Same as current price for neutral
+            tp1 = current_price * 1.005  # Minimal target
+            tp2 = current_price * 1.01
+            tp3 = current_price * 1.015
+            sl = current_price * 0.995   # Minimal stop
+            strategy = "Low Confidence - Wait for Better Setup"
         
         # Calculate risk/reward ratio
         try:
@@ -773,6 +812,17 @@ class AIAssistant:
             rr_bonus = min(1.1, 1.0 + (rr_ratio - 1.0) * 0.1) if rr_ratio > 1 else 0.9
             
             final_confidence = min(95, base_confidence * volume_multiplier * timeframe_multiplier * rr_bonus)
+            
+            # Apply 65% confidence threshold - neutralize if below
+            if final_confidence < 65:
+                direction = "NEUTRAL"
+                emoji = "⚖️"
+                entry = current_price  # Same as current price
+                tp1 = current_price * 1.005  # Minimal targets
+                tp2 = current_price * 1.01
+                tp3 = current_price * 1.015
+                sl = current_price * 0.995   # Minimal stop
+                strategy = "Low Confidence - Wait for Better Setup"
             
             # Leverage recommendation based on confidence and timeframe
             if final_confidence >= 80 and timeframe in ['4h', '1d']:
@@ -921,6 +971,7 @@ class AIAssistant:
                     
                     signals_text += f"""🔥 **{symbol} SIGNAL #{signal_count}**
 • **Direction**: {futures_signals['direction']} {futures_signals['emoji']}
+• **Confidence**: {futures_signals['confidence']:.1f}%
 • **Current**: {price_format}
 • **Entry**: ${futures_signals['entry']:,.6f}
 • **TP1**: ${futures_signals['tp1']:,.6f} \\(50%\\)
@@ -928,7 +979,6 @@ class AIAssistant:
 • **TP3**: ${futures_signals['tp3']:,.6f} \\(20%\\)
 • **SL**: ${futures_signals['sl']:,.6f}
 • **R:R**: {futures_signals['rr']:.1f}:1
-• **Confidence**: {futures_signals['confidence']:.1f}%
 
 """
                 
