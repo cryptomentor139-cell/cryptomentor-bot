@@ -354,8 +354,8 @@ class AIAssistant:
             stop_loss = price * (1 - volatility_factor * 1.5)     # Dynamic SL
         elif direction == "SHORT" and final_confidence >= 75:
             entry_price = price * (1 + volatility_factor * 0.3)   # Better entry on bounce
-            take_profit = price * (1 - volatility_factor * 2.5)   # Dynamic TP
-            stop_loss = price * (1 + volatility_factor * 1.5)     # Dynamic SL
+            take_profit = price * (1 - volatility_factor * 2.5)   # Dynamic TP (lower price)
+            stop_loss = price * (1 + volatility_factor * 1.5)     # Dynamic SL (higher price)
         else:
             # NEUTRAL or low confidence
             entry_price = price
@@ -1203,9 +1203,9 @@ class AIAssistant:
             direction = "SHORT"
             emoji = "🔴"
             entry = supply_1_mid
-            tp1 = demand_1_mid
-            tp2 = snd_zones['demand_2_high']
-            tp3 = snd_zones['demand_2_low']
+            tp1 = demand_1_mid                    # TP1: First target
+            tp2 = snd_zones['demand_1_low']       # TP2: Second target (lower)
+            tp3 = snd_zones['demand_2_low']       # TP3: Final target (lowest)
             sl = snd_zones['supply_2_low']
             confidence = 75
             strategy = "SnD Reversal Short"
@@ -1350,9 +1350,9 @@ class AIAssistant:
                 direction = "SHORT"
                 emoji = "🔴"
                 entry = current_price * 1.0005  # Optimal entry
-                tp1 = demand_1_mid
-                tp2 = snd_zones['demand_1_low']
-                tp3 = snd_zones['demand_2_high']
+                tp1 = demand_1_mid                    # TP1: First target (higher price)
+                tp2 = snd_zones['demand_1_low']       # TP2: Second target (lower price)  
+                tp3 = snd_zones['demand_2_low']       # TP3: Final target (lowest price)
                 sl = snd_zones['supply_1_high']
                 strategy = "SnD Supply Zone Reversal"
                 base_confidence = 85  # High confidence for zone reversal
@@ -1376,9 +1376,9 @@ class AIAssistant:
                     direction = "SHORT"
                     emoji = "🔴"
                     entry = current_price * 1.001
-                    tp1 = demand_1_mid
-                    tp2 = snd_zones['demand_1_low']
-                    tp3 = snd_zones['demand_2_high']
+                    tp1 = demand_1_mid                    # TP1: First target
+                    tp2 = snd_zones['demand_1_low']       # TP2: Second target (lower)
+                    tp3 = snd_zones['demand_2_low']       # TP3: Final target (lowest)
                     sl = supply_1_mid
                     strategy = "Range Breakdown Short"
                     base_confidence = 75
@@ -1458,7 +1458,7 @@ class AIAssistant:
                 direction = "NEUTRAL"
                 emoji = "⚖️"
                 entry = current_price
-                tp1 = current_price * 1.005
+                tp1 = current_price * 1.005   # Minimal upside for neutral
                 tp2 = current_price * 1.01
                 tp3 = current_price * 1.015
                 sl = current_price * 0.995
