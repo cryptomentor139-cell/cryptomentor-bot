@@ -429,7 +429,7 @@ class AIAssistant:
         else:
             global_sentiment = "💥 BEARISH"
             sentiment_emoji = "💥"
-        
+
         # Adjust base score with volume multiplier before capping
         adjusted_base_score = base_score * confidence_multiplier
         final_score = max(0, min(100, adjusted_base_score))
@@ -1568,26 +1568,26 @@ class AIAssistant:
         entry = futures_signals.get('entry', 0)
         sl = futures_signals.get('sl', 0)
         tp1 = futures_signals.get('tp1', 0)
-        
+
         if confidence < 65:
             return """🛑 **WAIT**: Low confidence signal
 📚 **Advice**: Study charts, wait for better setup
 ⏰ **Action**: Set alerts at key levels"""
-        
+
         if direction == "LONG":
             return f"""🚀 **BUY PLAN**:
 1️⃣ Set buy order at `${entry:,.6f}`
 2️⃣ Set stop loss at `${sl:,.6f}`
 3️⃣ Set take profit at `${tp1:,.6f}`
 4️⃣ Watch for volume confirmation"""
-        
+
         elif direction == "SHORT":
             return f"""📉 **SELL PLAN**:
 1️⃣ Set sell order at `${entry:,.6f}`
 2️⃣ Set stop loss at `${sl:,.6f}`
 3️⃣ Set take profit at `${tp1:,.6f}`
 4️⃣ Watch for volume confirmation"""
-        
+
         else:
             return f"""⏳ **MONITOR {symbol}**:
 📊 Watch key support/resistance levels
@@ -1645,8 +1645,8 @@ class AIAssistant:
                     snd_zones = self._get_enhanced_supply_demand_zones(symbol, current_price, crypto_api)
                     futures_signals = self._generate_futures_signals(symbol, current_price, timeframe, snd_zones)
 
-                    # Skip if confidence too low - lowered threshold for more signals
-                    if futures_signals['confidence'] < 60:
+                    # Skip if confidence too low - consistent with individual futures analysis
+                    if futures_signals['confidence'] < 70:
                         continue
 
                     signal_count += 1
@@ -1695,7 +1695,7 @@ class AIAssistant:
                 signals_text += f"""📋 **SUMMARY:**
 
 • **Total Signals**: {signal_count}
-• **Quality Filter**: 60%+ confidence only
+• **Quality Filter**: 70%+ confidence only
 • **Risk Management**: Max 2% per position
 
 ⚠️ **TRADING RULES:**
