@@ -1406,6 +1406,7 @@ class AIAssistant:
             # Trading implications
             if avg_change > 2:
                 implications = """
+
 💡 **TRADING IMPLICATIONS:**
 • 🚀 Strong bullish momentum - Ride the trend
 • 🎯 Focus on breakout strategies
@@ -1413,6 +1414,7 @@ class AIAssistant:
 • ⚠️ Watch for overextension signals"""
                 
                 opportunities = """
+
 🎯 **MARKET OPPORTUNITIES:**
 • 🏃 Momentum trading on major breakouts
 • ⚡ Long positions on pullbacks to support
@@ -1421,6 +1423,7 @@ class AIAssistant:
 • 📈 Options strategies (call spreads)"""
                 
                 risk_assessment = """
+
 ⚠️ **RISK ASSESSMENT:**
 • 🔥 HIGH VOLATILITY - Reduce position sizes
 • 📊 Tight stops recommended (3-5%)
@@ -1431,6 +1434,7 @@ class AIAssistant:
                 
             elif avg_change > -2:
                 implications = """
+
 💡 **TRADING IMPLICATIONS:**
 • 😐 Neutral market - Range trading strategies optimal
 • 🎯 Focus on support/resistance levels
@@ -1438,6 +1442,7 @@ class AIAssistant:
 • ⚠️ Altcoins may underperform - Be selective"""
                 
                 opportunities = """
+
 🎯 **MARKET OPPORTUNITIES:**
 • 🏃 Range trading between key support/resistance
 • ⚡ Scalping opportunities in high-volume pairs
@@ -1446,6 +1451,7 @@ class AIAssistant:
 • 📈 Futures vs spot price discrepancies"""
                 
                 risk_assessment = """
+
 ⚠️ **RISK ASSESSMENT:**
 • 😴 LOW VOLATILITY - May increase position sizes slightly
 • 📊 Wider stops acceptable (5-7%)
@@ -1456,6 +1462,7 @@ class AIAssistant:
                 
             else:
                 implications = """
+
 💡 **TRADING IMPLICATIONS:**
 • 📉 Bearish pressure - Short strategies preferred
 • 🎯 Focus on breakdown levels
@@ -1463,6 +1470,7 @@ class AIAssistant:
 • ⚠️ Cash preservation mode - Defensive positioning"""
                 
                 opportunities = """
+
 🎯 **MARKET OPPORTUNITIES:**
 • 🏃 Short selling on bounce failures
 • ⚡ Put options strategies
@@ -1471,6 +1479,7 @@ class AIAssistant:
 • 📈 DCA only in strongest fundamentals"""
                 
                 risk_assessment = """
+
 ⚠️ **RISK ASSESSMENT:**
 • 💥 HIGH RISK - Minimize exposure
 • 📊 Very tight stops (2-3%)
