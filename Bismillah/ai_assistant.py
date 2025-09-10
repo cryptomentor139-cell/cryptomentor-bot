@@ -592,6 +592,239 @@ class AIAssistant:
         else:
             return "Low"
 
+    def _generate_coin_recommendations(self, market_data: List[Dict], avg_change: float, btc_dominance: float) -> str:
+        """Generate intelligent coin recommendations based on market analysis"""
+        try:
+            # Sort coins by performance and analyze patterns
+            sorted_by_performance = sorted(market_data, key=lambda x: x['change_24h'], reverse=True)
+            sorted_by_volume = sorted(market_data, key=lambda x: x['volume_24h'], reverse=True)
+            
+            # Categorize coins
+            hot_performers = [coin for coin in sorted_by_performance if coin['change_24h'] > 5]
+            stable_performers = [coin for coin in market_data if 1 <= coin['change_24h'] <= 5]
+            oversold_candidates = [coin for coin in sorted_by_performance if coin['change_24h'] < -3]
+            
+            recommendations = """
+
+🏆 **RECOMMENDED COINS TO WATCH:**"""
+
+            # Best entry opportunities based on market conditions
+            if avg_change > 2:  # Bull market
+                recommendations += """
+
+💎 **BULLISH MOMENTUM PLAYS:**"""
+                for i, coin in enumerate(hot_performers[:3], 1):
+                    symbol = coin['symbol']
+                    change = coin['change_24h']
+                    price = coin['price']
+                    
+                    if price < 1:
+                        price_str = f"${price:.6f}"
+                    elif price < 100:
+                        price_str = f"${price:.4f}"
+                    else:
+                        price_str = f"${price:,.2f}"
+                    
+                    recommendations += f"""
+• **{i}. {symbol}** 🚀 {price_str} (+{change:.1f}%)
+  └─ Strategy: Momentum continuation, watch for pullbacks"""
+
+            elif avg_change < -2:  # Bear market
+                recommendations += """
+
+💰 **OVERSOLD RECOVERY CANDIDATES:**"""
+                for i, coin in enumerate(oversold_candidates[:3], 1):
+                    symbol = coin['symbol']
+                    change = coin['change_24h']
+                    price = coin['price']
+                    
+                    if price < 1:
+                        price_str = f"${price:.6f}"
+                    elif price < 100:
+                        price_str = f"${price:.4f}"
+                    else:
+                        price_str = f"${price:,.2f}"
+                    
+                    recommendations += f"""
+• **{i}. {symbol}** 📉 {price_str} ({change:.1f}%)
+  └─ Strategy: DCA on support levels, long-term accumulation"""
+
+            else:  # Neutral market
+                recommendations += """
+
+⚖️ **BALANCED PORTFOLIO PICKS:**"""
+                # Mix of stable and high volume coins
+                balanced_picks = []
+                
+                # Add top volume coins
+                for coin in sorted_by_volume[:2]:
+                    if coin not in balanced_picks:
+                        balanced_picks.append(coin)
+                
+                # Add stable performers
+                for coin in stable_performers[:2]:
+                    if coin not in balanced_picks and len(balanced_picks) < 3:
+                        balanced_picks.append(coin)
+                
+                # Fill with major coins if needed
+                for coin in market_data:
+                    if coin['symbol'] in ['BTC', 'ETH'] and coin not in balanced_picks and len(balanced_picks) < 3:
+                        balanced_picks.append(coin)
+                
+                for i, coin in enumerate(balanced_picks[:3], 1):
+                    symbol = coin['symbol']
+                    change = coin['change_24h']
+                    price = coin['price']
+                    volume = coin['volume_24h']
+                    
+                    if price < 1:
+                        price_str = f"${price:.6f}"
+                    elif price < 100:
+                        price_str = f"${price:.4f}"
+                    else:
+                        price_str = f"${price:,.2f}"
+                    
+                    if volume > 1000000000:
+                        vol_str = f"${volume/1000000000:.1f}B"
+                    elif volume > 1000000:
+                        vol_str = f"${volume/1000000:.0f}M"
+                    else:
+                        vol_str = f"${volume:,.0f}"
+                    
+                    strategy = "Range trading" if abs(change) < 2 else "Momentum play" if change > 0 else "Support bounce"
+                    
+                    recommendations += f"""
+• **{i}. {symbol}** 📊 {price_str} ({change:+.1f}%) Vol: {vol_str}
+  └─ Strategy: {strategy}"""
+
+            # Add BTC dominance based recommendations
+            if btc_dominance > 55:
+                recommendations += """
+
+🟠 **BTC DOMINANCE INSIGHTS:**
+• High BTC dominance - Focus on BTC & major alts
+• Altcoin season may be delayed
+• Consider BTC pairs for trading"""
+            elif btc_dominance < 45:
+                recommendations += """
+
+🌈 **ALTCOIN SEASON SIGNALS:**
+• Low BTC dominance - Altcoins gaining strength
+• Look for quality altcoin opportunities
+• Diversification recommended"""
+
+            return recommendations
+            
+        except Exception as e:
+            return """
+
+🏆 **RECOMMENDED COINS TO WATCH:**
+• Monitor market data untuk rekomendasi real-time
+• Focus pada top volume coins
+• Analisis technical sebelum entry"""
+
+    def _generate_best_entry_analysis(self, market_data: List[Dict], global_sentiment: str) -> str:
+        """Generate best entry timing and strategy analysis"""
+        try:
+            entry_analysis = """
+
+🎯 **BEST ENTRY STRATEGIES:**"""
+
+            # Analyze current market timing
+            current_hour = datetime.now().hour
+            
+            # Market timing analysis
+            if 14 <= current_hour <= 22:  # US hours
+                market_session = "🇺🇸 US Market Active - High liquidity"
+                timing_advice = "Optimal for high-volume trades"
+            elif 8 <= current_hour <= 16:  # European hours
+                market_session = "🇪🇺 European Market Active - Good liquidity"
+                timing_advice = "Good for trend following"
+            elif 0 <= current_hour <= 6:  # Asian hours
+                market_session = "🇯🇵 Asian Market Active - Moderate liquidity"
+                timing_advice = "Watch for gap plays"
+            else:
+                market_session = "🌙 Low Activity Period"
+                timing_advice = "Lower volumes, careful position sizing"
+
+            entry_analysis += f"""
+
+⏰ **MARKET TIMING:**
+• {market_session}
+• {timing_advice}
+
+💡 **ENTRY STRATEGIES BY SENTIMENT:**"""
+
+            if "BULLISH" in global_sentiment:
+                entry_analysis += """
+• **Buy the Dip Strategy**: Wait for 2-3% pullbacks
+• **Momentum Entry**: Break above resistance with volume
+• **DCA Strategy**: Split entries across 3-5 levels
+• **Risk Level**: Medium (take profits at +15-25%)"""
+
+            elif "BEARISH" in global_sentiment:
+                entry_analysis += """
+• **Short Bounce Strategy**: Sell strength, short rallies
+• **Cash Position**: Preserve capital, wait for capitulation
+• **DCA Bottom**: Only in strongest fundamentals
+• **Risk Level**: High (tight stops, small positions)"""
+
+            else:  # NEUTRAL
+                entry_analysis += """
+• **Range Trading**: Buy support, sell resistance
+• **Breakout Entry**: Wait for clear direction with volume
+• **Accumulation**: Gradual building of core positions
+• **Risk Level**: Low-Medium (5-10% stops)"""
+
+            # Technical entry conditions
+            entry_analysis += """
+
+📊 **TECHNICAL ENTRY CONDITIONS:**
+• **Volume Confirmation**: Entry only with 20%+ above average volume
+• **Support/Resistance**: Use key levels for timing
+• **Risk Management**: Never risk >2% per trade
+• **Position Sizing**: Inverse correlation with volatility
+
+🔥 **PRIORITY ACTION ITEMS:**"""
+
+            # Generate specific action items based on data
+            high_volume_coins = [coin for coin in market_data if coin['volume_24h'] > 1000000000]
+            
+            if high_volume_coins:
+                top_vol_coin = max(high_volume_coins, key=lambda x: x['volume_24h'])
+                entry_analysis += f"""
+• Monitor **{top_vol_coin['symbol']}** - Highest volume ({top_vol_coin['volume_24h']/1000000000:.1f}B)"""
+
+            # Add top performers
+            top_performer = max(market_data, key=lambda x: x['change_24h'])
+            if top_performer['change_24h'] > 1:
+                entry_analysis += f"""
+• Watch **{top_performer['symbol']}** momentum - Leading gainer (+{top_performer['change_24h']:.1f}%)"""
+
+            # Add major coins status
+            btc_data = next((coin for coin in market_data if coin['symbol'] == 'BTC'), None)
+            eth_data = next((coin for coin in market_data if coin['symbol'] == 'ETH'), None)
+            
+            if btc_data:
+                btc_trend = "bullish" if btc_data['change_24h'] > 1 else "bearish" if btc_data['change_24h'] < -1 else "neutral"
+                entry_analysis += f"""
+• **BTC** trend is {btc_trend} - Market leader signal"""
+
+            if eth_data:
+                eth_trend = "bullish" if eth_data['change_24h'] > 1 else "bearish" if eth_data['change_24h'] < -1 else "neutral"
+                entry_analysis += f"""
+• **ETH** showing {eth_trend} momentum - DeFi sentiment"""
+
+            return entry_analysis
+
+        except Exception as e:
+            return """
+
+🎯 **BEST ENTRY STRATEGIES:**
+• Monitor volume dan momentum untuk timing optimal
+• Use technical analysis untuk entry/exit points
+• Risk management adalah prioritas utama"""
+
     def _generate_trading_recommendations(self, signal_data: Dict, sentiment: Dict, snd_zones: Dict, current_price: float) -> str:
         """Generate trading recommendations"""
         direction = signal_data.get('direction', 'NEUTRAL')
@@ -1490,6 +1723,12 @@ class AIAssistant:
 
             analysis += implications + opportunities + risk_assessment
 
+            # Enhanced coin recommendations and analysis
+            coin_recommendations = self._generate_coin_recommendations(market_data, avg_change, btc_dominance)
+            best_entry_analysis = self._generate_best_entry_analysis(market_data, global_sentiment)
+            
+            analysis += coin_recommendations + best_entry_analysis
+
             # Key levels to watch
             btc_support = btc_data['price'] * 0.95 if btc_data else 105000
             btc_resistance = btc_data['price'] * 1.05 if btc_data else 115000
@@ -1497,6 +1736,7 @@ class AIAssistant:
             market_cap_high = total_market_cap * 1.05
 
             analysis += f"""
+
 🚨 **KEY LEVELS TO WATCH:**
 • **BTC Dominance Support**: {btc_dominance-2:.1f}%
 • **BTC Dominance Resistance**: {btc_dominance+2:.1f}%
