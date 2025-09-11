@@ -1223,17 +1223,37 @@ class AIAssistant:
 
         final_confidence = min(95, confidence * timeframe_multiplier)
 
+        # Enhanced validity and time horizon for basic signals
+        validity_hours = {
+            '15m': '1-3 hours', '30m': '2-6 hours', '1h': '4-12 hours',
+            '4h': '12-48 hours', '1d': '2-7 days', '1w': '1-3 weeks'
+        }.get(timeframe, '6-24 hours')
+
+        time_horizon = {
+            '15m': 'Scalping (15-90 min)', '30m': 'Quick Swing (1-6 hours)',
+            '1h': 'Intraday (4-18 hours)', '4h': 'Swing (1-4 days)',
+            '1d': 'Position (3-10 days)', '1w': 'Long-term (1-6 weeks)'
+        }.get(timeframe, 'Medium-term')
+
         return {
             'direction': direction,
             'emoji': emoji,
-            'entry': entry,
-            'tp1': tp1,
-            'tp2': tp2,
-            'tp3': tp3,
-            'sl': sl,
-            'rr': rr_ratio,
-            'confidence': final_confidence,
-            'strategy': strategy
+            'entry': float(entry) if entry else current_price,
+            'tp1': float(tp1) if tp1 else current_price * 1.02,
+            'tp2': float(tp2) if tp2 else current_price * 1.04,
+            'tp3': float(tp3) if tp3 else current_price * 1.06,
+            'sl': float(sl) if sl else current_price * 0.98,
+            'rr': float(rr_ratio) if rr_ratio else 1.0,
+            'confidence': float(final_confidence),
+            'strategy': str(strategy),
+            'leverage_rec': '3-5x',
+            'validity': str(validity_hours),
+            'time_horizon': str(time_horizon),
+            'volume_strength': 'Medium',
+            'distance_to_supply': 2.0,
+            'distance_to_demand': 2.0,
+            'zone_precision': 5,
+            'market_timing': 1.0
         }
 
     def _generate_advanced_futures_signals(self, symbol: str, current_price: float, timeframe: str, snd_zones: Dict, volume_24h: float) -> Dict:
@@ -1487,7 +1507,7 @@ class AIAssistant:
             else:
                 leverage_rec = "1-3x"
 
-            # Enhanced validity and time horizon
+            # Enhanced validity and time horizon with comprehensive mapping
             validity_hours = {
                 '15m': '1-3 hours', '30m': '2-6 hours', '1h': '4-12 hours',
                 '4h': '12-48 hours', '1d': '2-7 days', '1w': '1-3 weeks'
@@ -1499,30 +1519,51 @@ class AIAssistant:
                 '1d': 'Position (3-10 days)', '1w': 'Long-term (1-6 weeks)'
             }.get(timeframe, 'Medium-term')
 
+            # Ensure all required fields are present for futures signal response
             return {
                 'direction': direction,
                 'emoji': emoji,
-                'entry': entry,
-                'tp1': tp1,
-                'tp2': tp2,
-                'tp3': tp3,
-                'sl': sl,
-                'rr': rr_ratio,
-                'confidence': round(final_confidence, 1),
-                'strategy': strategy,
-                'leverage_rec': leverage_rec,
-                'validity': validity_hours,
-                'time_horizon': time_horizon,
-                'volume_strength': volume_status,
-                'distance_to_supply': distance_to_supply,
-                'distance_to_demand': distance_to_demand,
-                'zone_precision': zone_precision_bonus,
-                'market_timing': timing_bonus
+                'entry': float(entry) if entry else current_price,
+                'tp1': float(tp1) if tp1 else current_price * 1.02,
+                'tp2': float(tp2) if tp2 else current_price * 1.04,
+                'tp3': float(tp3) if tp3 else current_price * 1.06,
+                'sl': float(sl) if sl else current_price * 0.98,
+                'rr': float(rr_ratio) if rr_ratio else 1.0,
+                'confidence': round(float(final_confidence), 1),
+                'strategy': str(strategy),
+                'leverage_rec': str(leverage_rec),
+                'validity': str(validity_hours),
+                'time_horizon': str(time_horizon),
+                'volume_strength': str(volume_status),
+                'distance_to_supply': float(distance_to_supply),
+                'distance_to_demand': float(distance_to_demand),
+                'zone_precision': int(zone_precision_bonus),
+                'market_timing': float(timing_bonus)
             }
 
         except Exception as e:
-            # Fallback to basic signals
-            return self._generate_futures_signals(symbol, current_price, timeframe, snd_zones)
+            print(f"Error in advanced futures signals: {e}")
+            # Comprehensive fallback with all required fields
+            return {
+                'direction': 'NEUTRAL',
+                'emoji': '⚖️',
+                'entry': float(current_price),
+                'tp1': float(current_price * 1.02),
+                'tp2': float(current_price * 1.04),
+                'tp3': float(current_price * 1.06),
+                'sl': float(current_price * 0.98),
+                'rr': 1.0,
+                'confidence': 50.0,
+                'strategy': 'Error Fallback - Wait for Better Signal',
+                'leverage_rec': '1-3x',
+                'validity': '1-4 hours',
+                'time_horizon': 'Short-term monitoring',
+                'volume_strength': 'Unknown',
+                'distance_to_supply': 2.0,
+                'distance_to_demand': 2.0,
+                'zone_precision': 0,
+                'market_timing': 1.0
+            }
 
     def _analyze_market_structure(self, current_price: float, snd_zones: Dict, change_24h: float) -> str:
         """Analyze market structure for futures trading"""
