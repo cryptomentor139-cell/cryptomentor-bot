@@ -1332,7 +1332,7 @@ class AIAssistant:
         }
 
     def _generate_advanced_futures_signals(self, symbol: str, current_price: float, timeframe: str, snd_zones: Dict, volume_24h: float) -> Dict:
-        """Generate advanced futures trading signals with enhanced confidence analysis"""
+        """Generate advanced futures trading signals with enhanced confidence analysis and proper R:R ratios"""
         try:
             # Advanced multi-layer confidence calculation with REAL-TIME data
             supply_1_mid = (snd_zones['supply_1_low'] + snd_zones['supply_1_high']) / 2
@@ -1340,6 +1340,18 @@ class AIAssistant:
 
             # Get real 24h change for dynamic calculation
             change_24h = price_data.get('change_24h', 0) if 'price_data' in locals() else 0
+
+            # Timeframe-specific movement expectations for proper R:R calculation
+            timeframe_multipliers = {
+                '15m': {'min_move': 0.008, 'max_move': 0.025, 'volatility': 1.5},  # Scalping: 0.8-2.5%
+                '30m': {'min_move': 0.012, 'max_move': 0.035, 'volatility': 1.8},  # Quick swing: 1.2-3.5%
+                '1h': {'min_move': 0.018, 'max_move': 0.050, 'volatility': 2.2},   # Intraday: 1.8-5%
+                '4h': {'min_move': 0.035, 'max_move': 0.080, 'volatility': 3.0},   # Swing: 3.5-8%
+                '1d': {'min_move': 0.050, 'max_move': 0.120, 'volatility': 4.0},   # Position: 5-12%
+                '1w': {'min_move': 0.100, 'max_move': 0.250, 'volatility': 6.0}    # Long-term: 10-25%
+            }
+            
+            tf_config = timeframe_multipliers.get(timeframe, timeframe_multipliers['4h'])
 
             # Enhanced volume analysis with progressive scoring - REAL-TIME
             volume_multiplier = 1.0
@@ -1541,12 +1553,74 @@ class AIAssistant:
                 strategy = "Outside Optimal Zones"
                 base_confidence = 40
 
-            # Calculate risk/reward ratio with precision
+            # Enhanced R:R calculation with timeframe-specific targets and minimum 1.5:1 requirement
             try:
-                risk = abs(entry - sl)
-                reward = abs(tp1 - entry)
-                rr_ratio = reward / risk if risk > 0 else 1.0
-            except:
+                # Calculate stop loss based on timeframe and volatility
+                if direction == "LONG":
+                    # Dynamic stop loss calculation for LONG positions
+                    atr_stop = current_price * (tf_config['min_move'] * 0.8)  # Tighter stop
+                    zone_stop = abs(current_price - demand_1_mid) * 1.2       # Zone-based stop
+                    sl = current_price - max(atr_stop, zone_stop)
+                    
+                    # Calculate targets with proper R:R ratios
+                    risk = abs(entry - sl)
+                    
+                    # Ensure minimum 1.5:1 R:R ratio
+                    min_reward = risk * 1.5
+                    
+                    # Timeframe-specific target calculation
+                    tp1_distance = max(min_reward, current_price * tf_config['min_move'])
+                    tp2_distance = current_price * (tf_config['min_move'] * 1.8)
+                    tp3_distance = current_price * tf_config['max_move']
+                    
+                    tp1 = entry + tp1_distance
+                    tp2 = entry + tp2_distance  
+                    tp3 = entry + tp3_distance
+                    
+                elif direction == "SHORT":
+                    # Dynamic stop loss calculation for SHORT positions
+                    atr_stop = current_price * (tf_config['min_move'] * 0.8)  # Tighter stop
+                    zone_stop = abs(current_price - supply_1_mid) * 1.2       # Zone-based stop
+                    sl = current_price + max(atr_stop, zone_stop)
+                    
+                    # Calculate targets with proper R:R ratios
+                    risk = abs(sl - entry)
+                    
+                    # Ensure minimum 1.5:1 R:R ratio
+                    min_reward = risk * 1.5
+                    
+                    # Timeframe-specific target calculation
+                    tp1_distance = max(min_reward, current_price * tf_config['min_move'])
+                    tp2_distance = current_price * (tf_config['min_move'] * 1.8)
+                    tp3_distance = current_price * tf_config['max_move']
+                    
+                    tp1 = entry - tp1_distance
+                    tp2 = entry - tp2_distance
+                    tp3 = entry - tp3_distance
+                else:
+                    # NEUTRAL/WAIT positions
+                    sl = current_price * 0.995
+                    tp1 = current_price * 1.005
+                    tp2 = current_price * 1.01
+                    tp3 = current_price * 1.015
+                
+                # Final R:R calculation
+                if direction in ["LONG", "SHORT"]:
+                    risk = abs(entry - sl)
+                    reward = abs(tp1 - entry)
+                    rr_ratio = reward / risk if risk > 0 else 1.0
+                    
+                    # Enforce minimum 1.5:1 R:R ratio - reject signals below this
+                    if rr_ratio < 1.5:
+                        direction = "NEUTRAL"
+                        emoji = "⚖️"
+                        strategy = f"Poor R:R ({rr_ratio:.1f}:1) - Signal Rejected"
+                        base_confidence = 30  # Low confidence for poor R:R
+                else:
+                    rr_ratio = 1.0
+                    
+            except Exception as e:
+                print(f"R:R calculation error: {e}")
                 rr_ratio = 1.0
 
             # Enhanced confidence multipliers
@@ -1637,15 +1711,34 @@ class AIAssistant:
 
             # Enhanced validity and time horizon with comprehensive mapping
             validity_hours = {
-                '15m': '1-3 hours', '30m': '2-6 hours', '1h': '4-12 hours',
-                '4h': '12-48 hours', '1d': '2-7 days', '1w': '1-3 weeks'
-            }.get(timeframe, '6-24 hours')
+                '15m': '15-45 minutes', '30m': '30-90 minutes', '1h': '1-4 hours',
+                '4h': '4-16 hours', '1d': '1-3 days', '1w': '3-7 days'
+            }.get(timeframe, '2-8 hours')
 
             time_horizon = {
-                '15m': 'Scalping (15-90 min)', '30m': 'Quick Swing (1-6 hours)',
-                '1h': 'Intraday (4-18 hours)', '4h': 'Swing (1-4 days)',
-                '1d': 'Position (3-10 days)', '1w': 'Long-term (1-6 weeks)'
+                '15m': 'Scalping (Ultra-fast moves)', '30m': 'Quick Scalp (Fast moves)',
+                '1h': 'Intraday (Medium moves)', '4h': 'Swing Trading (Strong moves)',
+                '1d': 'Position Trading (Major moves)', '1w': 'Long-term (Trend moves)'
             }.get(timeframe, 'Medium-term')
+
+            # Timeframe-specific strategy names
+            strategy_mapping = {
+                '15m': 'Scalping Breakout',
+                '30m': 'Quick Momentum',
+                '1h': 'Intraday Trend',
+                '4h': 'Swing Position',
+                '1d': 'Daily Trend',
+                '1w': 'Weekly Macro'
+            }
+            
+            if strategy == "SnD Demand Zone Reversal":
+                strategy = f"{strategy_mapping.get(timeframe, 'SnD')} - Demand Reversal"
+            elif strategy == "SnD Supply Zone Reversal":
+                strategy = f"{strategy_mapping.get(timeframe, 'SnD')} - Supply Reversal"
+            elif "Range" in strategy:
+                strategy = f"{strategy_mapping.get(timeframe, 'Range')} - Range Play"
+            elif "Momentum" in strategy:
+                strategy = f"{strategy_mapping.get(timeframe, 'Momentum')} - Momentum Play"
 
             # Ensure all required fields are present for futures signal response
             return {
@@ -1782,6 +1875,18 @@ class AIAssistant:
             return "1-1.5%"
         else:
             return "0.5-1%"
+
+    def _get_timeframe_position_size(self, timeframe: str) -> str:
+        """Get position size recommendation based on timeframe"""
+        timeframe_sizes = {
+            '15m': '0.5-1% (High frequency)',
+            '30m': '0.8-1.5% (Active scalping)', 
+            '1h': '1-2% (Intraday trading)',
+            '4h': '1.5-2.5% (Swing trading)',
+            '1d': '2-3% (Position trading)',
+            '1w': '2-4% (Long-term holds)'
+        }
+        return timeframe_sizes.get(timeframe, '1-2%')
 
     def _calculate_professional_indicators(self, symbol: str, current_price: float, change_24h: float, snd_zones: Dict, crypto_api=None) -> Dict:
         """Calculate professional technical indicators for futures analysis"""
@@ -1940,7 +2045,7 @@ class AIAssistant:
         return "\n".join(insights)
 
     async def generate_futures_signals(self, language: str = 'id', crypto_api=None, query_args: List = None) -> str:
-        """Generate multiple futures signals for top cryptocurrencies"""
+        """Generate multiple futures signals for top cryptocurrencies with timeframe-specific strategies"""
         try:
             # Expanded symbols list - scan top 25 coins for better signal discovery
             symbols = [
@@ -1949,21 +2054,39 @@ class AIAssistant:
                 'DOGE', 'SHIB', 'PEPE', 'TRX', 'XLM'
             ]
 
-            # Parse query args if provided
+            # Parse query args if provided with enhanced timeframe detection
             timeframe = '4h'  # Default timeframe
+            valid_timeframes = ['15m', '30m', '1h', '4h', '1d', '1w']
+            
             if query_args:
                 for arg in query_args:
+                    arg_lower = arg.lower()
                     arg_upper = arg.upper()
-                    if any(tf in arg_upper for tf in ['M', 'H', 'D', 'W']):
-                        timeframe = arg.lower()
+                    
+                    # Enhanced timeframe detection
+                    if arg_lower in valid_timeframes:
+                        timeframe = arg_lower
+                    elif arg_lower.replace('min', 'm').replace('hour', 'h').replace('day', 'd').replace('week', 'w') in valid_timeframes:
+                        timeframe = arg_lower.replace('min', 'm').replace('hour', 'h').replace('day', 'd').replace('week', 'w')
                     elif arg_upper in symbols:
                         symbols = [arg_upper]  # Focus on specific symbol if requested
+
+            # Timeframe-specific descriptions
+            timeframe_descriptions = {
+                '15m': '⚡ Scalping - Ultra-fast entries/exits',
+                '30m': '🔥 Quick Scalp - Fast momentum plays', 
+                '1h': '📈 Intraday - Medium-term moves',
+                '4h': '⭐ Swing - Strong directional moves',
+                '1d': '💎 Position - Major trend moves',
+                '1w': '🏛️ Long-term - Macro trend plays'
+            }
 
             signals_text = f"""🎯 **FUTURES SIGNALS** ({timeframe.upper()})
 
 📊 **{datetime.now().strftime('%H:%M WIB')}**
-⚡ **TF**: {timeframe.upper()} | 🔍 **SnD + Volume**
-📈 **Scan**: Top 25 coins
+⚡ **Strategy**: {timeframe_descriptions.get(timeframe, timeframe.upper())}
+🔍 **Method**: SnD + Volume + R:R ≥1.5:1
+📈 **Scan**: Top 25 coins | **Min R:R**: 1.5:1
 
 """
 
@@ -1991,8 +2114,10 @@ class AIAssistant:
                     snd_zones = self._get_enhanced_supply_demand_zones(symbol, current_price, crypto_api)
                     futures_signals = self._generate_advanced_futures_signals(symbol, current_price, timeframe, snd_zones, volume_24h)
 
-                    # Only include signals with confidence >= 65% AND directional (LONG/SHORT)
-                    if futures_signals['confidence'] >= 65 and futures_signals['direction'] in ['LONG', 'SHORT']:
+                    # Enhanced filtering: confidence >= 65%, directional signal, AND minimum R:R 1.5:1
+                    if (futures_signals['confidence'] >= 65 and 
+                        futures_signals['direction'] in ['LONG', 'SHORT'] and 
+                        futures_signals['rr'] >= 1.5):
                         signals_found.append({
                             'symbol': symbol,
                             'signals': futures_signals,
@@ -2106,15 +2231,17 @@ class AIAssistant:
 
                 signals_text += f"""📊 **SUMMARY**:
 • **Scanned**: {total_scanned} coins
-• **Found**: {len(top_signals)} signals ({len(top_signals)/total_scanned*100:.1f}%)
-• **Market**: {long_signals} LONG | {short_signals} SHORT
-• **Avg**: {avg_confidence:.0f}% | Premium: {premium_signals}
+• **Found**: {len(top_signals)} quality signals ({len(top_signals)/total_scanned*100:.1f}%)
+• **Market**: {long_signals} LONG | {short_signals} SHORT  
+• **Avg Confidence**: {avg_confidence:.0f}% | Premium: {premium_signals}
+• **Min R:R**: 1.5:1 | **TF**: {timeframe_descriptions.get(timeframe, timeframe.upper())}
 
-⚠️ **RULES**:
-• **Size**: 1-3% per trade
-• **Risk**: Always use stop loss
-• **Valid**: {timeframe.upper()} periods
-• **Entry**: Volume confirmation required
+⚠️ **{timeframe.upper()} TRADING RULES**:
+• **Position Size**: {self._get_timeframe_position_size(timeframe)}
+• **Hold Time**: {validity_hours.get(timeframe, '2-8 hours')}
+• **R:R Minimum**: 1.5:1 (enforced)
+• **Stop Loss**: Always required BEFORE entry
+• **Volume**: Confirmation essential for {timeframe.upper()}
 
 """
             else:
