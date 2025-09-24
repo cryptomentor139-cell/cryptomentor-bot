@@ -1017,7 +1017,7 @@ class AIAssistant:
             # Update progress: Stage 1 - Data fetching
             if user_id and progress_tracker:
                 await progress_tracker.update_progress(user_id, 15, "⏳ Fetching market data...")
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(2.5)
 
             # Get current price and market data
             price_data = {}
@@ -1037,7 +1037,7 @@ class AIAssistant:
             # Update progress: Stage 2 - Enhanced Supply & Demand calculation
             if user_id and progress_tracker:
                 await progress_tracker.update_progress(user_id, 35, "🎯 Calculating Supply & Demand zones...")
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(3.0)
 
             # Get enhanced SnD zones and signals
             snd_zones = self._get_enhanced_supply_demand_zones(symbol, current_price, crypto_api)
@@ -1045,12 +1045,12 @@ class AIAssistant:
             # Update progress: Stage 3 - Market structure
             if user_id and progress_tracker:
                 await progress_tracker.update_progress(user_id, 50, "🧠 Processing market structure...")
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(2.8)
 
             # Update progress: Stage 4 - Signal generation
             if user_id and progress_tracker:
                 await progress_tracker.update_progress(user_id, 70, "⚡ Generating entry signals...")
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(4.2)
 
             # Generate signals
             futures_signals = self._generate_advanced_futures_signals(symbol, current_price, timeframe, snd_zones, volume_24h, crypto_api)
@@ -1058,7 +1058,7 @@ class AIAssistant:
             # Update progress: Stage 5 - Risk calculation
             if user_id and progress_tracker:
                 await progress_tracker.update_progress(user_id, 85, "💎 Calculating risk/reward...")
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(2.0)
 
             # Enhanced timeframe display
             tf_display = {
@@ -1191,7 +1191,7 @@ class AIAssistant:
             # Update progress: Final stage - Finalizing analysis
             if user_id and progress_tracker:
                 await progress_tracker.update_progress(user_id, 95, "✍️ Finalizing analysis...")
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(1.5)
 
             # Professional analysis output
             analysis = f"""🔍 **PROFESSIONAL FUTURES ANALYSIS - {symbol} ({timeframe.upper()})**
