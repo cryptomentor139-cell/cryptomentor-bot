@@ -966,33 +966,33 @@ class AIAssistant:
 
                     # Enhanced R:R ranking system
                     if rr >= 5.0:
-                        rr_rank = "🏆 ELITE"
+                        rr_rank = "ELITE"
                     elif rr >= 4.0:
-                        rr_rank = "💎 PREMIUM"
+                        rr_rank = "PREMIUM"
                     elif rr >= 3.5:
-                        rr_rank = "🥇 RANK #1"
+                        rr_rank = "RANK A+"
                     elif rr >= 3.0:
-                        rr_rank = "🥈 EXCELLENT"
+                        rr_rank = "EXCELLENT"
                     elif rr >= 2.5:
-                        rr_rank = "🥉 VERY GOOD"
+                        rr_rank = "VERY GOOD"
                     elif rr >= 2.0:
-                        rr_rank = "✅ GOOD"
+                        rr_rank = "GOOD"
                     elif rr >= 1.5:
-                        rr_rank = "📊 FAIR"
+                        rr_rank = "FAIR"
                     else:
-                        rr_rank = "⚠️ POOR"
+                        rr_rank = "POOR"
 
-                    signals_text += f"""**{i}. {symbol} {direction_icon} {direction}** (Confidence: {confidence:.1f}%)
+                    signals_text += f"""{i}. {symbol} {direction_icon} {direction} (Confidence: {confidence:.1f}%)
 
-🛑 **Stop Loss**: {format_signal_price(sl)}
-➡️ **Entry**: {format_signal_price(entry)}
-🎯 **TP1**: {format_signal_price(tp1)} (+{tp1_pct:.1f}%)
-🎯 **TP2**: {format_signal_price(tp2)} (+{tp2_pct:.1f}%)
-🎯 **TP3**: {format_signal_price(tp3)} (+{tp3_pct:.1f}%)
-💎 **R:R Ratio**: {rr:.1f}:1 ({rr_rank})
+Stop Loss: {format_signal_price(sl)}
+Entry: {format_signal_price(entry)}
+TP1: {format_signal_price(tp1)} (+{tp1_pct:.1f}%)
+TP2: {format_signal_price(tp2)} (+{tp2_pct:.1f}%)
+TP3: {format_signal_price(tp3)} (+{tp3_pct:.1f}%)
+R:R Ratio: {rr:.1f}:1 ({rr_rank})
 
-📈 **24h Change**: {change_24h:+.2f}%
-⚡ **Structure**: {structure_bias}
+24h Change: {change_24h:+.2f}%
+Structure: {structure_bias}
 
 """
 
