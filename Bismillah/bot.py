@@ -1261,28 +1261,14 @@ class TelegramBot:
             # Add credit status to response (credits already debited by guard)
             signals += f"\n\n{guard_message}"
 
-            # Handle long messages
+            # Handle long messages - use plain text to avoid parsing errors
             if len(signals) > 4000:
                 chunks = [signals[i:i+4000] for i in range(0, len(signals), 4000)]
-                try:
-                    await loading_msg.edit_text(chunks[0], parse_mode='MarkdownV2')
-                    for chunk in chunks[1:]:
-                        await update.message.reply_text(chunk, parse_mode='MarkdownV2')
-                except Exception as e:
-                    print(f"⚠️ Markdown error, sending as plain text: {e}")
-                    # Remove escape characters for plain text
-                    plain_chunks = [chunk.replace('\\', '') for chunk in chunks]
-                    await loading_msg.edit_text(plain_chunks[0], parse_mode=None)
-                    for chunk in plain_chunks[1:]:
-                        await update.message.reply_text(chunk, parse_mode=None)
+                await loading_msg.edit_text(chunks[0], parse_mode=None)
+                for chunk in chunks[1:]:
+                    await update.message.reply_text(chunk, parse_mode=None)
             else:
-                try:
-                    await loading_msg.edit_text(signals, parse_mode='MarkdownV2')
-                except Exception as e:
-                    print(f"⚠️ MarkdownV2 error, sending as plain text: {e}")
-                    # Remove escape characters for plain text
-                    plain_text = signals.replace('\\', '')
-                    await loading_msg.edit_text(plain_text, parse_mode=None)
+                await loading_msg.edit_text(signals, parse_mode=None)
 
         except Exception as e:
             # Cancel progress updates
