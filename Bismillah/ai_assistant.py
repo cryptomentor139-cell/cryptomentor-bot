@@ -1837,50 +1837,84 @@ class AIAssistant:
                 strategy = "Outside Optimal Zones"
                 base_confidence = min(45, base_confidence + 5)
 
-            # Enhanced R:R calculation with timeframe-specific targets and minimum 1.5:1 requirement
+            # Enhanced R:R calculation with dynamic targets for higher ratios
             try:
                 # Calculate stop loss based on timeframe and volatility
                 if direction == "LONG":
                     # Dynamic stop loss calculation for LONG positions
-                    atr_stop = current_price * (tf_config['min_move'] * 0.8)  # Tighter stop
-                    zone_stop = abs(current_price - demand_1_mid) * 1.2       # Zone-based stop
+                    atr_stop = current_price * (tf_config['min_move'] * 0.6)  # Even tighter stop for better R:R
+                    zone_stop = abs(current_price - demand_1_mid) * 0.8       # Tighter zone-based stop
                     sl = current_price - max(atr_stop, zone_stop)
 
-                    # Calculate targets with proper R:R ratios
+                    # Calculate risk first
                     risk = abs(entry - sl)
 
-                    # Ensure minimum 1.5:1 R:R ratio
-                    min_reward = risk * 1.5
+                    # Dynamic target calculation based on market conditions and timeframe
+                    # Higher volatility = higher R:R potential
+                    volatility_multiplier = 1.0
+                    if abs(change_24h) > 15:
+                        volatility_multiplier = 4.0  # Very high vol = 4:1+ potential
+                    elif abs(change_24h) > 10:
+                        volatility_multiplier = 3.5  # High vol = 3.5:1+ potential
+                    elif abs(change_24h) > 7:
+                        volatility_multiplier = 3.0  # Good vol = 3:1+ potential
+                    elif abs(change_24h) > 5:
+                        volatility_multiplier = 2.5  # Medium vol = 2.5:1+ potential
+                    elif abs(change_24h) > 3:
+                        volatility_multiplier = 2.0  # Low vol = 2:1+ potential
+                    else:
+                        volatility_multiplier = 1.8  # Very low vol = 1.8:1+ potential
 
-                    # Timeframe-specific target calculation
-                    tp1_distance = max(min_reward, current_price * tf_config['min_move'])
-                    tp2_distance = current_price * (tf_config['min_move'] * 1.8)
-                    tp3_distance = current_price * tf_config['max_move']
+                    # Timeframe-specific multiplier for higher targets
+                    tf_multiplier = {
+                        '15m': 1.5, '30m': 1.8, '1h': 2.0,
+                        '4h': 2.5, '1d': 3.0, '1w': 4.0
+                    }.get(timeframe, 2.0)
 
-                    tp1 = entry + tp1_distance
-                    tp2 = entry + tp2_distance
-                    tp3 = entry + tp3_distance
+                    # Calculate progressive targets with increasing R:R ratios
+                    base_reward = risk * volatility_multiplier * tf_multiplier
+                    
+                    tp1 = entry + (base_reward * 0.6)  # First target - conservative
+                    tp2 = entry + (base_reward * 1.0)  # Second target - base R:R
+                    tp3 = entry + (base_reward * 1.5)  # Third target - extended R:R
 
                 elif direction == "SHORT":
                     # Dynamic stop loss calculation for SHORT positions
-                    atr_stop = current_price * (tf_config['min_move'] * 0.8)  # Tighter stop
-                    zone_stop = abs(current_price - supply_1_mid) * 1.2       # Zone-based stop
+                    atr_stop = current_price * (tf_config['min_move'] * 0.6)  # Even tighter stop for better R:R
+                    zone_stop = abs(current_price - supply_1_mid) * 0.8       # Tighter zone-based stop
                     sl = current_price + max(atr_stop, zone_stop)
 
-                    # Calculate targets with proper R:R ratios
+                    # Calculate risk first
                     risk = abs(sl - entry)
 
-                    # Ensure minimum 1.5:1 R:R ratio
-                    min_reward = risk * 1.5
+                    # Dynamic target calculation based on market conditions and timeframe
+                    volatility_multiplier = 1.0
+                    if abs(change_24h) > 15:
+                        volatility_multiplier = 4.0  # Very high vol = 4:1+ potential
+                    elif abs(change_24h) > 10:
+                        volatility_multiplier = 3.5  # High vol = 3.5:1+ potential
+                    elif abs(change_24h) > 7:
+                        volatility_multiplier = 3.0  # Good vol = 3:1+ potential
+                    elif abs(change_24h) > 5:
+                        volatility_multiplier = 2.5  # Medium vol = 2.5:1+ potential
+                    elif abs(change_24h) > 3:
+                        volatility_multiplier = 2.0  # Low vol = 2:1+ potential
+                    else:
+                        volatility_multiplier = 1.8  # Very low vol = 1.8:1+ potential
 
-                    # Timeframe-specific target calculation
-                    tp1_distance = max(min_reward, current_price * tf_config['min_move'])
-                    tp2_distance = current_price * (tf_config['min_move'] * 1.8)
-                    tp3_distance = current_price * tf_config['max_move']
+                    # Timeframe-specific multiplier for higher targets
+                    tf_multiplier = {
+                        '15m': 1.5, '30m': 1.8, '1h': 2.0,
+                        '4h': 2.5, '1d': 3.0, '1w': 4.0
+                    }.get(timeframe, 2.0)
 
-                    tp1 = entry - tp1_distance
-                    tp2 = entry - tp2_distance
-                    tp3 = entry - tp3_distance
+                    # Calculate progressive targets with increasing R:R ratios
+                    base_reward = risk * volatility_multiplier * tf_multiplier
+                    
+                    tp1 = entry - (base_reward * 0.6)  # First target - conservative
+                    tp2 = entry - (base_reward * 1.0)  # Second target - base R:R
+                    tp3 = entry - (base_reward * 1.5)  # Third target - extended R:R
+
                 else:
                     # NEUTRAL/WAIT positions
                     sl = current_price * 0.995
@@ -1888,18 +1922,18 @@ class AIAssistant:
                     tp2 = current_price * 1.01
                     tp3 = current_price * 1.015
 
-                # Final R:R calculation
+                # Final R:R calculation - using TP2 as primary target for R:R calculation
                 if direction in ["LONG", "SHORT"]:
                     risk = abs(entry - sl)
-                    reward = abs(tp1 - entry)
+                    reward = abs(tp2 - entry)  # Use TP2 for main R:R calculation
                     rr_ratio = reward / risk if risk > 0 else 1.0
 
-                    # Enforce minimum 1.5:1 R:R ratio - reject signals below this
-                    if rr_ratio < 1.5:
+                    # Only reject signals with extremely poor R:R (below 1.2:1)
+                    if rr_ratio < 1.2:
                         direction = "NEUTRAL"
                         emoji = "⚖️"
                         strategy = f"Poor R:R ({rr_ratio:.1f}:1) - Signal Rejected"
-                        base_confidence = 30  # Low confidence for poor R:R
+                        base_confidence = 25  # Very low confidence for poor R:R
                 else:
                     rr_ratio = 1.0
 
@@ -1913,16 +1947,24 @@ class AIAssistant:
                 '4h': 1.05, '1d': 1.08, '1w': 1.12
             }.get(timeframe, 1.0)
 
-            # More conservative RR bonus
+            # Enhanced R:R bonus calculation for higher rewards
             rr_bonus = 1.0
-            if rr_ratio >= 3.0:
-                rr_bonus = 1.12    # Good RR but not too high bonus
+            if rr_ratio >= 5.0:
+                rr_bonus = 1.25    # Excellent RR - significant bonus
+            elif rr_ratio >= 4.0:
+                rr_bonus = 1.20    # Very good RR
+            elif rr_ratio >= 3.0:
+                rr_bonus = 1.15    # Good RR
+            elif rr_ratio >= 2.5:
+                rr_bonus = 1.12    # Above average RR
             elif rr_ratio >= 2.0:
                 rr_bonus = 1.08    # Decent RR
             elif rr_ratio >= 1.5:
-                rr_bonus = 1.05    # Minimal acceptable RR
-            elif rr_ratio < 1.0:
-                rr_bonus = 0.75    # Poor RR penalty
+                rr_bonus = 1.05    # Acceptable RR
+            elif rr_ratio >= 1.2:
+                rr_bonus = 1.02    # Minimal RR
+            else:
+                rr_bonus = 0.80    # Poor RR penalty
 
             # Conservative timing bonus
             current_hour = datetime.now().hour
@@ -1982,8 +2024,18 @@ class AIAssistant:
             preliminary_final = adjusted_confidence * hash_variation * market_multiplier * volume_multiplier
             final_confidence = min(90, max(40, preliminary_final))
 
-            # IMPROVED confidence threshold - require 55% for directional signals (better filtering)
-            if final_confidence < 55:
+            # Dynamic confidence threshold based on R:R ratio
+            confidence_threshold = 55  # Base threshold
+            
+            # Lower threshold for high R:R signals (they're worth taking with lower confidence)
+            if rr_ratio >= 4.0:
+                confidence_threshold = 45  # High R:R = lower confidence needed
+            elif rr_ratio >= 3.0:
+                confidence_threshold = 50  # Good R:R = slightly lower threshold
+            elif rr_ratio >= 2.5:
+                confidence_threshold = 52  # Above average R:R
+            
+            if final_confidence < confidence_threshold:
                 direction = "NEUTRAL"
                 emoji = "⚖️"
                 # Neutralize all prices to prevent user entry
@@ -1992,7 +2044,7 @@ class AIAssistant:
                 tp2 = current_price      # Same as entry to prevent execution
                 tp3 = current_price      # Same as entry to prevent execution
                 sl = current_price       # Same as entry to prevent execution
-                strategy = "Low Confidence - Wait for Better Setup"
+                strategy = f"Low Confidence ({final_confidence:.1f}% < {confidence_threshold}%) - Wait for Better Setup"
 
             # More realistic leverage recommendations based on honest confidence
             if final_confidence >= 85:
@@ -2674,8 +2726,23 @@ class AIAssistant:
                         tp2_pct = ((entry - tp2) / entry * 100)
                         tp3_pct = ((entry - tp3) / entry * 100)
 
-                    # R:R ranking
-                    rr_rank = "RANK #1" if rr >= 3.0 else "GOOD" if rr >= 2.0 else "FAIR"
+                    # Enhanced R:R ranking system
+                    if rr >= 5.0:
+                        rr_rank = "🏆 ELITE"
+                    elif rr >= 4.0:
+                        rr_rank = "💎 PREMIUM"
+                    elif rr >= 3.5:
+                        rr_rank = "🥇 RANK #1"
+                    elif rr >= 3.0:
+                        rr_rank = "🥈 EXCELLENT"
+                    elif rr >= 2.5:
+                        rr_rank = "🥉 VERY GOOD"
+                    elif rr >= 2.0:
+                        rr_rank = "✅ GOOD"
+                    elif rr >= 1.5:
+                        rr_rank = "📊 FAIR"
+                    else:
+                        rr_rank = "⚠️ POOR"
 
                     signals_text += f"""**{i}. {symbol} {direction_icon} {direction}** (Confidence: {confidence:.1f}%)
 
