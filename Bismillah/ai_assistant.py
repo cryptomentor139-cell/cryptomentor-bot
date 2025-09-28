@@ -157,8 +157,14 @@ class AIAssistant:
                 
                 # Check if it's a coin availability issue
                 if price_data and 'available_coins' in price_data:
-                    available_list = ', '.join(price_data['available_coins'][:10])
+                    available_list = ', '.join(price_data['available_coins'][:15])
+                    variants_info = ""
+                    if 'variants_tried' in price_data:
+                        variants_info = f"\n🔍 **Format Dicoba**: {', '.join(price_data['variants_tried'])}"
+                    
                     return f"""❌ **KOIN TIDAK TERSEDIA**: {symbol} tidak tersedia di Binance Exchange
+
+🔍 **Detail Error**: {price_data.get('last_error', 'Unknown error')}{variants_info}
 
 💡 **Koin yang Tersedia:**
 {available_list}
@@ -169,10 +175,13 @@ class AIAssistant:
 • `/analyze sol` - Solana
 • `/analyze xrp` - XRP
 • `/analyze ada` - Cardano
+• `/analyze aster` - Astar Network (jika tersedia)
 
-📊 **Info**: Bot menggunakan Binance Exchange yang memiliki 500+ koin populer, tetapi tidak semua altcoin tersedia."""
+📊 **Info**: Bot mencoba beberapa format symbol (USDT, BUSD, USDC pairs) untuk mencari {symbol} di Binance Exchange.
+
+💡 **Tips**: Pastikan symbol benar, contoh: 'BTC' bukan 'Bitcoin', 'ETH' bukan 'Ethereum'"""
                 else:
-                    return f"❌ **DATA ERROR**: Tidak dapat mengambil data {symbol}\n\n💡 **Solusi**: Coba `/analyze btc` atau `/analyze eth`"
+                    return f"❌ **DATA ERROR**: Tidak dapat mengambil data {symbol}\n\n💡 **Solusi**: Coba `/analyze btc` atau `/analyze eth`\n\n🔍 **Detail**: {price_data.get('error', 'Unknown error') if price_data else 'No data returned'}"
 
             # Update progress: Stage 2 - Technical analysis (OPTIMIZED)
             if user_id and progress_tracker:

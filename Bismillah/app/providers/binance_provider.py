@@ -63,8 +63,13 @@ def _append_usdt_if_base_only(s: str) -> str:
     stables = ("USDT","FDUSD","USDC","BUSD","TUSD")
     if any(s.endswith(x) for x in stables):
         return s
-    # BTC, ETH, SOL, XRP, BNB → default ke USDT
-    if 3 <= len(s) <= 5:
+    
+    # Check for BTC, ETH pairs
+    if any(s.endswith(x) for x in ("BTC", "ETH")):
+        return s
+    
+    # For symbols like ASTER, BTC, ETH, SOL, XRP, BNB → default ke USDT
+    if 2 <= len(s) <= 10:  # Extended range for longer symbols like ASTER
         return s + "USDT"
     return s
 
@@ -82,15 +87,37 @@ def get_price(symbol: str, futures: bool = False) -> float:
         r = _http.get(base + ep, params={"symbol": sym})
         data = r.json()
         
-        # Check if symbol not found
-        if "code" in data and data["code"] == -1121:
-            raise ValueError(f"Symbol {sym} not found on Binance")
+        # Better error detection
+        if isinstance(data, dict):
+            if "code" in data:
+                error_code = data.get("code")
+                error_msg = data.get("msg", "Unknown error")
+                
+                if error_code == -1121:
+                    raise ValueError(f"Symbol {sym} not found on Binance: {error_msg}")
+                elif error_code in [-1000, -1001, -1002]:
+                    raise ValueError(f"Binance API error {error_code}: {error_msg}")
+                else:
+                    raise ValueError(f"Binance error {error_code}: {error_msg}")
             
-        return float(data["price"])
-    except Exception as e:
-        if "Symbol" in str(e) and "not found" in str(e):
-            raise ValueError(f"Symbol {sym} not available on Binance")
+            # Check if we have price data
+            if "price" in data:
+                price = float(data["price"])
+                if price > 0:
+                    return price
+                else:
+                    raise ValueError(f"Invalid price data for {sym}: {price}")
+            else:
+                raise ValueError(f"No price data returned for {sym}")
+        else:
+            raise ValueError(f"Unexpected response format for {sym}")
+            
+    except ValueError:
+        # Re-raise ValueError as is
         raise
+    except Exception as e:
+        # Convert other exceptions to ValueError for consistency
+        raise ValueError(f"Failed to get price for {sym}: {str(e)}")
 
 def fetch_klines(symbol: str, interval: str, limit: int = 200, futures: bool = False) -> List[List[Any]]:
     sym = normalize_symbol(symbol)
