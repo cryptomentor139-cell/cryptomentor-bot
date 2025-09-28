@@ -37,28 +37,35 @@ class CryptoAPI:
                 if (time.time() - timestamp) < self._cache_timeout:
                     return cached_data
 
-            # Normalize symbol for Binance
-            normalized_symbol = normalize_symbol(symbol)
+            # Multiple symbol formats to try for better compatibility
+            symbol_variants = self._get_symbol_variants(symbol)
+            
+            spot_price = None
+            used_symbol = None
+            last_error = None
 
-            # Try to get spot price from Binance
-            try:
-                spot_price = get_price(normalized_symbol, futures=False)
-            except Exception as binance_error:
-                # Coin not available on Binance
-                logging.warning(f"Binance error for {symbol}: {binance_error}")
+            # Try each symbol variant
+            for variant in symbol_variants:
+                try:
+                    spot_price = get_price(variant, futures=False)
+                    if spot_price > 0:
+                        used_symbol = variant
+                        break
+                except Exception as e:
+                    last_error = str(e)
+                    continue
+
+            # If all variants failed
+            if spot_price is None or spot_price <= 0:
+                # Get available symbols for better error message
+                available_symbols = self._get_available_symbols_sample()
                 return {
                     'error': f'Coin {symbol} not available on Binance',
                     'symbol': symbol.upper(),
+                    'variants_tried': symbol_variants,
+                    'last_error': last_error,
                     'suggestion': 'Try popular coins like BTC, ETH, BNB, SOL, XRP, ADA, DOT, MATIC, AVAX, UNI',
-                    'available_coins': ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOT', 'MATIC', 'AVAX', 'UNI', 'LINK', 'LTC', 'ATOM', 'ICP', 'NEAR']
-                }
-
-            if spot_price <= 0:
-                return {
-                    'error': f'Invalid price data for {symbol}',
-                    'symbol': symbol.upper(),
-                    'suggestion': 'Try popular coins like BTC, ETH, BNB, SOL, XRP, ADA',
-                    'available_coins': ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOT', 'MATIC', 'AVAX', 'UNI']
+                    'available_coins': available_symbols
                 }
 
             # Get 24h ticker data for additional metrics
@@ -243,6 +250,61 @@ class CryptoAPI:
             logging.error(f"Error getting crypto info for {symbol}: {e}")
             return {'error': f'Crypto info error: {str(e)}', 'success': False}
 
+    def _get_symbol_variants(self, symbol: str) -> List[str]:
+        """Generate multiple symbol variants to try"""
+        base = symbol.upper().strip()
+        variants = []
+        
+        # Remove common suffixes first
+        clean_base = base.replace('USDT', '').replace('BUSD', '').replace('USDC', '')
+        
+        # Add variants in order of likelihood
+        variants.extend([
+            f"{clean_base}USDT",    # Most common
+            f"{clean_base}BUSD",    # Alternative stablecoin
+            f"{clean_base}USDC",    # Another stablecoin
+            f"{clean_base}BTC",     # BTC pair
+            f"{clean_base}ETH",     # ETH pair
+            clean_base,             # Original without pair
+        ])
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_variants = []
+        for variant in variants:
+            if variant not in seen:
+                seen.add(variant)
+                unique_variants.append(variant)
+        
+        return unique_variants[:6]  # Limit to 6 attempts
+
+    def _get_available_symbols_sample(self) -> List[str]:
+        """Get a sample of available symbols"""
+        try:
+            from app.providers.binance_provider import exchange_info
+            
+            # Get exchange info
+            info = exchange_info()
+            symbols = []
+            
+            if 'symbols' in info:
+                # Extract base assets from active USDT pairs
+                for symbol_info in info['symbols'][:50]:  # Limit to first 50
+                    if (symbol_info.get('status') == 'TRADING' and 
+                        symbol_info.get('symbol', '').endswith('USDT')):
+                        base = symbol_info['symbol'].replace('USDT', '')
+                        if len(base) <= 6:  # Reasonable length
+                            symbols.append(base)
+                
+                return symbols[:20]  # Return top 20
+            
+        except Exception as e:
+            logging.warning(f"Could not get exchange symbols: {e}")
+        
+        # Fallback list
+        return ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOT', 'MATIC', 'AVAX', 'UNI', 
+                'LINK', 'LTC', 'ATOM', 'ICP', 'NEAR', 'APT', 'FTM', 'ALGO', 'VET', 'FLOW']
+
     def _get_coin_name(self, symbol: str) -> str:
         """Get coin name mapping"""
         names = {
@@ -255,7 +317,8 @@ class CryptoAPI:
             'DOT': 'Polkadot',
             'MATIC': 'Polygon',
             'AVAX': 'Avalanche',
-            'UNI': 'Uniswap'
+            'UNI': 'Uniswap',
+            'ASTER': 'Astar Network'
         }
         return names.get(symbol.upper().replace('USDT', ''), symbol.upper())
 
