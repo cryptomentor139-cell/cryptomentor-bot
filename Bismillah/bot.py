@@ -750,6 +750,15 @@ class TelegramBot:
 • `/referral` - Ajak teman dapat 10 credit/referral
 • `/subscribe` - Upgrade premium untuk unlimited access
 
+💰 **BONUS TRADING MEXC - Dapatkan $20!**
+• Daftar di MEXC dengan link khusus kami
+• Lakukan KYC (verifikasi identitas)
+• Deposit minimum $100
+• **Dapatkan BONUS $20 langsung!** 🎉
+
+🔗 **Link Daftar MEXC:**
+https://www.mexc.fm/id-ID/acquisition/custom-sign-up?shareCode=mexc-3VvV3
+
 🚀 **Fitur Terbaru:**
 • Auto SnD Signals untuk Admin & Lifetime users
 • Supply & Demand analysis untuk futures trading
@@ -786,6 +795,15 @@ class TelegramBot:
 🎁 **How to Get Free Credits:**
 • `/referral` - Invite friends get 10 credits/referral
 • `/subscribe` - Upgrade premium for unlimited access
+
+💰 **MEXC TRADING BONUS - Get $20!**
+• Register on MEXC with our special link
+• Complete KYC (identity verification)
+• Make minimum deposit of $100
+• **Receive $20 BONUS instantly!** 🎉
+
+🔗 **MEXC Registration Link:**
+https://www.mexc.fm/id-ID/acquisition/custom-sign-up?shareCode=mexc-3VvV3
 
 🚀 **Latest Features:**
 • Auto SnD Signals for Admin & Lifetime users
@@ -875,6 +893,36 @@ class TelegramBot:
 🔧 **Admin Setup:**
 • `/setup_admin` - Petunjuk setup admin access
 • Perlu konfigurasi ADMIN_USER_ID di Replit Secrets
+
+💰 **BONUS TRADING MEXC - Dapatkan $20!**
+
+🎯 **Cara Mendapatkan Bonus:**
+1. Daftar di MEXC menggunakan link khusus kami
+2. Lakukan KYC (verifikasi identitas)
+3. Deposit minimum $100
+4. **Dapatkan BONUS $20 langsung ke akun!** 🎉
+
+🔗 **Link Daftar MEXC:**
+https://www.mexc.fm/id-ID/acquisition/custom-sign-up?shareCode=mexc-3VvV3
+
+💡 **Kenapa MEXC?**
+• Exchange global terpercaya dengan volume tinggi
+• Biaya trading rendah (0.1% spot, 0.02% futures)
+• 1700+ cryptocurrency tersedia
+• Leverage futures hingga 200x
+• Deposit/withdraw mudah dengan rupiah
+• Mobile app Android & iOS
+
+🚀 **Perfect untuk:**
+• Spot trading berdasarkan analisis CryptoMentor AI
+• Futures trading dengan sinyal SnD dari bot
+• Portfolio diversification dengan 1700+ coins
+
+📊 **Trading Tips dengan MEXC + CryptoMentor AI:**
+• Gunakan `/analyze` untuk riset fundamental
+• Gunakan `/futures` untuk entry/exit points
+• Gunakan `/price` untuk monitoring harga real-time
+• Follow sinyal dari `/futures_signals` untuk profit
 
 """
         await update.message.reply_text(help_text, parse_mode='Markdown')
