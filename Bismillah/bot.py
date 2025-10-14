@@ -1796,7 +1796,6 @@ Gunakan credit dengan bijak!"""
             await update.message.reply_text(f"❌ Failed to enable auto signals: {e}")
             logger.error(f"Error enabling auto signals: {e}")
 
-
     async def stop_auto_signals_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /disable_auto_signal_ai command - Admin only"""
         user_id = update.message.from_user.id
@@ -1825,10 +1824,6 @@ Gunakan credit dengan bijak!"""
         except Exception as e:
             await update.message.reply_text(f"❌ Failed to stop auto signals: {e}")
             logger.error(f"Error stopping auto signals: {e}")
-
-
-    # Rest of the existing methods (portfolio, subscribe, referral, admin commands, etc.)
-    # I'll include the essential ones for functionality
 
     async def portfolio_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /portfolio command"""
@@ -3365,7 +3360,6 @@ Keep your admin user IDs private and only share with trusted users."""
 
         await safe_reply(update.effective_message, message)
 
-
     async def banned_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /banned command with Database Router"""
         from app.db_router import ban_user, unban_user, get_user_info, check_user_banned
@@ -3893,6 +3887,15 @@ Keep your admin user IDs private and only share with trusted users."""
             self.application.add_handler(CommandHandler("refresh_credits", self.refresh_credits_command))
             self.application.add_handler(CommandHandler("grant_package", self.grant_package_command))
             self.application.add_handler(CommandHandler("setup_admin", self.setup_admin_command))
+            self.application.add_handler(CommandHandler("db_status", self.db_status_command))
+            self.application.add_handler(CommandHandler("banned", self.banned_command))
+            self.application.add_handler(CommandHandler("whoami", self.whoami_command))
+            self.application.add_handler(CommandHandler("admin_debug", self.admin_debug_command))
+            self.application.add_handler(CommandHandler("add_admin", self.add_admin_command))
+            self.application.add_handler(CommandHandler("remove_admin", self.remove_admin_command))
+            self.application.add_handler(CommandHandler("list_admins", self.list_admins_command))
+            self.application.add_handler(CommandHandler("check_premium", self.check_premium_command))
+            self.application.add_handler(CommandHandler("whois", self.whois_command))
 
             # Auto signals admin commands
             self.application.add_handler(CommandHandler("auto_signals_status", self.auto_signals_status_command))
