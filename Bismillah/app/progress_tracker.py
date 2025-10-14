@@ -101,12 +101,16 @@ class ProgressTracker:
 
         elif job.status == "processing":
             elapsed = time.time() - job.start_time
+            # Get current stage, default to initializing if not set
+            current_stage = getattr(job, 'current_stage', 'initializing')
+            progress = getattr(job, 'progress', 0)
+            
             return f"""🔄 **Sedang Diproses** - {current_time}
 
 🎯 **Command**: {job.command} {job.symbol}
-⚡ **Stage**: {job.current_stage}
+⚡ **Stage**: {current_stage}
 ⏱️ **Elapsed**: {elapsed:.0f}s
-📊 **Progress**: {job.progress}%
+📊 **Progress**: {progress}%
 
 💡 **Queue Info**: {queue_status['queue_count']} waiting | {queue_status['active_count']} active
 🎯 **Hampir selesai...**"""

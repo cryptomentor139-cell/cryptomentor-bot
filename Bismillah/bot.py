@@ -1087,11 +1087,7 @@ https://www.mexc.fm/id-ID/acquisition/custom-sign-up?shareCode=mexc-3VvV3
         # Start processing job
         job = await progress_tracker.start_processing(user_id, '/analyze', symbol)
 
-        # Show initial progress message
-        progress_msg = progress_tracker.get_progress_message(user_id)
-        loading_msg = await update.message.reply_text(progress_msg, parse_mode='Markdown')
-
-        # Immediate response with queue system
+        # Show SINGLE initial progress message
         initial_msg = progress_tracker.get_progress_message(user_id)
         loading_msg = await update.message.reply_text(initial_msg, parse_mode='Markdown')
 
@@ -1198,11 +1194,7 @@ https://www.mexc.fm/id-ID/acquisition/custom-sign-up?shareCode=mexc-3VvV3
         # Start processing job
         job = await progress_tracker.start_processing(user_id, '/market', '')
 
-        # Show initial progress message
-        progress_msg = progress_tracker.get_progress_message(user_id)
-        loading_msg = await update.message.reply_text(progress_msg, parse_mode='Markdown')
-
-        # Immediate response with queue system
+        # Show SINGLE initial progress message
         initial_msg = progress_tracker.get_progress_message(user_id)
         loading_msg = await update.message.reply_text(initial_msg, parse_mode='Markdown')
 
@@ -1483,11 +1475,7 @@ https://www.mexc.fm/id-ID/acquisition/custom-sign-up?shareCode=mexc-3VvV3
                     # Start processing job
                     job = await progress_tracker.start_processing(user_id, '/futures', symbol)
 
-                    # Show initial progress message
-                    progress_msg = progress_tracker.get_progress_message(user_id)
-                    await query.edit_message_text(progress_msg, parse_mode='Markdown')
-
-                    # Immediate response with queue system
+                    # Show SINGLE initial progress message
                     initial_msg = progress_tracker.get_progress_message(user_id)
                     await query.edit_message_text(initial_msg, parse_mode='Markdown')
 
