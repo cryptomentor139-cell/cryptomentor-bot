@@ -236,10 +236,17 @@ class TelegramBot:
             logger.error("📝 Go to Secrets tab and add your bot token")
             sys.exit(1)
 
-        # Initialize application with token - with concurrent user optimization
+        # Initialize application with token - with maximum concurrent user optimization
         try:
-            self.application = Application.builder().token(self.token).concurrent_updates(True).build()
-            logger.info("✅ Bot initialized successfully with concurrent updates enabled")
+            self.application = (
+                Application.builder()
+                .token(self.token)
+                .concurrent_updates(True)
+                .pool_timeout(30.0)
+                .connection_pool_size(100)
+                .build()
+            )
+            logger.info("✅ Bot initialized successfully with maximum concurrent updates enabled")
         except Exception as e:
             logger.error(f"❌ Failed to initialize bot: {e}")
             sys.exit(1)
