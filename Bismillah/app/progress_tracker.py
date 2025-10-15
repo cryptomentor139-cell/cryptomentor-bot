@@ -86,9 +86,13 @@ class ProgressTracker:
         if job.status == "queued":
             queue_position = next((i+1 for i, q in enumerate(self.queue) if q.user_id == user_id), 0)
             
-            # Clean, consistent queue message format
-            status_text = "Memulai sekarang" if queue_position == 1 and queue_status['active_count'] == 0 else "Menunggu user sebelumnya selesai"
-            estimasi_text = "Instant" if queue_position == 1 and queue_status['active_count'] == 0 else f"~{queue_position * 15} detik"
+            # Fix logic: if user is the only one in queue (1 dari 1), should start immediately
+            if queue_position == 1 and queue_status['queue_count'] == 1:
+                status_text = "Memulai sekarang"
+                estimasi_text = "Instant"
+            else:
+                status_text = "Menunggu user sebelumnya selesai"
+                estimasi_text = f"~{queue_position * 15} detik"
             
             return f"""⏳ Dalam Antrian - {current_time}
 
