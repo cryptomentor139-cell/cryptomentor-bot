@@ -14,10 +14,9 @@ class CryptoAPI:
     def __init__(self):
         self.binance_available = True
         self._cache = {}
-        self._cache_timeout = 60  # Reduced to 1 minute for market data freshness
-        self._market_cache_timeout = 30  # 30 seconds for market overview (even faster)
-        
-        logging.info("CryptoAPI initialized with Binance provider - Optimized for concurrent users")
+        self._cache_timeout = 300  # 5 minutes
+
+        logging.info("CryptoAPI initialized with Binance provider")
 
     def _make_request(self, url: str, headers: dict, params: dict = None, timeout: int = 30) -> Dict[str, Any]:
         """
@@ -391,30 +390,20 @@ class CryptoAPI:
 
     def get_market_overview(self) -> Dict[str, Any]:
         """
-        Ultra-optimized market overview for concurrent users - cached and streamlined
+        Mendapatkan overview pasar dari data Binance (estimasi global metrics)
         """
         try:
-            # Check market-specific cache first
-            market_cache_key = "market_overview_fast"
-            if market_cache_key in self._cache:
-                cached_data, timestamp = self._cache[market_cache_key]
-                if (time.time() - timestamp) < self._market_cache_timeout:
-                    logging.info("📦 Market overview cache hit")
-                    return cached_data
+            # Get data for major cryptocurrencies to estimate market overview
+            major_symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOT', 'MATIC', 'AVAX', 'UNI']
 
-            # Ultra-fast approach: Only get BTC and ETH for market estimation
-            # This represents ~70% of total market cap but with 90% less API calls
-            essential_symbols = ['BTC', 'ETH']  # Reduced from 10 to 2
-            
             total_market_cap = 0
             total_volume_24h = 0
             total_change = 0
             successful_requests = 0
 
-            for symbol in essential_symbols:
+            for symbol in major_symbols:
                 try:
-                    # Use cached data if available for speed
-                    price_data = self.get_crypto_price(symbol, force_refresh=False)
+                    price_data = self.get_crypto_price(symbol, force_refresh=True)
                     if 'error' not in price_data:
                         total_market_cap += price_data.get('market_cap', 0)
                         total_volume_24h += price_data.get('volume_24h', 0)
@@ -424,72 +413,33 @@ class CryptoAPI:
                     continue
 
             if successful_requests == 0:
-                # Ultra-fast fallback with reasonable estimates
-                result = {
-                    'success': True,
-                    'global_metrics': {
-                        'total_market_cap': 2500000000000,  # $2.5T estimate
-                        'total_volume_24h': 100000000000,   # $100B estimate
-                        'market_cap_change_24h': 1.5,       # Neutral estimate
-                        'btc_dominance': 58.5,
-                        'eth_dominance': 14.2,
-                        'active_cryptocurrencies': 9500,
-                        'active_exchanges': 500
-                    },
-                    'timestamp': datetime.now().isoformat(),
-                    'source': 'binance_fallback_estimates'
-                }
-                # Cache fallback too
-                self._cache[market_cache_key] = (result, time.time())
-                return result
+                return {'error': 'No market data available', 'success': False}
 
             avg_change = total_change / successful_requests
 
-            # Quick BTC dominance calculation
-            btc_market_cap = 0
-            if successful_requests > 0:
-                # Get BTC market cap from our fetched data
-                btc_data = None
-                try:
-                    btc_data = self.get_crypto_price('BTC', force_refresh=False)
-                    if 'error' not in btc_data:
-                        btc_market_cap = btc_data.get('market_cap', 0)
-                except:
-                    pass
+            # Estimate BTC dominance
+            btc_data = self.get_crypto_price('BTC', force_refresh=True)
+            btc_dominance = 58.5  # Default estimate
+            if 'error' not in btc_data and total_market_cap > 0:
+                btc_dominance = (btc_data.get('market_cap', 0) / total_market_cap) * 100
 
-            # Extrapolate total market from BTC+ETH (they represent ~70% of market)
-            extrapolated_total_cap = total_market_cap * 1.43  # Scale up from 70% to 100%
-            btc_dominance = (btc_market_cap / extrapolated_total_cap * 100) if btc_market_cap > 0 and extrapolated_total_cap > 0 else 58.5
-
-            result = {
+            return {
                 'success': True,
                 'global_metrics': {
-                    'total_market_cap': extrapolated_total_cap,
-                    'total_volume_24h': total_volume_24h * 1.5,  # Scale volume too
+                    'total_market_cap': total_market_cap,
+                    'total_volume_24h': total_volume_24h,
                     'market_cap_change_24h': avg_change,
                     'btc_dominance': btc_dominance,
-                    'eth_dominance': 14.2,  # Reasonable estimate
-                    'active_cryptocurrencies': 9500,
-                    'active_exchanges': 500
+                    'eth_dominance': 14.2,  # Estimate
+                    'active_cryptocurrencies': 9500,  # Estimate
+                    'active_exchanges': 500  # Estimate
                 },
                 'timestamp': datetime.now().isoformat(),
-                'source': 'binance_ultra_fast'
+                'source': 'binance_estimated'
             }
 
-            # Cache the result for other concurrent users
-            self._cache[market_cache_key] = (result, time.time())
-            logging.info(f"✅ Ultra-fast market overview generated and cached")
-            
-            return result
-
         except Exception as e:
-            logging.error(f"Error in ultra-fast market overview: {e}")
-            # Return cached data if available, even if expired
-            if market_cache_key in self._cache:
-                cached_data, _ = self._cache[market_cache_key]
-                logging.info("📦 Using stale cache due to error")
-                return cached_data
-                
+            logging.error(f"Error getting market overview: {e}")
             return {'error': f'Market overview error: {str(e)}', 'success': False}
 
     def get_crypto_info(self, symbol: str) -> Dict[str, Any]:
