@@ -16,24 +16,18 @@ class ProcessingJob:
 
 class ProgressTracker:
     def __init__(self):
-        self.max_concurrent = 1  # Single user priority system
+        self.max_concurrent = 50  # Multi-user concurrent processing
         self.active_jobs: Dict[int, ProcessingJob] = {}
         self.queue: List[ProcessingJob] = []
 
     async def start_processing(self, user_id: int, command: str, symbol: str) -> ProcessingJob:
-        """Start processing job with single user priority"""
+        """Start processing job with multi-user concurrent support"""
         job = ProcessingJob(user_id=user_id, command=command, symbol=symbol)
 
-        # Check if we can start immediately (only 1 active allowed)
-        if len(self.active_jobs) < self.max_concurrent:
-            job.status = "processing"
-            self.active_jobs[user_id] = job
-            print(f"✅ Job started immediately for user {user_id}: {command}")
-        else:
-            # Add to queue
-            job.status = "queued"
-            self.queue.append(job)
-            print(f"📋 Job queued for user {user_id}: {command} (Position: {len(self.queue)})")
+        # Always start immediately with high concurrent limit for multi-user support
+        job.status = "processing"
+        self.active_jobs[user_id] = job
+        print(f"✅ Job started immediately for user {user_id}: {command} (Active: {len(self.active_jobs)}/{self.max_concurrent})")
 
         return job
 
@@ -80,7 +74,7 @@ class ProgressTracker:
         }
 
     def get_progress_message(self, user_id: int) -> str:
-        """Generate responsive progress message for single user priority"""
+        """Generate responsive progress message for multi-user concurrent processing"""
         job = self.get_job_status(user_id)
         if not job:
             return "❌ Job tidak ditemukan"
@@ -94,10 +88,10 @@ class ProgressTracker:
 
 🎯 **Command**: {job.command} {job.symbol if job.symbol else ''}
 📍 **Posisi Antrian**: {queue_position} dari {queue_status['queue_count']}
-⚡ **Status**: Menunggu user sebelumnya selesai
+⚡ **Status**: Server overloaded, waiting for slot
 
-💡 **Estimasi**: ~{queue_position * 15} detik
-🔄 **Priority**: Single user processing active"""
+💡 **Estimasi**: ~{queue_position * 5} detik
+🔄 **Multi-User**: Concurrent processing active"""
 
         elif job.status == "processing":
             elapsed = time.time() - job.start_time
@@ -111,8 +105,8 @@ class ProgressTracker:
 ⏱️ **Elapsed**: {elapsed:.0f}s
 📊 **Progress**: {progress}%
 
-💡 **Queue Info**: {queue_status['queue_count']} waiting | 1 active
-🎯 **Anda sedang diproses...**"""
+💡 **Active Users**: {queue_status['active_count']} processing simultaneously
+🚀 **Multi-Threading**: Enabled for all users"""
 
         return "✅ Job completed"
 
