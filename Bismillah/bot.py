@@ -11,9 +11,9 @@ import asyncio
 from datetime import datetime
 from telegram import Update
 from telegram.ext import (
-    Application, 
-    CommandHandler, 
-    MessageHandler, 
+    Application,
+    CommandHandler,
+    MessageHandler,
     CallbackQueryHandler,
     filters,
     ContextTypes
@@ -109,9 +109,9 @@ class TelegramBot:
         if SUPABASE_AVAILABLE:
             try:
                 ensure_user_registered(
-                    user.id, 
-                    user.username, 
-                    user.first_name, 
+                    user.id,
+                    user.username,
+                    user.first_name,
                     user.last_name
                 )
             except Exception as e:
@@ -278,7 +278,7 @@ Choose an option from the menu below:"""
             from crypto_api import crypto_api
 
             analysis = await ai_assistant.get_comprehensive_analysis_async(
-                symbol.replace('USDT', ''), 
+                symbol.replace('USDT', ''),
                 crypto_api=crypto_api
             )
 
@@ -347,7 +347,7 @@ Choose an option from the menu below:"""
         class ProgressTracker:
             async def update_progress(self, message):
                 pass
-        
+
         async def safe_send_message(bot, chat_id, text):
             try:
                 await bot.send_message(chat_id=chat_id, text=text, parse_mode='MARKDOWN')
@@ -399,14 +399,14 @@ Choose an option from the menu below:"""
         try:
             from ai_assistant import AIAssistant
             from crypto_api import crypto_api
-            self.ai_assistant = AIAssistant() 
+            self.ai_assistant = AIAssistant()
             self.crypto_api = crypto_api
 
             # Assuming ProgressTracker and safe_send_message are available
             class ProgressTracker:
                 async def update_progress(self, message):
                     pass
-            
+
             async def safe_send_message(bot, chat_id, text):
                 try:
                     await bot.send_message(chat_id=chat_id, text=text, parse_mode='MARKDOWN')
@@ -632,6 +632,14 @@ Choose an option from the menu below:"""
                 timeout=30,
                 drop_pending_updates=True
             )
+
+            # Initialize lifetime auto-signals
+            try:
+                from lifetime_auto_signals import start_lifetime_auto_signals
+                self.lifetime_auto_signals = await start_lifetime_auto_signals(self.application.bot)
+                print("👑 Lifetime Auto-Signals system started")
+            except Exception as e:
+                print(f"⚠️ Lifetime Auto-Signals failed to start: {e}")
 
             # Keep running
             while True:
