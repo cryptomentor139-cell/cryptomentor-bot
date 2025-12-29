@@ -296,11 +296,11 @@ async def market_overview_callback(update: Update, context: ContextTypes.DEFAULT
 
 <b>📊 Market Sentiment:</b> {sentiment_text}
 
-<b>━━━━━━━━━━━━━━━━</b>
+────────────────
 
 {pairs_text}
 
-<b>━━━━━━━━━━━━━━━━</b>
+────────────────
 
 <i>💡 Data from Binance Spot Market</i>"""
         
