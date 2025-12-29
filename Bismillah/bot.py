@@ -443,120 +443,93 @@ Choose an option from the menu below:"""
         """Handle futures analysis command"""
         if len(context.args) < 2:
             await update.effective_message.reply_text(
-                "❌ **Usage:** `/futures <symbol> <timeframe>`\n\n"
-                "**Example:** `/futures BTC 1h`\n"
-                "**Timeframes:** 15m, 30m, 1h, 4h, 1d, 1w",
+                "📊 **Futures Analysis**\n\n"
+                "Usage: /futures symbol timeframe\n\n"
+                "Example: /futures BTCUSDT 1h\n"
+                "Timeframes: 15m, 30m, 1h, 4h, 1d",
                 parse_mode='MARKDOWN'
             )
             return
 
         symbol = context.args[0].upper()
         timeframe = context.args[1].lower()
-
-        # Placeholder for AI Assistant and Crypto API
-        # In a real scenario, these would be initialized or passed in
-        self.ai_assistant = AIAssistant() # Assuming AIAssistant is available and can be instantiated like this
-        from crypto_api import crypto_api # Assuming crypto_api is available
-        self.crypto_api = crypto_api
-
-        # Assuming ProgressTracker and safe_send_message are available
-        # For demonstration, defining dummy versions if not imported
-        class ProgressTracker:
-            async def update_progress(self, message):
-                pass
-
-        async def safe_send_message(bot, chat_id, text):
-            try:
-                await bot.send_message(chat_id=chat_id, text=text, parse_mode='MARKDOWN')
-            except Exception as e:
-                print(f"Error sending message: {e}")
-
-        # Handle /futures command
+        
+        # Ensure symbol has USDT suffix
+        if not 'USDT' in symbol:
+            symbol = symbol + 'USDT'
+        
         try:
-            user_id = update.effective_user.id
-            args = context.args
-
-            print(f"🔍 Futures command called by user {user_id} with args: {args}")
-
-            symbol = args[0].upper() if args else 'BTC'
-            timeframe = args[1] if len(args) > 1 else '4h'
-
-            print(f"📊 Processing futures analysis for {symbol} on {timeframe}")
-
-            # Create progress tracker
-            message = await update.message.reply_text("⏳ Analyzing futures signals...")
-            progress_tracker = ProgressTracker()
-
-            # Get analysis with error handling
+            await update.message.reply_text(f"⏳ Analyzing {symbol} {timeframe}...")
+            
+            # Get klines data from binance
             try:
-                analysis = await self.ai_assistant.get_futures_analysis(
-                    symbol, timeframe, 'id', self.crypto_api, progress_tracker, user_id
-                )
-                print(f"✅ Analysis generated successfully for {symbol}")
-            except Exception as analysis_error:
-                print(f"❌ Analysis generation failed: {analysis_error}")
-                analysis = f"❌ Analysis failed for {symbol}: {str(analysis_error)[:100]}..."
+                from app.providers.binance_provider import fetch_klines
+                klines = fetch_klines(symbol, timeframe, limit=100)
+                if not klines or len(klines) == 0:
+                    await update.message.reply_text(f"❌ No data for {symbol} {timeframe}")
+                    return
+                
+                # Extract OHLCV
+                closes = [float(k[4]) for k in klines[-20:]]  # Last 20 closes
+                
+                # Simple trend analysis
+                latest = float(klines[-1][4])
+                prev = float(klines[-2][4])
+                change = ((latest - prev) / prev * 100)
+                
+                avg_20 = sum(closes) / len(closes)
+                trend = "📈 BULLISH" if latest > avg_20 else "📉 BEARISH"
+                
+                response = f"""📊 **Futures: {symbol}**
 
-            # Send result
-            await safe_send_message(context.bot, update.effective_chat.id, analysis)
-            print(f"📤 Message sent to user {user_id}")
+Price: ${latest:.2f}
+Change: {change:+.2f}%
+Trend: {trend}
+MA20: ${avg_20:.2f}
 
+Support: ${min(closes):.2f}
+Resistance: ${max(closes):.2f}"""
+                
+                await update.message.reply_text(response, parse_mode='MARKDOWN')
+            except Exception as e:
+                await update.message.reply_text(f"❌ Data error: {str(e)[:80]}")
+                
         except Exception as e:
-            error_msg = f"❌ Error in futures analysis: {str(e)[:100]}..."
-            await update.message.reply_text(error_msg)
-            print(f"❌ Futures command error: {e}")
-            import traceback
-            traceback.print_exc()
+            await update.message.reply_text(f"❌ Error: {str(e)[:80]}")
 
 
     async def futures_signals_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle futures signals command"""
-        # Placeholder for AI Assistant and Crypto API
-        # In a real scenario, these would be initialized or passed in
         try:
-            from ai_assistant import AIAssistant
-            from crypto_api import crypto_api
-            self.ai_assistant = AIAssistant()
-            self.crypto_api = crypto_api
-
-            # Assuming ProgressTracker and safe_send_message are available
-            class ProgressTracker:
-                async def update_progress(self, message):
-                    pass
-
-            async def safe_send_message(bot, chat_id, text):
+            await update.message.reply_text("⏳ Generating signals for top coins...")
+            
+            # Quick signal analysis for top 5 coins
+            from app.providers.binance_provider import fetch_klines
+            coins = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT']
+            signals_text = "🚀 **Futures Signals (1H)**\n\n"
+            
+            for coin in coins:
                 try:
-                    await bot.send_message(chat_id=chat_id, text=text, parse_mode='MARKDOWN')
-                except Exception as e:
-                    print(f"Error sending message: {e}")
-
-            user_id = update.effective_user.id
-            print(f"🔍 Futures signals command called by user {user_id}")
-
-            # Create progress tracker
-            message = await update.message.reply_text("⏳ Generating multi-coin futures signals...")
-            progress_tracker = ProgressTracker()
-
-            # Get signals with error handling
-            try:
-                signals = await self.ai_assistant.generate_futures_signals(
-                    'id', self.crypto_api, context.args, progress_tracker
-                )
-                print("✅ Multi-coin futures signals generated successfully")
-            except Exception as signal_error:
-                print(f"❌ Signal generation failed: {signal_error}")
-                signals = f"❌ Signal generation failed: {str(signal_error)[:100]}..."
-
-            # Send result
-            await safe_send_message(context.bot, update.effective_chat.id, signals)
-            print(f"📤 Message sent to user {user_id}")
-
+                    klines = fetch_klines(coin, '1h', limit=50)
+                    if not klines or len(klines) < 2:
+                        continue
+                    
+                    closes = [float(k[4]) for k in klines[-20:]]
+                    latest = closes[-1]
+                    prev = closes[-2]
+                    ma20 = sum(closes) / len(closes)
+                    
+                    signal = "🟢" if latest > ma20 else "🔴"
+                    change = ((latest - prev) / prev * 100)
+                    
+                    signals_text += f"{signal} {coin}: {change:+.2f}%\n"
+                except:
+                    continue
+            
+            await update.message.reply_text(signals_text, parse_mode='MARKDOWN')
+            
         except Exception as e:
-            error_msg = f"❌ Error in futures signals: {str(e)[:100]}..."
-            await update.message.reply_text(error_msg)
-            print(f"❌ Futures signals command error: {e}")
-            import traceback
-            traceback.print_exc()
+            await update.message.reply_text(f"❌ Error: {str(e)[:80]}")
 
 
     async def portfolio_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
