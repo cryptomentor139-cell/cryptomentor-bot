@@ -219,19 +219,107 @@ async def check_price_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def market_overview_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Trigger /market command"""
+    """Fetch and display market overview for top 5 pairs (BTC, ETH, BNB, SOL, XRP)"""
     query = update.callback_query
     await query.answer()
     
-    # Remove inline keyboard and show market data
-    await query.edit_message_text(
-        text="🌍 **Market Overview**\n\nFetching market data...",
-        reply_markup=None
-    )
+    try:
+        # Send loading message
+        await query.edit_message_text(
+            text="📊 Fetching market data...",
+            reply_markup=None,
+            parse_mode='HTML'
+        )
+        
+        # Get crypto API instance
+        from crypto_api import crypto_api
+        
+        # Fetch market data in parallel (5 pairs, <3 second target)
+        market_data = crypto_api.get_market_overview_fast()
+        
+        if not market_data.get('success', False):
+            error_msg = market_data.get('error', 'Unknown error')
+            await query.edit_message_text(
+                text=f"❌ <b>Market Data Error</b>\n\nFailed to fetch market data:\n<code>{error_msg}</code>",
+                parse_mode='HTML'
+            )
+            return
+        
+        # Format market overview message
+        pairs = market_data.get('pairs', [])
+        sentiment = market_data.get('sentiment', 'UNKNOWN')
+        
+        # Sentiment emoji and color
+        sentiment_emoji = '🟢' if sentiment == 'BULLISH' else ('🟡' if sentiment == 'NEUTRAL' else '🔴')
+        sentiment_text = f"{sentiment_emoji} <b>{sentiment}</b>"
+        
+        # Build pairs summary
+        pairs_lines = []
+        for pair in pairs:
+            emoji = pair.get('emoji', '○')
+            symbol = pair.get('symbol', 'N/A')
+            price = pair.get('price', 0)
+            change = pair.get('change_24h', 0)
+            volume = pair.get('volume_24h', 0)
+            
+            # Format price
+            if price >= 1:
+                price_str = f"${price:,.0f}" if price > 1000 else f"${price:.2f}"
+            else:
+                price_str = f"${price:.6f}"
+            
+            # Format change with color
+            change_str = f"{'+' if change > 0 else ''}{change:.2f}%"
+            change_emoji = '🟢' if change > 0 else ('🔴' if change < 0 else '⚪')
+            
+            # Format volume
+            if volume > 1_000_000_000:
+                volume_str = f"${volume/1_000_000_000:.1f}B"
+            elif volume > 1_000_000:
+                volume_str = f"${volume/1_000_000:.1f}M"
+            else:
+                volume_str = f"${volume/1_000:,.0f}K"
+            
+            pair_line = f"{emoji} <b>{symbol}</b>: {price_str} | {change_emoji} {change_str} | 📈 {volume_str}"
+            pairs_lines.append(pair_line)
+        
+        pairs_text = "\n".join(pairs_lines)
+        
+        # Build final message
+        from datetime import datetime
+        from pytz import timezone as tz_module
+        current_time = datetime.now(tz_module('Asia/Jakarta')).strftime('%H:%M:%S')
+        
+        message_text = f"""<b>🌍 GLOBAL MARKET OVERVIEW</b>
+
+<b>⏰ {current_time}</b> WIB
+
+<b>📊 Market Sentiment:</b> {sentiment_text}
+
+<b>━━━━━━━━━━━━━━━━</b>
+
+{pairs_text}
+
+<b>━━━━━━━━━━━━━━━━</b>
+
+<i>💡 Data from Binance Spot Market</i>"""
+        
+        # Send formatted message
+        await query.edit_message_text(
+            text=message_text,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=PRICE_MARKET)]])
+        )
+        
+        logger.info(f"Market overview sent successfully. Sentiment: {sentiment}")
     
-    # Simulate calling the /market command handler
-    # In actual implementation, you'd call: await handle_market(update, context)
-    context.user_data['action'] = 'market'
+    except Exception as e:
+        logger.error(f"Market overview error: {e}", exc_info=True)
+        await query.edit_message_text(
+            text=f"❌ <b>Error</b>\n\n{str(e)[:100]}",
+            parse_mode='HTML'
+        )
+        context.user_data['action'] = None
 
 
 async def trading_analysis_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

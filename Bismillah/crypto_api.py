@@ -388,6 +388,75 @@ class CryptoAPI:
             logging.error(f"Error getting futures data for {symbol}: {e}")
             return {'error': f'Failed to get futures data for {symbol}: {str(e)}'}
 
+    def get_market_overview_fast(self) -> Dict[str, Any]:
+        """
+        Optimized market overview: fetch top 5 pairs in parallel for <3 second response
+        Only USDT pairs: BTC, ETH, BNB, SOL, XRP
+        """
+        try:
+            import concurrent.futures
+            from app.providers.binance_provider import get_price
+            
+            # Top 5 professional trading pairs (USDT only)
+            pairs = [
+                {'symbol': 'BTC', 'name': 'Bitcoin', 'emoji': '₿', 'importance': 'CRITICAL'},
+                {'symbol': 'ETH', 'name': 'Ethereum', 'emoji': 'Ξ', 'importance': 'CRITICAL'},
+                {'symbol': 'BNB', 'name': 'Binance Coin', 'emoji': '🟡', 'importance': 'HIGH'},
+                {'symbol': 'SOL', 'name': 'Solana', 'emoji': '◎', 'importance': 'HIGH'},
+                {'symbol': 'XRP', 'name': 'Ripple', 'emoji': '💧', 'importance': 'MEDIUM'},
+            ]
+            
+            # Parallel fetch with timeout
+            def fetch_pair_data(pair_info):
+                try:
+                    symbol = f"{pair_info['symbol']}USDT"
+                    price_data = self.get_crypto_price(pair_info['symbol'], force_refresh=True)
+                    
+                    if 'error' in price_data:
+                        return None
+                    
+                    return {
+                        'symbol': pair_info['symbol'],
+                        'name': pair_info['name'],
+                        'emoji': pair_info['emoji'],
+                        'full_symbol': symbol,
+                        'price': price_data.get('price', 0),
+                        'change_24h': float(price_data.get('change_24h', 0)),
+                        'volume_24h': price_data.get('volume_24h', 0),
+                        'success': True
+                    }
+                except Exception as e:
+                    logging.error(f"Failed to fetch {pair_info['symbol']}: {e}")
+                    return None
+            
+            # Fetch all pairs in parallel (max workers = 5, one per pair)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                results = list(executor.map(fetch_pair_data, pairs, timeout=5))
+            
+            # Filter out failed requests
+            valid_data = [r for r in results if r is not None]
+            
+            if len(valid_data) == 0:
+                return {'error': 'Failed to fetch market data', 'success': False}
+            
+            # Calculate market sentiment (based on positive changes)
+            positive_count = sum(1 for r in valid_data if r['change_24h'] > 0)
+            sentiment = 'BULLISH' if positive_count >= 4 else ('NEUTRAL' if positive_count >= 2 else 'BEARISH')
+            
+            return {
+                'success': True,
+                'pairs': valid_data,
+                'sentiment': sentiment,
+                'positive_count': positive_count,
+                'total_pairs': len(valid_data),
+                'timestamp': datetime.now().isoformat(),
+                'source': 'binance_spot'
+            }
+        
+        except Exception as e:
+            logging.error(f"Error in fast market overview: {e}")
+            return {'error': str(e), 'success': False}
+
     def get_market_overview(self) -> Dict[str, Any]:
         """
         Mendapatkan overview pasar dari data Binance (estimasi global metrics)
