@@ -115,24 +115,39 @@ class MenuCallbackHandler:
 
     async def show_main_menu(self, query, context):
         """Show main menu"""
+        user_id = query.from_user.id
+        from database import Database
+        db = Database()
+        user_lang = db.get_user_language(user_id)
+        
         await query.edit_message_text(
-            get_menu_text(MAIN_MENU),
+            get_menu_text(MAIN_MENU, user_lang),
             reply_markup=MenuBuilder.build_main_menu(),
             parse_mode='MARKDOWN'
         )
 
     async def show_price_market_menu(self, query, context):
         """Show price & market submenu"""
+        user_id = query.from_user.id
+        from database import Database
+        db = Database()
+        user_lang = db.get_user_language(user_id)
+        
         await query.edit_message_text(
-            get_menu_text(PRICE_MARKET),
+            get_menu_text(PRICE_MARKET, user_lang),
             reply_markup=MenuBuilder.build_price_market_menu(),
             parse_mode='MARKDOWN'
         )
 
     async def show_trading_analysis_menu(self, query, context):
         """Show trading analysis submenu"""
+        user_id = query.from_user.id
+        from database import Database
+        db = Database()
+        user_lang = db.get_user_language(user_id)
+        
         await query.edit_message_text(
-            get_menu_text(TRADING_ANALYSIS),
+            get_menu_text(TRADING_ANALYSIS, user_lang),
             reply_markup=MenuBuilder.build_trading_analysis_menu(),
             parse_mode='MARKDOWN'
         )
@@ -497,13 +512,24 @@ Type your question about cryptocurrency, trading, or blockchain technology.
         try:
             from database import Database
             db = Database()
-            current_lang = db.get_user_language(user_id) or 'en'
-            current_name = {'en': 'English', 'id': 'Bahasa Indonesia'}.get(current_lang, 'English')
+            current_lang = db.get_user_language(user_id) or 'id'
+            current_name = {'en': 'English', 'id': 'Bahasa Indonesia'}.get(current_lang, 'Bahasa Indonesia')
         except:
-            current_lang = 'en'
-            current_name = 'English'
+            current_lang = 'id'
+            current_name = 'Bahasa Indonesia'
 
-        language_text = f"""🌐 **Language Settings**
+        if current_lang == 'id':
+            language_text = f"""🌐 **Pengaturan Bahasa**
+
+📍 **Bahasa Saat Ini:** {current_name} (`{current_lang}`)
+
+🗣️ **Bahasa Tersedia:**
+• 🇺🇸 English - Fitur lengkap
+• 🇮🇩 Bahasa Indonesia - Fitur lengkap
+
+💡 **Pilih bahasa yang Anda inginkan:**"""
+        else:
+            language_text = f"""🌐 **Language Settings**
 
 📍 **Current Language:** {current_name} (`{current_lang}`)
 
@@ -1171,32 +1197,36 @@ Needed: {max(0, next_tier['requirement'] - total_referrals)} more referrals
                     success_msg = f"""✅ **Bahasa berhasil diubah ke {lang_names[lang_code]}!**
 
 🎯 **Perubahan yang aktif:**
-• Menu dan pesan dalam Bahasa Indonesia
-• Analisis trading dalam bahasa lokal
+• Menu dan pesan dalam Bahasa Indonesia  
+• Analisis trading dalam bahasa Indonesia
 • Support customer dalam bahasa Indonesia
 
-💡 **Catatan:** Beberapa data teknis tetap dalam bahasa Inggris untuk akurasi."""
+💡 **Catatan:** Bot sekarang akan merespons dalam Bahasa Indonesia."""
+                    await query.answer("✅ Bahasa berhasil diubah ke Bahasa Indonesia!")
                 else:
                     success_msg = f"""✅ **Language changed to {lang_names[lang_code]}!**
 
 🎯 **Active Changes:**
 • Menus and messages in English
-• Trading analysis in English
+• Trading analysis in English  
 • Customer support in English
 
-💡 **Note:** All technical data will be in English for accuracy."""
+💡 **Note:** Bot will now respond in English."""
+                    await query.answer("✅ Language changed to English!")
                 
-                await query.answer(f"✅ Language changed to {lang_names[lang_code]}!")
-                
-                # Back to settings menu with updated language
-                await self.show_settings_menu(query, context)
+                # Show success message with proper language
+                await query.edit_message_text(
+                    success_msg,
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali ke Pengaturan" if lang_code == 'id' else "🔙 Back to Settings", callback_data=SETTINGS_MENU)]]),
+                    parse_mode='MARKDOWN'
+                )
                 
             else:
-                await query.answer("❌ Failed to update language. Please try again.", show_alert=True)
+                await query.answer("❌ Gagal mengubah bahasa. Silakan coba lagi." if lang_code == 'id' else "❌ Failed to update language. Please try again.", show_alert=True)
                 
         except Exception as e:
             print(f"Error setting language: {e}")
-            await query.answer("❌ Error updating language. Please try again.", show_alert=True)
+            await query.answer("❌ Error mengubah bahasa. Silakan coba lagi." if lang_code == 'id' else "❌ Error updating language. Please try again.", show_alert=True)
 
 
 def register_menu_handlers(application, bot_instance):

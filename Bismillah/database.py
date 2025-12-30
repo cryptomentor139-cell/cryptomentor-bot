@@ -1591,8 +1591,13 @@ class Database:
         """Get user's language preference"""
         try:
             user = self.get_user(telegram_id)
-            # Default to 'id' if user not found or language_code is missing
-            return user.get('language_code', 'id') if user else 'id' 
+            if user and user.get('language_code'):
+                return user.get('language_code')
+            else:
+                # Default to Indonesian and update user if exists
+                if user:
+                    self.update_user_language(telegram_id, 'id')
+                return 'id'
         except Exception as e:
             print(f"Error getting user language: {e}")
             return 'id' # Default language
