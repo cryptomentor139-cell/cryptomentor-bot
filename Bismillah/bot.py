@@ -1237,7 +1237,7 @@ _Select an option below:_
  ➕ Add Premium - Grant premium access
  ➖ Remove Premium - Revoke premium
  ♾️ Set Lifetime - Grant lifetime access
- 🎁 Add Credits - Give credits to user
+ 🎁 Manage Credits - Add or reset credits
 
 _Select an action below:_
 """
@@ -1245,11 +1245,68 @@ _Select an action below:_
                 [InlineKeyboardButton("➕ Add Premium", callback_data="admin_add_premium")],
                 [InlineKeyboardButton("➖ Remove Premium", callback_data="admin_remove_premium")],
                 [InlineKeyboardButton("♾️ Set Lifetime", callback_data="admin_set_lifetime")],
-                [InlineKeyboardButton("🎁 Add Credits", callback_data="admin_add_credits")],
+                [InlineKeyboardButton("🎁 Manage Credits", callback_data="admin_add_credits")],
                 [InlineKeyboardButton("◀️ Back", callback_data="admin_back")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(premium_text, reply_markup=reply_markup, parse_mode='MARKDOWN')
+
+        elif query.data == "admin_add_premium":
+            msg = await query.edit_message_text(
+                "📝 **Add Premium Access**\n\n"
+                "🆔 Reply with user ID and days (e.g., `123456789 30`)\n"
+                "Or just user ID for 30 days default",
+                parse_mode='MARKDOWN',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium")]])
+            )
+            context.user_data['awaiting_input'] = 'admin_add_premium'
+            context.user_data['message_id'] = msg.message_id
+
+        elif query.data == "admin_remove_premium":
+            msg = await query.edit_message_text(
+                "📝 **Remove Premium Access**\n\n"
+                "🆔 Reply with user ID",
+                parse_mode='MARKDOWN',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium")]])
+            )
+            context.user_data['awaiting_input'] = 'admin_remove_premium'
+            context.user_data['message_id'] = msg.message_id
+
+        elif query.data == "admin_set_lifetime":
+            msg = await query.edit_message_text(
+                "📝 **Set Lifetime Access**\n\n"
+                "🆔 Reply with user ID to grant lifetime premium",
+                parse_mode='MARKDOWN',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium")]])
+            )
+            context.user_data['awaiting_input'] = 'admin_set_lifetime'
+            context.user_data['message_id'] = msg.message_id
+
+        elif query.data == "admin_add_credits":
+            credits_text = """**🎁 Manage Credits**
+
+Choose an action:
+"""
+            keyboard = [
+                [InlineKeyboardButton("➕ Add Credits to User", callback_data="admin_add_credits_manual")],
+                [InlineKeyboardButton("🔄 Reset Users Below 100", callback_data="admin_reset_users_credits")],
+                [InlineKeyboardButton("◀️ Back", callback_data="admin_premium")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(credits_text, reply_markup=reply_markup, parse_mode='MARKDOWN')
+
+        elif query.data == "admin_add_credits_manual":
+            msg = await query.edit_message_text(
+                "📝 **Add Credits to User**\n\n"
+                "🆔 Reply with user ID and credits (e.g., `123456789 100`)",
+                parse_mode='MARKDOWN',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_add_credits")]])
+            )
+            context.user_data['awaiting_input'] = 'admin_add_credits_manual'
+            context.user_data['message_id'] = msg.message_id
+
+        elif query.data == "admin_reset_users_credits":
+            await self.handle_admin_reset_credits(query, context)
 
         elif query.data == "admin_reset_credits":
             await self.handle_admin_reset_credits(query, context)
@@ -1446,6 +1503,66 @@ _Select an action below:_
         """Handle text messages for menu interactions"""
         user_data = context.user_data
         text = update.message.text
+
+        # Handle admin inputs
+        awaiting = user_data.get('awaiting_input')
+        if awaiting in ['admin_add_premium', 'admin_remove_premium', 'admin_set_lifetime', 'admin_add_credits_manual']:
+            from database import Database
+            from datetime import datetime, timedelta
+            
+            parts = text.strip().split()
+            try:
+                user_id = int(parts[0])
+                db = Database()
+                
+                if awaiting == 'admin_add_premium':
+                    days = int(parts[1]) if len(parts) > 1 else 30
+                    premium_until = datetime.utcnow() + timedelta(days=days)
+                    db.add_user_premium(user_id, premium_until)
+                    await update.message.reply_text(
+                        f"✅ Premium access added!\n\n"
+                        f"🆔 User: {user_id}\n"
+                        f"📅 Days: {days}\n"
+                        f"⏰ Until: {premium_until.strftime('%Y-%m-%d %H:%M:%S')}",
+                        parse_mode='MARKDOWN'
+                    )
+                
+                elif awaiting == 'admin_remove_premium':
+                    db.remove_user_premium(user_id)
+                    await update.message.reply_text(
+                        f"✅ Premium access removed!\n\n"
+                        f"🆔 User: {user_id}",
+                        parse_mode='MARKDOWN'
+                    )
+                
+                elif awaiting == 'admin_set_lifetime':
+                    db.set_user_lifetime(user_id, True)
+                    await update.message.reply_text(
+                        f"✅ Lifetime access granted!\n\n"
+                        f"🆔 User: {user_id}\n"
+                        f"♾️ Status: Lifetime Premium",
+                        parse_mode='MARKDOWN'
+                    )
+                
+                elif awaiting == 'admin_add_credits_manual':
+                    credits = int(parts[1]) if len(parts) > 1 else 100
+                    db.add_user_credits(user_id, credits)
+                    await update.message.reply_text(
+                        f"✅ Credits added!\n\n"
+                        f"🆔 User: {user_id}\n"
+                        f"💰 Added: {credits}",
+                        parse_mode='MARKDOWN'
+                    )
+                
+                user_data.pop('awaiting_input', None)
+                user_data.pop('message_id', None)
+                
+            except (ValueError, IndexError):
+                await update.message.reply_text(
+                    "❌ Invalid format! Please check your input and try again.",
+                    parse_mode='MARKDOWN'
+                )
+            return
 
         # Handle manual symbol input
         if user_data.get('awaiting_manual_symbol'):

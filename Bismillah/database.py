@@ -1987,3 +1987,58 @@ class Database:
                 self.conn.close()
         except Exception as e:
             print(f"Error closing database: {e}")
+    def add_user_premium(self, user_id, premium_until):
+        """Add premium access to user"""
+        try:
+            self.cursor.execute("""
+                UPDATE users 
+                SET premium_until = ?, is_lifetime = 0
+                WHERE telegram_id = ?
+            """, (premium_until, user_id))
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error adding premium: {e}")
+            return False
+
+    def remove_user_premium(self, user_id):
+        """Remove premium access from user"""
+        try:
+            self.cursor.execute("""
+                UPDATE users 
+                SET premium_until = NULL, is_lifetime = 0
+                WHERE telegram_id = ?
+            """, (user_id,))
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error removing premium: {e}")
+            return False
+
+    def set_user_lifetime(self, user_id, is_lifetime=True):
+        """Set user as lifetime premium"""
+        try:
+            self.cursor.execute("""
+                UPDATE users 
+                SET is_lifetime = ?, premium_until = NULL
+                WHERE telegram_id = ?
+            """, (1 if is_lifetime else 0, user_id))
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error setting lifetime: {e}")
+            return False
+
+    def add_user_credits(self, user_id, amount):
+        """Add credits to user"""
+        try:
+            self.cursor.execute("""
+                UPDATE users 
+                SET credits = COALESCE(credits, 0) + ?
+                WHERE telegram_id = ?
+            """, (amount, user_id))
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error adding credits: {e}")
+            return False
