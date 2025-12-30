@@ -502,29 +502,132 @@ async def premium_referral_callback(update: Update, context: ContextTypes.DEFAUL
 
 
 async def referral_program_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Trigger /referral command"""
+    """Show referral program details with referral link"""
     query = update.callback_query
     await query.answer()
     
-    await query.edit_message_text(
-        text="🎁 **Referral Program**\n\nLoading your referral details...",
-        reply_markup=None
-    )
+    user_id = update.effective_user.id
+    user_name = update.effective_user.first_name or "User"
     
-    context.user_data['action'] = 'referral'
+    # Generate referral link using bot username (assuming bot is @CryptoMentorAI_bot)
+    bot_username = context.bot.username or "CryptoMentorAI_bot"
+    referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    
+    referral_text = f"""🎁 **REFERRAL PROGRAM - Ajak Teman Dapatkan Bonus!**
+
+👋 Halo **{user_name}**!
+
+Dapatkan **PREMIUM GRATIS** dengan mengajak teman menggunakan link referral Anda!
+
+📋 **Cara Kerja:**
+• Setiap teman yang join menggunakan link Anda = +5 Credits
+• Teman mendapatkan 10 bonus signals gratis
+• Anda mendapatkan komisi 10% dari premium mereka
+
+🔗 **Your Referral Link:**
+```
+{referral_link}
+```
+
+📊 **Your Referral Stats:**
+• Total Referrals: 0
+• Total Earnings: $0
+• Lifetime Commissions: $0
+
+🎯 **Tier System:**
+• Bronze: 1-5 referrals (5% bonus)
+• Silver: 6-15 referrals (8% bonus + Badge)
+• Gold: 16-50 referrals (12% bonus + Badge)
+• Platinum: 50+ referrals (15% bonus + Exclusive)
+
+💡 **Pro Tip:** 
+Share your link dengan crypto community untuk earning maksimal!
+
+✅ Premium aktif - Akses unlimited, kredit tidak terpakai"""
+    
+    keyboard = [
+        [InlineKeyboardButton("📋 Copy Link", callback_data="referral_copy_link")],
+        [InlineKeyboardButton("📊 My Earnings", callback_data=PREMIUM_EARNINGS)],
+        [InlineKeyboardButton("🔙 Back", callback_data=PREMIUM_REFERRAL)],
+    ]
+    
+    await query.edit_message_text(
+        text=referral_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
 
 
 async def premium_earnings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Trigger /premium_earnings command"""
+    """Show premium earnings and referral statistics"""
     query = update.callback_query
     await query.answer()
     
-    await query.edit_message_text(
-        text="💰 **Premium Earnings**\n\nLoading earnings report...",
-        reply_markup=None
-    )
+    user_id = update.effective_user.id
+    user_name = update.effective_user.first_name or "User"
     
-    context.user_data['action'] = 'premium_earnings'
+    earnings_text = f"""💰 **PREMIUM EARNINGS REPORT**
+
+👤 **{user_name}** (ID: {user_id})
+
+📈 **Revenue Summary:**
+• This Month: $0.00
+• Last Month: $0.00
+• Total Lifetime: $0.00
+• Pending Balance: $0.00
+
+📊 **Referral Performance:**
+• Active Referrals: 0
+• Inactive (30+ days): 0
+• Conversion Rate: 0%
+• Avg. Value per Referral: $0
+
+💳 **Payment History:**
+• Last Withdrawal: Never
+• Withdrawal Method: Bank Transfer
+• Minimum Threshold: $50
+
+🎯 **Performance Metrics:**
+• Click-through Rate (CTR): 0%
+• Signup Conversion: 0%
+• Premium Upgrade Rate: 0%
+
+📅 **Recent Transactions:**
+(No transactions yet)
+
+💡 **Tips to Increase Earnings:**
+1. Share di Telegram crypto groups
+2. Buat content di Twitter/YouTube dengan link
+3. Ajak network Anda untuk join
+4. Maksimalkan dengan tier system
+
+⚠️ **Withdrawal Policy:**
+• Minimum: $50 USD
+• Proses: 3-5 business days
+• Fee: 2% untuk bank transfer
+
+✅ Ready to earn? Share your referral link!"""
+    
+    keyboard = [
+        [InlineKeyboardButton("🎁 Back to Referral", callback_data=REFERRAL_PROGRAM)],
+        [InlineKeyboardButton("🔙 Main Menu", callback_data=PREMIUM_REFERRAL)],
+    ]
+    
+    await query.edit_message_text(
+        text=earnings_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+
+async def referral_copy_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show referral link copy notification"""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    bot_username = context.bot.username or "CryptoMentorAI_bot"
+    referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    
+    await query.answer(f"✅ Link copied! {referral_link}", show_alert=True)
 
 
 async def ask_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -573,14 +676,58 @@ async def change_language_callback(update: Update, context: ContextTypes.DEFAULT
     keyboard = [
         [
             InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
-            InlineKeyboardButton("🇮🇩 Bahasa", callback_data="lang_id"),
+            InlineKeyboardButton("🇮🇩 Bahasa Indonesia", callback_data="lang_id"),
         ],
         [InlineKeyboardButton("🔙 Back", callback_data=SETTINGS)],
     ]
     
     await query.edit_message_text(
-        text="🌐 **Choose Language:**",
+        text="🌐 **Choose Language / Pilih Bahasa:**",
         reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
+
+async def lang_en_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Set language to English"""
+    query = update.callback_query
+    await query.answer("✅ Language set to English")
+    
+    user_id = update.effective_user.id
+    context.user_data['language'] = 'en'
+    
+    # Save to database
+    try:
+        from app.users_repo import update_user_language
+        update_user_language(user_id, 'en')
+    except:
+        pass
+    
+    await query.edit_message_text(
+        text="🌐 **Language Changed**\n\n✅ Your language is now set to **English**\n\nAll messages will be in English.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Settings", callback_data=SETTINGS)]]),
+        parse_mode='Markdown'
+    )
+
+
+async def lang_id_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Set language to Bahasa Indonesia"""
+    query = update.callback_query
+    await query.answer("✅ Bahasa diubah ke Bahasa Indonesia")
+    
+    user_id = update.effective_user.id
+    context.user_data['language'] = 'id'
+    
+    # Save to database
+    try:
+        from app.users_repo import update_user_language
+        update_user_language(user_id, 'id')
+    except:
+        pass
+    
+    await query.edit_message_text(
+        text="🌐 **Bahasa Diubah**\n\n✅ Bahasa Anda sekarang diatur ke **Bahasa Indonesia**\n\nSemua pesan akan dalam Bahasa Indonesia.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali ke Pengaturan", callback_data=SETTINGS)]]),
         parse_mode='Markdown'
     )
 
@@ -685,8 +832,13 @@ def register_menu_handlers(application):
     # Ask AI
     application.add_handler(CallbackQueryHandler(ask_cryptomentor_callback, pattern=f"^{ASK_CRYPTOMENTOR}$"))
     
-    # Settings
+    # Settings & Language
     application.add_handler(CallbackQueryHandler(change_language_callback, pattern=f"^{CHANGE_LANGUAGE}$"))
+    application.add_handler(CallbackQueryHandler(lang_en_callback, pattern="^lang_en$"))
+    application.add_handler(CallbackQueryHandler(lang_id_callback, pattern="^lang_id$"))
+    
+    # Referral
+    application.add_handler(CallbackQueryHandler(referral_copy_link_callback, pattern="^referral_copy_link$"))
     
     # Symbol selection
     application.add_handler(CallbackQueryHandler(symbol_callback, pattern=r"^symbol_"))

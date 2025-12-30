@@ -191,6 +191,28 @@ def create_user(telegram_id: int, first_name: str = None, username: str = None,
         print(f"Error creating user {telegram_id}: {e}")
         return False
 
+def update_user_language(telegram_id: int, language: str) -> bool:
+    """Update user language preference in Supabase"""
+    try:
+        supabase = get_supabase_client()
+        
+        # Update language field
+        result = supabase.table("users").update({
+            "language": language,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }).eq("telegram_id", telegram_id).execute()
+        
+        if result.data:
+            print(f"✅ Updated language for user {telegram_id} to {language}")
+            return True
+        else:
+            print(f"❌ Failed to update language for user {telegram_id}")
+            return False
+    except Exception as e:
+        print(f"Error updating language for user {telegram_id}: {e}")
+        return False
+
+
 def update_user_credits(telegram_id: int, credits: int) -> bool:
     """Update user credits in Supabase"""
     try:
