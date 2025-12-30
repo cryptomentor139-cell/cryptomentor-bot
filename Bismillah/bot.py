@@ -138,7 +138,7 @@ class TelegramBot:
 
         # Register callback handlers for admin panel buttons and signals
         self.application.add_handler(CallbackQueryHandler(self.signal_callback_handler, pattern=r'^signal_tf_'))
-        self.application.add_handler(CallbackQueryHandler(self.admin_button_handler))
+        self.application.add_handler(CallbackQueryHandler(self.admin_button_handler, pattern=r'^admin_'))
         
         # Message handler for menu interactions
         self.application.add_handler(
