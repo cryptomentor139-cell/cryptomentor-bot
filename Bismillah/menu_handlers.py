@@ -84,6 +84,12 @@ class MenuCallbackHandler:
                 await self.handle_referral_stats(query, context)
             elif callback_data == "referral_withdrawal":
                 await self.handle_referral_withdrawal(query, context)
+            elif callback_data == "referral_guide":
+                await self.handle_referral_guide(query, context)
+            elif callback_data == "tier_system_guide":
+                await self.handle_tier_system_guide(query, context)
+            elif callback_data == "advanced_referral_guide":
+                await self.handle_advanced_referral_guide(query, context)
 
 
             # Symbol selection handlers
@@ -535,7 +541,7 @@ Just type the number in your next message!"""
         )
 
     async def handle_referral_stats(self, query, context):
-        """Handle detailed referral statistics"""
+        """Handle detailed referral statistics with advanced tier system"""
         user_id = query.from_user.id
         user_name = query.from_user.first_name or "User"
 
@@ -544,6 +550,7 @@ Just type the number in your next message!"""
         active_referrals = 0
         total_earnings = 0
         this_month_earnings = 0
+        premium_referrals = 0
 
         try:
             from database import Database
@@ -553,48 +560,69 @@ Just type the number in your next message!"""
             active_referrals = stats.get('active_referrals', 0)
             total_earnings = stats.get('total_earnings', 0)
             this_month_earnings = stats.get('this_month_earnings', 0)
+            
+            # Get premium referral count
+            earnings_summary = db.get_referral_earnings_summary(user_id)
+            premium_referrals = earnings_summary.get('premium_referrals', 0)
         except:
             pass
 
-        # Determine tier
-        tier_info = self.get_referral_tier(total_referrals)
+        # Get current tier and progress
+        current_tier = self.get_referral_tier_info(total_referrals)
+        next_tier = self.get_next_tier_info(total_referrals)
+        
+        # Calculate earnings potential
+        credit_value = (total_referrals - premium_referrals) * 5  # 5 credits per free referral
+        money_value = total_earnings
+        estimated_monthly = self.calculate_monthly_potential(total_referrals, active_referrals)
 
-        stats_text = f"""📊 **STATISTIK REFERRAL DETAIL**
+        stats_text = f"""🏆 **REFERRAL DASHBOARD - {current_tier['name']} TIER**
 
-👤 **{user_name}** (ID: {user_id})
+👤 **{user_name}** | Level {current_tier['level']}/5
 
-🎯 **Performance Overview:**
-• Total Referrals: {total_referrals}
-• Active Referrals (30 hari): {active_referrals}
-• Conversion Rate: {(active_referrals/max(total_referrals,1)*100):.1f}%
-• Success Rate: {'🟢 Excellent' if total_referrals > 10 else '🟡 Good' if total_referrals > 5 else '🔴 Needs Improvement'}
+📊 **PERFORMANCE METRICS:**
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Total Referrals: {total_referrals:>15} ┃
+┃ Free Referrals: {total_referrals - premium_referrals:>16} ┃
+┃ Premium Referrals: {premium_referrals:>13} ┃
+┃ Success Rate: {(active_referrals/max(total_referrals,1)*100):>17.1f}% ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-💰 **Earnings Summary:**
+💎 **CURRENT TIER: {current_tier['name']}**
+{current_tier['icon']} **Benefits:**
+• Credit Bonus: +{current_tier['bonus']}% pada setiap referral
+• Money Multiplier: {current_tier['money_multiplier']}x cash rewards
+• Badge: {current_tier['badge']}
+• Special Access: {current_tier['access']}
+
+🎯 **PROGRESSION TO {next_tier['name']}:**
+Progress: {total_referrals}/{next_tier['requirement']} ({(total_referrals/next_tier['requirement']*100):.1f}%)
+{'▓' * int(total_referrals/next_tier['requirement']*10)}{'░' * (10-int(total_referrals/next_tier['requirement']*10))}
+Needed: {max(0, next_tier['requirement'] - total_referrals)} more referrals
+
+💰 **EARNINGS OVERVIEW:**
+• Credits Earned: {credit_value:,} credits (≈ Rp {credit_value * 500:,})
+• Cash Earned: Rp {money_value:,}
 • Bulan Ini: Rp {this_month_earnings:,}
-• Total Lifetime: Rp {total_earnings:,}
-• Rata-rata per Referral: Rp {(total_earnings/max(total_referrals,1)):,.0f}
-• Status Withdrawal: {'✅ Available' if total_earnings >= 50000 else '⏳ Minimum Rp 50,000'}
+• Estimated Monthly: Rp {estimated_monthly:,}
 
-{tier_info}
+📈 **GROWTH STRATEGY:**
+{self.get_tier_specific_tips(current_tier['level'])}
 
-📈 **Tips Meningkatkan Performa:**
-• Share link di 3+ grup crypto berbeda
-• Buat tutorial penggunaan bot
-• Ajak teman yang aktif trading
-• Konsisten share 1x setiap hari
+🎁 **REWARDS UNLOCKED:**
+{self.get_rewards_display(current_tier['level'], total_referrals)}
 
-🎁 **Bonus Berikutnya:**
-• {10-total_referrals%10} referral lagi untuk bonus tier!
-• Target: {((total_referrals//10)+1)*10} referrals
-
-⚡ **Quick Actions:**
-• Copy link dan share sekarang
-• Invite 5 teman untuk bonus instant credits
-• Upgrade ke premium untuk earning 2x lipat"""
+⚡ **TIER BONUSES AKTIF:**
+• Credit boost: {current_tier['bonus']}% extra
+• Withdrawal priority: {current_tier['withdrawal_priority']}
+• Customer support: {current_tier['support_level']}"""
 
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         keyboard = [
-            [InlineKeyboardButton("📋 Copy Link", callback_data="copy_referral_link")],
+            [InlineKeyboardButton("📋 Copy Link", callback_data="copy_referral_link"),
+             InlineKeyboardButton("💡 Tips & Guide", callback_data="referral_guide")],
+            [InlineKeyboardButton("🎯 Tier Guide", callback_data="tier_system_guide"),
+             InlineKeyboardButton("💰 Withdrawal", callback_data="referral_withdrawal")],
             [InlineKeyboardButton("🔙 Back", callback_data="referral_program")],
         ]
 
@@ -666,35 +694,335 @@ Just type the number in your next message!"""
             parse_mode='MARKDOWN'
         )
 
-    def get_referral_tier(self, total_referrals):
-        """Get referral tier information"""
-        if total_referrals >= 50:
-            return """💎 **DIAMOND TIER** (50+ referrals)
-• +25% bonus credits
-• Lifetime premium benefits  
-• Exclusive Diamond community
-• Priority customer support"""
-        elif total_referrals >= 26:
-            return """🥇 **GOLD TIER** (26-50 referrals)
-• +15% bonus credits
-• VIP support channel
-• Premium features trial
-• Gold badge di profile"""
-        elif total_referrals >= 11:
-            return """🥈 **SILVER TIER** (11-25 referrals)
-• +10% bonus credits
-• Early access features
-• Silver badge di profile
-• Beta tester access"""
-        elif total_referrals >= 1:
-            return """🥉 **BRONZE TIER** (1-10 referrals)
-• +5% bonus credits
-• Bronze badge di profile
-• Member community access"""
+    def get_referral_tier_info(self, total_referrals):
+        """Get comprehensive referral tier information"""
+        if total_referrals >= 100:
+            return {
+                'name': 'DIAMOND', 'level': 5, 'bonus': 30, 'money_multiplier': 3.0,
+                'icon': '💎', 'badge': '👑 Diamond Elite',
+                'access': 'VIP Community + Direct Admin Access',
+                'withdrawal_priority': 'Instant (0-2 hours)',
+                'support_level': 'White-glove Priority Support'
+            }
+        elif total_referrals >= 50:
+            return {
+                'name': 'GOLD', 'level': 4, 'bonus': 20, 'money_multiplier': 2.5,
+                'icon': '🥇', 'badge': '🏆 Gold Champion',
+                'access': 'Premium Community + Beta Features',
+                'withdrawal_priority': 'Fast Track (2-6 hours)',
+                'support_level': 'Priority Support'
+            }
+        elif total_referrals >= 25:
+            return {
+                'name': 'SILVER', 'level': 3, 'bonus': 15, 'money_multiplier': 2.0,
+                'icon': '🥈', 'badge': '⚡ Silver Elite',
+                'access': 'Silver Community + Early Access',
+                'withdrawal_priority': 'Accelerated (6-12 hours)',
+                'support_level': 'Enhanced Support'
+            }
+        elif total_referrals >= 10:
+            return {
+                'name': 'BRONZE', 'level': 2, 'bonus': 10, 'money_multiplier': 1.5,
+                'icon': '🥉', 'badge': '🔥 Bronze Achiever',
+                'access': 'Member Community',
+                'withdrawal_priority': 'Standard (12-24 hours)',
+                'support_level': 'Standard Support'
+            }
         else:
-            return """⭐ **STARTER TIER** (0 referrals)
-• Ready to earn rewards
-• Join sekarang dan mulai earning!"""
+            return {
+                'name': 'STARTER', 'level': 1, 'bonus': 5, 'money_multiplier': 1.0,
+                'icon': '⭐', 'badge': '🌟 Rising Star',
+                'access': 'Basic Community',
+                'withdrawal_priority': 'Normal (24-48 hours)',
+                'support_level': 'Community Support'
+            }
+
+    def get_next_tier_info(self, total_referrals):
+        """Get information about next tier"""
+        if total_referrals >= 100:
+            return {'name': 'DIAMOND ELITE', 'requirement': 200}
+        elif total_referrals >= 50:
+            return {'name': 'DIAMOND', 'requirement': 100}
+        elif total_referrals >= 25:
+            return {'name': 'GOLD', 'requirement': 50}
+        elif total_referrals >= 10:
+            return {'name': 'SILVER', 'requirement': 25}
+        else:
+            return {'name': 'BRONZE', 'requirement': 10}
+
+    def calculate_monthly_potential(self, total_referrals, active_referrals):
+        """Calculate estimated monthly earning potential"""
+        if total_referrals == 0:
+            return 0
+        
+        # Base calculation: assume 10% of referrals become premium monthly
+        conversion_rate = 0.10
+        avg_premium_value = 15000  # Average premium subscription value
+        
+        # Tier multiplier
+        tier = self.get_referral_tier_info(total_referrals)
+        multiplier = tier['money_multiplier']
+        
+        estimated = total_referrals * conversion_rate * avg_premium_value * 0.1 * multiplier
+        return int(estimated)
+
+    def get_tier_specific_tips(self, tier_level):
+        """Get tier-specific growth tips"""
+        tips = {
+            1: "🚀 **STARTER STRATEGY:**\n• Share di 2-3 grup crypto\n• Ajak 5 teman trading pertama\n• Focus quality over quantity",
+            2: "📈 **BRONZE GROWTH:**\n• Expand ke 5+ crypto communities\n• Create tutorial content\n• Build personal crypto network",
+            3: "⚡ **SILVER SCALING:**\n• Launch referral campaign\n• Partner dengan crypto influencers\n• Host crypto learning sessions",
+            4: "🏆 **GOLD MASTERY:**\n• Build referral sub-network\n• Mentor bronze/silver members\n• Create premium content strategy",
+            5: "💎 **DIAMOND EXCELLENCE:**\n• Lead community initiatives\n• Develop scalable systems\n• Mentor entire referral network"
+        }
+        return tips.get(tier_level, tips[1])
+
+    def get_rewards_display(self, tier_level, total_referrals):
+        """Display unlocked rewards"""
+        rewards = []
+        
+        if tier_level >= 1:
+            rewards.append("✅ 5 credits per free referral")
+        if tier_level >= 2:
+            rewards.append("✅ 10% bonus credits")
+            rewards.append("✅ Bronze badge & community access")
+        if tier_level >= 3:
+            rewards.append("✅ 15% bonus credits")
+            rewards.append("✅ Early access to features")
+        if tier_level >= 4:
+            rewards.append("✅ 20% bonus credits")
+            rewards.append("✅ VIP support channel")
+        if tier_level >= 5:
+            rewards.append("✅ 30% bonus credits")
+            rewards.append("✅ Direct admin access")
+            
+        # Milestone rewards
+        milestones = [
+            (5, "🎁 50 bonus credits"),
+            (15, "🎁 100 bonus credits + 1 day premium"),
+            (30, "🎁 1 week premium trial"),
+            (75, "🎁 1 month premium"),
+        ]
+        
+        for milestone, reward in milestones:
+            if total_referrals >= milestone:
+                rewards.append(f"✅ {reward}")
+        
+        return "\n".join(rewards) if rewards else "🔒 Complete first referral to unlock rewards"
+
+    async def handle_referral_guide(self, query, context):
+        """Show comprehensive referral guide"""
+        guide_text = """📚 **PANDUAN REFERRAL MASTER**
+
+🎯 **STRATEGI DASAR:**
+
+**1. TARGET AUDIENCE YANG TEPAT** 🎪
+• Trader crypto pemula (butuh guidance)
+• Member grup crypto aktif
+• Followers crypto influencers
+• Teman yang tertarik investasi
+
+**2. PLATFORM SHARING OPTIMAL** 📱
+• WhatsApp: Personal approach, trust tinggi
+• Telegram Groups: Crypto communities
+• Discord: Gaming + crypto communities  
+• Twitter/X: Crypto Twitter audience
+• Instagram Stories: Visual appeal
+
+**3. CONTENT STRATEGY** ✍️
+• Screenshot profit dari bot signals
+• Tutorial cara pakai bot (video)
+• Testimonial hasil trading
+• Before/After portfolio growth
+• Educational crypto content
+
+**4. TIMING YANG TEPAT** ⏰
+• Bull market: Share profit screenshots
+• Bear market: Share risk management tips
+• News events: Share quick analysis
+• Weekend: Educational content
+• Asian hours: Indonesian audience
+
+**5. CONVERSION TACTICS** 💡
+• Offer free 1-on-1 crypto guidance
+• Share exclusive trading tips
+• Create beginner-friendly tutorials
+• Build trust through consistency
+• Follow up dengan referrals
+
+🏆 **PRO TIPS:**
+• Authenticity > Hard selling
+• Educational content builds trust  
+• Personal success story works best
+• Community building = long-term success
+• Quality referrals > Quantity spam"""
+
+        keyboard = [
+            [InlineKeyboardButton("🎯 Advanced Strategies", callback_data="advanced_referral_guide")],
+            [InlineKeyboardButton("📊 Back to Stats", callback_data="referral_stats")],
+        ]
+
+        await query.edit_message_text(
+            text=guide_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='MARKDOWN'
+        )
+
+    async def handle_tier_system_guide(self, query, context):
+        """Show comprehensive tier system guide"""
+        tier_guide = """🏆 **TIER SYSTEM GUIDE - PATH TO DIAMOND**
+
+🌟 **TIER OVERVIEW:**
+
+**⭐ STARTER (0 referrals)**
+• Bonus: 5% extra credits
+• Rewards: Learning phase
+• Goal: First 10 referrals
+
+**🥉 BRONZE (10-24 referrals)** 
+• Bonus: 10% extra credits + 1.5x money
+• Rewards: Community access
+• Goal: Build foundation network
+
+**🥈 SILVER (25-49 referrals)**
+• Bonus: 15% extra credits + 2x money  
+• Rewards: Early feature access
+• Goal: Scale & systematize
+
+**🥇 GOLD (50-99 referrals)**
+• Bonus: 20% extra credits + 2.5x money
+• Rewards: VIP community + priority support
+• Goal: Leadership & mentoring
+
+**💎 DIAMOND (100+ referrals)**
+• Bonus: 30% extra credits + 3x money
+• Rewards: Elite access + admin connection
+• Goal: Master referral ecosystem
+
+📈 **PROGRESSION STRATEGY:**
+
+**Phase 1: Foundation (0→10)**
+• Duration: 2-4 weeks
+• Focus: Friends & family
+• Method: Personal recommendation
+
+**Phase 2: Growth (10→25)**  
+• Duration: 1-2 months
+• Focus: Community expansion
+• Method: Content + networking
+
+**Phase 3: Scale (25→50)**
+• Duration: 2-3 months  
+• Focus: System building
+• Method: Partnerships + automation
+
+**Phase 4: Mastery (50→100)**
+• Duration: 3-6 months
+• Focus: Leadership
+• Method: Team building + mentoring
+
+💰 **EARNING POTENTIAL:**
+• STARTER: ~Rp 50K/month
+• BRONZE: ~Rp 200K/month
+• SILVER: ~Rp 500K/month  
+• GOLD: ~Rp 1.5M/month
+• DIAMOND: ~Rp 5M+/month
+
+*Estimasi berdasarkan 10% conversion rate ke premium*"""
+
+        keyboard = [
+            [InlineKeyboardButton("📊 My Progress", callback_data="referral_stats")],
+            [InlineKeyboardButton("💡 Strategy Guide", callback_data="referral_guide")],
+        ]
+
+        await query.edit_message_text(
+            text=tier_guide,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='MARKDOWN'
+        )
+
+    async def handle_advanced_referral_guide(self, query, context):
+        """Show advanced referral strategies"""
+        advanced_guide = """🚀 **ADVANCED REFERRAL MASTERY**
+
+💡 **PSYCHOLOGICAL TRIGGERS:**
+
+**1. SCARCITY & URGENCY** ⏰
+• "Limited 100 credits bonus berakhir minggu ini"
+• "Premium trial hanya untuk 50 orang pertama"
+• "Exclusive early access buat referral hari ini"
+
+**2. SOCIAL PROOF** 👥
+• Screenshot testimonial success stories
+• "Join 10,000+ active traders di Indonesia"
+• Share leaderboard achievements
+
+**3. RECIPROCITY PRINCIPLE** 🎁
+• Berikan free value dulu (tips, analysis)
+• Free crypto education sebelum referral
+• Help solve their trading problems first
+
+**4. AUTHORITY POSITIONING** 👔
+• Share your trading wins/credentials
+• Educational content yang valuable
+• Position as crypto mentor/guide
+
+🔥 **CONVERSION OPTIMIZATION:**
+
+**A. LANDING EXPERIENCE**
+• Personal onboarding untuk setiap referral
+• Custom welcome message
+• Free consultation offer
+
+**B. RETENTION STRATEGY**  
+• Weekly check-in dengan referrals
+• Share exclusive trading insights
+• Build long-term relationships
+
+**C. UPSELLING FUNNEL**
+• Free user → Credits exhausted → Premium push
+• Social proof dari existing premium users
+• Limited-time upgrade discounts
+
+📊 **TRACKING & ANALYTICS:**
+
+**Conversion Metrics:**
+• Click-through rate dari link
+• Free registration rate
+• Premium conversion rate
+• Monthly retention rate
+
+**Optimization Points:**
+• A/B test different messaging
+• Track which platforms perform best  
+• Identify highest-value referral sources
+• Optimize timing untuk maximum impact
+
+🎯 **AUTOMATION TOOLS:**
+
+• Auto-follow up messages
+• Scheduled content sharing
+• Referral performance tracking
+• Reward notifications
+
+💎 **DIAMOND-TIER SECRETS:**
+• Build referral teams (MLM-style)
+• Create crypto trading courses
+• Host exclusive webinars
+• Partner dengan crypto projects
+• Develop personal brand as crypto expert"""
+
+        keyboard = [
+            [InlineKeyboardButton("📚 Basic Guide", callback_data="referral_guide")],
+            [InlineKeyboardButton("🏆 Tier System", callback_data="tier_system_guide")],
+            [InlineKeyboardButton("📊 Back to Stats", callback_data="referral_stats")],
+        ]
+
+        await query.edit_message_text(
+            text=advanced_guide,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='MARKDOWN'
+        )
 
 
 def register_menu_handlers(application, bot_instance):

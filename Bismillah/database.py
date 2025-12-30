@@ -1250,58 +1250,8 @@ class Database:
             return {'total_referrals': 0, 'total_earnings': 0, 'recent_referrals': []}
 
     def record_premium_referral_reward(self, referrer_id, referred_id, subscription_type, package_amount):
-        """Record premium referral reward when someone subscribes"""
-        try:
-            # Validate inputs
-            if not referrer_id or not referred_id:
-                print(f"❌ Invalid referral IDs: referrer={referrer_id}, referred={referred_id}")
-                return False
-
-            # Check if referrer exists and is premium (only premium users can earn money)
-            referrer = self.get_user(referrer_id)
-            if not referrer:
-                print(f"❌ Referrer {referrer_id} not found")
-                return False
-
-            if not self.is_user_premium(referrer_id):
-                print(f"❌ Referrer {referrer_id} is not premium, cannot earn money rewards")
-                return False
-
-            # Calculate earnings (Rp 10,000 per premium subscription)
-            earnings = 10000
-
-            # Check if this referral reward already exists to prevent duplicates
-            self.cursor.execute("""
-                SELECT id FROM premium_referrals 
-                WHERE referrer_id = ? AND referred_id = ? AND status = 'paid'
-            """, (referrer_id, referred_id))
-
-            if self.cursor.fetchone():
-                print(f"⚠️ Premium referral reward already exists for {referrer_id} → {referred_id}")
-                return True  # Not an error, just already processed
-
-            self.cursor.execute("""
-                INSERT INTO premium_referrals 
-                (referrer_id, referred_id, subscription_type, subscription_amount, earnings, status, created_at)
-                VALUES (?, ?, ?, ?, ?, 'paid', datetime('now'))
-            """, (referrer_id, referred_id, subscription_type, package_amount, earnings))
-
-            # Update referrer's premium earnings
-            self.cursor.execute("""
-                UPDATE users SET premium_earnings = COALESCE(premium_earnings, 0) + ? WHERE telegram_id = ?
-            """, (earnings, referrer_id))
-
-            self.conn.commit()
-
-            # Log the reward
-            self.log_user_activity(referrer_id, "premium_referral_reward", 
-                                 f"Earned Rp {earnings:,} from {referred_id} subscribing {subscription_type}")
-
-            print(f"✅ Premium referral reward processed: {referrer_id} earned Rp {earnings:,}")
-            return True
-        except Exception as e:
-            print(f"Error recording premium referral reward: {e}")
-            return False
+        """Record premium referral reward when someone subscribes - uses enhanced tier system"""
+        return self.record_enhanced_premium_referral_reward(referrer_id, referred_id, subscription_type, package_amount)
 
     def check_premium_referral(self, telegram_id):
         """Check if user was referred via premium referral code"""
@@ -1673,49 +1623,215 @@ class Database:
             }
 
     def process_referral_reward(self, referrer_id, referred_id):
-        """Process referral reward when someone joins"""
-        try:
-            # Give 5 bonus credits to referrer
-            self.cursor.execute("""
-                UPDATE users SET credits = credits + 5 WHERE telegram_id = ?
-            """, (referrer_id,))
-            
-            if self.cursor.rowcount > 0:
-                self.conn.commit()
-                # Log the referral reward
-                self.log_user_activity(
-                    referrer_id, 
-                    "referral_reward", 
-                    f"Earned 5 credits from referral {referred_id}"
-                )
-                print(f"✅ Processed referral reward: {referrer_id} got 5 credits from {referred_id}")
-                return True
-            return False
-        except Exception as e:
-            print(f"Error processing referral reward: {e}")
-            return False
+        """Process referral reward when someone joins - uses enhanced tier system"""
+        return self.process_enhanced_referral_reward(referrer_id, referred_id)
 
     def get_user_tier(self, telegram_id):
-        """Get user's referral tier based on total referrals"""
+        """Get user's referral tier based on total referrals with enhanced system"""
         try:
             self.cursor.execute("""
                 SELECT COUNT(*) FROM users WHERE referred_by = ?
             """, (telegram_id,))
             total_referrals = self.cursor.fetchone()[0] or 0
             
-            if total_referrals >= 50:
-                return {'tier': 'DIAMOND', 'level': 5, 'bonus': 25}
-            elif total_referrals >= 26:
-                return {'tier': 'GOLD', 'level': 4, 'bonus': 15}
-            elif total_referrals >= 11:
-                return {'tier': 'SILVER', 'level': 3, 'bonus': 10}
-            elif total_referrals >= 1:
-                return {'tier': 'BRONZE', 'level': 2, 'bonus': 5}
+            if total_referrals >= 100:
+                return {'tier': 'DIAMOND', 'level': 5, 'bonus': 30, 'money_multiplier': 3.0}
+            elif total_referrals >= 50:
+                return {'tier': 'GOLD', 'level': 4, 'bonus': 20, 'money_multiplier': 2.5}
+            elif total_referrals >= 25:
+                return {'tier': 'SILVER', 'level': 3, 'bonus': 15, 'money_multiplier': 2.0}
+            elif total_referrals >= 10:
+                return {'tier': 'BRONZE', 'level': 2, 'bonus': 10, 'money_multiplier': 1.5}
             else:
-                return {'tier': 'STARTER', 'level': 1, 'bonus': 0}
+                return {'tier': 'STARTER', 'level': 1, 'bonus': 5, 'money_multiplier': 1.0}
         except Exception as e:
             print(f"Error getting user tier: {e}")
-            return {'tier': 'STARTER', 'level': 1, 'bonus': 0}
+            return {'tier': 'STARTER', 'level': 1, 'bonus': 5, 'money_multiplier': 1.0}
+
+    def apply_tier_bonus_to_credits(self, telegram_id, base_credits):
+        """Apply tier bonus to credit rewards"""
+        try:
+            tier = self.get_user_tier(telegram_id)
+            bonus_percentage = tier['bonus']
+            bonus_credits = int(base_credits * (bonus_percentage / 100))
+            total_credits = base_credits + bonus_credits
+            
+            return {
+                'base_credits': base_credits,
+                'bonus_credits': bonus_credits, 
+                'total_credits': total_credits,
+                'tier': tier['tier'],
+                'bonus_percentage': bonus_percentage
+            }
+        except Exception as e:
+            print(f"Error applying tier bonus: {e}")
+            return {
+                'base_credits': base_credits,
+                'bonus_credits': 0,
+                'total_credits': base_credits,
+                'tier': 'STARTER',
+                'bonus_percentage': 0
+            }
+
+    def apply_tier_multiplier_to_earnings(self, telegram_id, base_earnings):
+        """Apply tier multiplier to money earnings"""
+        try:
+            tier = self.get_user_tier(telegram_id)
+            multiplier = tier['money_multiplier']
+            total_earnings = int(base_earnings * multiplier)
+            bonus_earnings = total_earnings - base_earnings
+            
+            return {
+                'base_earnings': base_earnings,
+                'bonus_earnings': bonus_earnings,
+                'total_earnings': total_earnings,
+                'tier': tier['tier'],
+                'multiplier': multiplier
+            }
+        except Exception as e:
+            print(f"Error applying tier multiplier: {e}")
+            return {
+                'base_earnings': base_earnings,
+                'bonus_earnings': 0,
+                'total_earnings': base_earnings,
+                'tier': 'STARTER',
+                'multiplier': 1.0
+            }
+
+    def process_enhanced_referral_reward(self, referrer_id, referred_id):
+        """Process referral reward with tier system bonuses"""
+        try:
+            base_credits = 5
+            
+            # Apply tier bonus
+            credit_result = self.apply_tier_bonus_to_credits(referrer_id, base_credits)
+            total_credits = credit_result['total_credits']
+            
+            # Add credits to referrer
+            self.cursor.execute("""
+                UPDATE users SET credits = credits + ? WHERE telegram_id = ?
+            """, (total_credits, referrer_id))
+            
+            if self.cursor.rowcount > 0:
+                self.conn.commit()
+                # Log enhanced referral reward
+                self.log_user_activity(
+                    referrer_id, 
+                    "enhanced_referral_reward", 
+                    f"Earned {total_credits} credits ({base_credits} base + {credit_result['bonus_credits']} {credit_result['tier']} bonus) from referral {referred_id}"
+                )
+                print(f"✅ Enhanced referral reward processed: {referrer_id} got {total_credits} credits ({credit_result['tier']} tier)")
+                return True
+            return False
+        except Exception as e:
+            print(f"Error processing enhanced referral reward: {e}")
+            return False
+
+    def record_enhanced_premium_referral_reward(self, referrer_id, referred_id, subscription_type, package_amount):
+        """Record premium referral reward with tier multipliers"""
+        try:
+            if not referrer_id or not referred_id:
+                return False
+
+            referrer = self.get_user(referrer_id)
+            if not referrer or not self.is_user_premium(referrer_id):
+                return False
+
+            base_earnings = 10000  # Base Rp 10,000
+            
+            # Apply tier multiplier
+            earnings_result = self.apply_tier_multiplier_to_earnings(referrer_id, base_earnings)
+            total_earnings = earnings_result['total_earnings']
+
+            # Record the enhanced premium referral
+            self.cursor.execute("""
+                INSERT INTO premium_referrals 
+                (referrer_id, referred_id, subscription_type, subscription_amount, earnings, status, created_at)
+                VALUES (?, ?, ?, ?, ?, 'paid', datetime('now'))
+            """, (referrer_id, referred_id, subscription_type, package_amount, total_earnings))
+
+            # Update referrer's premium earnings
+            self.cursor.execute("""
+                UPDATE users SET premium_earnings = COALESCE(premium_earnings, 0) + ? WHERE telegram_id = ?
+            """, (total_earnings, referrer_id))
+
+            self.conn.commit()
+
+            # Log the enhanced reward
+            self.log_user_activity(referrer_id, "enhanced_premium_referral_reward", 
+                                 f"Earned Rp {total_earnings:,} ({base_earnings:,} base × {earnings_result['multiplier']}x {earnings_result['tier']} multiplier) from {referred_id} subscribing {subscription_type}")
+
+            print(f"✅ Enhanced premium referral reward: {referrer_id} earned Rp {total_earnings:,} ({earnings_result['tier']} tier)")
+            return True
+        except Exception as e:
+            print(f"Error recording enhanced premium referral reward: {e}")
+            return False
+
+    def get_tier_leaderboard(self, limit=20):
+        """Get referral leaderboard with tier information"""
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    u.telegram_id,
+                    u.first_name,
+                    u.username,
+                    COUNT(r.telegram_id) as referral_count,
+                    COALESCE(u.premium_earnings, 0) as earnings
+                FROM users u
+                LEFT JOIN users r ON r.referred_by = u.telegram_id
+                WHERE u.telegram_id IS NOT NULL
+                GROUP BY u.telegram_id, u.first_name, u.username, u.premium_earnings
+                HAVING referral_count > 0
+                ORDER BY referral_count DESC, earnings DESC
+                LIMIT ?
+            """, (limit,))
+            
+            results = []
+            for i, row in enumerate(self.cursor.fetchall()):
+                tier_info = self.get_user_tier(row[0])
+                results.append({
+                    'rank': i + 1,
+                    'telegram_id': row[0],
+                    'first_name': row[1],
+                    'username': row[2],
+                    'referral_count': row[3],
+                    'earnings': row[4],
+                    'tier': tier_info['tier'],
+                    'tier_level': tier_info['level']
+                })
+            return results
+        except Exception as e:
+            print(f"Error getting tier leaderboard: {e}")
+            return []
+
+    def get_referral_milestones(self, telegram_id):
+        """Get referral milestones and rewards"""
+        try:
+            self.cursor.execute("""
+                SELECT COUNT(*) FROM users WHERE referred_by = ?
+            """, (telegram_id,))
+            total_referrals = self.cursor.fetchone()[0] or 0
+            
+            milestones = [
+                {'count': 1, 'reward': '🎁 Welcome bonus: 20 credits', 'unlocked': total_referrals >= 1},
+                {'count': 5, 'reward': '🎁 Bronze achiever: 50 bonus credits', 'unlocked': total_referrals >= 5},
+                {'count': 10, 'reward': '🎁 Bronze tier: Community access + 10% bonus', 'unlocked': total_referrals >= 10},
+                {'count': 15, 'reward': '🎁 Growth bonus: 100 credits + badge', 'unlocked': total_referrals >= 15},
+                {'count': 25, 'reward': '🎁 Silver tier: 15% bonus + early access', 'unlocked': total_referrals >= 25},
+                {'count': 35, 'reward': '🎁 Silver master: 1 week premium trial', 'unlocked': total_referrals >= 35},
+                {'count': 50, 'reward': '🎁 Gold tier: VIP access + 20% bonus', 'unlocked': total_referrals >= 50},
+                {'count': 75, 'reward': '🎁 Gold master: 1 month premium', 'unlocked': total_referrals >= 75},
+                {'count': 100, 'reward': '🎁 Diamond tier: Elite access + 30% bonus', 'unlocked': total_referrals >= 100}
+            ]
+            
+            return {
+                'current_referrals': total_referrals,
+                'milestones': milestones,
+                'next_milestone': next((m for m in milestones if not m['unlocked']), None)
+            }
+        except Exception as e:
+            print(f"Error getting referral milestones: {e}")
+            return {'current_referrals': 0, 'milestones': [], 'next_milestone': None}
 
     def get_language_stats(self):
         """Get language usage statistics"""
