@@ -240,7 +240,42 @@ Choose an option from the menu below:"""
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show help information"""
-        help_text = """📚 **CryptoMentor AI - Command Reference**
+        user_id = update.effective_user.id
+        
+        # Get user language
+        from database import Database
+        db = Database()
+        user_lang = db.get_user_language(user_id)
+
+        if user_lang == 'id':
+            help_text = """📚 **CryptoMentor AI - Panduan Perintah**
+
+🎯 **Sistem Menu (Disarankan):**
+• `/start` - Tampilkan menu selamat datang
+• `/menu` - Buka menu utama kapan saja
+
+💰 **Perintah Gratis:**
+• `/price <symbol>` - Cek harga cryptocurrency
+• `/market` - Ringkasan pasar global
+• `/portfolio` - Lihat kepemilikan Anda
+• `/credits` - Cek saldo kredit
+
+🧠 **Perintah Analisis (Perlu Kredit):**
+• `/analyze <symbol>` - Analisis spot dengan SnD (20 kredit)
+• `/futures <symbol> <timeframe>` - Analisis futures (20 kredit)
+• `/futures_signals` - Sinyal multi-coin (60 kredit)
+
+👑 **Premium & Akun:**
+• `/subscribe` - Upgrade ke premium
+• `/referral` - Program referral
+• `/language <en|id>` - Ubah bahasa
+
+🤖 **Asisten AI:**
+• `/ask_ai <pertanyaan>` - Tanya AI tentang crypto
+
+💡 **Tips:** Gunakan menu tombol untuk pengalaman terbaik!"""
+        else:
+            help_text = """📚 **CryptoMentor AI - Command Reference**
 
 🎯 **Menu System (Recommended):**
 • `/start` - Show welcome menu
@@ -272,6 +307,12 @@ Choose an option from the menu below:"""
     async def price_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle price command with real Binance integration"""
         symbol = context.args[0].upper() if context.args else "BTC"
+        user_id = update.effective_user.id
+
+        # Get user language
+        from database import Database
+        db = Database()
+        user_lang = db.get_user_language(user_id)
 
         try:
             from crypto_api import crypto_api
@@ -280,11 +321,18 @@ Choose an option from the menu below:"""
             price_data = crypto_api.get_crypto_price(symbol, force_refresh=True)
 
             if 'error' in price_data:
-                await update.effective_message.reply_text(
-                    f"❌ **Error for {symbol}:**\n{price_data['error']}\n\n"
-                    f"💡 Try: `/price btc` or `/price eth`",
-                    parse_mode='MARKDOWN'
-                )
+                if user_lang == 'id':
+                    await update.effective_message.reply_text(
+                        f"❌ **Error untuk {symbol}:**\n{price_data['error']}\n\n"
+                        f"💡 Coba: `/price btc` atau `/price eth`",
+                        parse_mode='MARKDOWN'
+                    )
+                else:
+                    await update.effective_message.reply_text(
+                        f"❌ **Error for {symbol}:**\n{price_data['error']}\n\n"
+                        f"💡 Try: `/price btc` or `/price eth`",
+                        parse_mode='MARKDOWN'
+                    )
                 return
 
             # Format price display
@@ -304,22 +352,40 @@ Choose an option from the menu below:"""
             change_emoji = "📈" if change_24h >= 0 else "📉"
             volume_format = f"${volume_24h/1000000:.1f}M" if volume_24h > 1000000 else f"${volume_24h:,.0f}"
 
-            await update.effective_message.reply_text(
-                f"📊 **{symbol} Price (Binance)**\n\n"
-                f"💰 **Current**: {price_format}\n"
-                f"📈 **24h Change**: {change_24h:+.2f}% {change_emoji}\n"
-                f"📊 **24h Volume**: {volume_format}\n\n"
-                f"🎯 Use `/analyze {symbol.lower()}` for SnD analysis\n"
-                f"⚡ Use `/futures {symbol.lower()} 1h` for signals",
-                parse_mode='MARKDOWN'
-            )
+            if user_lang == 'id':
+                await update.effective_message.reply_text(
+                    f"📊 **Harga {symbol} (Binance)**\n\n"
+                    f"💰 **Saat ini**: {price_format}\n"
+                    f"📈 **Perubahan 24j**: {change_24h:+.2f}% {change_emoji}\n"
+                    f"📊 **Volume 24j**: {volume_format}\n\n"
+                    f"🎯 Gunakan `/analyze {symbol.lower()}` untuk analisis SnD\n"
+                    f"⚡ Gunakan `/futures {symbol.lower()} 1h` untuk sinyal",
+                    parse_mode='MARKDOWN'
+                )
+            else:
+                await update.effective_message.reply_text(
+                    f"📊 **{symbol} Price (Binance)**\n\n"
+                    f"💰 **Current**: {price_format}\n"
+                    f"📈 **24h Change**: {change_24h:+.2f}% {change_emoji}\n"
+                    f"📊 **24h Volume**: {volume_format}\n\n"
+                    f"🎯 Use `/analyze {symbol.lower()}` for SnD analysis\n"
+                    f"⚡ Use `/futures {symbol.lower()} 1h` for signals",
+                    parse_mode='MARKDOWN'
+                )
 
         except Exception as e:
-            await update.effective_message.reply_text(
-                f"❌ **Price Error**: {str(e)[:100]}\n\n"
-                f"💡 Try: `/price btc` or `/price eth`",
-                parse_mode='MARKDOWN'
-            )
+            if user_lang == 'id':
+                await update.effective_message.reply_text(
+                    f"❌ **Error Harga**: {str(e)[:100]}\n\n"
+                    f"💡 Coba: `/price btc` atau `/price eth`",
+                    parse_mode='MARKDOWN'
+                )
+            else:
+                await update.effective_message.reply_text(
+                    f"❌ **Price Error**: {str(e)[:100]}\n\n"
+                    f"💡 Try: `/price btc` or `/price eth`",
+                    parse_mode='MARKDOWN'
+                )
 
     async def market_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle market overview command - EXACT FORMAT"""
@@ -671,19 +737,37 @@ Resistance: ${max(closes):.2f}"""
     async def credits_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle credits command"""
         user_id = update.effective_user.id
-        credits = 100  # Placeholder
+        
+        # Get user language and credits
+        from database import Database
+        db = Database()
+        user_lang = db.get_user_language(user_id)
+        credits = db.get_user_credits(user_id)
 
-        await update.effective_message.reply_text(
-            f"💳 **Credit Balance**\n\n"
-            f"👤 User: {update.effective_user.first_name}\n"
-            f"💰 Credits: {credits}\n\n"
-            f"📊 **Credit Costs:**\n"
-            f"• Spot Analysis: 20 credits\n"
-            f"• Futures Analysis: 20 credits\n"
-            f"• Multi-Coin Signals: 60 credits\n\n"
-            f"⭐ Upgrade to Premium for unlimited access!",
-            parse_mode='MARKDOWN'
-        )
+        if user_lang == 'id':
+            await update.effective_message.reply_text(
+                f"💳 **Saldo Kredit**\n\n"
+                f"👤 Pengguna: {update.effective_user.first_name}\n"
+                f"💰 Kredit: {credits}\n\n"
+                f"📊 **Biaya Kredit:**\n"
+                f"• Analisis Spot: 20 kredit\n"
+                f"• Analisis Futures: 20 kredit\n"
+                f"• Sinyal Multi-Coin: 60 kredit\n\n"
+                f"⭐ Upgrade ke Premium untuk akses unlimited!",
+                parse_mode='MARKDOWN'
+            )
+        else:
+            await update.effective_message.reply_text(
+                f"💳 **Credit Balance**\n\n"
+                f"👤 User: {update.effective_user.first_name}\n"
+                f"💰 Credits: {credits}\n\n"
+                f"📊 **Credit Costs:**\n"
+                f"• Spot Analysis: 20 credits\n"
+                f"• Futures Analysis: 20 credits\n"
+                f"• Multi-Coin Signals: 60 credits\n\n"
+                f"⭐ Upgrade to Premium for unlimited access!",
+                parse_mode='MARKDOWN'
+            )
 
     async def subscribe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle subscribe command"""

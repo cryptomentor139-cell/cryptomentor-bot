@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 """
 CryptoMentor AI 2.0 - Button-Based Menu System
@@ -40,7 +39,7 @@ POPULAR_SYMBOLS = ["BTC", "ETH", "SOL", "ADA", "DOT", "MATIC", "AVAX", "UNI"]
 
 class MenuBuilder:
     """Builds InlineKeyboard menus for CryptoMentor AI"""
-    
+
     @staticmethod
     def build_main_menu() -> InlineKeyboardMarkup:
         """Build the main menu with 7 categories"""
@@ -54,7 +53,7 @@ class MenuBuilder:
             [InlineKeyboardButton("⚙️ Settings", callback_data=SETTINGS_MENU)]
         ]
         return InlineKeyboardMarkup(keyboard)
-    
+
     @staticmethod
     def build_price_market_menu() -> InlineKeyboardMarkup:
         """Build Price & Market submenu"""
@@ -64,7 +63,7 @@ class MenuBuilder:
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data=MAIN_MENU)]
         ]
         return InlineKeyboardMarkup(keyboard)
-    
+
     @staticmethod
     def build_trading_analysis_menu() -> InlineKeyboardMarkup:
         """Build Trading Analysis submenu"""
@@ -74,7 +73,7 @@ class MenuBuilder:
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data=MAIN_MENU)]
         ]
         return InlineKeyboardMarkup(keyboard)
-    
+
     @staticmethod
     def build_futures_signals_menu() -> InlineKeyboardMarkup:
         """Build Futures Signals submenu"""
@@ -84,7 +83,7 @@ class MenuBuilder:
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data=MAIN_MENU)]
         ]
         return InlineKeyboardMarkup(keyboard)
-    
+
     @staticmethod
     def build_portfolio_credits_menu() -> InlineKeyboardMarkup:
         """Build Portfolio & Credits submenu"""
@@ -96,7 +95,7 @@ class MenuBuilder:
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data=MAIN_MENU)]
         ]
         return InlineKeyboardMarkup(keyboard)
-    
+
     @staticmethod
     def build_premium_referral_menu() -> InlineKeyboardMarkup:
         """Build Premium & Referral submenu"""
@@ -106,7 +105,7 @@ class MenuBuilder:
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data=MAIN_MENU)]
         ]
         return InlineKeyboardMarkup(keyboard)
-    
+
     @staticmethod
     def build_ask_ai_menu() -> InlineKeyboardMarkup:
         """Build Ask AI submenu"""
@@ -115,7 +114,7 @@ class MenuBuilder:
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data=MAIN_MENU)]
         ]
         return InlineKeyboardMarkup(keyboard)
-    
+
     @staticmethod
     def build_settings_menu() -> InlineKeyboardMarkup:
         """Build Settings submenu"""
@@ -124,12 +123,12 @@ class MenuBuilder:
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data=MAIN_MENU)]
         ]
         return InlineKeyboardMarkup(keyboard)
-    
+
     @staticmethod
     def build_symbol_selection() -> InlineKeyboardMarkup:
         """Build popular symbol selection keyboard"""
         keyboard = []
-        
+
         # Group symbols in pairs for better layout
         for i in range(0, len(POPULAR_SYMBOLS), 2):
             row = []
@@ -138,13 +137,13 @@ class MenuBuilder:
             if i + 1 < len(POPULAR_SYMBOLS):
                 row.append(InlineKeyboardButton(f"₿ {POPULAR_SYMBOLS[i+1]}", callback_data=f"symbol_{POPULAR_SYMBOLS[i+1]}"))
             keyboard.append(row)
-        
+
         # Add manual input option and back button
         keyboard.append([InlineKeyboardButton("⌨️ Type Symbol Manually", callback_data="manual_symbol")])
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data=MAIN_MENU)])
-        
+
         return InlineKeyboardMarkup(keyboard)
-    
+
     @staticmethod
     def build_timeframe_selection(symbol: str) -> InlineKeyboardMarkup:
         """Build timeframe selection for futures analysis"""
@@ -159,110 +158,82 @@ class MenuBuilder:
         ]
         return InlineKeyboardMarkup(keyboard)
 
-def get_menu_text(menu_type: str, user_data: Dict = None) -> str:
-    """Get appropriate text for each menu type"""
-    
-    menu_texts = {
-        MAIN_MENU: """🤖 **CryptoMentor AI 2.0 - Main Menu**
+def get_menu_text(menu_key: str, user_lang: str = 'en') -> str:
+    """Get menu text by key with language support"""
+    if user_lang == 'id':
+        texts = {
+            MAIN_MENU: """🤖 **CryptoMentor AI 2.0**
 
-Welcome! Choose from the options below:
+Selamat datang di platform analisis cryptocurrency canggih!
 
-📈 **Price & Market** - Check real-time prices and market overview
-🧠 **Trading Analysis** - Advanced SnD analysis for spot and futures
-🚀 **Futures Signals** - Professional trading signals
-💼 **Portfolio & Credits** - Manage your portfolio and account
-👑 **Premium & Referral** - Premium features and earnings
-🤖 **Ask AI** - Chat with our AI assistant
-⚙️ **Settings** - Language and preferences
+Pilih opsi di bawah untuk memulai:""",
 
-💡 **Tip**: Advanced users can still use slash commands like `/price btc`""",
+            PRICE_MARKET: """📊 **Analisis Harga & Pasar**
 
-        PRICE_MARKET: """📈 **Price & Market**
+Dapatkan harga cryptocurrency real-time dan insight pasar komprehensif.""",
 
-Get real-time cryptocurrency data:
+            TRADING_ANALYSIS: """🧠 **Analisis Trading AI**
 
-🔹 **Check Price** - Real-time prices from CoinAPI (FREE)
-🌍 **Market Overview** - Global market stats and trends (FREE)
+Analisis teknis canggih yang didukung algoritma Supply & Demand.""",
 
-💰 Both features are completely free to use!""",
+            FUTURES_SIGNALS: """⚡ **Sinyal Trading Futures**
 
-        TRADING_ANALYSIS: """🧠 **Trading Analysis with Supply & Demand**
+Sinyal trading futures profesional dengan titik entry/exit yang presisi.""",
 
-Professional trading analysis:
+            PORTFOLIO_CREDITS: """💼 **Portfolio & Kredit**
 
-📊 **Spot Analysis** - Comprehensive analysis with SnD zones (20 credits)
-📉 **Futures Analysis** - Futures trading signals with SnD (20 credits)
+Kelola portfolio crypto Anda dan cek saldo kredit.""",
 
-⚡ Features real-time CoinAPI data + advanced SnD algorithms""",
+            PREMIUM_REFERRAL: """👑 **Premium & Referral**
 
-        FUTURES_SIGNALS: """🚀 **Futures Trading Signals**
+Upgrade ke premium dan dapatkan penghasilan melalui program referral.""",
 
-Professional futures trading tools:
+            ASK_AI_MENU: """🤖 **Asisten AI**
 
-🔥 **Multi-Coin Signals** - Scan 25+ coins for trading opportunities (60 credits)
-👑 **Auto Signals** - Automated signals for Lifetime premium users only
+Dapatkan insight ahli dan jawaban untuk pertanyaan cryptocurrency Anda.""",
 
-💎 All signals include precise entry, TP, and SL levels""",
+            SETTINGS_MENU: """⚙️ **Pengaturan**
 
-        PORTFOLIO_CREDITS: """💼 **Portfolio & Credits Management**
+Sesuaikan pengalaman CryptoMentor AI Anda."""
+        }
+    else:
+        texts = {
+            MAIN_MENU: """🤖 **CryptoMentor AI 2.0**
 
-Manage your account and investments:
+Welcome to the advanced cryptocurrency analysis platform!
 
-📂 **My Portfolio** - View your crypto holdings (FREE)
-➕ **Add Coin** - Add coins to track performance (FREE)
-💳 **Check Credits** - View your current credit balance (FREE)
-⭐ **Upgrade Premium** - Unlock unlimited features
+Choose an option below to get started:""",
 
-💡 New users start with 100 free credits!""",
+            PRICE_MARKET: """📊 **Price & Market Analysis**
 
-        PREMIUM_REFERRAL: """👑 **Premium & Referral Program**
+Get real-time cryptocurrency prices and comprehensive market insights.""",
 
-Maximize your earnings and unlock exclusive features:
+            TRADING_ANALYSIS: """🧠 **AI Trading Analysis**
 
-🎁 **Referral Program** - Complete referral system with rewards (FREE)
-• Earn credits for every referral
-• Premium users get cash rewards
-• Multi-tier bonus system
-• Real withdrawal options
+Advanced technical analysis powered by Supply & Demand algorithms.""",
 
-💰 **Premium Earnings** - Comprehensive earnings dashboard
-• Track all your referral income
-• Detailed statistics and analytics
-• Withdrawal history and options
+            FUTURES_SIGNALS: """⚡ **Futures Trading Signals**
 
-💎 **Benefits:**
-• Free users: Credit rewards
-• Premium users: Cash + credit rewards
-• All tiers: Progressive bonus system
-• Instant tracking and real-time stats""",
+Professional futures trading signals with precise entry/exit points.""",
 
-        ASK_AI_MENU: """🤖 **AI Assistant**
+            PORTFOLIO_CREDITS: """💼 **Portfolio & Credits**
 
-Chat with CryptoMentor AI:
+Manage your crypto portfolio and check your credit balance.""",
 
-💬 **Ask AI** - Get expert answers about crypto and trading
+            PREMIUM_REFERRAL: """👑 **Premium & Referral**
 
-📚 Examples: "What is DeFi?", "Explain Bitcoin halving", "Trading tips"
+Upgrade to premium and earn through our referral program.""",
 
-🎯 Free for basic questions, premium for advanced analysis""",
+            ASK_AI_MENU: """🤖 **AI Assistant**
 
-        SETTINGS_MENU: """⚙️ **Settings**
+Get expert insights and answers to your cryptocurrency questions.""",
 
-Customize your experience:
+            SETTINGS_MENU: """⚙️ **Settings**
 
-🌐 **Change Language** - Switch between Indonesian and English
-• 🇮🇩 Bahasa Indonesia - Full Indonesian interface
-• 🇺🇸 English - Complete English interface
+Customize your CryptoMentor AI experience."""
+        }
 
-🔧 **Available Settings:**
-• Language preferences
-• Notification settings (coming soon)
-• Display preferences (coming soon)
-
-💡 **Tip:** Language changes apply immediately to all bot messages!"""
-    }
-    
-    return menu_texts.get(menu_type, "Menu not found")
+    return texts.get(menu_key, "Menu not found")
 
 # Export all components
 __all__ = [

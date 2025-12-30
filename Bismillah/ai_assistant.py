@@ -131,6 +131,13 @@ class AIAssistant:
     async def get_comprehensive_analysis_async(self, symbol: str, indicators: Dict = None, market_data: Dict = None, language: str = 'id', crypto_api=None, progress_tracker=None, user_id=None) -> str:
         """Generate comprehensive crypto analysis with enhanced data accuracy"""
         try:
+            # Get user language for proper response
+            user_lang = 'en'
+            if user_id:
+                from database import Database
+                db = Database()
+                user_lang = db.get_user_language(user_id)
+
             # Enhanced timing for high-accuracy data processing
             stage_timings = {
                 'data_validation': 1.0,  # 1.0 seconds - thorough data validation
@@ -144,7 +151,10 @@ class AIAssistant:
 
             # Update progress: Stage 1 - Enhanced data validation
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "🔍 Validating data sources...", 12)
+                if user_lang == 'id':
+                    progress_tracker.update_progress(user_id, "🔍 Memvalidasi sumber data...", 12)
+                else:
+                    progress_tracker.update_progress(user_id, "🔍 Validating data sources...", 12)
                 await asyncio.sleep(stage_timings['data_validation'])
 
             # Enhanced data fetching with validation
@@ -167,7 +177,10 @@ class AIAssistant:
                     else:
                         # Low quality data - try alternative approach
                         if user_id and progress_tracker:
-                            progress_tracker.update_progress(user_id, "⚠️ Retrying with backup method...", 18)
+                            if user_lang == 'id':
+                                progress_tracker.update_progress(user_id, "⚠️ Mencoba ulang dengan metode cadangan...", 18)
+                            else:
+                                progress_tracker.update_progress(user_id, "⚠️ Retrying with backup method...", 18)
 
                         # Retry with different validation approach
                         price_data = crypto_api.get_crypto_price(symbol, force_refresh=True)
@@ -175,7 +188,10 @@ class AIAssistant:
 
             # Update progress: Stage 2 - Cross-verification
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "✅ Cross-verifying data...", 28)
+                if user_lang == 'id':
+                    progress_tracker.update_progress(user_id, "✅ Verifikasi silang data...", 28)
+                else:
+                    progress_tracker.update_progress(user_id, "✅ Cross-verifying data...", 28)
                 await asyncio.sleep(stage_timings['cross_verify'])
 
             current_price = price_data.get('price', 0) if 'error' not in price_data else 0
@@ -213,11 +229,17 @@ class AIAssistant:
 
 💡 **Tips**: Pastikan symbol benar, contoh: 'BTC' bukan 'Bitcoin', 'ETH' bukan 'Ethereum'"""
                 else:
-                    return f"❌ **DATA ERROR**: Tidak dapat mengambil data {symbol}\n\n💡 **Solusi**: Coba `/analyze btc` atau `/analyze eth`\n\n🔍 **Detail**: {price_data.get('error', 'Unknown error') if price_data else 'No data returned'}"
+                    if user_lang == 'id':
+                        return f"❌ **DATA ERROR**: Tidak dapat mengambil data {symbol}\n\n💡 **Solusi**: Coba `/analyze btc` atau `/analyze eth`\n\n🔍 **Detail**: {price_data.get('error', 'Unknown error') if price_data else 'No data returned'}"
+                    else:
+                        return f"❌ **DATA ERROR**: Could not retrieve data for {symbol}\n\n💡 **Solution**: Try `/analyze btc` or `/analyze eth`\n\n🔍 **Details**: {price_data.get('error', 'Unknown error') if price_data else 'No data returned'}"
 
             # Update progress: Stage 2 - Technical analysis (OPTIMIZED)
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "📊 Processing indicators...", 35)
+                if user_lang == 'id':
+                    progress_tracker.update_progress(user_id, "📊 Memproses indikator...", 35)
+                else:
+                    progress_tracker.update_progress(user_id, "📊 Processing indicators...", 35)
                 await asyncio.sleep(stage_timings['technical'])
 
             # Price formatting
@@ -238,7 +260,10 @@ class AIAssistant:
 
             # Update progress: Stage 3 - SnD zones (FAST)
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "🎯 Calculating SnD...", 55)
+                if user_lang == 'id':
+                    progress_tracker.update_progress(user_id, "🎯 Menghitung SnD...", 55)
+                else:
+                    progress_tracker.update_progress(user_id, "🎯 Calculating SnD...", 55)
                 await asyncio.sleep(stage_timings['snd_zones'])
 
             # Get Supply & Demand zones
@@ -246,7 +271,10 @@ class AIAssistant:
 
             # Update progress: Stage 4 - Signal generation (CORE)
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "⚡ Generating signals...", 75)
+                if user_lang == 'id':
+                    progress_tracker.update_progress(user_id, "⚡ Menghasilkan sinyal...", 75)
+                else:
+                    progress_tracker.update_progress(user_id, "⚡ Generating signals...", 75)
                 await asyncio.sleep(stage_timings['signals'])
 
             # Generate signals
@@ -254,7 +282,10 @@ class AIAssistant:
 
             # Update progress: Stage 5 - Sentiment analysis (QUICK)
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "🧠 Analyzing sentiment...", 90)
+                if user_lang == 'id':
+                    progress_tracker.update_progress(user_id, "🧠 Menganalisis sentimen...", 90)
+                else:
+                    progress_tracker.update_progress(user_id, "🧠 Analyzing sentiment...", 90)
                 await asyncio.sleep(stage_timings['sentiment'])
 
             # Market sentiment
@@ -268,7 +299,10 @@ class AIAssistant:
 
             # Update progress: Final stage (QUICK)
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "✅ Finalizing...", 98)
+                if user_lang == 'id':
+                    progress_tracker.update_progress(user_id, "✅ Finalisasi...", 98)
+                else:
+                    progress_tracker.update_progress(user_id, "✅ Finalizing...", 98)
                 await asyncio.sleep(stage_timings['finalize'])
 
             # Format analysis with proper spacing
@@ -325,7 +359,10 @@ class AIAssistant:
 
             # Complete the job
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "✅ Analysis complete!", 100)
+                if user_lang == 'id':
+                    progress_tracker.update_progress(user_id, "✅ Analisis selesai!", 100)
+                else:
+                    progress_tracker.update_progress(user_id, "✅ Analysis complete!", 100)
                 progress_tracker.complete_job(user_id)
 
             return analysis
@@ -335,7 +372,10 @@ class AIAssistant:
             if user_id and progress_tracker:
                 progress_tracker.complete_job(user_id)
             print(f"Error in comprehensive analysis: {e}")
-            return f"❌ Terjadi kesalahan dalam analisis {symbol}. Error: {str(e)[:100]}..."
+            if user_lang == 'id':
+                return f"❌ Terjadi kesalahan dalam analisis {symbol}. Error: {str(e)[:100]}..."
+            else:
+                return f"❌ An error occurred during analysis for {symbol}. Error: {str(e)[:100]}..."
 
     def _get_enhanced_supply_demand_zones(self, symbol: str, current_price: float, crypto_api=None) -> Dict:
         """Calculate enhanced Supply & Demand zones"""
@@ -879,11 +919,17 @@ class AIAssistant:
                 # Assume user_id is available or generated here. For simplicity, let's use a placeholder.
                 # In a real application, user_id would come from the context.
                 user_id = f"user_{random.randint(1000, 9999)}"
-                await progress_tracker.update_progress(user_id, "⏳ Initializing analysis...", 0)
+                if language == 'id':
+                    await progress_tracker.update_progress(user_id, "⏳ Menginisialisasi analisis...", 0)
+                else:
+                    await progress_tracker.update_progress(user_id, "⏳ Initializing analysis...", 0)
                 await asyncio.sleep(0.1)
 
                 # Update progress: Stage 1 - Data fetching for the first batch of coins
-                await progress_tracker.update_progress(user_id, 5, "⏳ Fetching market data...")
+                if language == 'id':
+                    await progress_tracker.update_progress(user_id, 5, "⏳ Mengambil data pasar...")
+                else:
+                    await progress_tracker.update_progress(user_id, 5, "⏳ Fetching market data...")
                 await asyncio.sleep(0.2)
 
 
@@ -1073,7 +1119,21 @@ class AIAssistant:
 🔄 Jalankan ulang untuk variasi sinyal"""
 
             else:
-                signals_text += f"""⚠️ **NO HIGH-CONFIDENCE SIGNALS**
+                if language == 'id':
+                    signals_text += f"""⚠️ **TIDAK ADA SINYAL BERKEMUNGKINAN TINGGI**
+
+📊 **Dipindai**: {total_scanned} koin
+📈 **Ditemukan**: 0 sinyal (threshold 65%+ - Hanya Kualitas)
+💤 **Status**: Kondisi pasar konsolidasi atau kepercayaan rendah
+
+💡 **REKOMENDASI JUJUR:**
+• Pasar mungkin tidak memiliki peluang trading yang jelas saat ini
+• Ini NORMAL - sinyal bagus jarang muncul terus menerus
+• Gunakan `/futures btc` untuk analisis spesifik (mungkin menunjukkan kepercayaan 45-65%)
+• Tunggu setup probabilitas tinggi yang asli
+• Kualitas lebih penting dari kuantitas - lebih baik menunggu daripada memaksakan trade"""
+                else:
+                    signals_text += f"""⚠️ **NO HIGH-CONFIDENCE SIGNALS**
 
 📊 **Scanned**: {total_scanned} coins
 📈 **Found**: 0 signals (65%+ threshold - Quality Only)
@@ -1357,71 +1417,71 @@ class AIAssistant:
 
             # Market timing analysis
             if 14 <= current_hour <= 22:  # US hours
-                market_session = "🇺🇸 US Market Active - High liquidity"
-                timing_advice = "Optimal for high-volume trades"
+                market_session = "Optimal Trading Session (High Liquidity)"
+                timing_advice = "Ideal for executing trades with tighter stops and targets"
             elif 8 <= current_hour <= 16:  # European hours
-                market_session = "🇪🇺 European Market Active - Good liquidity"
-                timing_advice = "Good for trend following"
+                market_session = "Moderate Trading Session (Good Liquidity)"
+                timing_advice = "Suitable for trend continuation and swing entries"
             elif 0 <= current_hour <= 6:  # Asian hours
-                market_session = "🇯🇵 Asian Market Active - Moderate liquidity"
-                timing_advice = "Watch for gap plays"
+                market_session = "Lower Activity Session (Moderate Liquidity)"
+                timing_advice = "Watch for potential gap fills or early trend indications"
             else:
-                market_session = "🌙 Low Activity Period"
-                timing_advice = "Lower volumes, careful position sizing"
+                market_session = "Low Activity Period (Reduced Liquidity)"
+                timing_advice = "Exercise caution, wider stops may be needed"
 
             entry_analysis += f"""
 
 ⏰ **MARKET TIMING:**
-• {market_session}
-• {timing_advice}
+• **Session**: {market_session}
+• **Advice**: {timing_advice}
 
 💡 **ENTRY STRATEGIES BY SENTIMENT:**"""
 
             if "BULLISH" in global_sentiment:
                 entry_analysis += """
-• **Buy the Dip Strategy**: Wait for 2-3% pullbacks
-• **Momentum Entry**: Break above resistance with volume
-• **DCA Strategy**: Split entries across 3-5 levels
-• **Risk Level**: Medium (take profits at +15-25%)"""
+• **Buy the Dip Strategy**: Wait for 2-3% pullbacks on strong coins
+• **Momentum Entry**: Break above key resistance levels with confirming volume
+• **DCA Strategy**: Gradually build positions on minor dips
+• **Risk Level**: Medium to High - Be aggressive but manage risk"""
 
             elif "BEARISH" in global_sentiment:
                 entry_analysis += """
-• **Short Bounce Strategy**: Sell strength, short rallies
-• **Cash Position**: Preserve capital, wait for capitulation
-• **DCA Bottom**: Only in strongest fundamentals
-• **Risk Level**: High (tight stops, small positions)"""
+• **Short Bounce Strategy**: Fade rallies and short clear breakdowns
+• **Cash Position**: Preserve capital, wait for capitulation or clear reversal signals
+• **DCA Bottom**: Only consider for extremely strong fundamental coins at key support
+• **Risk Level**: High - Tight stops and minimal positions"""
 
             else:  # NEUTRAL
                 entry_analysis += """
-• **Range Trading**: Buy support, sell resistance
-• **Breakout Entry**: Wait for clear direction with volume
-• **Accumulation**: Gradual building of core positions
-• **Risk Level**: Low-Medium (5-10% stops)"""
+• **Range Trading**: Buy at support, sell at resistance within defined ranges
+• **Breakout Entry**: Wait for clear, high-volume breakouts from consolidation
+• **Accumulation**: Gradually build positions on stable assets, avoid chasing pumps
+• **Risk Level**: Low to Medium - Defined risk with clear stop-loss levels"""
 
             # Technical entry conditions
             entry_analysis += """
 
 📊 **TECHNICAL ENTRY CONDITIONS:**
-• **Volume Confirmation**: Entry only with 20%+ above average volume
-• **Support/Resistance**: Use key levels for timing
-• **Risk Management**: Never risk >2% per trade
-• **Position Sizing**: Inverse correlation with volatility
+• **Volume Confirmation**: Entry requires significant volume spike (20%+ above average)
+• **Support/Resistance Levels**: Use key S/R zones for precise entry timing
+• **Risk Management**: Never risk more than 2-3% of capital per trade
+• **Position Sizing**: Adjust based on confidence and asset volatility
 
 🔥 **PRIORITY ACTION ITEMS:**"""
 
             # Generate specific action items based on data
-            high_volume_coins = [coin for coin in market_data if coin['volume_24h'] > 1000000000]
+            high_volume_coins = [coin for coin in market_data if coin['volume_24h'] > 1000000000] # 1B+ volume
 
             if high_volume_coins:
                 top_vol_coin = max(high_volume_coins, key=lambda x: x['volume_24h'])
                 entry_analysis += f"""
-• Monitor **{top_vol_coin['symbol']}** - Highest volume ({top_vol_coin['volume_24h']/1000000000:.1f}B)"""
+• Monitor **{top_vol_coin['symbol']}** - Highest volume ({top_vol_coin['volume_24h']/1000000000:.1f}B) for potential entries."""
 
             # Add top performers
             top_performer = max(market_data, key=lambda x: x['change_24h'])
             if top_performer['change_24h'] > 1:
                 entry_analysis += f"""
-• Watch **{top_performer['symbol']}** momentum - Leading gainer (+{top_performer['change_24h']:.1f}%)"""
+• Watch **{top_performer['symbol']}** momentum (+{top_performer['change_24h']:.1f}%) - Strong gainer."""
 
             # Add major coins status
             btc_data = next((coin for coin in market_data if coin['symbol'] == 'BTC'), None)
@@ -1430,12 +1490,12 @@ class AIAssistant:
             if btc_data:
                 btc_trend = "bullish" if btc_data['change_24h'] > 1 else "bearish" if btc_data['change_24h'] < -1 else "neutral"
                 entry_analysis += f"""
-• **BTC** trend is {btc_trend} - Market leader signal"""
+• **BTC** trend is {btc_trend} - Market leader signal to follow."""
 
             if eth_data:
                 eth_trend = "bullish" if eth_data['change_24h'] > 1 else "bearish" if eth_data['change_24h'] < -1 else "neutral"
                 entry_analysis += f"""
-• **ETH** showing {eth_trend} momentum - DeFi sentiment"""
+• **ETH** showing {eth_trend} momentum - Key indicator for DeFi sentiment."""
 
             return entry_analysis
 
@@ -1443,9 +1503,10 @@ class AIAssistant:
             return """
 
 🎯 **BEST ENTRY STRATEGIES:**
-• Monitor volume dan momentum untuk timing optimal
-• Use technical analysis untuk entry/exit points
-• Risk management adalah prioritas utama"""
+• Monitor volume and momentum for optimal timing.
+• Utilize technical analysis for precise entry/exit points.
+• Prioritize risk management on all trades.
+• Error during analysis: {str(e)[:100]}..."""
 
     def _generate_trading_recommendations(self, signal_data: Dict, sentiment: Dict, snd_zones: Dict, current_price: float) -> str:
         """Generate trading recommendations"""
@@ -1456,20 +1517,20 @@ class AIAssistant:
         recommendations = []
 
         if direction == "LONG" and sentiment_score > 60:
-            recommendations.append("• ✅ Consider LONG position dengan konfirmasi SnD")
+            recommendations.append("• ✅ Pertimbangkan posisi LONG dengan konfirmasi SnD")
             recommendations.append("• 🎯 Entry dekat Demand Zone untuk risk optimal")
             recommendations.append("• 📈 Target profit di Supply Zone 1")
         elif direction == "SHORT" and sentiment_score < 40:
-            recommendations.append("• ❌ Consider SHORT position dengan konfirmasi SnD")
+            recommendations.append("• ❌ Pertimbangkan posisi SHORT dengan konfirmasi SnD")
             recommendations.append("• 🎯 Entry dekat Supply Zone untuk risk optimal")
             recommendations.append("• 📉 Target profit di Demand Zone 1")
         else:
-            recommendations.append("• ⏳ Wait for clearer signals di SnD zones")
-            recommendations.append("• 👀 Monitor price action di key levels")
-            recommendations.append("• 📊 Tunggu konfirmasi volume breakout")
+            recommendations.append("• ⏳ Tunggu sinyal yang lebih jelas di zona SnD")
+            recommendations.append("• 👀 Pantau price action di level kunci")
+            recommendations.append("• 📊 Tunggu konfirmasi breakout volume")
 
-        recommendations.append("• 🛡️ Always use stop loss sesuai SnD zones")
-        recommendations.append("• 💰 Position sizing max 2-3% portfolio")
+        recommendations.append("• 🛡️ Selalu gunakan stop loss sesuai zona SnD")
+        recommendations.append("• 💰 Ukuran posisi maksimal 2-3% portfolio")
 
         return "\n".join(recommendations)
 
@@ -1488,7 +1549,10 @@ class AIAssistant:
 
             # Update progress: Stage 1 - Data fetching (FAST)
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "⚡ Fetching market data...", 15)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "⚡ Mengambil data pasar...", 15)
+                else:
+                    progress_tracker.update_progress(user_id, "⚡ Fetching market data...", 15)
                 await asyncio.sleep(stage_timings['data_fetch'])
 
             # Get current price and market data
@@ -1504,11 +1568,17 @@ class AIAssistant:
                 # Complete job even on error
                 if user_id and progress_tracker:
                     progress_tracker.complete_job(user_id)
-                return f"❌ **DATA ERROR**: Tidak dapat mengambil data {symbol}\n\n💡 **Solusi**: Coba `/futures btc` atau `/futures eth`"
+                if language == 'id':
+                    return f"❌ **DATA ERROR**: Tidak dapat mengambil data {symbol}\n\n💡 **Solusi**: Coba `/futures btc` atau `/futures eth`"
+                else:
+                    return f"❌ **DATA ERROR**: Could not retrieve data for {symbol}\n\n💡 **Solution**: Try `/futures btc` or `/futures eth`"
 
             # Update progress: Stage 2 - SnD zones (OPTIMIZED)
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "🎯 Calculating SnD zones...", 35)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "🎯 Menghitung zona SnD...", 35)
+                else:
+                    progress_tracker.update_progress(user_id, "🎯 Calculating SnD zones...", 35)
                 await asyncio.sleep(stage_timings['snd_calc'])
 
             # Get enhanced SnD zones and signals
@@ -1516,12 +1586,18 @@ class AIAssistant:
 
             # Update progress: Stage 3 - Market structure (FAST)
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "🧠 Processing structure...", 55)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "🧠 Memproses struktur...", 55)
+                else:
+                    progress_tracker.update_progress(user_id, "🧠 Processing structure...", 55)
                 await asyncio.sleep(stage_timings['structure'])
 
             # Update progress: Stage 4 - Signal generation (CORE)
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "⚡ Generating signals...", 75)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "⚡ Menghasilkan sinyal...", 75)
+                else:
+                    progress_tracker.update_progress(user_id, "⚡ Generating signals...", 75)
                 await asyncio.sleep(stage_timings['signals'])
 
             # Generate signals
@@ -1529,7 +1605,10 @@ class AIAssistant:
 
             # Update progress: Stage 5 - Risk calculation (FAST)
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "💎 Finalizing R:R...", 90)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "💎 Finalisasi R:R...", 90)
+                else:
+                    progress_tracker.update_progress(user_id, "💎 Finalizing R:R...", 90)
                 await asyncio.sleep(stage_timings['risk_calc'])
 
             # Enhanced timeframe display
@@ -1682,13 +1761,25 @@ class AIAssistant:
 🎯 **TP1**: {format_price(futures_signals['tp1'])} (+{tp1_pct:.1f}%)
 🎯 **TP2**: {format_price(futures_signals['tp2'])} (+{tp2_pct:.1f}%)
 🎯 **TP3**: {format_price(futures_signals['tp3'])} (+{tp3_pct:.1f}%)
-💎 **R:R Ratio**: {futures_signals['rr']:.1f}:1 {"(RANK #1)" if futures_signals['rr'] >= 3.0 else "(GOOD)" if futures_signals['rr'] >= 2.0 else "(FAIR)"}
+💎 **R:R Ratio**: {futures_signals['rr']:.1f}:1 ({rr_status})
 
 📊 **Strategy**: {futures_signals.get('strategy', 'Advanced SnD')}
 ⚡ **Time Horizon**: {futures_signals.get('time_horizon', '4-24 hours')}
 🎯 **Position Size**: {self._calculate_position_size(confidence)} of portfolio"""
             else:
-                signal_display = f"""
+                if language == 'id':
+                    signal_display = f"""
+🔍 **ANALISIS FUTURES PROFESIONAL - {symbol} ({timeframe.upper()})**
+
+📍 **Harga Saat Ini**: {price_format} ({change_24h:+.2f}%)
+⏳ **STATUS SINYAL**: TIDAK ADA SINYAL
+⚠️ **Kepercayaan**: {confidence:.1f}% (Di bawah ambang batas)
+
+❌ **Tidak ada setup trading yang tersedia**
+💡 **Rekomendasi**: Tunggu kondisi pasar yang lebih baik
+📊 **Alasan**: Kurangnya konfluensi faktor teknikal"""
+                else:
+                    signal_display = f"""
 🔍 **PROFESSIONAL FUTURES ANALYSIS - {symbol} ({timeframe.upper()})**
 
 📍 **Current Price**: {price_format} ({change_24h:+.2f}%)
@@ -1703,7 +1794,7 @@ class AIAssistant:
 
             analysis += f"""
 
-🔬 **TECHNICAL ANALYSIS ({timeframe.upper()}):**
+🔬 **ANALISIS TEKNIKAL ({timeframe.upper()}):**
 • EMA50: {tech_indicators['ema_50']}
 • EMA200: {tech_indicators['ema_200']}
 • RSI(14): {tech_indicators['rsi']} ({tech_indicators['rsi_status']})
@@ -1734,7 +1825,7 @@ class AIAssistant:
 • Gunakan proper position sizing (1-3% per trade)
 • Set stop loss sebelum entry
 • Take profit secara bertahap
-• Monitor market conditions
+• Pantau kondisi pasar
 • DYOR sebelum trading
 
 🎯 **EXECUTION CHECKLIST**:
@@ -1749,7 +1840,10 @@ class AIAssistant:
 
             # Complete the job
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "✅ Analysis complete!", 100)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "✅ Analisis selesai!", 100)
+                else:
+                    progress_tracker.update_progress(user_id, "✅ Analysis complete!", 100)
                 progress_tracker.complete_job(user_id)
 
             return analysis
@@ -1762,7 +1856,23 @@ class AIAssistant:
                 except:
                     pass  # Ignore progress tracker errors
             print(f"Error in futures signals: {e}")
-            return f"""❌ **FUTURES SIGNAL ERROR**
+            if language == 'id':
+                return f"""❌ **ERROR SINYAL FUTURES**
+
+**Simbol**: {symbol}
+**Timeframe**: {timeframe}
+**Error**: {str(e)[:100]}...
+
+💡 **Perbaikan Cepat:**
+• Coba `/futures btc`
+• Gunakan `/price {symbol}` untuk memeriksa data
+• Tunggu 30 detik dan coba lagi
+
+🔧 **Command Alternatif:**
+• `/analyze {symbol}` - Analisis komprehensif
+• `/market` - Ikhtisar pasar"""
+            else:
+                return f"""❌ **FUTURES SIGNAL ERROR**
 
 **Symbol**: {symbol}
 **Timeframe**: {timeframe}
@@ -2715,7 +2825,10 @@ class AIAssistant:
             }
 
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "⚡ Fetching market data...", 15)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "⚡ Mengambil data pasar...", 15)
+                else:
+                    progress_tracker.update_progress(user_id, "⚡ Fetching market data...", 15)
                 await asyncio.sleep(stage_timings['fetch_global'])
 
             # Get market data from CoinAPI
@@ -2723,7 +2836,10 @@ class AIAssistant:
             symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOT', 'MATIC', 'AVAX', 'UNI']
 
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "📊 Processing metrics...", 35)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "📊 Memproses metrik...", 35)
+                else:
+                    progress_tracker.update_progress(user_id, "📊 Processing metrics...", 35)
                 await asyncio.sleep(stage_timings['process'])
 
             for symbol in symbols:
@@ -2742,11 +2858,17 @@ class AIAssistant:
                     continue
 
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "🧠 Analyzing sentiment...", 60)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "🧠 Menganalisis sentimen...", 60)
+                else:
+                    progress_tracker.update_progress(user_id, "🧠 Analyzing sentiment...", 60)
                 await asyncio.sleep(stage_timings['analyze'])
 
             if not market_data:
-                return "❌ Unable to fetch market data from CoinAPI"
+                if language == 'id':
+                    return "❌ Tidak dapat mengambil data pasar dari CoinAPI"
+                else:
+                    return "❌ Unable to fetch market data from CoinAPI"
 
             # Calculate market metrics
             total_change = sum(coin['change_24h'] for coin in market_data)
@@ -2754,7 +2876,10 @@ class AIAssistant:
             total_volume = sum(coin['volume_24h'] for coin in market_data)
 
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "💰 Calculating dominance...", 80)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "💰 Menghitung dominasi...", 80)
+                else:
+                    progress_tracker.update_progress(user_id, "💰 Calculating dominance...", 80)
                 await asyncio.sleep(stage_timings['dominance'])
 
             # BTC dominance simulation
@@ -2764,7 +2889,10 @@ class AIAssistant:
                 btc_dominance = 50.0 + (btc_data['change_24h'] * 0.5)  # Estimate
 
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "✅ Building overview...", 95)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "✅ Membangun gambaran umum...", 95)
+                else:
+                    progress_tracker.update_progress(user_id, "✅ Building overview...", 95)
                 await asyncio.sleep(stage_timings['finalize'])
 
             # Market sentiment analysis
@@ -2804,9 +2932,16 @@ class AIAssistant:
 🎯 **Market Mood**: {market_mood}
 📈 **Rata-rata Perubahan**: {avg_change:+.2f}%
 🟠 **BTC Dominance**: {btc_dominance:.1f}%
-📊 **Volume Status**: {volume_status}
+📊 **Status Volume**: {volume_status}
 
-💰 **TOP PERFORMERS (24H):**"""
+🔬 **ANALISIS STRUKTUR PASAR:**
+🔄 **Tren**: {"Bullish Momentum" if avg_change > 2 else "Bearish Correction" if avg_change < -2 else "Sideways Consolidation"}
+⚡ **Struktur**: {"Risk-On" if avg_change > 2 else "Risk-Off" if avg_change < -2 else "Neutral"}
+🧠 **Alasan**: {"Sentimen positif mendorong kenaikan" if avg_change > 2 else "Tekanan jual meluas" if avg_change < -2 else "Pasar menantikan katalis"}
+📊 **Indeks Ketakutan & Keserakahan**: {50 + (avg_change * 5):.0f}/100 {"(Extreme Greed)" if (50 + (avg_change * 5)) > 75 else "(Greed)" if (50 + (avg_change * 5)) > 55 else "(Neutral)" if (50 + (avg_change * 5)) > 45 else "(Fear)" if (50 + (avg_change * 5)) > 25 else "(Extreme Fear)"}
+
+📈 **KINERJA CRYPTOCURRENCY TERATAS (24H):**
+"""
 
             # Show top performers
             sorted_performers = sorted(market_data, key=lambda x: x['change_24h'], reverse=True)
@@ -2814,7 +2949,7 @@ class AIAssistant:
                 price_format = f"${coin['price']:.4f}" if coin['price'] < 100 else f"${coin['price']:,.2f}"
                 change_emoji = "📈" if coin['change_24h'] >= 0 else "📉"
                 analysis += f"""
-• **{i}. {coin['symbol']}**: {price_format} ({coin['change_24h']:+.2f}%) {change_emoji}"""
+• **{i}. {coin['symbol']}** {change_emoji} {price_format} ({coin['change_24h']:+.1f}%)"""
 
             analysis += f"""
 
@@ -2822,13 +2957,20 @@ class AIAssistant:
 
 {entry_analysis}
 
-📡 **Data Source**: CoinAPI Real-time + Binance
-🕐 **Update**: {datetime.now().strftime('%H:%M:%S WIB')}
-🔄 **Refresh**: Real-time market data"""
+🚨 **LEVEL KUNCI UNTUK DIPANTAU:**
+• **Support Dominasi BTC**: {btc_dominance-2:.1f}%
+• **Resistance Dominasi BTC**: {btc_dominance+2:.1f}%
+• **Level Kunci Kapitalisasi Pasar**: {format_large_number(total_market_cap * 0.95)} - {format_large_number(total_market_cap * 1.05)}
+
+📡 **Sumber Data**: CoinAPI Real-time + Analisis Multi-API
+⏰ **Pembaruan Berikutnya**: Setiap 15 menit untuk data real-time"""
 
             # Complete progress tracking
             if user_id and progress_tracker:
-                progress_tracker.update_progress(user_id, "✅ Market analysis complete!", 100)
+                if language == 'id':
+                    progress_tracker.update_progress(user_id, "✅ Analisis pasar selesai!", 100)
+                else:
+                    progress_tracker.update_progress(user_id, "✅ Market analysis complete!", 100)
                 progress_tracker.complete_job(user_id)
 
             return analysis
@@ -2838,7 +2980,20 @@ class AIAssistant:
             if user_id and progress_tracker:
                 progress_tracker.complete_job(user_id)
             print(f"Error in market sentiment: {e}")
-            return f"""❌ **MARKET ANALYSIS ERROR**
+            if language == 'id':
+                return f"""❌ **ERROR ANALISIS PASAR**
+
+**Error**: {str(e)[:100]}...
+
+💡 **Perbaikan Cepat:**
+• Coba `/price btc` untuk data dasar
+• Gunakan `/analyze btc` untuk analisis koin tunggal
+• Tunggu 30 detik dan coba lagi
+
+🔧 **Command Alternatif:**
+• `/market` - Gambaran umum pasar crypto"""
+            else:
+                return f"""❌ **MARKET ANALYSIS ERROR**
 
 **Error**: {str(e)[:100]}...
 
@@ -2848,7 +3003,7 @@ class AIAssistant:
 • Wait 30 seconds and retry
 
 🔧 **Alternative Commands:**
-• `/market` - Overview pasar crypto"""
+• `/market` - Market overview"""
 
     def get_market_sentiment(self, language: str = 'id', crypto_api=None) -> str:
         """Get comprehensive market overview and sentiment analysis using Binance data"""
@@ -2974,27 +3129,27 @@ class AIAssistant:
                     return f"${num:,.0f}"
 
             # Main analysis output
-            analysis = f"""🌍 **COMPREHENSIVE MARKET ANALYSIS**
+            analysis = f"""🌍 **KOMPREHENSIF ANALISIS PASAR**
 
-🕐 **Analysis Time**: {datetime.now().strftime('%H:%M:%S WIB')}
-📊 **Global Sentiment**: {global_sentiment}
-⭐ **Confidence**: {confidence:.0f}%
+🕐 **Waktu Analisis**: {datetime.now().strftime('%H:%M:%S WIB')}
+📊 **Sentimen Global**: {global_sentiment}
+⭐ **Keyakinan**: {confidence:.0f}%
 
-💰 **GLOBAL METRICS:**
-• **Total Market Cap**: {format_large_number(total_market_cap)}
-• **24h Market Change**: {avg_change:+.2f}%
-• **Total Volume 24h**: {format_large_number(total_volume)}
-• **Active Cryptocurrencies**: {active_cryptos:,}
-• **BTC Dominance**: {btc_dominance:.1f}%
-• **ETH Dominance**: {eth_dominance:.1f}%
+💰 **METRIK GLOBAL:**
+• **Total Kapitalisasi Pasar**: {format_large_number(total_market_cap)}
+• **Perubahan Pasar 24j**: {avg_change:+.2f}%
+• **Total Volume 24j**: {format_large_number(total_volume)}
+• **Kripto Aktif**: {active_cryptos:,}
+• **Dominasi BTC**: {btc_dominance:.1f}%
+• **Dominasi ETH**: {eth_dominance:.1f}%
 
-🔬 **MARKET STRUCTURE ANALYSIS:**
-🔄 **Trend**: {trend}
-⚡ **Structure**: {structure}
-🧠 **Reasoning**: {reasoning}
-📊 **Fear & Greed**: {fear_greed} ({fear_greed_value:.0f}/100)
+🔬 **ANALISIS STRUKTUR PASAR:**
+🔄 **Tren**: {trend}
+⚡ **Struktur**: {structure}
+🧠 **Alasan**: {reasoning}
+📊 **Indeks Ketakutan & Keserakahan**: {fear_greed} ({fear_greed_value:.0f}/100)
 
-📈 **TOP CRYPTOCURRENCIES PERFORMANCE:**
+📈 **KINERJA CRYPTOCURRENCY TERATAS (24H):**
 """
 
             # Sort by market cap and show top 5
@@ -3035,86 +3190,86 @@ class AIAssistant:
             if avg_change > 2:
                 implications = """
 
-💡 **TRADING IMPLICATIONS:**
-• 🚀 Strong bullish momentum - Ride the trend
-• 🎯 Focus on breakout strategies
-• 🟢 Risk-on environment - Altcoins favorable
-• ⚠️ Watch for overextension signals"""
+💡 **IMPLIKASI TRADING:**
+• 🚀 Momentum bullish kuat - Ikuti tren
+• 🎯 Fokus pada strategi breakout
+• 🟢 Lingkungan risk-on - Altcoin menguntungkan
+• ⚠️ Waspadai sinyal overextension"""
 
                 opportunities = """
 
-🎯 **MARKET OPPORTUNITIES:**
-• 🏃 Momentum trading on breakout strategies
-• ⚡ Long positions on pullbacks to support
-• 🚀 Altcoin rotation plays
-• 🔄 Futures premium arbitrage
-• 📈 Options strategies (call spreads)"""
+🎯 **PELUANG PASAR:**
+• 🏃 Trading momentum pada breakout
+• ⚡ Posisi long pada pullback ke support
+• 🚀 Rotasi altcoin
+• 🔄 Arbitrase premium futures
+• 📈 Strategi opsi (call spread)"""
 
                 risk_assessment = """
 
-⚠️ **RISK ASSESSMENT:**
-• 🔥 HIGH VOLATILITY - Reduce position sizes
-• 📊 Tight stops recommended (3-5%)
-• 💨 Fast-moving market - Quick decisions needed
-• 💡 Take profits incrementally
-• 📱 Monitor for reversal signals
-• ⏰ Set alerts for key resistance breaks"""
+⚠️ **PENILAIAN RISIKO:**
+• 🔥 VOLATILITAS TINGGI - Kurangi ukuran posisi
+• 📊 Stop ketat direkomendasikan (3-5%)
+• 💨 Pasar bergerak cepat - Keputusan cepat diperlukan
+• 💡 Ambil profit secara bertahap
+• 📱 Pantau sinyal pembalikan
+• ⏰ Setel peringatan untuk breakout resistance kunci"""
 
             elif avg_change > -2:
                 implications = """
 
-💡 **TRADING IMPLICATIONS:**
-• 😐 Neutral market - Range trading strategies optimal
-• 🎯 Focus on support/resistance levels
-• 🟠 BTC leading market - Trade major pairs (BTC, ETH)
-• ⚠️ Altcoins may underperform - Be selective"""
+💡 **IMPLIKASI TRADING:**
+• 😐 Pasar netral - Strategi range trading optimal
+• 🎯 Fokus pada level support/resistance
+• 🟠 BTC memimpin pasar - Perdagangkan pasangan utama (BTC, ETH)
+• ⚠️ Altcoin mungkin berkinerja buruk - Selektif"""
 
                 opportunities = """
 
-🎯 **MARKET OPPORTUNITIES:**
-• 🏃 Range trading between key support/resistance
-• ⚡ Scalping opportunities in high-volume pairs
-• 🟠 Bitcoin maximalist strategy - Focus on BTC/ETH
-• 🔄 Cross-exchange arbitrage opportunities
-• 📈 Futures vs spot price discrepancies"""
+🎯 **PELUANG PASAR:**
+• 🏃 Trading range antara support/resistance kunci
+• ⚡ Peluang scalping pada pasangan bervolume tinggi
+• 🟠 Strategi Bitcoin maximalist - Fokus pada BTC/ETH
+• 🔄 Peluang arbitrase antar-exchange
+• 📈 Perbedaan harga futures vs spot"""
 
                 risk_assessment = """
 
-⚠️ **RISK ASSESSMENT:**
-• 😴 LOW VOLATILITY - May increase position sizes slightly
-• 📊 Wider stops acceptable (5-7%)
-• 🔍 Uncertain market conditions - Wait for clarity
-• 💡 Paper trade strategies before live execution
-• 📱 Monitor news and regulatory developments
-• ⏰ Set alerts for key support/resistance breaks"""
+⚠️ **PENILAIAN RISIKO:**
+• 😴 VOLATILITAS RENDAH - Dapat sedikit menambah ukuran posisi
+• 📊 Stop lebih lebar dapat diterima (5-7%)
+• 🔍 Kondisi pasar tidak pasti - Tunggu kejelasan
+• 💡 Paper trade strategi sebelum eksekusi live
+• 📱 Pantau berita dan perkembangan regulasi
+• ⏰ Setel peringatan untuk breakout support kunci"""
 
             else:
                 implications = """
 
-💡 **TRADING IMPLICATIONS:**
-• 📉 Bearish pressure - Short strategies preferred
-• 🎯 Focus on breakdown levels
-• 🔴 Risk-off environment - Avoid altcoins
-• ⚠️ Cash preservation mode - Defensive positioning"""
+💡 **IMPLIKASI TRADING:**
+• 📉 Tekanan bearish - Strategi short lebih disukai
+• 🎯 Fokus pada level breakdown
+• 🔴 Lingkungan risk-off - Hindari altcoin
+• ⚠️ Mode konservasi modal - Posisi defensif"""
 
                 opportunities = """
 
-🎯 **MARKET OPPORTUNITIES:**
-• 🏃 Short selling on bounce failures
-• ⚡ Put options strategies
-• 💰 Building cash for bottom opportunities
-• 🔄 Hedge existing long positions
-• 📈 DCA only in strongest fundamentals"""
+🎯 **PELUANG PASAR:**
+• 🏃 Short pada pantulan yang gagal
+• ⚡ Strategi put options
+• 💰 Membangun kas untuk peluang bottom
+• 🔄 Lindungi posisi long yang ada
+• 📈 DCA hanya pada fundamental terkuat"""
 
                 risk_assessment = """
 
-⚠️ **RISK ASSESSMENT:**
-• 💥 HIGH RISK - Minimize exposure
-• 📊 Very tight stops (2-3%)
-• 🚨 Panic selling possible - Avoid FOMO
-• 💡 Wait for capitulation signals
-• 📱 News-driven volatility expected
-• ⏰ Set alerts for major support breaks"""
+⚠️ **PENILAIAN RISIKO:**
+• 💥 RISIKO TINGGI - Minimalkan eksposur
+• 📊 Stop sangat ketat (2-3%)
+• 🚨 Potensi panic selling - Hindari FOMO
+• 💡 Tunggu sinyal capitulation
+• 📱 Volatilitas berbasis berita diharapkan
+• ⏰ Setel peringatan untuk breakout support utama"""
 
             analysis += implications + opportunities + risk_assessment
 
@@ -3132,19 +3287,19 @@ class AIAssistant:
 
             analysis += f"""
 
-🚨 **KEY LEVELS TO WATCH:**
-• **BTC Dominance Support**: {btc_dominance-2:.1f}%
-• **BTC Dominance Resistance**: {btc_dominance+2:.1f}%
-• **Market Cap Key Level**: {format_large_number(market_cap_low)} - {format_large_number(market_cap_high)}
+🚨 **LEVEL KUNCI UNTUK DIPANTAU:**
+• **Support Dominasi BTC**: {btc_dominance-2:.1f}%
+• **Resistance Dominasi BTC**: {btc_dominance+2:.1f}%
+• **Level Kunci Kapitalisasi Pasar**: {format_large_number(market_cap_low)} - {format_large_number(market_cap_high)}
 
-📡 **Data Sources**: Binance Global Metrics + Multi-API Analysis
-⏰ **Next Update**: Setiap 15 menit untuk data real-time"""
+📡 **Sumber Data**: Binance Global Metrics + Analisis Multi-API
+⏰ **Pembaruan Berikutnya**: Setiap 15 menit untuk data real-time"""
 
             return analysis
 
         except Exception as e:
             print(f"Error in market sentiment: {e}")
-            return f"""🌍 **COMPREHENSIVE MARKET ANALYSIS**
+            return f"""🌍 **KOMPREHENSIF ANALISIS PASAR**
 
 ⚠️ **Error**: Tidak dapat mengambil data pasar lengkap saat ini.
 
@@ -3155,7 +3310,7 @@ class AIAssistant:
 
 🔄 Coba command `/market` lagi dalam beberapa menit untuk data lengkap.
 
-**Error details**: {str(e)[:100]}..."""
+**Detail Error**: {str(e)[:100]}..."""
 
     def get_ai_response(self, question: str, language: str = 'id') -> str:
         """Get AI response for general crypto questions"""
@@ -3172,7 +3327,8 @@ class AIAssistant:
 
             # Check for general crypto questions
             if any(word in question_lower for word in crypto_keywords):
-                return """🪙 **Cryptocurrency - Pengenalan**
+                if language == 'id':
+                    return """🪙 **Cryptocurrency - Pengenalan**
 
 Cryptocurrency adalah mata uang digital yang menggunakan teknologi blockchain untuk keamanan dan transparansi.
 
@@ -3184,32 +3340,86 @@ Cryptocurrency adalah mata uang digital yang menggunakan teknologi blockchain un
 
 🔝 **Top Cryptocurrencies:**
 • Bitcoin (BTC) - Digital gold
-• Ethereum (ETH) - Smart contracts platform
-• Binance Coin (BNB) - Exchange token
+• Ethereum (ETH) - Platform smart contracts
+• Binance Coin (BNB) - Token exchange
 • Solana (SOL) - High-speed blockchain
 
 📊 **Cara Memulai:**
 • Pelajari dasar-dasar blockchain
 • Pilih exchange terpercaya
-• Mulai dengan amount kecil
+• Mulai dengan jumlah kecil
 • Diversifikasi portfolio
 
 ⚠️ **Risiko yang Perlu Diketahui:**
 • Volatilitas tinggi
 • Risiko regulasi
 • Keamanan wallet
+• Manipulasi pasar
+
+💰 **Tips Investasi:**
+• DYOR (Do Your Own Research)
+• Jangan invest lebih dari yang Anda mampu untuk hilang
+• DCA (Dollar Cost Averaging)
+• Tahan untuk jangka panjang (Hold)"""
+                else:
+                    return """🪙 **Cryptocurrency - Introduction**
+
+Cryptocurrency is a digital currency that uses blockchain technology for security and transparency.
+
+💡 **Core Concepts:**
+• Decentralized digital currency
+• Not controlled by central banks
+• Uses cryptography for security
+• Transactions recorded on the blockchain
+
+🔝 **Top Cryptocurrencies:**
+• Bitcoin (BTC) - Digital gold
+• Ethereum (ETH) - Smart contracts platform
+• Binance Coin (BNB) - Exchange token
+• Solana (SOL) - High-speed blockchain
+
+📊 **Getting Started:**
+• Learn blockchain basics
+• Choose a trusted exchange
+• Start with small amounts
+• Diversify your portfolio
+
+⚠️ **Risks to Be Aware Of:**
+• High volatility
+• Regulatory risks
+• Wallet security
 • Market manipulation
 
-💰 **Tips Investment:**
+💰 **Investment Tips:**
 • DYOR (Do Your Own Research)
-• Jangan invest lebih dari yang mampu hilang
+• Never invest more than you can afford to lose
 • DCA (Dollar Cost Averaging)
-• Hold untuk long-term"""
+• Long-term holding (Hold)"""
 
             elif any(word in question_lower for word in bitcoin_keywords):
-                return """🟠 **Bitcoin (BTC) - Info**
+                if language == 'id':
+                    return """🟠 **Bitcoin (BTC) - Info**
 
 Bitcoin adalah cryptocurrency pertama dan terbesar di dunia, diciptakan oleh Satoshi Nakamoto pada 2009.
+
+💡 **Fitur Utama:**
+• Mata uang digital terdesentralisasi
+• Pasokan terbatas: 21 juta BTC
+• Penyimpan nilai & emas digital
+• Konsensus Proof of Work
+
+📊 **Tips Trading:**
+• Penyimpan nilai jangka panjang
+• Volatilitas tinggi dalam jangka pendek
+• Ikuti berita adopsi institusional
+• Analisis teknikal sangat efektif
+
+💰 **Perspektif Investasi:**
+Bitcoin sering dianggap sebagai "emas digital" dan lindung nilai terhadap inflasi."""
+                else:
+                    return """🟠 **Bitcoin (BTC) - Info**
+
+Bitcoin is the world's first and largest cryptocurrency, created by Satoshi Nakamoto in 2009.
 
 💡 **Key Features:**
 • Decentralized digital currency
@@ -3224,18 +3434,38 @@ Bitcoin adalah cryptocurrency pertama dan terbesar di dunia, diciptakan oleh Sat
 • Technical analysis very effective
 
 💰 **Investment Perspective:**
-Bitcoin sering dianggap sebagai "digital gold" dan hedge against inflation."""
+Bitcoin is often considered "digital gold" and a hedge against inflation."""
 
             elif any(word in question_lower for word in ethereum_keywords):
-                return """🔷 **Ethereum (ETH) - Info**
+                if language == 'id':
+                    return """🔷 **Ethereum (ETH) - Info**
 
-Ethereum adalah platform blockchain yang mendukung smart contracts dan DeFi ecosystem.
+Ethereum adalah platform blockchain yang mendukung smart contracts dan ekosistem DeFi.
+
+💡 **Fitur Utama:**
+• Platform smart contract
+• Pusat ekosistem DeFi
+• Dasar marketplace NFT
+• Proof of Stake (sejak The Merge)
+
+📊 **Tips Trading:**
+• Ikuti tren DeFi
+• Pantau dampak biaya gas
+• Perhatikan upgrade besar
+• Korelasi kuat dengan token DeFi
+
+💰 **Perspektif Investasi:**
+Ethereum adalah "infrastruktur" untuk Web3 dan aplikasi blockchain."""
+                else:
+                    return """🔷 **Ethereum (ETH) - Info**
+
+Ethereum is a blockchain platform that supports smart contracts and the DeFi ecosystem.
 
 💡 **Key Features:**
 • Smart contract platform
 • DeFi ecosystem hub
 • NFT marketplace backbone
-• Proof of Stake (since Merge)
+• Proof of Stake (since The Merge)
 
 📊 **Trading Tips:**
 • Follow DeFi trends
@@ -3244,12 +3474,39 @@ Ethereum adalah platform blockchain yang mendukung smart contracts dan DeFi ecos
 • Strong correlation with DeFi tokens
 
 💰 **Investment Perspective:**
-Ethereum adalah "infrastructure" untuk Web3 dan aplikasi blockchain."""
+Ethereum is the "infrastructure" for Web3 and blockchain applications."""
 
             elif any(word in question_lower for word in defi_keywords):
-                return """🏦 **DeFi (Decentralized Finance) - Explained**
+                if language == 'id':
+                    return """🏦 **DeFi (Decentralized Finance) - Penjelasan**
 
-DeFi adalah sistem finansial yang dibangun di blockchain, tanpa intermediary tradisional.
+DeFi adalah sistem finansial yang dibangun di atas blockchain, tanpa perantara tradisional.
+
+💡 **Komponen Inti:**
+• DEX (Decentralized Exchanges)
+• Protokol Pinjam-Meminjam (Lending & Borrowing)
+• Yield farming & Liquidity mining
+• Stablecoin & Aset Sintetis
+
+📊 **Protokol DeFi Populer:**
+• Uniswap (DEX)
+• Aave (Lending)
+• Compound (Lending)
+• MakerDAO (Stablecoin)
+
+⚠️ **Risiko:**
+• Risiko smart contract
+• Impermanent loss
+• Biaya gas tinggi
+• Ketidakpastian regulasi
+
+💰 **Peluang:**
+• Imbal hasil lebih tinggi dari keuangan tradisional
+• Inovasi produk finansial"""
+                else:
+                    return """🏦 **DeFi (Decentralized Finance) - Explained**
+
+DeFi is a financial system built on blockchain, without traditional intermediaries.
 
 💡 **Core Components:**
 • DEX (Decentralized Exchanges)
@@ -3274,7 +3531,41 @@ DeFi adalah sistem finansial yang dibangun di blockchain, tanpa intermediary tra
 • Innovation in financial products"""
 
             elif any(word in question_lower for word in trading_keywords):
-                return """📈 **Crypto Trading Strategy - Basics**
+                if language == 'id':
+                    return """📈 **Strategi Trading Crypto - Dasar**
+
+💡 **Strategi Fundamental:**
+
+**1. Analisis Teknikal:**
+• Level Support & Resistance
+• Moving averages (EMA 50, 200)
+• Indikator RSI, MACD
+• Analisis Volume
+
+**2. Manajemen Risiko:**
+• Jangan pernah risiko >2-3% per trade
+• Selalu gunakan stop loss
+• Ambil profit secara bertahap
+• Ukuran posisi sangat penting
+
+**3. Jenis Pasar:**
+• Pasar Bullish: Beli saat turun (Buy the dip)
+• Pasar Bearish: Jual saat naik (Short rallies)
+• Sideways: Trading di rentang (Range trading)
+
+⚠️ **Kesalahan Umum:**
+• FOMO buying di puncak
+• Tidak menggunakan stop loss
+• Leverage berlebihan
+• Trading emosional
+
+💰 **Tips Pro:**
+• Rencanakan trade Anda
+• Buat jurnal trading
+• Tetap update dengan berita
+• Latihan dengan jumlah kecil terlebih dahulu"""
+                else:
+                    return """📈 **Crypto Trading Strategy - Basics**
 
 💡 **Fundamental Strategies:**
 
@@ -3291,7 +3582,7 @@ DeFi adalah sistem finansial yang dibangun di blockchain, tanpa intermediary tra
 • Position sizing is crucial
 
 **3. Market Types:**
-• Bull market: Buy dips
+• Bull market: Buy the dip
 • Bear market: Short rallies
 • Sideways: Range trading
 
@@ -3309,39 +3600,61 @@ DeFi adalah sistem finansial yang dibangun di blockchain, tanpa intermediary tra
 
             # If question contains specific words, provide targeted responses
             elif any(word in question_lower for word in ['wallet', 'dompet']):
-                return """💼 **Crypto Wallet - Panduan**
+                if language == 'id':
+                    return """💼 **Dompet Crypto - Panduan**
 
-Crypto wallet adalah aplikasi untuk menyimpan cryptocurrency Anda dengan aman.
+Dompet crypto adalah aplikasi untuk menyimpan cryptocurrency Anda dengan aman.
 
-🔐 **Jenis Wallet:**
-• **Hot Wallet**: Online, mudah akses (MetaMask, Trust Wallet)
+🔐 **Jenis Dompet:**
+• **Hot Wallet**: Online, mudah diakses (MetaMask, Trust Wallet)
 • **Cold Wallet**: Offline, lebih aman (Ledger, Trezor)
-• **Exchange Wallet**: Di exchange (Binance, Coinbase)
+• **Dompet Exchange**: Di exchange (Binance, Coinbase)
 
-🛡️ **Keamanan Wallet:**
-• Backup seed phrase dengan aman
-• Jangan share private key
+🛡️ **Keamanan Dompet:**
+• Cadangkan seed phrase dengan aman
+• Jangan bagikan private key
 • Gunakan 2FA jika tersedia
 • Verifikasi alamat sebelum transfer
 
 💡 **Rekomendasi:**
 • Pemula: Trust Wallet atau MetaMask
-• Advanced: Hardware wallet untuk amount besar
-• Trading: Exchange wallet untuk kemudahan"""
+• Lanjutan: Hardware wallet untuk jumlah besar
+• Trading: Dompet exchange untuk kemudahan"""
+                else:
+                    return """💼 **Crypto Wallet - Guide**
+
+A crypto wallet is an application to securely store your cryptocurrencies.
+
+🔐 **Wallet Types:**
+• **Hot Wallet**: Online, easy access (MetaMask, Trust Wallet)
+• **Cold Wallet**: Offline, more secure (Ledger, Trezor)
+• **Exchange Wallet**: On the exchange (Binance, Coinbase)
+
+🛡️ **Wallet Security:**
+• Back up your seed phrase securely
+• Never share your private key
+• Use 2FA if available
+• Verify addresses before transfers
+
+💡 **Recommendations:**
+• Beginners: Trust Wallet or MetaMask
+• Advanced: Hardware wallet for large amounts
+• Trading: Exchange wallet for convenience"""
 
             elif any(word in question_lower for word in ['mining', 'menambang']):
-                return """⛏️ **Crypto Mining - Panduan**
+                if language == 'id':
+                    return """⛏️ **Crypto Mining - Panduan**
 
-Mining adalah proses validasi transaksi crypto dan mendapat reward.
+Mining adalah proses validasi transaksi crypto dan mendapatkan imbalan.
 
 💻 **Jenis Mining:**
-• **Bitcoin Mining**: Butuh ASIC, listrik besar
-• **Ethereum Mining**: GPU-based (sekarang Proof of Stake)
+• **Bitcoin Mining**: Membutuhkan ASIC, listrik besar
+• **Ethereum Mining**: Berbasis GPU (sekarang Proof of Stake)
 • **Altcoin Mining**: Berbagai algoritma
 
 ⚡ **Pertimbangan:**
 • Biaya listrik vs profit
-• Hardware cost & maintenance
+• Biaya hardware & perawatan
 • Pool mining vs solo mining
 • Regulasi lokal
 
@@ -3349,35 +3662,80 @@ Mining adalah proses validasi transaksi crypto dan mendapat reward.
 • Staking (Proof of Stake)
 • Yield farming di DeFi
 • Cloud mining (hati-hati scam)"""
+                else:
+                    return """⛏️ **Crypto Mining - Guide**
+
+Mining is the process of validating crypto transactions and earning rewards.
+
+💻 **Mining Types:**
+• **Bitcoin Mining**: Requires ASICs, high electricity costs
+• **Ethereum Mining**: GPU-based (now Proof of Stake)
+• **Altcoin Mining**: Various algorithms
+
+⚡ **Considerations:**
+• Electricity costs vs. profit
+• Hardware cost & maintenance
+• Pool mining vs. solo mining
+• Local regulations
+
+💰 **Modern Alternatives:**
+• Staking (Proof of Stake)
+• Yield farming in DeFi
+• Cloud mining (beware of scams)"""
 
             else:
                 # Generic helpful response for unmatched questions
-                return f"""🤖 **AI Assistant Ready!**
+                if language == 'id':
+                    return f"""🤖 **AI Assistant Siap Membantu!**
 
 Pertanyaan Anda: "{question[:50]}{'...' if len(question) > 50 else ''}"
 
-Saya siap membantu dengan topik crypto! 
+Saya siap membantu Anda dengan topik seputar crypto! 
 
 💡 **Topik yang bisa saya bantu:**
-• **Crypto Basics**: Bitcoin, Ethereum, blockchain
-• **DeFi**: Uniswap, lending, yield farming  
-• **Trading**: Technical analysis, strategies
-• **Wallet**: Setup, security, recommendations
-• **Mining**: Proof of Work, staking, alternatives
+• **Dasar-dasar Crypto**: Bitcoin, Ethereum, blockchain
+• **DeFi**: Uniswap, lending, yield farming
+• **Trading**: Analisis teknikal, strategi
+• **Wallet**: Pengaturan, keamanan, rekomendasi
+• **Mining**: Proof of Work, staking, alternatif
 
-📚 **Command tersedia:**
+📚 **Command yang tersedia:**
 • `/analyze btc` - Analisis komprehensif Bitcoin
-• `/futures btc` - Sinyal trading Bitcoin  
-• `/market` - Overview pasar crypto
+• `/futures btc` - Sinyal trading Bitcoin
+• `/market` - Gambaran umum pasar
 • `/price btc` - Harga real-time (gratis)
 
-🔄 **Coba tanya lagi dengan lebih spesifik:**
-Contoh: "Apa itu Bitcoin?", "Bagaimana cara trading crypto?", "Wallet mana yang aman?"
+🔄 **Coba ajukan pertanyaan lagi dengan lebih spesifik:**
+Contoh: "Apa itu Bitcoin?", "Bagaimana cara trading crypto?", "Dompet mana yang aman?"
 
 Saya siap membantu dengan pengetahuan crypto terlengkap! 🚀"""
+                else:
+                    return f"""🤖 **AI Assistant Ready!**
+
+Your question: "{question[:50]}{'...' if len(question) > 50 else ''}"
+
+I'm here to help you with all things crypto! 
+
+💡 **Topics I can assist with:**
+• **Crypto Basics**: Bitcoin, Ethereum, blockchain
+• **DeFi**: Uniswap, lending, yield farming
+• **Trading**: Technical analysis, strategies
+• **Wallets**: Setup, security, recommendations
+• **Mining**: Proof of Work, staking, alternatives
+
+📚 **Available Commands:**
+• `/analyze btc` - Comprehensive Bitcoin analysis
+• `/futures btc` - Bitcoin trading signals
+• `/market` - Crypto market overview
+• `/price btc` - Real-time price (free)
+
+🔄 **Try asking again with more specifics:**
+Examples: "What is Bitcoin?", "How to trade crypto?", "Which wallet is secure?"
+
+Let's explore the crypto world together! 🚀"""
 
         except Exception as e:
-            return f"❌ Error dalam memproses pertanyaan: {str(e)[:100]}..."
+            return f"❌ Error processing the question: {str(e)[:100]}..."
 
         except Exception as e:
-            return f"❌ Error dalam memproses pertanyaan: {str(e)[:100]}..."
+            return f"❌ Error processing the question: {str(e)[:100]}..."
