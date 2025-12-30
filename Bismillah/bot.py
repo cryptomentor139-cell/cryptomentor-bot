@@ -1127,17 +1127,19 @@ Resistance: ${max(closes):.2f}"""
                 else:
                     print(f"[DB STATUS] Health check failed: {status_msg}")
                 
-                import json
+                import sqlite3
                 import os
                 local_users = 0
                 try:
-                    local_db_path = os.path.join(os.path.dirname(__file__), 'data', 'users_local.json')
-                    if os.path.exists(local_db_path):
-                        with open(local_db_path, 'r') as f:
-                            local_data = json.load(f)
-                            local_users = len(local_data)
+                    sqlite_path = os.path.join(os.path.dirname(__file__), 'cryptomentor.db')
+                    if os.path.exists(sqlite_path):
+                        conn = sqlite3.connect(sqlite_path)
+                        cursor = conn.cursor()
+                        cursor.execute('SELECT COUNT(*) FROM users')
+                        local_users = cursor.fetchone()[0]
+                        conn.close()
                 except Exception as le:
-                    print(f"[DB STATUS] Local DB error: {le}")
+                    print(f"[DB STATUS] Local SQLite error: {le}")
                     local_users = 0
                 
                 combined_users = total_users + local_users
@@ -1158,7 +1160,7 @@ Resistance: ${max(closes):.2f}"""
 
 **Storage**
 ☁️ Supabase: users, portfolios, referrals
-💾 Local: users\_local.json
+💾 SQLite: cryptomentor.db
 🔄 Sync: Real-time enabled
 """
             except Exception as e:
