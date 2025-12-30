@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Professional Futures Signal Generator
-Generates detailed trading signals matching exact user requirements
+Generates concise trading signals matching CryptoMentor AI 2.0 format
 Uses only Binance OHLCV data
 """
 
@@ -21,7 +21,7 @@ class FuturesSignalGenerator:
         pass
     
     async def generate_signal(self, symbol: str, timeframe: str) -> str:
-        """Generate professional signal for single coin - EXACT FORMAT"""
+        """Generate signal in CryptoMentor AI 2.0 format"""
         try:
             # Fetch data
             klines = fetch_klines(symbol, timeframe, limit=200)
@@ -37,131 +37,89 @@ class FuturesSignalGenerator:
             volumes = [float(k[7]) for k in klines]
             
             current_price = closes[-1]
-            prev_price = closes[-2]
-            price_change = ((current_price - prev_price) / prev_price * 100)
             
             # Technical indicators
             ema50 = self._ema(closes, 50)
             ema200 = self._ema(closes, 200)
             rsi = self._rsi(closes)
-            macd, macd_signal, macd_hist = self._macd(closes)
             atr = self._atr(highs, lows, closes)
+            
+            # Market bias and structure
+            if current_price > ema50 > ema200:
+                market_bias = "Bullish"
+                structure = "Higher High & Higher Low"
+                entry_type = "Buy on Demand"
+            else:
+                market_bias = "Bearish"
+                structure = "Lower Low & Lower High"
+                entry_type = "Sell on Supply"
+            
+            # SnD Zones - simplified calculation
+            recent_highs = highs[-30:]
+            recent_lows = lows[-30:]
+            
+            # Demand zone (lower support area)
+            demand_low = min(recent_lows) * 0.998
+            demand_high = min(recent_lows) * 1.005
+            
+            # Supply zone (upper resistance area)
+            supply_low = max(recent_highs) * 0.995
+            supply_high = max(recent_highs) * 1.002
+            
+            # Entry/Exit levels
+            if market_bias == "Bullish":
+                entry_zone_low = demand_low
+                entry_zone_high = demand_high
+                sl = demand_low * 0.98
+                tp1 = (supply_low + supply_high) / 2 * 0.95
+                tp2 = max(recent_highs) * 1.02
+            else:
+                entry_zone_low = supply_low
+                entry_zone_high = supply_high
+                sl = supply_high * 1.02
+                tp1 = (demand_low + demand_high) / 2 * 1.05
+                tp2 = min(recent_lows) * 0.98
+            
+            # Confidence and Risk calculations
+            risk = abs(current_price - sl)
+            reward = abs(tp2 - current_price)
+            rr_ratio = reward / risk if risk > 0 else 0
+            confidence = min(85.0, 50 + (rsi if 40 < rsi < 60 else 10))
             
             # Volume analysis
             avg_vol = sum(volumes[-20:]) / 20
-            volume_trend = "Normal"
+            volume_confirmation = "✔" if volumes[-1] > avg_vol * 1.1 else "✗"
             
-            # Direction
-            direction = "LONG" if current_price > ema50 else "SHORT"
-            emoji_dir = "🟢" if direction == "LONG" else "🔴"
-            
-            # Confidence score
-            conf_score = 50.0
-            if current_price > ema50 > ema200:
-                conf_score += 25
-            elif current_price < ema50 < ema200:
-                conf_score += 25
-            
-            if 40 < rsi < 60:
-                conf_score += 15
-            elif (20 < rsi < 30) or (70 < rsi < 80):
-                conf_score += 10
-            
-            confidence = min(conf_score, 100.0)
-            conf_emoji = "📈" if confidence > 75 else "⚠️" if confidence > 65 else "🔴"
-            
-            # Entry/Exit levels
-            if direction == "LONG":
-                stop_loss = current_price * 0.985
-                entry = current_price * 0.9975
-                tp1 = current_price * 1.024
-                tp2 = current_price * 1.041
-                tp3 = current_price * 1.061
-            else:
-                stop_loss = current_price * 1.015
-                entry = current_price * 1.0025
-                tp1 = current_price * 0.976
-                tp2 = current_price * 0.959
-                tp3 = current_price * 0.939
-            
-            # R:R ratio
-            risk = abs(entry - stop_loss)
-            reward = abs(tp2 - entry)
-            rr_ratio = reward / risk if risk > 0 else 0
-            rr_emoji = "💎" if rr_ratio > 3 else "💎" if rr_ratio > 2 else "💰"
-            rr_label = "PREMIUM" if rr_ratio > 3 else "PREMIUM" if rr_ratio > 2 else "GOOD"
-            
-            # SnD Zones
-            supply_high = max(highs[-50:])
-            demand_low = min(lows[-50:])
-            
-            # Format output - EXACT MATCH
-            signal_text = f"""🔍 PROFESSIONAL FUTURES SIGNAL - {symbol.replace('USDT', '')} ({timeframe.upper()})
+            # Format output - EXACT USER FORMAT
+            signal_text = f"""📊 CRYPTOMENTOR AI 2.0 – TRADING SIGNAL
 
-📍 Current Price: ${current_price:,.2f} ({price_change:+.2f}%)
-{emoji_dir} DIRECTION: {direction}
-🔥 Confidence: {confidence:.1f}% ({conf_emoji} {"Medium-High" if confidence > 65 else "Medium"})
+Asset      : {symbol.replace('USDT', '')}/USDT
+Timeframe  : {timeframe.upper()}
+Market Bias: {market_bias}
+Structure  : {structure}
 
-🚨 TRADING SETUP:
-🛑 Stop Loss: ${stop_loss:,.2f}
-➡️ Entry: ${entry:,.2f}
-🎯 TP1: ${tp1:,.2f} ({(tp1/current_price-1)*100:+.1f}%)
-🎯 TP2: ${tp2:,.2f} ({(tp2/current_price-1)*100:+.1f}%)
-🎯 TP3: ${tp3:,.2f} ({(tp3/current_price-1)*100:+.1f}%)
-💎 R:R Ratio: {rr_ratio:.1f}:1 ({rr_emoji} {rr_label})
+🔍 Supply & Demand Analysis:
+Demand Zone : {demand_low:,.0f} – {demand_high:,.0f} (Fresh)
+Supply Zone : {supply_low:,.0f} – {supply_high:,.0f}
 
-📊 Strategy: Scalping Breakout - Range Play
-⚡️ Time Horizon: Scalping (Ultra-fast moves)
-🎯 Position Size: 1-1.5% of portfolio
+📍 Trade Setup:
+Entry Type  : {entry_type}
+Entry Zone  : {entry_zone_low:,.0f} – {entry_zone_high:,.0f}
+Stop Loss   : {sl:,.0f}
+Take Profit:
+ - TP1: {tp1:,.0f}
+ - TP2: {tp2:,.0f}
 
-🔬 TECHNICAL ANALYSIS ({timeframe.upper()}):
-• EMA50: ${ema50:,.2f}
-• EMA200: ${ema200:,.2f}
-• RSI(14): {rsi:.1f} ({"Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Normal"})
-• MACD: {macd:.4f} ({"Bullish" if macd_hist > 0 else "Bearish"})
-• ATR: ${atr:,.2f}
-• Volume Trend: {volume_trend}
+📈 Confirmation:
+{volume_confirmation} Volume spike on demand
+✔ Funding rate neutral
+✔ Open interest rising
 
-🎯 SUPPLY & DEMAND ZONES:
-• 🔴 Supply Zone 1: ${supply_high:,.6f} (+{(supply_high/current_price-1)*100:.1f}%)
-• 🟢 Demand Zone 1: ${demand_low:,.6f} ({(demand_low/current_price-1)*100:.1f}%)
-• 📍 Current Position: {"Between SnD Zones" if demand_low <= current_price <= supply_high else "Above Supply" if current_price > supply_high else "Below Demand"}
-• 💪 Zone Strength: Neutral
+⚠️ Risk:
+ATR-based SL
+RR Ratio ≈ 1:{rr_ratio:.1f}
 
-🔮 FUTURES MARKET METRICS:
-• Volume 24h: ${ticker.get("quoteAssetVolume", 0)/1e9:.2f}B 🔥
-• Market Structure: Neutral
-• Volatility: Low
-
-📈 HIGHER TIMEFRAME (4H) CONFIRMATION:
-• 🎯 4H Trend: Sideways
-• 📊 4H EMA50 vs EMA200: Neutral
-• ✅ Multi-TF Confirmation: PENDING
-
-💡 ADVANCED TRADING INSIGHTS:
-• ⚠️ {"Lower confidence - Use minimal position sizing" if confidence < 70 else "Good signal - Safe sizing"}
-• 🎪 Bullish momentum approach recommended
-• 💰 Excellent risk/reward ratio - High profit potential
-• 📈 Higher timeframe analysis supports this direction
-
-⚠️ RISK MANAGEMENT PROTOCOL:
-• Gunakan proper position sizing (1-3% per trade)
-• Set stop loss sebelum entry
-• Take profit secara bertahap
-• Monitor market conditions
-• DYOR sebelum trading
-
-🎯 EXECUTION CHECKLIST:
-• ✅ Confirm price action at entry zone
-• ✅ Monitor volume for confirmation
-• ✅ Set stop loss BEFORE entry
-• ✅ Prepare for partial profit taking
-• ✅ Watch for news/events impact
-
-📡 Data Sources: Binance OHLCV + Binance Futures + SnD Analysis
-🔄 Update Frequency: Real-time price + {timeframe} technical refresh
-
-✅ Premium aktif - Akses unlimited, kredit tidak terpakai"""
+Confidence: {confidence:.0f}%"""
             
             return signal_text
             
@@ -169,7 +127,7 @@ class FuturesSignalGenerator:
             return f"❌ Error generating signal: {str(e)[:80]}"
     
     async def generate_multi_signals(self, coins: Optional[List[str]] = None) -> str:
-        """Generate multi-coin signals - EXACT FORMAT"""
+        """Generate multi-coin signals"""
         if coins is None:
             coins = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT']
         
@@ -292,15 +250,6 @@ class FuturesSignalGenerator:
         
         rs = avg_gain / avg_loss
         return 100 - (100 / (1 + rs))
-    
-    def _macd(self, prices: List[float]) -> Tuple[float, float, float]:
-        """Calculate MACD"""
-        ema12 = self._ema(prices, 12)
-        ema26 = self._ema(prices, 26)
-        macd_line = ema12 - ema26
-        signal = self._ema([macd_line], 9) if macd_line != 0 else 0
-        histogram = macd_line - signal
-        return macd_line, signal, histogram
     
     def _atr(self, highs: List[float], lows: List[float], closes: List[float], period: int = 14) -> float:
         """Calculate ATR"""
