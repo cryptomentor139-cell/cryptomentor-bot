@@ -90,6 +90,8 @@ class MenuCallbackHandler:
                 await self.handle_tier_system_guide(query, context)
             elif callback_data == "advanced_referral_guide":
                 await self.handle_advanced_referral_guide(query, context)
+            elif callback_data.startswith("set_lang_"):
+                await self.handle_set_language(query, context)
 
 
             # Symbol selection handlers
@@ -489,14 +491,42 @@ Type your question about cryptocurrency, trading, or blockchain technology.
         )
 
     async def handle_change_language(self, query, context):
-        """Handle change language - trigger /language"""
-        fake_update = Update(
-            update_id=999999,
-            message=query.message,
-            callback_query=query
-        )
+        """Handle language change with interactive buttons"""
+        user_id = query.from_user.id
+        
+        try:
+            from database import Database
+            db = Database()
+            current_lang = db.get_user_language(user_id) or 'en'
+            current_name = {'en': 'English', 'id': 'Bahasa Indonesia'}.get(current_lang, 'English')
+        except:
+            current_lang = 'en'
+            current_name = 'English'
 
-        await self.bot.language_command(fake_update, context)
+        language_text = f"""🌐 **Language Settings**
+
+📍 **Current Language:** {current_name} (`{current_lang}`)
+
+🗣️ **Available Languages:**
+• 🇺🇸 English - Full features
+• 🇮🇩 Bahasa Indonesia - Fitur lengkap
+
+💡 **Select your preferred language:**"""
+
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        keyboard = [
+            [
+                InlineKeyboardButton("🇺🇸 English", callback_data="set_lang_en"),
+                InlineKeyboardButton("🇮🇩 Bahasa Indonesia", callback_data="set_lang_id")
+            ],
+            [InlineKeyboardButton("🔙 Back to Settings", callback_data=SETTINGS_MENU)]
+        ]
+
+        await query.edit_message_text(
+            language_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='MARKDOWN'
+        )
 
     async def handle_symbol_selection(self, query, context):
         """Handle symbol selection from popular symbols"""
@@ -1117,6 +1147,56 @@ Needed: {max(0, next_tier['requirement'] - total_referrals)} more referrals
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='MARKDOWN'
         )
+
+    async def handle_set_language(self, query, context):
+        """Handle language selection from buttons"""
+        user_id = query.from_user.id
+        lang_code = query.data.split('_')[-1]  # Extract 'en' or 'id' from 'set_lang_en'
+        
+        if lang_code not in ['en', 'id']:
+            await query.answer("❌ Invalid language selection", show_alert=True)
+            return
+            
+        try:
+            from database import Database
+            db = Database()
+            
+            # Update user language
+            success = db.update_user_language(user_id, lang_code)
+            
+            if success:
+                lang_names = {'en': 'English', 'id': 'Bahasa Indonesia'}
+                
+                if lang_code == 'id':
+                    success_msg = f"""✅ **Bahasa berhasil diubah ke {lang_names[lang_code]}!**
+
+🎯 **Perubahan yang aktif:**
+• Menu dan pesan dalam Bahasa Indonesia
+• Analisis trading dalam bahasa lokal
+• Support customer dalam bahasa Indonesia
+
+💡 **Catatan:** Beberapa data teknis tetap dalam bahasa Inggris untuk akurasi."""
+                else:
+                    success_msg = f"""✅ **Language changed to {lang_names[lang_code]}!**
+
+🎯 **Active Changes:**
+• Menus and messages in English
+• Trading analysis in English
+• Customer support in English
+
+💡 **Note:** All technical data will be in English for accuracy."""
+                
+                await query.answer(f"✅ Language changed to {lang_names[lang_code]}!")
+                
+                # Back to settings menu with updated language
+                await self.show_settings_menu(query, context)
+                
+            else:
+                await query.answer("❌ Failed to update language. Please try again.", show_alert=True)
+                
+        except Exception as e:
+            print(f"Error setting language: {e}")
+            await query.answer("❌ Error updating language. Please try again.", show_alert=True)
 
 
 def register_menu_handlers(application, bot_instance):

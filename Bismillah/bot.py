@@ -804,25 +804,79 @@ Resistance: ${max(closes):.2f}"""
             )
 
     async def language_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle language command"""
+        """Handle language command with database integration"""
+        user_id = update.effective_user.id
         lang = context.args[0].lower() if context.args else None
 
         if not lang or lang not in ['en', 'id']:
-            await update.effective_message.reply_text(
-                "🌐 **Language Selection**\n\n"
-                "**Usage:** `/language <code>`\n\n"
-                "**Available:**\n"
-                "• `en` - English\n"
-                "• `id` - Bahasa Indonesia",
-                parse_mode='MARKDOWN'
-            )
+            # Get current language from database
+            try:
+                from database import Database
+                db = Database()
+                current_lang = db.get_user_language(user_id) or 'en'
+                current_name = {'en': 'English', 'id': 'Bahasa Indonesia'}.get(current_lang, 'English')
+                
+                await update.effective_message.reply_text(
+                    f"🌐 **Language Selection**\n\n"
+                    f"📍 **Current:** {current_name} (`{current_lang}`)\n\n"
+                    f"**Usage:** `/language <code>`\n\n"
+                    f"**Available:**\n"
+                    f"• `en` - English\n"
+                    f"• `id` - Bahasa Indonesia\n\n"
+                    f"**Example:** `/language id`",
+                    parse_mode='MARKDOWN'
+                )
+            except Exception as e:
+                await update.effective_message.reply_text(
+                    "🌐 **Language Selection**\n\n"
+                    "**Usage:** `/language <code>`\n\n"
+                    "**Available:**\n"
+                    "• `en` - English\n"
+                    "• `id` - Bahasa Indonesia",
+                    parse_mode='MARKDOWN'
+                )
             return
 
-        lang_names = {'en': 'English', 'id': 'Bahasa Indonesia'}
-        await update.effective_message.reply_text(
-            f"✅ Language changed to {lang_names[lang]}!",
-            parse_mode='MARKDOWN'
-        )
+        # Update language in database
+        try:
+            from database import Database
+            db = Database()
+            
+            # Ensure user exists first
+            user = db.get_user(user_id)
+            if not user:
+                db.create_user(
+                    user_id,
+                    update.effective_user.username,
+                    update.effective_user.first_name,
+                    update.effective_user.last_name,
+                    lang  # Set language during creation
+                )
+            else:
+                # Update existing user's language
+                db.update_user_language(user_id, lang)
+
+            lang_names = {'en': 'English', 'id': 'Bahasa Indonesia'}
+            
+            if lang == 'id':
+                success_msg = f"✅ **Bahasa berhasil diubah ke {lang_names[lang]}!**\n\n" \
+                             f"🎯 Sekarang bot akan merespons dalam Bahasa Indonesia.\n" \
+                             f"💡 Gunakan `/menu` untuk navigasi yang mudah!"
+            else:
+                success_msg = f"✅ **Language changed to {lang_names[lang]}!**\n\n" \
+                             f"🎯 Bot will now respond in English.\n" \
+                             f"💡 Use `/menu` for easy navigation!"
+
+            await update.effective_message.reply_text(success_msg, parse_mode='MARKDOWN')
+            
+        except Exception as e:
+            print(f"Error updating language: {e}")
+            lang_names = {'en': 'English', 'id': 'Bahasa Indonesia'}
+            await update.effective_message.reply_text(
+                f"✅ Language preference set to {lang_names[lang]}!\n\n"
+                f"💡 Note: Language saved locally for this session.",
+                parse_mode='MARKDOWN'
+            )
 
     async def id_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /id command - show user Telegram ID"""

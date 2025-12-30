@@ -261,6 +261,53 @@ class Database:
 
         self.conn.commit()
 
+    def _generate_free_referral_code(self, telegram_id):
+        """Generates a unique free referral code."""
+        import random
+        import string
+        attempts = 0
+        while attempts < 10:
+            code = 'F' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
+            if not self.get_user_by_referral_code(code):
+                return code
+            attempts += 1
+        return f'F{telegram_id}{random.randint(1000,9999)}' # Fallback
+
+    def _generate_premium_referral_code(self, telegram_id):
+        """Generates a unique premium referral code."""
+        import random
+        import string
+        attempts = 0
+        while attempts < 10:
+            code = 'P' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
+            if not self.get_user_by_premium_referral_code(code):
+                return code
+            attempts += 1
+        return f'P{telegram_id}{random.randint(1000,9999)}' # Fallback
+
+    def execute_query(self, query, params=None, fetch_one=False, fetch_all=False):
+        """Executes a query and handles fetching results."""
+        try:
+            self.cursor.execute(query, params or ())
+            if fetch_one:
+                row = self.cursor.fetchone()
+                if row:
+                    # Try to return as dictionary if column names are available
+                    columns = [description[0] for description in self.cursor.description]
+                    return dict(zip(columns, row))
+                return None
+            elif fetch_all:
+                columns = [description[0] for description in self.cursor.description]
+                return [dict(zip(columns, r)) for r in self.cursor.fetchall()]
+            else:
+                self.conn.commit()
+                return self.cursor.rowcount # Indicate rows affected for INSERT/UPDATE/DELETE
+        except Exception as e:
+            print(f"DB Error executing query: {e}\nQuery: {query}\nParams: {params}")
+            self.conn.rollback() # Rollback on error
+            return None
+
+
     def create_user(self, telegram_id, username, first_name=None, last_name=None, language_code='id', referred_by=None):
         """Create a new user in the database with enhanced persistence and Supabase sync"""
         try:
@@ -294,30 +341,8 @@ class Database:
                 return True
 
             # Generate unique referral codes
-            import random
-            import string
-
-            # Generate free referral code
-            attempts = 0
-            while attempts < 10:
-                referral_code = 'F' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
-                if not self.get_user_by_referral_code(referral_code):
-                    break
-                attempts += 1
-            
-            if attempts >= 10:
-                referral_code = f'F{telegram_id}{random.randint(1000,9999)}'
-
-            # Generate premium referral code
-            attempts = 0
-            while attempts < 10:
-                premium_referral_code = 'P' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
-                if not self.get_user_by_premium_referral_code(premium_referral_code):
-                    break
-                attempts += 1
-                
-            if attempts >= 10:
-                premium_referral_code = f'P{telegram_id}{random.randint(1000,9999)}'
+            referral_code = self._generate_free_referral_code(telegram_id)
+            premium_referral_code = self._generate_premium_referral_code(telegram_id)
 
             # Base credits: 100 for all users
             base_credits = 100
@@ -478,15 +503,16 @@ class Database:
         """Update user's language preference"""
         try:
             # Validate language code
-            valid_languages = ['id', 'en']
+            valid_languages = ['id', 'en'] # Add more languages as needed
             if language_code not in valid_languages:
                 print(f"❌ Invalid language code: {language_code}")
-                return False
-            
+                # Optionally, set to default or return False
+                language_code = 'id' # Default to Indonesian if invalid
+
             self.cursor.execute("""
                 UPDATE users SET language_code = ? WHERE telegram_id = ?
             """, (language_code, telegram_id))
-            
+
             success = self.cursor.rowcount > 0
             if success:
                 self.conn.commit()
@@ -499,7 +525,7 @@ class Database:
                 print(f"✅ Updated language for user {telegram_id}: {language_code}")
             else:
                 print(f"❌ User {telegram_id} not found when updating language")
-            
+
             return success
         except Exception as e:
             print(f"DB Error (update_user_language): {e}")
@@ -737,9 +763,9 @@ class Database:
     def deduct_credit(self, telegram_id, amount):
         """Deduct credits from user (only for non-premium, non-admin users)"""
         try:
-            # Get all admin IDs
+            # Get all admin IDs from environment variables
             admin_ids = set()
-            for i in range(1, 10):
+            for i in range(1, 6): # Check up to ADMIN5_USER_ID
                 key = f'ADMIN_USER_ID' if i == 1 else f'ADMIN{i}_USER_ID'
                 admin_id_str = os.getenv(key, '0')
                 try:
@@ -747,7 +773,7 @@ class Database:
                     if admin_id > 0:
                         admin_ids.add(admin_id)
                 except ValueError:
-                    continue
+                    continue # Ignore if not a valid integer
 
             if self.is_user_premium(telegram_id) or telegram_id in admin_ids:
                 # Admins and premium users don't lose credits
@@ -756,6 +782,7 @@ class Database:
             # Check current credits first to ensure user has enough
             current_user = self.get_user(telegram_id)
             if not current_user:
+                print(f"❌ User {telegram_id} not found for credit deduction.")
                 return False
 
             current_credits = current_user.get('credits', 0)
@@ -763,18 +790,26 @@ class Database:
                 print(f"❌ Insufficient credits for user {telegram_id}: has {current_credits}, needs {amount}")
                 return False
 
+            # Use execute_query for transaction safety
+            self.cursor.execute("BEGIN TRANSACTION")
             self.cursor.execute("""
                 UPDATE users SET credits = credits - ? 
                 WHERE telegram_id = ? AND credits >= ?
             """, (amount, telegram_id, amount))
 
-            if self.cursor.rowcount > 0:
+            rows_affected = self.cursor.rowcount
+            if rows_affected > 0:
                 self.conn.commit()
                 # Log credit deduction for tracking
-                self.log_user_activity(telegram_id, "credit_deduction", f"Deducted {amount} credits, remaining: {current_credits - amount}")
+                remaining_credits = current_credits - amount
+                self.log_user_activity(telegram_id, "credit_deduction", f"Deducted {amount} credits, remaining: {remaining_credits}")
                 return True
-            return False
+            else:
+                self.conn.rollback()
+                print(f"❌ Credit deduction failed for user {telegram_id} (rowcount 0).")
+                return False
         except Exception as e:
+            self.conn.rollback()
             print(f"DB Error (deduct_credit): {e}")
             return False
 
@@ -1049,15 +1084,11 @@ class Database:
 
                 # Generate free referral code if missing
                 if not referral_code:
-                    referral_code = 'F' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
-                    while self.get_user_by_referral_code(referral_code):
-                        referral_code = 'F' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
+                    referral_code = self._generate_free_referral_code(telegram_id)
 
                 # Generate premium referral code if missing
                 if not premium_referral_code:
-                    premium_referral_code = 'P' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
-                    while self.get_user_by_premium_referral_code(premium_referral_code):
-                        premium_referral_code = 'P' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=7))
+                    premium_referral_code = self._generate_premium_referral_code(telegram_id)
 
                 # Update the user
                 self.cursor.execute("""
@@ -1151,7 +1182,7 @@ class Database:
         try:
             # Get first available admin ID for logging
             admin_id = 0
-            for i in range(1, 10):
+            for i in range(1, 6): # Check up to ADMIN5_USER_ID
                 key = f'ADMIN_USER_ID' if i == 1 else f'ADMIN{i}_USER_ID'
                 admin_id_str = os.getenv(key, '0')
                 try:
@@ -1160,7 +1191,7 @@ class Database:
                         admin_id = potential_admin_id
                         break
                 except ValueError:
-                    continue
+                    continue # Ignore if not a valid integer
 
             details = f"Sent {signals_count} signals to {success_count}/{total_eligible} eligible users"
 
@@ -1486,13 +1517,13 @@ class Database:
         """Get detailed referral statistics for a user"""
         try:
             from datetime import datetime, timedelta
-            
+
             # Get total referrals
             self.cursor.execute("""
                 SELECT COUNT(*) FROM users WHERE referred_by = ?
             """, (telegram_id,))
             total_referrals = self.cursor.fetchone()[0]
-            
+
             # Get active referrals (last 30 days)
             thirty_days_ago = (datetime.now() - timedelta(days=30)).isoformat()
             self.cursor.execute("""
@@ -1500,14 +1531,14 @@ class Database:
                 WHERE referred_by = ? AND created_at >= ?
             """, (telegram_id, thirty_days_ago))
             active_referrals = self.cursor.fetchone()[0]
-            
+
             # Get total earnings from premium referrals
             self.cursor.execute("""
                 SELECT COALESCE(SUM(earnings), 0) FROM premium_referrals 
                 WHERE referrer_id = ? AND status = 'paid'
             """, (telegram_id,))
             total_earnings = self.cursor.fetchone()[0]
-            
+
             # Get this month's earnings
             current_month = datetime.now().strftime('%Y-%m')
             self.cursor.execute("""
@@ -1516,7 +1547,7 @@ class Database:
                 AND strftime('%Y-%m', created_at) = ?
             """, (telegram_id, current_month))
             this_month_earnings = self.cursor.fetchone()[0]
-            
+
             return {
                 'total_referrals': total_referrals or 0,
                 'active_referrals': active_referrals or 0,
@@ -1540,14 +1571,14 @@ class Database:
                 SELECT COUNT(*) FROM users WHERE referred_by = ?
             """, (telegram_id,))
             total_referrals = self.cursor.fetchone()[0]
-            
+
             # Get premium earnings
             self.cursor.execute("""
                 SELECT COALESCE(premium_earnings, 0) FROM users WHERE telegram_id = ?
             """, (telegram_id,))
             result = self.cursor.fetchone()
             total_earnings = result[0] if result else 0
-            
+
             return {
                 'total_referrals': total_referrals or 0,
                 'total_earnings': total_earnings or 0
@@ -1560,10 +1591,11 @@ class Database:
         """Get user's language preference"""
         try:
             user = self.get_user(telegram_id)
-            return user.get('language_code', 'id') if user else 'id'
+            # Default to 'id' if user not found or language_code is missing
+            return user.get('language_code', 'id') if user else 'id' 
         except Exception as e:
             print(f"Error getting user language: {e}")
-            return 'id'
+            return 'id' # Default language
 
     def get_all_referrals(self, telegram_id):
         """Get all users referred by this user"""
@@ -1574,7 +1606,7 @@ class Database:
                 WHERE referred_by = ?
                 ORDER BY created_at DESC
             """, (telegram_id,))
-            
+
             results = []
             for row in self.cursor.fetchall():
                 results.append({
@@ -1600,21 +1632,21 @@ class Database:
                 FROM premium_referrals 
                 WHERE referrer_id = ? AND status = 'paid'
             """, (telegram_id,))
-            
+
             premium_result = self.cursor.fetchone()
             premium_referrals = premium_result[0] if premium_result else 0
             premium_earnings = premium_result[1] if premium_result else 0
-            
+
             # Get free referral count
             self.cursor.execute("""
                 SELECT COUNT(*) FROM users WHERE referred_by = ?
             """, (telegram_id,))
             total_referrals = self.cursor.fetchone()[0] or 0
             free_referrals = total_referrals - premium_referrals
-            
+
             # Calculate credit earnings (5 credits per free referral)
             credit_earnings = free_referrals * 5
-            
+
             return {
                 'total_referrals': total_referrals,
                 'free_referrals': free_referrals,
@@ -1645,7 +1677,7 @@ class Database:
                 SELECT COUNT(*) FROM users WHERE referred_by = ?
             """, (telegram_id,))
             total_referrals = self.cursor.fetchone()[0] or 0
-            
+
             if total_referrals >= 100:
                 return {'tier': 'DIAMOND', 'level': 5, 'bonus': 30, 'money_multiplier': 3.0}
             elif total_referrals >= 50:
@@ -1667,7 +1699,7 @@ class Database:
             bonus_percentage = tier['bonus']
             bonus_credits = int(base_credits * (bonus_percentage / 100))
             total_credits = base_credits + bonus_credits
-            
+
             return {
                 'base_credits': base_credits,
                 'bonus_credits': bonus_credits, 
@@ -1692,7 +1724,7 @@ class Database:
             multiplier = tier['money_multiplier']
             total_earnings = int(base_earnings * multiplier)
             bonus_earnings = total_earnings - base_earnings
-            
+
             return {
                 'base_earnings': base_earnings,
                 'bonus_earnings': bonus_earnings,
@@ -1714,16 +1746,16 @@ class Database:
         """Process referral reward with tier system bonuses"""
         try:
             base_credits = 5
-            
+
             # Apply tier bonus
             credit_result = self.apply_tier_bonus_to_credits(referrer_id, base_credits)
             total_credits = credit_result['total_credits']
-            
+
             # Add credits to referrer
             self.cursor.execute("""
                 UPDATE users SET credits = credits + ? WHERE telegram_id = ?
             """, (total_credits, referrer_id))
-            
+
             if self.cursor.rowcount > 0:
                 self.conn.commit()
                 # Log enhanced referral reward
@@ -1746,11 +1778,13 @@ class Database:
                 return False
 
             referrer = self.get_user(referrer_id)
+            # Check if referrer exists and is premium
             if not referrer or not self.is_user_premium(referrer_id):
+                print(f"Skipping premium referral reward for {referrer_id}: Referrer not found or not premium.")
                 return False
 
             base_earnings = 10000  # Base Rp 10,000
-            
+
             # Apply tier multiplier
             earnings_result = self.apply_tier_multiplier_to_earnings(referrer_id, base_earnings)
             total_earnings = earnings_result['total_earnings']
@@ -1797,7 +1831,7 @@ class Database:
                 ORDER BY referral_count DESC, earnings DESC
                 LIMIT ?
             """, (limit,))
-            
+
             results = []
             for i, row in enumerate(self.cursor.fetchall()):
                 tier_info = self.get_user_tier(row[0])
@@ -1823,7 +1857,7 @@ class Database:
                 SELECT COUNT(*) FROM users WHERE referred_by = ?
             """, (telegram_id,))
             total_referrals = self.cursor.fetchone()[0] or 0
-            
+
             milestones = [
                 {'count': 1, 'reward': '🎁 Welcome bonus: 20 credits', 'unlocked': total_referrals >= 1},
                 {'count': 5, 'reward': '🎁 Bronze achiever: 50 bonus credits', 'unlocked': total_referrals >= 5},
@@ -1835,7 +1869,7 @@ class Database:
                 {'count': 75, 'reward': '🎁 Gold master: 1 month premium', 'unlocked': total_referrals >= 75},
                 {'count': 100, 'reward': '🎁 Diamond tier: Elite access + 30% bonus', 'unlocked': total_referrals >= 100}
             ]
-            
+
             return {
                 'current_referrals': total_referrals,
                 'milestones': milestones,
@@ -1858,7 +1892,7 @@ class Database:
                 GROUP BY language_code
                 ORDER BY count DESC
             """)
-            
+
             results = []
             for row in self.cursor.fetchall():
                 results.append({
@@ -1877,10 +1911,10 @@ class Database:
             self.cursor.execute("""
                 UPDATE users SET language_code = ? WHERE language_code = ?
             """, (language_to, language_from))
-            
+
             updated_count = self.cursor.rowcount
             self.conn.commit()
-            
+
             print(f"✅ Updated language for {updated_count} users: {language_from} → {language_to}")
             return updated_count
         except Exception as e:
@@ -1905,7 +1939,7 @@ class Database:
                 ORDER BY referral_count DESC, earnings DESC
                 LIMIT ?
             """, (limit,))
-            
+
             results = []
             for i, row in enumerate(self.cursor.fetchall()):
                 results.append({
