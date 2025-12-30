@@ -684,20 +684,57 @@ Just type the symbol in your next message!"""
         )
 
     async def handle_futures_timeframe_selection(self, query, context):
-        """Handle futures timeframe selection"""
+        """Handle futures timeframe selection - DIRECT ANALYSIS"""
         # Parse callback data: futures_SYMBOL_TIMEFRAME
         parts = query.data.split('_')
         if len(parts) >= 3:
             symbol = parts[1]
             timeframe = parts[2]
 
-            await query.edit_message_text("⏳ Analyzing futures data...")
+            # Ensure symbol has USDT
+            if not 'USDT' in symbol:
+                symbol = symbol + 'USDT'
 
-            # Use existing futures callback from bot.py
-            await self.bot.handle_callback_query(
-                Update(update_id=999999, callback_query=query),
-                context
-            )
+            try:
+                await query.edit_message_text(f"🔄 **Futures: {symbol} {timeframe}**\n\n📊 Fetching klines data...", parse_mode='MARKDOWN')
+
+                from app.providers.binance_provider import fetch_klines
+
+                # Get klines
+                klines = fetch_klines(symbol, timeframe, limit=100)
+                if not klines or len(klines) == 0:
+                    await query.edit_message_text(
+                        f"❌ No data for {symbol} {timeframe}",
+                        parse_mode='MARKDOWN'
+                    )
+                    return
+
+                # Extract OHLCV
+                closes = [float(k[4]) for k in klines[-20:]]
+                latest = float(klines[-1][4])
+                prev = float(klines[-2][4])
+                change = ((latest - prev) / prev * 100)
+
+                avg_20 = sum(closes) / len(closes)
+                trend = "📈 BULLISH" if latest > avg_20 else "📉 BEARISH"
+
+                response = f"""📊 **Futures: {symbol}**
+
+Price: ${latest:.2f}
+Change: {change:+.2f}%
+Trend: {trend}
+20MA: ${avg_20:.2f}
+
+Analysis: {trend} signal detected"""
+
+                await query.edit_message_text(response, parse_mode='MARKDOWN')
+
+            except Exception as e:
+                await query.edit_message_text(
+                    f"❌ **Error**: {str(e)[:100]}\n\n"
+                    f"💡 Please try again",
+                    parse_mode='MARKDOWN'
+                )
 
     async def handle_add_coin_amount(self, query, context, symbol):
         """Handle amount input for add coin"""
@@ -741,18 +778,73 @@ Just type the number in your next message!"""
         await self.bot.price_command(fake_update, context)
 
     async def execute_analyze_command(self, query, context, symbol):
-        """Execute analyze command for selected symbol"""
-        await query.edit_message_text(f"⏳ Analyzing {symbol}...")
-
-        # Create fake context with args
-        context.args = [symbol]
-        fake_update = Update(
-            update_id=999999,
-            message=query.message,
-            callback_query=query
-        )
-
-        await self.bot.analyze_command(fake_update, context)
+        """Execute analyze command for selected symbol - DIRECT ANALYSIS"""
+        # Ensure symbol has USDT
+        if not any(symbol.endswith(pair) for pair in ['USDT', 'BUSD', 'USDC']):
+            symbol += 'USDT'
+        
+        try:
+            await query.edit_message_text(f"🔄 **Analyzing {symbol}...**\n\n📊 Fetching Binance data...\n🎯 Detecting zones...", parse_mode='MARKDOWN')
+            
+            from snd_zone_detector import detect_snd_zones
+            from ai_assistant import AIAssistant
+            from crypto_api import crypto_api
+            
+            # Get SnD analysis
+            snd_result = detect_snd_zones(symbol, "1h", limit=100)
+            
+            if 'error' in snd_result:
+                await query.edit_message_text(
+                    f"❌ **Analysis Error for {symbol}:**\n{snd_result['error']}\n\n"
+                    f"💡 Try a different symbol like BTC, ETH, etc.",
+                    parse_mode='MARKDOWN'
+                )
+                return
+            
+            # Generate AI analysis
+            ai_assistant = AIAssistant()
+            analysis = await ai_assistant.get_comprehensive_analysis_async(
+                symbol.replace('USDT', ''),
+                crypto_api=crypto_api
+            )
+            
+            # Build SnD summary
+            snd_summary = f"\n\n🎯 **ENHANCED SnD ZONES (Binance Klines):**\n"
+            
+            if snd_result.get('demand_zones'):
+                snd_summary += f"🟢 **Demand Zones:** {len(snd_result['demand_zones'])}\n"
+                for zone in snd_result['demand_zones'][:2]:
+                    snd_summary += f"   • ${zone.low:.6f} - ${zone.high:.6f} (S:{zone.strength:.0f}%)\n"
+            
+            if snd_result.get('supply_zones'):
+                snd_summary += f"🔴 **Supply Zones:** {len(snd_result['supply_zones'])}\n"
+                for zone in snd_result['supply_zones'][:2]:
+                    snd_summary += f"   • ${zone.low:.6f} - ${zone.high:.6f} (S:{zone.strength:.0f}%)\n"
+            
+            if snd_result.get('entry_signal'):
+                snd_summary += f"\n🚨 **SnD SIGNAL: {snd_result['entry_signal']}**\n"
+                snd_summary += f"💪 **Strength:** {snd_result['signal_strength']:.1f}%\n"
+                snd_summary += f"🎯 **Entry:** ${snd_result['entry_price']:.6f}\n"
+                snd_summary += f"🛑 **Stop:** ${snd_result['stop_loss']:.6f}\n"
+                snd_summary += f"🎯 **Target:** ${snd_result['take_profit']:.6f}"
+            else:
+                snd_summary += f"\n⏳ **No SnD Signal** - Wait for zone revisit"
+            
+            full_analysis = analysis + snd_summary
+            
+            # Send result (split if too long)
+            if len(full_analysis) > 4000:
+                await query.edit_message_text(full_analysis[:4000], parse_mode='MARKDOWN')
+                await query.message.reply_text(full_analysis[4000:], parse_mode='MARKDOWN')
+            else:
+                await query.edit_message_text(full_analysis, parse_mode='MARKDOWN')
+        
+        except Exception as e:
+            await query.edit_message_text(
+                f"❌ **Error**: {str(e)[:100]}\n\n"
+                f"💡 Please try again or check symbol format",
+                parse_mode='MARKDOWN'
+            )
 
     async def handle_copy_referral_link(self, query, context):
         """Handle copy referral link"""
