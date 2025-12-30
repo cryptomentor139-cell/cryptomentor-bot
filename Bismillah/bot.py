@@ -1108,9 +1108,10 @@ Resistance: ${max(closes):.2f}"""
                         premium_users = 0
                     
                     try:
-                        lifetime_result = sb_client.table('users').select('id', count='exact').eq('is_premium', True).is_('subscription_end', 'null').execute()
+                        lifetime_result = sb_client.table('users').select('id', count='exact').eq('is_lifetime', True).execute()
                         lifetime_users = lifetime_result.count if lifetime_result.count else 0
-                    except:
+                    except Exception as le:
+                        print(f"[DB STATUS] Lifetime query error: {le}")
                         lifetime_users = 0
                     
                     from datetime import datetime
