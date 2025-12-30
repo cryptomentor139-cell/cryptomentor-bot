@@ -217,12 +217,24 @@ Manage your account and investments:
 
         PREMIUM_REFERRAL: """👑 **Premium & Referral Program**
 
-Maximize your earnings:
+Maximize your earnings and unlock exclusive features:
 
-🎁 **Referral Program** - Earn credits and money from referrals (FREE)
-💰 **Premium Earnings** - View your referral earnings dashboard
+🎁 **Referral Program** - Complete referral system with rewards (FREE)
+• Earn credits for every referral
+• Premium users get cash rewards
+• Multi-tier bonus system
+• Real withdrawal options
 
-💎 Premium users earn money from premium referrals!""",
+💰 **Premium Earnings** - Comprehensive earnings dashboard
+• Track all your referral income
+• Detailed statistics and analytics
+• Withdrawal history and options
+
+💎 **Benefits:**
+• Free users: Credit rewards
+• Premium users: Cash + credit rewards
+• All tiers: Progressive bonus system
+• Instant tracking and real-time stats""",
 
         ASK_AI_MENU: """🤖 **AI Assistant**
 
@@ -239,8 +251,15 @@ Chat with CryptoMentor AI:
 Customize your experience:
 
 🌐 **Change Language** - Switch between Indonesian and English
+• 🇮🇩 Bahasa Indonesia - Full Indonesian interface
+• 🇺🇸 English - Complete English interface
 
-🔧 More settings coming soon in future updates!"""
+🔧 **Available Settings:**
+• Language preferences
+• Notification settings (coming soon)
+• Display preferences (coming soon)
+
+💡 **Tip:** Language changes apply immediately to all bot messages!"""
     }
     
     return menu_texts.get(menu_type, "Menu not found")
