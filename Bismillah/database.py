@@ -465,11 +465,30 @@ class Database:
     def update_user_language(self, telegram_id, language_code):
         """Update user's language preference"""
         try:
+            # Validate language code
+            valid_languages = ['id', 'en']
+            if language_code not in valid_languages:
+                print(f"❌ Invalid language code: {language_code}")
+                return False
+            
             self.cursor.execute("""
                 UPDATE users SET language_code = ? WHERE telegram_id = ?
             """, (language_code, telegram_id))
-            self.conn.commit()
-            return True
+            
+            success = self.cursor.rowcount > 0
+            if success:
+                self.conn.commit()
+                # Log language change
+                self.log_user_activity(
+                    telegram_id, 
+                    "language_changed", 
+                    f"Language changed to {language_code}"
+                )
+                print(f"✅ Updated language for user {telegram_id}: {language_code}")
+            else:
+                print(f"❌ User {telegram_id} not found when updating language")
+            
+            return success
         except Exception as e:
             print(f"DB Error (update_user_language): {e}")
             return False
@@ -1500,6 +1519,279 @@ class Database:
         except Exception as e:
             print(f"❌ Error checking ban status for user {telegram_id}: {e}")
             return False
+
+    def get_detailed_referral_stats(self, telegram_id):
+        """Get detailed referral statistics for a user"""
+        try:
+            from datetime import datetime, timedelta
+            
+            # Get total referrals
+            self.cursor.execute("""
+                SELECT COUNT(*) FROM users WHERE referred_by = ?
+            """, (telegram_id,))
+            total_referrals = self.cursor.fetchone()[0]
+            
+            # Get active referrals (last 30 days)
+            thirty_days_ago = (datetime.now() - timedelta(days=30)).isoformat()
+            self.cursor.execute("""
+                SELECT COUNT(*) FROM users 
+                WHERE referred_by = ? AND created_at >= ?
+            """, (telegram_id, thirty_days_ago))
+            active_referrals = self.cursor.fetchone()[0]
+            
+            # Get total earnings from premium referrals
+            self.cursor.execute("""
+                SELECT COALESCE(SUM(earnings), 0) FROM premium_referrals 
+                WHERE referrer_id = ? AND status = 'paid'
+            """, (telegram_id,))
+            total_earnings = self.cursor.fetchone()[0]
+            
+            # Get this month's earnings
+            current_month = datetime.now().strftime('%Y-%m')
+            self.cursor.execute("""
+                SELECT COALESCE(SUM(earnings), 0) FROM premium_referrals 
+                WHERE referrer_id = ? AND status = 'paid' 
+                AND strftime('%Y-%m', created_at) = ?
+            """, (telegram_id, current_month))
+            this_month_earnings = self.cursor.fetchone()[0]
+            
+            return {
+                'total_referrals': total_referrals or 0,
+                'active_referrals': active_referrals or 0,
+                'total_earnings': total_earnings or 0,
+                'this_month_earnings': this_month_earnings or 0
+            }
+        except Exception as e:
+            print(f"Error getting detailed referral stats: {e}")
+            return {
+                'total_referrals': 0,
+                'active_referrals': 0,
+                'total_earnings': 0,
+                'this_month_earnings': 0
+            }
+
+    def get_referral_stats(self, telegram_id):
+        """Get basic referral statistics for a user"""
+        try:
+            # Get total referrals
+            self.cursor.execute("""
+                SELECT COUNT(*) FROM users WHERE referred_by = ?
+            """, (telegram_id,))
+            total_referrals = self.cursor.fetchone()[0]
+            
+            # Get premium earnings
+            self.cursor.execute("""
+                SELECT COALESCE(premium_earnings, 0) FROM users WHERE telegram_id = ?
+            """, (telegram_id,))
+            result = self.cursor.fetchone()
+            total_earnings = result[0] if result else 0
+            
+            return {
+                'total_referrals': total_referrals or 0,
+                'total_earnings': total_earnings or 0
+            }
+        except Exception as e:
+            print(f"Error getting referral stats: {e}")
+            return {'total_referrals': 0, 'total_earnings': 0}
+
+    def get_user_language(self, telegram_id):
+        """Get user's language preference"""
+        try:
+            user = self.get_user(telegram_id)
+            return user.get('language_code', 'id') if user else 'id'
+        except Exception as e:
+            print(f"Error getting user language: {e}")
+            return 'id'
+
+    def get_all_referrals(self, telegram_id):
+        """Get all users referred by this user"""
+        try:
+            self.cursor.execute("""
+                SELECT telegram_id, first_name, username, is_premium, created_at
+                FROM users 
+                WHERE referred_by = ?
+                ORDER BY created_at DESC
+            """, (telegram_id,))
+            
+            results = []
+            for row in self.cursor.fetchall():
+                results.append({
+                    'telegram_id': row[0],
+                    'first_name': row[1],
+                    'username': row[2],
+                    'is_premium': row[3],
+                    'created_at': row[4]
+                })
+            return results
+        except Exception as e:
+            print(f"Error getting all referrals: {e}")
+            return []
+
+    def get_referral_earnings_summary(self, telegram_id):
+        """Get detailed earnings summary for referrals"""
+        try:
+            # Get premium referral earnings
+            self.cursor.execute("""
+                SELECT 
+                    COUNT(*) as total_premium_referrals,
+                    COALESCE(SUM(earnings), 0) as total_premium_earnings
+                FROM premium_referrals 
+                WHERE referrer_id = ? AND status = 'paid'
+            """, (telegram_id,))
+            
+            premium_result = self.cursor.fetchone()
+            premium_referrals = premium_result[0] if premium_result else 0
+            premium_earnings = premium_result[1] if premium_result else 0
+            
+            # Get free referral count
+            self.cursor.execute("""
+                SELECT COUNT(*) FROM users WHERE referred_by = ?
+            """, (telegram_id,))
+            total_referrals = self.cursor.fetchone()[0] or 0
+            free_referrals = total_referrals - premium_referrals
+            
+            # Calculate credit earnings (5 credits per free referral)
+            credit_earnings = free_referrals * 5
+            
+            return {
+                'total_referrals': total_referrals,
+                'free_referrals': free_referrals,
+                'premium_referrals': premium_referrals,
+                'credit_earnings': credit_earnings,
+                'money_earnings': premium_earnings,
+                'total_value': premium_earnings + (credit_earnings * 100)  # Estimate credit value
+            }
+        except Exception as e:
+            print(f"Error getting referral earnings summary: {e}")
+            return {
+                'total_referrals': 0,
+                'free_referrals': 0,
+                'premium_referrals': 0,
+                'credit_earnings': 0,
+                'money_earnings': 0,
+                'total_value': 0
+            }
+
+    def process_referral_reward(self, referrer_id, referred_id):
+        """Process referral reward when someone joins"""
+        try:
+            # Give 5 bonus credits to referrer
+            self.cursor.execute("""
+                UPDATE users SET credits = credits + 5 WHERE telegram_id = ?
+            """, (referrer_id,))
+            
+            if self.cursor.rowcount > 0:
+                self.conn.commit()
+                # Log the referral reward
+                self.log_user_activity(
+                    referrer_id, 
+                    "referral_reward", 
+                    f"Earned 5 credits from referral {referred_id}"
+                )
+                print(f"✅ Processed referral reward: {referrer_id} got 5 credits from {referred_id}")
+                return True
+            return False
+        except Exception as e:
+            print(f"Error processing referral reward: {e}")
+            return False
+
+    def get_user_tier(self, telegram_id):
+        """Get user's referral tier based on total referrals"""
+        try:
+            self.cursor.execute("""
+                SELECT COUNT(*) FROM users WHERE referred_by = ?
+            """, (telegram_id,))
+            total_referrals = self.cursor.fetchone()[0] or 0
+            
+            if total_referrals >= 50:
+                return {'tier': 'DIAMOND', 'level': 5, 'bonus': 25}
+            elif total_referrals >= 26:
+                return {'tier': 'GOLD', 'level': 4, 'bonus': 15}
+            elif total_referrals >= 11:
+                return {'tier': 'SILVER', 'level': 3, 'bonus': 10}
+            elif total_referrals >= 1:
+                return {'tier': 'BRONZE', 'level': 2, 'bonus': 5}
+            else:
+                return {'tier': 'STARTER', 'level': 1, 'bonus': 0}
+        except Exception as e:
+            print(f"Error getting user tier: {e}")
+            return {'tier': 'STARTER', 'level': 1, 'bonus': 0}
+
+    def get_language_stats(self):
+        """Get language usage statistics"""
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    language_code, 
+                    COUNT(*) as count,
+                    ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM users WHERE telegram_id IS NOT NULL), 2) as percentage
+                FROM users 
+                WHERE telegram_id IS NOT NULL
+                GROUP BY language_code
+                ORDER BY count DESC
+            """)
+            
+            results = []
+            for row in self.cursor.fetchall():
+                results.append({
+                    'language': row[0] or 'id',
+                    'count': row[1],
+                    'percentage': row[2]
+                })
+            return results
+        except Exception as e:
+            print(f"Error getting language stats: {e}")
+            return []
+
+    def batch_update_language(self, language_from, language_to):
+        """Batch update user language preferences"""
+        try:
+            self.cursor.execute("""
+                UPDATE users SET language_code = ? WHERE language_code = ?
+            """, (language_to, language_from))
+            
+            updated_count = self.cursor.rowcount
+            self.conn.commit()
+            
+            print(f"✅ Updated language for {updated_count} users: {language_from} → {language_to}")
+            return updated_count
+        except Exception as e:
+            print(f"Error batch updating language: {e}")
+            return 0
+
+    def get_referral_leaderboard(self, limit=10):
+        """Get top referrers leaderboard"""
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    u.telegram_id,
+                    u.first_name,
+                    u.username,
+                    COUNT(r.telegram_id) as referral_count,
+                    COALESCE(u.premium_earnings, 0) as earnings
+                FROM users u
+                LEFT JOIN users r ON r.referred_by = u.telegram_id
+                WHERE u.telegram_id IS NOT NULL
+                GROUP BY u.telegram_id, u.first_name, u.username, u.premium_earnings
+                HAVING referral_count > 0
+                ORDER BY referral_count DESC, earnings DESC
+                LIMIT ?
+            """, (limit,))
+            
+            results = []
+            for i, row in enumerate(self.cursor.fetchall()):
+                results.append({
+                    'rank': i + 1,
+                    'telegram_id': row[0],
+                    'first_name': row[1],
+                    'username': row[2],
+                    'referral_count': row[3],
+                    'earnings': row[4]
+                })
+            return results
+        except Exception as e:
+            print(f"Error getting referral leaderboard: {e}")
+            return []
 
     def close(self):
         """Close database connection"""
