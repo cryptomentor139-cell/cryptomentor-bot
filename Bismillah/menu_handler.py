@@ -464,13 +464,19 @@ async def multi_coin_signals_callback(update: Update, context: ContextTypes.DEFA
                         [InlineKeyboardButton("🔙 Back", callback_data=FUTURES_SIGNALS)]]
             await query.edit_message_text(
                 text=f"❌ {msg}\n\n⭐ Upgrade ke Premium untuk akses unlimited!",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='HTML'
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return
+        print(f"✅ Credit deducted for user {user_id}: 60 credits (multi-coin), remaining: {remain}")
     except Exception as e:
-        print(f"Credit check error: {e}")
-        # Continue if credit system fails (fallback)
+        print(f"❌ Credit check error for user {user_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        await query.edit_message_text(
+            text="❌ Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=FUTURES_SIGNALS)]])
+        )
+        return
     
     await query.edit_message_text(
         text=f"🔥 **Multi-Coin Futures Signals**\n\n⏳ Generating signals...\n{est_time}",
@@ -1021,12 +1027,19 @@ async def symbol_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             [InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]]
                 await query.edit_message_text(
                     text=f"❌ {msg}\n\n⭐ Upgrade ke Premium untuk akses unlimited!",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 return
+            print(f"✅ Credit deducted for user {user_id}: 20 credits, remaining: {remain}")
         except Exception as e:
-            print(f"Credit check error: {e}")
+            print(f"❌ Credit check error for user {user_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            await query.edit_message_text(
+                text="❌ Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]])
+            )
+            return
         
         user_tz = get_user_timezone_from_context(context, user_id)
         est_time = get_estimated_time_message(5, user_tz)
@@ -1114,12 +1127,19 @@ async def symbol_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             [InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]]
                 await query.edit_message_text(
                     text=f"❌ {msg}\n\n⭐ Upgrade ke Premium untuk akses unlimited!",
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 return
+            print(f"✅ Credit deducted for user {user_id}: 20 credits (futures), remaining: {remain}")
         except Exception as e:
-            print(f"Credit check error: {e}")
+            print(f"❌ Credit check error for user {user_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            await query.edit_message_text(
+                text="❌ Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]])
+            )
+            return
         
         user_tz = get_user_timezone_from_context(context, user_id)
         est_time = get_estimated_time_message(5, user_tz)
