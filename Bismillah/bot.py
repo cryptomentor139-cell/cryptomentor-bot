@@ -1770,9 +1770,11 @@ Choose action:
             try:
                 from supabase_client import supabase
                 if supabase:
-                    result = supabase.table('users').select('telegram_id', count='exact').lt('credits', 100).eq('is_premium', False).execute()
+                    # Use or_ filter to handle NULL and false values for is_premium
+                    result = supabase.table('users').select('telegram_id', count='exact').lt('credits', 100).or_('is_premium.is.null,is_premium.eq.false').execute()
                     supabase_below_100 = result.count if result.count else 0
-            except:
+            except Exception as e:
+                print(f"Supabase count error: {e}")
                 pass
 
             warning_text = f"""⚠️ **RESET CREDITS BELOW 100 - CONFIRMATION**
@@ -1848,9 +1850,10 @@ Choose action:
                         supabase_updated = result.data if isinstance(result.data, int) else 0
                         print(f"✅ Supabase RPC: Reset {supabase_updated} users")
                     except Exception as rpc_error:
-                        # Fallback: direct table update
+                        # Fallback: direct table update with proper NULL handling
                         print(f"⚠️ RPC not available, using direct update: {rpc_error}")
-                        result = supabase.table('users').update({'credits': 100}).lt('credits', 100).eq('is_premium', False).execute()
+                        # Update users where credits < 100 AND (is_premium is NULL OR is_premium = false)
+                        result = supabase.table('users').update({'credits': 100}).lt('credits', 100).or_('is_premium.is.null,is_premium.eq.false').execute()
                         supabase_updated = len(result.data) if result.data else 0
                         print(f"✅ Supabase direct: Updated {supabase_updated} users")
                 else:
