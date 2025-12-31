@@ -147,13 +147,33 @@ class LifetimeAutoSignalSystem:
                 if (snd_result.get('entry_signal') and 
                     snd_result.get('signal_strength', 0) >= self.min_signal_confidence):
                     
+                    # Get zone info for limit order display
+                    demand_zones = snd_result.get('demand_zones', [])
+                    supply_zones = snd_result.get('supply_zones', [])
+                    direction = snd_result['entry_signal'].replace('_DEMAND', '').replace('_SUPPLY', '')
+                    
+                    # Determine entry zone based on direction
+                    if direction == 'BUY' and demand_zones:
+                        entry_zone = demand_zones[0]  # Best demand zone
+                        zone_low = entry_zone.low
+                        zone_high = entry_zone.high
+                    elif direction == 'SELL' and supply_zones:
+                        entry_zone = supply_zones[0]  # Best supply zone
+                        zone_low = entry_zone.low
+                        zone_high = entry_zone.high
+                    else:
+                        zone_low = snd_result['entry_price'] * 0.995
+                        zone_high = snd_result['entry_price'] * 1.005
+                    
                     signal_data = {
                         'symbol': symbol,
-                        'direction': snd_result['entry_signal'].replace('_DEMAND', '').replace('_SUPPLY', ''),
+                        'direction': direction,
                         'signal_type': snd_result['entry_signal'],
                         'confidence': snd_result['signal_strength'],
                         'current_price': snd_result['current_price'],
                         'entry_price': snd_result['entry_price'],
+                        'zone_low': zone_low,
+                        'zone_high': zone_high,
                         'stop_loss': snd_result['stop_loss'],
                         'take_profit': snd_result['take_profit'],
                         'active_demand': snd_result.get('active_demand'),
@@ -203,8 +223,19 @@ class LifetimeAutoSignalSystem:
         return success_count
 
     def format_lifetime_signals_message(self, signals: List[Dict[str, Any]]) -> str:
-        """Format signals message for lifetime users"""
+        """Format signals message for lifetime users with zone-based limit orders"""
         current_time = datetime.now(timezone.utc)
+        
+        # Helper function for price formatting
+        def fmt_price(p):
+            if p >= 1000:
+                return f"${p:,.2f}"
+            elif p >= 1:
+                return f"${p:,.4f}"
+            elif p >= 0.0001:
+                return f"${p:.6f}"
+            else:
+                return f"${p:.8f}"
         
         message = f"""🚨 <b>LIFETIME AUTO SIGNALS</b> 🚨
 
@@ -218,14 +249,25 @@ class LifetimeAutoSignalSystem:
             direction_emoji = "🟢" if signal['direction'] == 'BUY' else "🔴"
             confidence_emoji = "🔥" if signal['confidence'] >= 85 else "⭐"
             
+            # Zone-based order type
+            if signal['direction'] == 'BUY':
+                order_type = "LIMIT LONG"
+                zone_label = "Demand Zone"
+            else:
+                order_type = "LIMIT SHORT"
+                zone_label = "Supply Zone"
+            
+            zone_low = signal.get('zone_low', signal['entry_price'] * 0.995)
+            zone_high = signal.get('zone_high', signal['entry_price'] * 1.005)
+            
             message += f"""<b>{i}. {signal['symbol']}/USDT</b> {direction_emoji}
 
-{confidence_emoji} <b>Signal:</b> {signal['direction']}
+{confidence_emoji} <b>Signal:</b> {order_type}
 💪 <b>Confidence:</b> {signal['confidence']:.1f}%
-💰 <b>Entry:</b> ${signal['entry_price']:.6f}
-🛑 <b>Stop Loss:</b> ${signal['stop_loss']:.6f}
-🎯 <b>Take Profit:</b> ${signal['take_profit']:.6f}
-📈 <b>Current:</b> ${signal['current_price']:.6f}
+📍 <b>{zone_label}:</b> {fmt_price(zone_low)} – {fmt_price(zone_high)}
+🛑 <b>Stop Loss:</b> {fmt_price(signal['stop_loss'])}
+🎯 <b>Take Profit:</b> {fmt_price(signal['take_profit'])}
+📈 <b>Current:</b> {fmt_price(signal['current_price'])}
 
 """
 
@@ -236,7 +278,8 @@ class LifetimeAutoSignalSystem:
 • 24/7 automated scanning
 
 ⚠️ <b>Risk Management:</b>
-• Use proper position sizing
+• Place LIMIT orders at zone levels
+• Do NOT use market orders
 • Follow stop-loss levels
 • DYOR before trading
 
