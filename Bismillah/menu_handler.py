@@ -9,6 +9,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKe
 from telegram.ext import ContextTypes, ConversationHandler, CallbackQueryHandler
 from typing import Optional, List
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -375,16 +376,45 @@ async def futures_signals_callback(update: Update, context: ContextTypes.DEFAULT
 
 
 async def multi_coin_signals_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Trigger /futures_signals command"""
+    """Generate multi-coin futures signals with async processing"""
     query = update.callback_query
     await query.answer()
     
+    chat_id = query.message.chat_id
+    message_id = query.message.message_id
+    
     await query.edit_message_text(
-        text="🔥 **Multi-Coin Futures Signals**\n\nScanning market for signals...",
-        reply_markup=None
+        text="🔥 **Multi-Coin Futures Signals**\n\n⏳ Generating signals... Please wait ~10 seconds",
+        reply_markup=None,
+        parse_mode='Markdown'
     )
     
-    context.user_data['action'] = 'futures_signals'
+    async def generate_and_send():
+        try:
+            from futures_signal_generator import FuturesSignalGenerator
+            generator = FuturesSignalGenerator()
+            signals = await generator.generate_multi_signals()
+            
+            if len(signals) > 4000:
+                signals = signals[:3900] + "\n\n... (truncated)"
+            
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=signals,
+                parse_mode=None
+            )
+        except Exception as e:
+            logger.error(f"Multi-coin signals error: {e}")
+            keyboard = [[InlineKeyboardButton("🔙 Back", callback_data=FUTURES_SIGNALS)]]
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=f"❌ Error generating signals: {str(e)[:100]}\n\nPlease try again.",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+    
+    asyncio.create_task(generate_and_send())
 
 
 async def auto_signal_info_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

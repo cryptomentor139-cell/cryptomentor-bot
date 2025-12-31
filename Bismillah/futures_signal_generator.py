@@ -127,13 +127,11 @@ Confidence: {confidence:.0f}%"""
             return f"❌ Error generating signal: {str(e)[:80]}"
     
     async def generate_multi_signals(self, coins: Optional[List[str]] = None) -> str:
-        """Generate multi-coin signals"""
+        """Generate multi-coin signals - optimized for speed"""
         if coins is None:
-            # Expanded coin list for comprehensive coverage
             coins = [
                 'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
-                'ADAUSDT', 'DOLUSDT', 'AVAXUSDT', 'MATICUSDT', 'LINKUSDT',
-                'UNIUSDT', 'LTCUSDT', 'DOGECOINUSDT', 'PEPEUSDT', 'OPUSDT'
+                'ADAUSDT', 'DOTUSDT', 'AVAXUSDT', 'POLUSDT', 'LINKUSDT'
             ]
         
         try:
