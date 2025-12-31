@@ -1423,7 +1423,10 @@ Choose an action:
             context.user_data['message_id'] = msg.message_id
 
         elif query.data == "admin_reset_users_credits":
-            await self.handle_admin_reset_credits(query, context)
+            await self.handle_admin_reset_below_100(query, context)
+
+        elif query.data == "admin_reset_users_credits_confirm":
+            await self.handle_admin_reset_below_100_confirm(query, context)
 
         elif query.data == "admin_reset_credits":
             await self.handle_admin_reset_credits(query, context)
@@ -1740,6 +1743,162 @@ Choose action:
                 f"Failed to reset credits: {str(e)}\n\n"
                 f"Please check console logs for details.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_back")]]),
+                parse_mode='MARKDOWN'
+            )
+
+    async def handle_admin_reset_below_100(self, query, context):
+        """Show confirmation for resetting credits ONLY for users below 100"""
+        from database import Database
+
+        try:
+            db = Database()
+
+            # Count users below 100 credits in local DB
+            try:
+                db.cursor.execute("""
+                    SELECT COUNT(*) FROM users 
+                    WHERE credits < 100 
+                    AND (is_premium = 0 OR is_premium IS NULL)
+                """)
+                local_below_100 = db.cursor.fetchone()[0]
+            except:
+                local_below_100 = 0
+
+            # Count users below 100 in Supabase
+            supabase_below_100 = 0
+            try:
+                from supabase_client import supabase
+                if supabase:
+                    result = supabase.table('users').select('telegram_id', count='exact').lt('credits', 100).eq('is_premium', False).execute()
+                    supabase_below_100 = result.count if result.count else 0
+            except:
+                pass
+
+            warning_text = f"""⚠️ **RESET CREDITS BELOW 100 - CONFIRMATION**
+
+🎯 **Action:** Set 100 credits for users with < 100 credits
+📊 **Scope:** Both Local SQLite & Supabase databases
+
+📈 **Users Below 100 Credits:**
+• 📁 Local SQLite: {local_below_100} users
+• ☁️ Supabase: {supabase_below_100} users
+
+💡 **Note:**
+• Only users with credits < 100 will be affected
+• Users with 100+ credits will NOT change
+• Premium users are unaffected
+
+❓ **Are you sure you want to proceed?**"""
+
+            keyboard = [
+                [InlineKeyboardButton("✅ YES - Reset Users Below 100", callback_data="admin_reset_users_credits_confirm")],
+                [InlineKeyboardButton("❌ Cancel", callback_data="admin_add_credits")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                warning_text,
+                reply_markup=reply_markup,
+                parse_mode='MARKDOWN'
+            )
+        except Exception as e:
+            await query.edit_message_text(
+                f"❌ Error: {str(e)}",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_add_credits")]]),
+                parse_mode='MARKDOWN'
+            )
+
+    async def handle_admin_reset_below_100_confirm(self, query, context):
+        """Execute reset credits for users below 100"""
+        from database import Database
+
+        try:
+            await query.edit_message_text(
+                "⏳ **Processing...**\n\n"
+                "📁 Updating Local SQLite (users < 100 credits)...\n"
+                "☁️ Updating Supabase (users < 100 credits)...",
+                parse_mode='MARKDOWN'
+            )
+
+            db = Database()
+            local_updated = 0
+            supabase_updated = 0
+            errors = []
+
+            # 1. Reset credits in Local SQLite (only users below 100)
+            try:
+                local_updated = db.reset_credits_below_threshold(threshold=100, new_amount=100)
+                print(f"✅ Local SQLite: Reset {local_updated} users below 100")
+            except Exception as e:
+                errors.append(f"Local SQLite: {str(e)}")
+                print(f"❌ Local SQLite error: {e}")
+
+            # 2. Reset credits in Supabase (only users below 100)
+            try:
+                from supabase_client import supabase
+                if supabase:
+                    # Try RPC first
+                    try:
+                        result = supabase.rpc('reset_credits_below_threshold', {
+                            'p_threshold': 100,
+                            'p_new_amount': 100
+                        }).execute()
+                        supabase_updated = result.data if isinstance(result.data, int) else 0
+                        print(f"✅ Supabase RPC: Reset {supabase_updated} users")
+                    except Exception as rpc_error:
+                        # Fallback: direct table update
+                        print(f"⚠️ RPC not available, using direct update: {rpc_error}")
+                        result = supabase.table('users').update({'credits': 100}).lt('credits', 100).eq('is_premium', False).execute()
+                        supabase_updated = len(result.data) if result.data else 0
+                        print(f"✅ Supabase direct: Updated {supabase_updated} users")
+                else:
+                    errors.append("Supabase client not available")
+            except Exception as e:
+                errors.append(f"Supabase: {str(e)}")
+                print(f"❌ Supabase error: {e}")
+
+            # 3. Log admin action
+            admin_id = query.from_user.id
+            db.log_user_activity(
+                admin_id,
+                "admin_reset_credits_below_100",
+                f"Reset credits < 100: Local:{local_updated}, Supabase:{supabase_updated}"
+            )
+
+            # 4. Show results
+            if errors:
+                result_text = f"""⚠️ **COMPLETED WITH WARNINGS**
+
+✅ **Updated Users (credits < 100):**
+• 📁 Local SQLite: {local_updated} users
+• ☁️ Supabase: {supabase_updated} users
+
+❌ **Errors:**
+"""
+                for error in errors:
+                    result_text += f"• {error}\n"
+            else:
+                result_text = f"""✅ **RESET BELOW 100 COMPLETED**
+
+📊 **Updated Users:**
+• 📁 Local SQLite: {local_updated} users
+• ☁️ Supabase: {supabase_updated} users
+• 💰 New Balance: 100 credits
+
+✅ All users with < 100 credits now have 100 credits"""
+
+            keyboard = [[InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_add_credits")]]
+
+            await query.edit_message_text(
+                result_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='MARKDOWN'
+            )
+
+        except Exception as e:
+            await query.edit_message_text(
+                f"❌ **ERROR:** {str(e)}",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_add_credits")]]),
                 parse_mode='MARKDOWN'
             )
 

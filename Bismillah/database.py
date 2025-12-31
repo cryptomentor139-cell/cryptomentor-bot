@@ -1055,6 +1055,27 @@ class Database:
             self.conn.rollback()
             return 0
 
+    def reset_credits_below_threshold(self, threshold=100, new_amount=100):
+        """Reset credits ONLY for users below a certain threshold"""
+        try:
+            self.cursor.execute("""
+                UPDATE users 
+                SET credits = ? 
+                WHERE credits < ? 
+                AND (is_premium = 0 OR is_premium IS NULL)
+            """, (new_amount, threshold))
+
+            updated_count = self.cursor.rowcount
+            self.conn.commit()
+
+            print(f"✅ Reset {updated_count} users with credits < {threshold} to {new_amount}")
+            return updated_count
+
+        except Exception as e:
+            print(f"❌ Error resetting credits below threshold: {e}")
+            self.conn.rollback()
+            return 0
+
     def fix_referral_data_integrity(self):
         """Fix missing referral codes and other referral-related issues"""
         try:
