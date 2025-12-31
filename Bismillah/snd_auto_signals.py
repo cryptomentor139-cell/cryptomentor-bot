@@ -116,11 +116,28 @@ class SnDAutoSignals:
             signal = await self._enhanced_scan_symbol_for_signal(symbol, self.crypto_api)
 
             if signal and signal.get('confidence', 0) >= self.min_confidence:
+                # Get zone data for limit order display
+                entry = signal['entry']
+                direction = signal['direction']
+                
+                # Calculate zone range (approximately 0.5% width for limit orders)
+                zone_width = entry * 0.005
+                if direction == 'LONG':
+                    # Demand zone - buy limit below current
+                    zone_low = entry - zone_width
+                    zone_high = entry
+                else:
+                    # Supply zone - sell limit above current
+                    zone_low = entry
+                    zone_high = entry + zone_width
+                
                 # Ensure the format matches our expectations
                 return {
                     'symbol': signal['symbol'],
-                    'direction': signal['direction'],
-                    'entry_price': signal['entry'],  # Match old format
+                    'direction': direction,
+                    'entry_price': entry,  # Match old format
+                    'zone_low': zone_low,
+                    'zone_high': zone_high,
                     'tp1': signal['tp1'],
                     'tp2': signal['tp2'],
                     'sl': signal['sl'],
@@ -265,7 +282,19 @@ class SnDAutoSignals:
             traceback.print_exc()
 
     def _format_signals_message(self, signals):
-        """Format signals into a readable message (plain text to avoid parsing errors)"""
+        """Format signals into a readable message with zone-based limit orders"""
+        
+        # Helper function for price formatting
+        def fmt_price(p):
+            if p >= 1000:
+                return f"${p:,.2f}"
+            elif p >= 1:
+                return f"${p:,.4f}"
+            elif p >= 0.0001:
+                return f"${p:.6f}"
+            else:
+                return f"${p:.8f}"
+        
         message = f"""🚨 AUTO SIGNALS - SUPPLY & DEMAND ANALYSIS
 
 🕐 Scan Time: {datetime.now().strftime('%H:%M:%S WIB')}
@@ -273,28 +302,38 @@ class SnDAutoSignals:
 
 """
 
-        for i, signal in enumerate(signals, 1):  # Limit to top 3 signals
-            direction_emoji = "🟢" if signal['direction'] == 'LONG' else "🔴"
+        for i, signal in enumerate(signals, 1):
+            direction = signal['direction']
+            direction_emoji = "🟢" if direction == 'LONG' else "🔴"
             confidence_emoji = "🔥" if signal['confidence'] >= 85 else "⭐" if signal['confidence'] >= 75 else "💡"
+            
+            # Zone-based order type
+            if direction == 'LONG':
+                order_type = "LIMIT LONG"
+                zone_label = "Demand Zone"
+            else:
+                order_type = "LIMIT SHORT"
+                zone_label = "Supply Zone"
+            
+            zone_low = signal.get('zone_low', signal['entry_price'] * 0.995)
+            zone_high = signal.get('zone_high', signal['entry_price'] * 1.005)
 
-            message += f"""{i}. {signal['symbol']} {direction_emoji} {signal['direction']}
+            message += f"""{i}. {signal['symbol']} {direction_emoji} {order_type}
 {confidence_emoji} Confidence: {signal['confidence']:.1f}%
-💰 Entry: ${signal['entry_price']:,.2f}
-🛑 Stop Loss: ${signal['sl']:,.2f}
-🎯 TP1: ${signal['tp1']:,.2f}
-🎯 TP2: ${signal['tp2']:,.2f}
+📍 {zone_label}: {fmt_price(zone_low)} – {fmt_price(zone_high)}
+🛑 Stop Loss: {fmt_price(signal['sl'])}
+🎯 TP1: {fmt_price(signal['tp1'])}
+🎯 TP2: {fmt_price(signal['tp2'])}
 📊 R/R Ratio: {signal['risk_reward']:.1f}:1
 🔄 Trend: {signal['trend'].title()}
-⚡ Structure: {signal['market_structure'].replace('_', ' ').title()}
-🧠 Reason: {signal['reason']}
-📈 24h Change: {signal.get('change_24h', 0):+.2f}%
+📈 Current: {fmt_price(signal.get('current_price', 0))}
 
 """
 
         message += f"""⚠️ TRADING DISCLAIMER:
-• Signals berbasis Supply & Demand analysis
+• Place LIMIT orders at zone levels
+• Do NOT use market orders
 • Gunakan proper risk management
-• Position sizing sesuai risk level
 • DYOR sebelum trading
 
 🎯 Auto Signals hanya untuk Admin & Lifetime users
