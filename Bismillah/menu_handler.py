@@ -589,21 +589,90 @@ async def check_credits_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def upgrade_premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Trigger /subscribe command"""
+    """Show premium subscription packages with user's Telegram ID"""
     query = update.callback_query
     await query.answer()
     
     user_id = update.effective_user.id
-    user_tz = get_user_timezone_from_context(context, user_id)
-    est_time = get_estimated_time_message(2, user_tz)
+    
+    subscription_text = f"""🚀 <b>CryptoMentor AI 2.0 – Paket Berlangganan</b>
+
+Trading lebih terarah dengan AI berbasis Supply & Demand (SnD), data real-time Binance, dan sistem signal profesional tanpa hambatan credits (Unlimited access).
+
+💎 <b>PILIH PAKET PREMIUM</b>
+
+🔹 <b>Monthly</b>
+💰 Rp320.000 / bulan
+✔ Futures & Spot SnD Signals
+✔ Analisis on-demand
+✔ Semua fitur premium
+
+🔹 <b>2 Bulan</b>
+💰 Rp600.000 / 2 bulan
+✔ Lebih hemat dari bulanan
+✔ Semua fitur premium
+✔ Cocok untuk swing trader
+
+🔹 ⭐ <b>1 Tahun (Most Popular)</b>
+💰 Rp3.500.000 / tahun
+✔ Semua fitur premium
+✔ Lebih hemat & tanpa perpanjang bulanan
+
+🔥 <b>LIFETIME (LIMITED SLOT)</b>
+💰 Rp6.500.000 – Sekali Bayar
+
+🚀 Akses Seumur Hidup + Auto Signal
+
+<b>Benefit LIFETIME:</b>
+✔ Semua fitur premium (selamanya)
+✔ Auto Futures & Spot Signal (SnD Based)
+✔ Priority Signal (zona terbaik lebih dulu)
+✔ Akses SETIAP pembaruan fitur CryptoMentor AI ke depan
+✔ Tidak ada biaya bulanan / tahunan lagi
+
+💳 <b>METODE PEMBAYARAN</b>
+
+🏦 <b>Transfer Bank</b>
+Nama: NABIL FARREL AL FARI
+Bank: Mandiri
+No Rek: 1560018407074
+
+📱 <b>E-Money</b>
+ShopeePay / GoPay / DANA
+📞 0877-7927-4400
+
+⛓️ <b>On-Chain Crypto</b>
+Network: BEP20
+Address:
+<code>0xed7342ac9c22b1495af4d63f15a7c9768a028ea8</code>
+
+✅ <b>CARA AKTIVASI (WAJIB)</b>
+
+1️⃣ Lakukan pembayaran sesuai paket yang dipilih
+2️⃣ Kirim bukti pembayaran ke admin: 👉 @BillFarr
+3️⃣ Sertakan informasi berikut:
+
+✅ Paket yang dipilih (Monthly / 2 Bulan / 1 Tahun / Lifetime)
+✅ UID Telegram kamu: <code>{user_id}</code>
+
+4️⃣ Akun akan diaktifkan setelah dikonfirmasi admin
+
+📌 <b>CATATAN</b>
+📊 Signal berbasis Supply & Demand, bukan tebak-tebakan
+🤖 Data 100% dari Binance
+🧠 Cocok untuk pemula hingga advanced
+❌ Tidak menjanjikan profit, fokus probability & risk management"""
+    
+    keyboard = [
+        [InlineKeyboardButton("📞 Contact Admin", url="https://t.me/BillFarr")],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data=MAIN_MENU)],
+    ]
     
     await query.edit_message_text(
-        text=f"⭐ **Upgrade to Premium**\n\nLoading subscription options...\n{est_time}",
-        reply_markup=None,
-        parse_mode='Markdown'
+        text=subscription_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='HTML'
     )
-    
-    context.user_data['action'] = 'subscribe'
 
 
 async def premium_referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
