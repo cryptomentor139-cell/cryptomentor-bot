@@ -986,6 +986,8 @@ Zone {label} – {desc}
         credits = 0
         is_lifetime = False
         premium_until = None
+        has_autosignal = False
+        autosignal_until = None
         try:
             from supabase_client import get_user as supabase_get_user
             user_data = supabase_get_user(user_id)
@@ -993,6 +995,8 @@ Zone {label} – {desc}
                 credits = user_data.get('credits', 0) or 0
                 is_lifetime = user_data.get('is_lifetime', False)
                 premium_until = user_data.get('premium_until')
+                has_autosignal = user_data.get('has_autosignal', False)
+                autosignal_until = user_data.get('autosignal_until')
                 if user_data.get('first_name'):
                     user_name = user_data.get('first_name')
             else:
@@ -1005,10 +1009,19 @@ Zone {label} – {desc}
             # Premium user response
             if is_lifetime:
                 premium_status = "♾️ LIFETIME"
+                autosignal_text = "✔ Auto Signal: ♾️ SELAMANYA"
             elif premium_until:
                 premium_status = f"⏳ Until: {str(premium_until)[:10]}"
+                if has_autosignal and autosignal_until:
+                    autosignal_text = f"✔ Auto Signal: ✅ Aktif (s/d {str(autosignal_until)[:10]})"
+                else:
+                    autosignal_text = "✔ Auto Signal: ❌ Tidak aktif"
             else:
                 premium_status = "✅ Active"
+                if has_autosignal and autosignal_until:
+                    autosignal_text = f"✔ Auto Signal: ✅ Aktif (s/d {str(autosignal_until)[:10]})"
+                else:
+                    autosignal_text = "✔ Auto Signal: ❌ Tidak aktif"
             
             if user_lang == 'id':
                 await update.effective_message.reply_text(
@@ -1021,11 +1034,12 @@ Zone {label} – {desc}
                     f"✔ Tidak membutuhkan kredit\n"
                     f"✔ Spot & Futures Analysis tanpa batas\n"
                     f"✔ Multi-Coin Signals tanpa batas\n"
-                    f"✔ Auto Signal (Lifetime only)\n\n"
+                    f"{autosignal_text}\n\n"
                     f"🎉 Nikmati semua fitur tanpa batasan!",
                     parse_mode='HTML'
                 )
             else:
+                autosignal_text_en = autosignal_text.replace("Aktif", "Active").replace("Tidak aktif", "Not active").replace("SELAMANYA", "FOREVER").replace("s/d", "until")
                 await update.effective_message.reply_text(
                     f"👑 <b>Premium Status Active</b>\n\n"
                     f"👤 User: {user_name}\n"
@@ -1036,18 +1050,25 @@ Zone {label} – {desc}
                     f"✔ No credits required\n"
                     f"✔ Unlimited Spot & Futures Analysis\n"
                     f"✔ Unlimited Multi-Coin Signals\n"
-                    f"✔ Auto Signal (Lifetime only)\n\n"
+                    f"{autosignal_text_en}\n\n"
                     f"🎉 Enjoy all features without limits!",
                     parse_mode='HTML'
                 )
         else:
-            # Free user response
+            # Free user response - also show Auto Signal status if they have it
+            if has_autosignal and autosignal_until:
+                autosignal_status_id = f"\n📡 <b>Auto Signal:</b> ✅ Aktif (s/d {str(autosignal_until)[:10]})"
+                autosignal_status_en = f"\n📡 <b>Auto Signal:</b> ✅ Active (until {str(autosignal_until)[:10]})"
+            else:
+                autosignal_status_id = ""
+                autosignal_status_en = ""
+            
             if user_lang == 'id':
                 await update.effective_message.reply_text(
                     f"💳 <b>Saldo Kredit</b>\n\n"
                     f"👤 Pengguna: {user_name}\n"
                     f"🆔 UID Telegram: <code>{user_id}</code>\n"
-                    f"💰 Kredit: {credits}\n\n"
+                    f"💰 Kredit: {credits}{autosignal_status_id}\n\n"
                     f"📊 <b>Biaya Kredit:</b>\n"
                     f"• Analisis Spot: 20 kredit\n"
                     f"• Analisis Futures: 20 kredit\n"
@@ -1060,7 +1081,7 @@ Zone {label} – {desc}
                     f"💳 <b>Credit Balance</b>\n\n"
                     f"👤 User: {user_name}\n"
                     f"🆔 Telegram UID: <code>{user_id}</code>\n"
-                    f"💰 Credits: {credits}\n\n"
+                    f"💰 Credits: {credits}{autosignal_status_en}\n\n"
                     f"📊 <b>Credit Costs:</b>\n"
                     f"• Spot Analysis: 20 credits\n"
                     f"• Futures Analysis: 20 credits\n"
@@ -2296,6 +2317,24 @@ Choose action:
                             f"{supabase_status}",
                             parse_mode='MARKDOWN'
                         )
+                        
+                        try:
+                            await context.bot.send_message(
+                                chat_id=user_id,
+                                text=f"🎉 <b>Selamat! Anda Mendapat Premium!</b>\n\n"
+                                     f"👑 Status: <b>PREMIUM MEMBER</b>\n"
+                                     f"📅 Durasi: {days} hari\n"
+                                     f"⏰ Berlaku hingga: {premium_until.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                                     f"✨ <b>Keuntungan Premium:</b>\n"
+                                     f"✔ Akses UNLIMITED ke semua fitur\n"
+                                     f"✔ Tidak membutuhkan kredit\n"
+                                     f"✔ Spot & Futures Analysis tanpa batas\n"
+                                     f"✔ Multi-Coin Signals tanpa batas\n\n"
+                                     f"🚀 Nikmati semua fitur premium sekarang!",
+                                parse_mode='HTML'
+                            )
+                        except Exception as e:
+                            print(f"Failed to notify user {user_id}: {e}")
                     
                     elif awaiting == 'admin_remove_premium':
                         db.remove_user_premium(user_id)
@@ -2335,6 +2374,24 @@ Choose action:
                             f"{supabase_status}",
                             parse_mode='MARKDOWN'
                         )
+                        
+                        try:
+                            await context.bot.send_message(
+                                chat_id=user_id,
+                                text=f"🎉 <b>Selamat! Anda Mendapat LIFETIME Premium!</b>\n\n"
+                                     f"♾️ Status: <b>LIFETIME MEMBER</b>\n"
+                                     f"📅 Durasi: SELAMANYA\n\n"
+                                     f"✨ <b>Keuntungan Lifetime:</b>\n"
+                                     f"✔ Akses UNLIMITED ke semua fitur SELAMANYA\n"
+                                     f"✔ Tidak membutuhkan kredit\n"
+                                     f"✔ Spot & Futures Analysis tanpa batas\n"
+                                     f"✔ Multi-Coin Signals tanpa batas\n"
+                                     f"✔ Auto Signal access SELAMANYA\n\n"
+                                     f"🚀 Terima kasih telah menjadi member Lifetime!",
+                                parse_mode='HTML'
+                            )
+                        except Exception as e:
+                            print(f"Failed to notify user {user_id}: {e}")
                     
                     elif awaiting == 'admin_grant_autosignal':
                         days = int(parts[1]) if len(parts) > 1 else 30
@@ -2371,6 +2428,23 @@ Choose action:
                             f"{supabase_status}",
                             parse_mode='MARKDOWN'
                         )
+                        
+                        try:
+                            await context.bot.send_message(
+                                chat_id=user_id,
+                                text=f"🎉 <b>Selamat! Anda Mendapat Akses Auto Signal!</b>\n\n"
+                                     f"📡 Feature: <b>AUTO SIGNAL</b>\n"
+                                     f"📅 Durasi: {days} hari\n"
+                                     f"⏰ Berlaku hingga: {expiry_date.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                                     f"✨ <b>Keuntungan Auto Signal:</b>\n"
+                                     f"✔ Terima sinyal trading otomatis\n"
+                                     f"✔ Notifikasi langsung ke chat Anda\n"
+                                     f"✔ Supply & Demand zone alerts\n\n"
+                                     f"🚀 Gunakan /credits untuk cek status!",
+                                parse_mode='HTML'
+                            )
+                        except Exception as e:
+                            print(f"Failed to notify user {user_id}: {e}")
                     
                     elif awaiting == 'admin_add_credits_manual':
                         credits = int(parts[1]) if len(parts) > 1 else 100
