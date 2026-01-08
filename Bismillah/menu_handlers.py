@@ -318,6 +318,33 @@ class MenuCallbackHandler:
 
     async def handle_multi_coin_signals(self, query, context):
         """Handle multi-coin signals with enhanced SnD analysis"""
+        user_id = query.from_user.id
+        
+        # Check and deduct credits (60 for Multi-Coin Signals)
+        try:
+            from app.credits_guard import require_credits
+            ok, remain, msg = require_credits(user_id, 60)
+            if not ok:
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⭐ Upgrade Premium", callback_data=UPGRADE_PREMIUM)],
+                    [InlineKeyboardButton("🔙 Back", callback_data=FUTURES_SIGNALS)]
+                ])
+                await query.edit_message_text(
+                    text=f"❌ {msg}\n\n⭐ Upgrade ke Premium untuk akses unlimited!",
+                    reply_markup=keyboard
+                )
+                return
+            print(f"✅ Credit deducted for user {user_id}: 60 credits (multi-coin), remaining: {remain}", flush=True)
+        except Exception as e:
+            print(f"❌ Credit check error for user {user_id}: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            await query.edit_message_text(
+                text="❌ Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=FUTURES_SIGNALS)]])
+            )
+            return
+        
         await query.edit_message_text("⏳ Generating futures signals with Supply & Demand analysis...")
 
         try:
@@ -698,6 +725,33 @@ Just type the symbol in your next message!"""
 
     async def handle_futures_timeframe_selection(self, query, context):
         """Handle futures timeframe selection with sentiment-based entry recommendations"""
+        user_id = query.from_user.id
+        
+        # Check and deduct credits (20 for Futures Analysis)
+        try:
+            from app.credits_guard import require_credits
+            ok, remain, msg = require_credits(user_id, 20)
+            if not ok:
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⭐ Upgrade Premium", callback_data=UPGRADE_PREMIUM)],
+                    [InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]
+                ])
+                await query.edit_message_text(
+                    text=f"❌ {msg}\n\n⭐ Upgrade ke Premium untuk akses unlimited!",
+                    reply_markup=keyboard
+                )
+                return
+            print(f"✅ Credit deducted for user {user_id}: 20 credits (futures analysis), remaining: {remain}", flush=True)
+        except Exception as e:
+            print(f"❌ Credit check error for user {user_id}: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            await query.edit_message_text(
+                text="❌ Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]])
+            )
+            return
+        
         # Parse callback data: futures_SYMBOL_TIMEFRAME
         parts = query.data.split('_')
         if len(parts) >= 3:
@@ -899,6 +953,33 @@ Just type the number in your next message!"""
 
     async def execute_analyze_command(self, query, context, symbol):
         """Execute Spot Signal analysis with tiered DCA zones"""
+        user_id = query.from_user.id
+        
+        # Check and deduct credits (20 for Spot Analysis)
+        try:
+            from app.credits_guard import require_credits
+            ok, remain, msg = require_credits(user_id, 20)
+            if not ok:
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⭐ Upgrade Premium", callback_data=UPGRADE_PREMIUM)],
+                    [InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]
+                ])
+                await query.edit_message_text(
+                    text=f"❌ {msg}\n\n⭐ Upgrade ke Premium untuk akses unlimited!",
+                    reply_markup=keyboard
+                )
+                return
+            print(f"✅ Credit deducted for user {user_id}: 20 credits (spot analysis), remaining: {remain}", flush=True)
+        except Exception as e:
+            print(f"❌ Credit check error for user {user_id}: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            await query.edit_message_text(
+                text="❌ Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]])
+            )
+            return
+        
         # Ensure symbol has USDT
         if not any(symbol.endswith(pair) for pair in ['USDT', 'BUSD', 'USDC']):
             symbol += 'USDT'
