@@ -1033,6 +1033,55 @@ Just type the number in your next message!"""
                 
                 response += f"\n📈 <b>Context:</b>\n• Trend: {trend}\n• Volume: {volume_status}\n\n🔥 <b>Confidence:</b> {confidence:.0f}%\n💡 <b>Strategy:</b> DCA on demand zones\n\n<i>⚠️ Spot only • Entry range, not market buy</i>"
                 
+                # Add AI reasoning for premium users
+                try:
+                    from deepseek_ai import DeepSeekAI
+                    ai = DeepSeekAI()
+                    
+                    # Prepare signal data for AI
+                    buy_zones_data = []
+                    for i, (label, desc, alloc) in enumerate(zone_labels):
+                        if i < len(sorted_demands):
+                            zone = sorted_demands[i]
+                            zone_width = zone.high - zone.low
+                            tp1 = zone.high + (zone_width * 1.5)
+                            tp2 = zone.high + (zone_width * 3.0)
+                            strength = zone.strength if hasattr(zone, 'strength') else 50
+                            
+                            buy_zones_data.append({
+                                'label': label,
+                                'low': zone.low,
+                                'high': zone.high,
+                                'allocation': alloc,
+                                'strength': strength,
+                                'tp1': tp1,
+                                'tp2': tp2
+                            })
+                    
+                    sell_zone_data = None
+                    if supply_zones:
+                        best_supply = supply_zones[0]
+                        sell_zone_data = {
+                            'low': best_supply.low,
+                            'high': best_supply.high
+                        }
+                    
+                    signal_data = {
+                        'current_price': current_price,
+                        'trend': trend,
+                        'volume_status': volume_status,
+                        'confidence': confidence,
+                        'buy_zones': buy_zones_data,
+                        'sell_zone': sell_zone_data
+                    }
+                    
+                    # Generate AI reasoning
+                    ai_reasoning = await ai.generate_spot_signal_reasoning(symbol, signal_data)
+                    response += ai_reasoning
+                    
+                except Exception as e:
+                    print(f"Error adding AI reasoning to spot signal: {e}")
+                
                 await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response, parse_mode='HTML')
             
             except Exception as e:

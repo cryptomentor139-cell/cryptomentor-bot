@@ -523,3 +523,64 @@ Don't give definite financial advice, always remind that trading is risky."""
             summary += f"- {symbol}: ${price:,.2f} ({change:+.2f}%) Vol: ${volume:,.0f}\n"
         
         return summary
+
+    async def generate_spot_signal_reasoning(self, symbol: str, signal_data: dict) -> str:
+        """Generate AI reasoning for spot trading signal"""
+        if not self.ai or not self.ai.available:
+            return ""
+        
+        try:
+            # Prepare context for AI
+            context = f"""
+Spot Trading Signal Analysis untuk {symbol}:
+
+Market Data:
+- Current Price: ${signal_data['current_price']:,.2f}
+- Trend: {signal_data['trend']}
+- Volume Status: {signal_data['volume_status']}
+- Confidence: {signal_data['confidence']:.0f}%
+
+Buy Zones (DCA Strategy):
+"""
+            
+            # Add buy zones
+            for i, zone in enumerate(signal_data.get('buy_zones', [])):
+                context += f"\n- Zone {zone['label']}: ${zone['low']:,.2f} - ${zone['high']:,.2f} ({zone['allocation']})"
+                context += f"\n  Strength: {zone['strength']:.0f}%"
+                context += f"\n  TP1: ${zone['tp1']:,.2f}, TP2: ${zone['tp2']:,.2f}"
+            
+            # Add sell zone
+            if signal_data.get('sell_zone'):
+                sell = signal_data['sell_zone']
+                context += f"\n\nSell Zone (Take Profit):"
+                context += f"\n- ${sell['low']:,.2f} - ${sell['high']:,.2f}"
+            
+            # AI prompt for spot signal reasoning
+            system_prompt = """Kamu adalah CryptoMentor AI, expert crypto analyst untuk spot trading.
+Berikan reasoning SINGKAT (max 300 kata) untuk spot signal ini yang mencakup:
+1. Mengapa buy zones ini optimal untuk DCA?
+2. Bagaimana cara eksekusi DCA strategy?
+3. Kapan waktu yang tepat untuk take profit?
+4. Risk management untuk spot trading
+5. Tips untuk maximize profit
+
+Gunakan bahasa yang jelas dan actionable. Fokus pada strategi DCA yang aman."""
+
+            user_prompt = f"{context}\n\nBerikan reasoning untuk spot signal ini. Jelaskan strategi DCA yang optimal dan kapan take profit."
+            
+            # Call AI with reduced tokens for faster response
+            reasoning = await self._call_deepseek_api(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.6,
+                max_tokens=400
+            )
+            
+            if reasoning:
+                return f"\n\n🤖 <b>AI REASONING</b>:\n\n{reasoning}"
+            else:
+                return ""
+                
+        except Exception as e:
+            print(f"Error generating spot signal reasoning: {e}")
+            return ""
