@@ -13,12 +13,13 @@ class DeepSeekAI:
         self.api_key = os.getenv('DEEPSEEK_API_KEY')
         self.base_url = os.getenv('DEEPSEEK_BASE_URL', 'https://openrouter.ai/api/v1')
         
-        # Use StepFun Step 3.5 Flash - FREE & FAST model for reasoning & crypto news
+        # Use Google Gemini Flash 1.5 - FREE & SUPER FAST model for reasoning & crypto news
         # Options:
+        # - "google/gemini-flash-1.5" = FREE, SUPER CEPAT (1-3 detik), excellent quality ⚡⚡⚡⚡ [RECOMMENDED]
         # - "stepfun/step-3.5-flash" = FREE, CEPAT (2-5 detik), bagus untuk reasoning & berita
         # - "openai/gpt-3.5-turbo" = Berbayar, reliable (3-5s)
         # - "deepseek/deepseek-chat" = Lambat tapi reasoning detail (10-15s)
-        self.model = os.getenv('AI_MODEL', 'stepfun/step-3.5-flash')  # Default to FREE model
+        self.model = os.getenv('AI_MODEL', 'google/gemini-flash-1.5')  # Default to FASTEST FREE model
         
         self.available = bool(self.api_key)
         self.provider = 'openrouter'
