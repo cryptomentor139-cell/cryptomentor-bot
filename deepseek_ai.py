@@ -248,7 +248,8 @@ Use casual but professional language. Explain in detail but keep it easy to unde
         self, 
         symbol: str, 
         market_data: Dict[str, Any],
-        language: str = 'id'
+        language: str = 'id',
+        include_advanced_data: bool = True
     ) -> str:
         """
         Analisis market sederhana tanpa memerlukan OHLCV data
@@ -302,39 +303,41 @@ Analisis Market untuk {symbol}:
 📈 Kondisi Market: {condition}
 """
             
-            # Prompt untuk CryptoMentor AI
-            system_prompt = """Kamu adalah CryptoMentor AI, expert crypto analyst dengan pengalaman 10+ tahun di trading cryptocurrency. 
-Tugasmu adalah memberikan analisis market yang mendalam dengan reasoning yang jelas dan mudah dipahami.
+            # Add advanced data if available
+            advanced_context = ""
+            if include_advanced_data:
+                try:
+                    from app.providers.advanced_data_provider import advanced_data_provider
+                    enhanced_data = await advanced_data_provider.get_enhanced_market_context(symbol)
+                    advanced_context = advanced_data_provider.format_enhanced_context(enhanced_data)
+                except Exception as e:
+                    print(f"Error getting advanced data: {e}")
+            
+            market_context += advanced_context
+            
+            # Prompt untuk CryptoMentor AI (OPTIMIZED for speed)
+            system_prompt = """Kamu adalah CryptoMentor AI, expert crypto analyst.
+Berikan analisis SINGKAT dan PADAT (maksimal 400 kata) yang mencakup:
+1. Kondisi market saat ini (1-2 kalimat)
+2. Reasoning utama (2-3 poin)
+3. Level penting (support/resistance)
+4. Rekomendasi trading (singkat)
+5. Risk warning (1 kalimat)
 
-Berikan analisis yang mencakup:
-1. Kondisi market saat ini dan interpretasinya
-2. Reasoning di balik pergerakan harga 24 jam terakhir
-3. Analisis volume dan volatilitas
-4. Potensi pergerakan harga ke depan (short-term)
-5. Level-level penting yang perlu diperhatikan
-6. Risk dan opportunity yang ada
-7. Rekomendasi trading yang actionable dengan risk management
-
-Gunakan bahasa yang santai tapi profesional. Jelaskan dengan detail tapi tetap mudah dipahami.
-Jangan lupa selalu ingatkan tentang risk management dan bahwa trading itu berisiko."""
+Gunakan bahasa yang jelas dan to-the-point. Fokus pada insight yang actionable."""
 
             if language == 'en':
-                system_prompt = """You are CryptoMentor AI, an expert crypto analyst with 10+ years of experience in cryptocurrency trading.
-Your task is to provide in-depth market analysis with clear and easy-to-understand reasoning.
+                system_prompt = """You are CryptoMentor AI, expert crypto analyst.
+Provide BRIEF and CONCISE analysis (max 400 words) covering:
+1. Current market condition (1-2 sentences)
+2. Main reasoning (2-3 points)
+3. Key levels (support/resistance)
+4. Trading recommendation (brief)
+5. Risk warning (1 sentence)
 
-Provide analysis that includes:
-1. Current market condition and its interpretation
-2. Reasoning behind the 24-hour price movement
-3. Volume and volatility analysis
-4. Potential short-term price movements
-5. Important levels to watch
-6. Risks and opportunities
-7. Actionable trading recommendations with risk management
+Use clear and to-the-point language. Focus on actionable insights."""
 
-Use casual but professional language. Explain in detail but keep it easy to understand.
-Always remind about risk management and that trading is risky."""
-
-            user_prompt = f"{market_context}\n\nBerikan analisis mendalam dengan reasoning yang jelas untuk kondisi market {symbol} saat ini."
+            user_prompt = f"{market_context}\n\nBerikan analisis SINGKAT dan PADAT untuk {symbol}. Fokus pada insight yang paling penting."
             
             if language == 'en':
                 user_prompt = f"{market_context}\n\nProvide in-depth analysis with clear reasoning for the current {symbol} market condition."
@@ -451,7 +454,7 @@ Don't give definite financial advice, always remind that trading is risky."""
         system_prompt: str, 
         user_prompt: str,
         temperature: float = 0.5,
-        max_tokens: int = 1000
+        max_tokens: int = 600  # Reduced from 1000 to 600 for faster response
     ) -> Optional[str]:
         """Call DeepSeek API via OpenRouter with aggressive timeout"""
         try:
