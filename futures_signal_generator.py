@@ -2,7 +2,7 @@
 """
 Professional Futures Signal Generator
 Generates concise trading signals matching CryptoMentor AI 2.0 format
-Uses only Binance OHLCV data
+Uses only Binance OHLCV data + AI Reasoning
 """
 
 from typing import List, Optional, Tuple
@@ -13,11 +13,18 @@ try:
 except ImportError:
     from binance_provider import fetch_klines, get_enhanced_ticker_data
 
+try:
+    from deepseek_ai import DeepSeekAI
+except ImportError:
+    DeepSeekAI = None
+
 
 class FuturesSignalGenerator:
-    """Generate professional futures trading signals"""
+    """Generate professional futures trading signals with AI reasoning"""
     
     def __init__(self):
+        """Initialize signal generator with AI"""
+        self.ai = DeepSeekAI() if DeepSeekAI else None
         pass
     
     async def generate_signal(self, symbol: str, timeframe: str) -> str:
@@ -120,6 +127,35 @@ ATR-based SL
 RR Ratio ≈ 1:{rr_ratio:.1f}
 
 Confidence: {confidence:.0f}%"""
+            
+            # Add AI reasoning for premium users
+            market_data = {
+                'current_price': current_price,
+                'symbol': symbol,
+                'timeframe': timeframe
+            }
+            
+            signal_data = {
+                'market_bias': market_bias,
+                'structure': structure,
+                'rsi': rsi,
+                'volume_confirmation': volume_confirmation,
+                'entry_low': entry_zone_low,
+                'entry_high': entry_zone_high,
+                'sl': sl,
+                'tp1': tp1,
+                'tp2': tp2,
+                'rr_ratio': rr_ratio,
+                'confidence': confidence,
+                'demand_low': demand_low,
+                'demand_high': demand_high,
+                'supply_low': supply_low,
+                'supply_high': supply_high
+            }
+            
+            # Generate AI reasoning
+            ai_reasoning = await self.generate_ai_reasoning(symbol, market_data, signal_data)
+            signal_text += ai_reasoning
             
             return signal_text
             
@@ -264,3 +300,65 @@ Confidence: {confidence:.0f}%"""
             trs.append(tr)
         
         return sum(trs[-period:]) / period if trs else 0.0
+
+    async def generate_ai_reasoning(self, symbol: str, market_data: dict, signal_data: dict) -> str:
+        """Generate AI reasoning for the trading signal"""
+        if not self.ai or not self.ai.available:
+            return ""
+        
+        try:
+            # Prepare context for AI
+            context = f"""
+Trading Signal Analysis for {symbol}:
+
+Market Data:
+- Current Price: ${market_data['current_price']:,.2f}
+- Market Bias: {signal_data['market_bias']}
+- Structure: {signal_data['structure']}
+- RSI: {signal_data['rsi']:.1f}
+- Volume Confirmation: {signal_data['volume_confirmation']}
+
+Trade Setup:
+- Entry Zone: ${signal_data['entry_low']:,.0f} - ${signal_data['entry_high']:,.0f}
+- Stop Loss: ${signal_data['sl']:,.0f}
+- Take Profit 1: ${signal_data['tp1']:,.0f}
+- Take Profit 2: ${signal_data['tp2']:,.0f}
+- Risk/Reward Ratio: 1:{signal_data['rr_ratio']:.1f}
+- Confidence: {signal_data['confidence']:.0f}%
+
+Supply & Demand Zones:
+- Demand Zone: ${signal_data['demand_low']:,.0f} - ${signal_data['demand_high']:,.0f}
+- Supply Zone: ${signal_data['supply_low']:,.0f} - ${signal_data['supply_high']:,.0f}
+"""
+            
+            # AI prompt for reasoning
+            system_prompt = """Kamu adalah CryptoMentor AI, expert crypto analyst dengan pengalaman 10+ tahun.
+Tugasmu adalah memberikan reasoning yang jelas dan mendalam untuk trading signal yang diberikan.
+
+Berikan analisis yang mencakup:
+1. Mengapa market bias saat ini (bullish/bearish)?
+2. Apa yang membuat entry zone ini optimal?
+3. Bagaimana supply & demand zones mendukung signal ini?
+4. Mengapa stop loss dan take profit di level tersebut?
+5. Risk management dan saran eksekusi
+
+Gunakan bahasa yang profesional tapi mudah dipahami. Fokus pada reasoning yang actionable."""
+
+            user_prompt = f"{context}\n\nBerikan reasoning mendalam untuk signal ini. Jelaskan mengapa ini adalah setup yang bagus dan bagaimana cara eksekusinya dengan optimal."
+            
+            # Call AI
+            reasoning = await self.ai._call_deepseek_api(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.7,
+                max_tokens=800
+            )
+            
+            if reasoning:
+                return f"\n\n🤖 **AI REASONING**:\n\n{reasoning}"
+            else:
+                return ""
+                
+        except Exception as e:
+            print(f"Error generating AI reasoning: {e}")
+            return ""
