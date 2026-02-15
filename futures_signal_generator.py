@@ -302,7 +302,7 @@ Confidence: {confidence:.0f}%"""
         return sum(trs[-period:]) / period if trs else 0.0
 
     async def generate_ai_reasoning(self, symbol: str, market_data: dict, signal_data: dict) -> str:
-        """Generate AI reasoning for the trading signal"""
+        """Generate AI reasoning for the trading signal - ULTRA FAST"""
         if not self.ai:
             return ""
         
@@ -310,55 +310,33 @@ Confidence: {confidence:.0f}%"""
             return ""
         
         try:
-            # Prepare context for AI
-            context = f"""
-Trading Signal Analysis for {symbol}:
-
-Market Data:
-- Current Price: ${market_data['current_price']:,.2f}
-- Market Bias: {signal_data['market_bias']}
-- Structure: {signal_data['structure']}
-- RSI: {signal_data['rsi']:.1f}
-- Volume Confirmation: {signal_data['volume_confirmation']}
-
-Trade Setup:
-- Entry Zone: ${signal_data['entry_low']:,.0f} - ${signal_data['entry_high']:,.0f}
-- Stop Loss: ${signal_data['sl']:,.0f}
-- Take Profit 1: ${signal_data['tp1']:,.0f}
-- Take Profit 2: ${signal_data['tp2']:,.0f}
-- Risk/Reward Ratio: 1:{signal_data['rr_ratio']:.1f}
-- Confidence: {signal_data['confidence']:.0f}%
-
-Supply & Demand Zones:
-- Demand Zone: ${signal_data['demand_low']:,.0f} - ${signal_data['demand_high']:,.0f}
-- Supply Zone: ${signal_data['supply_low']:,.0f} - ${signal_data['supply_high']:,.0f}
-"""
+            # ULTRA MINIMAL context - only essentials
+            context = f"""Futures {symbol}: ${market_data['current_price']:,.2f}
+Bias: {signal_data['market_bias']} | RSI: {signal_data['rsi']:.0f}
+Entry: ${signal_data['entry_low']:,.0f}-${signal_data['entry_high']:,.0f}
+SL: ${signal_data['sl']:,.0f} | TP: ${signal_data['tp2']:,.0f}
+R:R: 1:{signal_data['rr_ratio']:.1f}"""
             
-            # AI prompt for reasoning
-            system_prompt = """Kamu adalah CryptoMentor AI, expert crypto analyst dengan pengalaman 10+ tahun.
-Tugasmu adalah memberikan reasoning yang jelas dan mendalam untuk trading signal yang diberikan.
+            # ULTRA SHORT prompt for speed
+            system_prompt = """Expert crypto analyst. Berikan reasoning SANGAT SINGKAT (max 80 kata):
+1. Kenapa bias ini?
+2. Kenapa entry optimal?
+3. Risk management
 
-Berikan analisis yang mencakup:
-1. Mengapa market bias saat ini (bullish/bearish)?
-2. Apa yang membuat entry zone ini optimal?
-3. Bagaimana supply & demand zones mendukung signal ini?
-4. Mengapa stop loss dan take profit di level tersebut?
-5. Risk management dan saran eksekusi
+Padat, jelas, actionable."""
 
-Gunakan bahasa yang profesional tapi mudah dipahami. Fokus pada reasoning yang actionable."""
-
-            user_prompt = f"{context}\n\nBerikan reasoning mendalam untuk signal ini. Jelaskan mengapa ini adalah setup yang bagus dan bagaimana cara eksekusinya dengan optimal."
+            user_prompt = f"{context}\n\nReasoning singkat untuk futures signal ini."
             
-            # Call AI
+            # DRASTICALLY reduced tokens for SPEED
             reasoning = await self.ai._call_deepseek_api(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                temperature=0.7,
-                max_tokens=800
+                temperature=0.5,
+                max_tokens=120  # Reduced from 800 to 120 for ULTRA SPEED
             )
             
             if reasoning:
-                return f"\n\n🤖 **AI REASONING**:\n\n{reasoning}"
+                return f"\n\n🤖 **AI INSIGHT**:\n{reasoning}"
             else:
                 return ""
                 

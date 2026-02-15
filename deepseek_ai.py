@@ -456,7 +456,7 @@ Don't give definite financial advice, always remind that trading is risky."""
         temperature: float = 0.5,
         max_tokens: int = 600  # Reduced from 1000 to 600 for faster response
     ) -> Optional[str]:
-        """Call DeepSeek API via OpenRouter with aggressive timeout"""
+        """Call DeepSeek API via OpenRouter with ULTRA AGGRESSIVE timeout"""
         try:
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -475,10 +475,10 @@ Don't give definite financial advice, always remind that trading is risky."""
                 "max_tokens": max_tokens
             }
 
-            # Use asyncio to run requests in executor with AGGRESSIVE timeout
+            # Use asyncio to run requests in executor with ULTRA AGGRESSIVE timeout
             loop = asyncio.get_event_loop()
             
-            # Set timeout to 15 seconds max for API call
+            # Set timeout to 8 seconds max for API call (reduced from 15s)
             try:
                 response = await asyncio.wait_for(
                     loop.run_in_executor(
@@ -487,14 +487,14 @@ Don't give definite financial advice, always remind that trading is risky."""
                             f"{self.base_url}/chat/completions",
                             headers=headers,
                             json=payload,
-                            timeout=15  # 15 second HTTP timeout
+                            timeout=8  # 8 second HTTP timeout (reduced from 15s)
                         )
                     ),
-                    timeout=20  # 20 second overall timeout
+                    timeout=10  # 10 second overall timeout (reduced from 20s)
                 )
             except asyncio.TimeoutError:
-                print(f"⚠️ OpenRouter API timeout after 20 seconds")
-                return "⚠️ AI response timeout. Silakan coba lagi."
+                print(f"⚠️ OpenRouter API timeout after 10 seconds")
+                return "⚠️ AI response timeout. Signal tetap valid tanpa AI reasoning."
 
             if response.status_code == 200:
                 result = response.json()
@@ -505,7 +505,7 @@ Don't give definite financial advice, always remind that trading is risky."""
 
         except asyncio.TimeoutError:
             print(f"⚠️ API call timeout")
-            return "⚠️ AI response timeout. Silakan coba lagi."
+            return "⚠️ AI response timeout. Signal tetap valid tanpa AI reasoning."
         except Exception as e:
             print(f"Error calling DeepSeek API: {e}")
             return None
@@ -525,59 +525,36 @@ Don't give definite financial advice, always remind that trading is risky."""
         return summary
 
     async def generate_spot_signal_reasoning(self, symbol: str, signal_data: dict) -> str:
-        """Generate AI reasoning for spot trading signal"""
+        """Generate AI reasoning for spot trading signal - ULTRA FAST"""
         if not self.available:
             return ""
         
         try:
-            # Prepare context for AI
-            context = f"""
-Spot Trading Signal Analysis untuk {symbol}:
-
-Market Data:
-- Current Price: ${signal_data['current_price']:,.2f}
-- Trend: {signal_data['trend']}
-- Volume Status: {signal_data['volume_status']}
-- Confidence: {signal_data['confidence']:.0f}%
-
-Buy Zones (DCA Strategy):
-"""
+            # ULTRA MINIMAL context - only essentials
+            context = f"""Spot {symbol}: ${signal_data['current_price']:,.2f}
+Trend: {signal_data['trend']} | Confidence: {signal_data['confidence']:.0f}%
+Buy Zones: {len(signal_data.get('buy_zones', []))} zones detected"""
             
-            # Add buy zones
-            for i, zone in enumerate(signal_data.get('buy_zones', [])):
-                context += f"\n- Zone {zone['label']}: ${zone['low']:,.2f} - ${zone['high']:,.2f} ({zone['allocation']})"
-                context += f"\n  Strength: {zone['strength']:.0f}%"
-                context += f"\n  TP1: ${zone['tp1']:,.2f}, TP2: ${zone['tp2']:,.2f}"
-            
-            # Add sell zone
-            if signal_data.get('sell_zone'):
-                sell = signal_data['sell_zone']
-                context += f"\n\nSell Zone (Take Profit):"
-                context += f"\n- ${sell['low']:,.2f} - ${sell['high']:,.2f}"
-            
-            # AI prompt for spot signal reasoning
-            system_prompt = """Kamu adalah CryptoMentor AI, expert crypto analyst untuk spot trading.
-Berikan reasoning SINGKAT (max 300 kata) untuk spot signal ini yang mencakup:
-1. Mengapa buy zones ini optimal untuk DCA?
-2. Bagaimana cara eksekusi DCA strategy?
-3. Kapan waktu yang tepat untuk take profit?
-4. Risk management untuk spot trading
-5. Tips untuk maximize profit
+            # ULTRA SHORT prompt for speed
+            system_prompt = """Expert crypto analyst. Berikan reasoning SANGAT SINGKAT (max 100 kata):
+1. Kenapa setup ini bagus?
+2. Cara eksekusi DCA
+3. Risk management
 
-Gunakan bahasa yang jelas dan actionable. Fokus pada strategi DCA yang aman."""
+Padat, jelas, actionable."""
 
-            user_prompt = f"{context}\n\nBerikan reasoning untuk spot signal ini. Jelaskan strategi DCA yang optimal dan kapan take profit."
+            user_prompt = f"{context}\n\nReasoning singkat untuk spot signal ini."
             
-            # Call AI with reduced tokens for faster response
+            # DRASTICALLY reduced tokens for SPEED
             reasoning = await self._call_deepseek_api(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                temperature=0.6,
-                max_tokens=400
+                temperature=0.5,
+                max_tokens=150  # Reduced from 400 to 150 for SPEED
             )
             
             if reasoning:
-                return f"\n\n🤖 <b>AI REASONING</b>:\n\n{reasoning}"
+                return f"\n\n🤖 <b>AI INSIGHT</b>:\n{reasoning}"
             else:
                 return ""
                 
