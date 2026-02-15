@@ -526,7 +526,7 @@ Don't give definite financial advice, always remind that trading is risky."""
 
     async def generate_spot_signal_reasoning(self, symbol: str, signal_data: dict) -> str:
         """Generate AI reasoning for spot trading signal"""
-        if not self.ai or not self.ai.available:
+        if not self.available:
             return ""
         
         try:

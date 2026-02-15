@@ -303,7 +303,10 @@ Confidence: {confidence:.0f}%"""
 
     async def generate_ai_reasoning(self, symbol: str, market_data: dict, signal_data: dict) -> str:
         """Generate AI reasoning for the trading signal"""
-        if not self.ai or not self.ai.available:
+        if not self.ai:
+            return ""
+        
+        if not self.ai.available:
             return ""
         
         try:
