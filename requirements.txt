@@ -1,0 +1,13 @@
+# Core Dependencies
+python-telegram-bot==22.6
+requests==2.32.5
+python-dotenv==1.2.1
+aiohttp==3.13.2
+pytz==2025.2
+
+# Database
+supabase==2.28.0
+
+# Optional but recommended
+certifi>=2023.7.22
+urllib3>=2.0.0
