@@ -1277,6 +1277,8 @@ class Database:
         Get all users from both local and Supabase for broadcast
         Returns: dict with 'local', 'supabase', 'unique_ids', and stats
         """
+        print("[get_all_broadcast_users] Starting...")
+        
         result = {
             'local_users': [],
             'supabase_users': [],
@@ -1292,6 +1294,7 @@ class Database:
         
         try:
             # Get local users
+            print("[get_all_broadcast_users] Fetching local users...")
             local_users = self.get_all_users()
             result['local_users'] = local_users
             
@@ -1301,8 +1304,10 @@ class Database:
                     result['unique_ids'].add(int(tid))
             
             result['stats']['local_count'] = len(local_users)
+            print(f"[get_all_broadcast_users] Local users: {result['stats']['local_count']}")
             
             # Get Supabase users if available
+            print(f"[get_all_broadcast_users] Supabase enabled: {self.supabase_enabled}")
             if self.supabase_enabled:
                 try:
                     from supabase_client import supabase

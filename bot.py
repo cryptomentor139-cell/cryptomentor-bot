@@ -2058,7 +2058,13 @@ Choose action:
                 db = get_database()
                 broadcast_data = db.get_all_broadcast_users()
                 user_count = broadcast_data['stats']['total_unique']
-            except:
+                
+                # Log for debugging
+                print(f"[Broadcast] User count: {user_count}")
+                print(f"[Broadcast] Local: {broadcast_data['stats']['local_count']}, "
+                      f"Supabase: {broadcast_data['stats']['supabase_count']}")
+            except Exception as e:
+                print(f"[Broadcast] Error getting user count: {e}")
                 user_count = "unknown"
             
             msg = await query.edit_message_text(
