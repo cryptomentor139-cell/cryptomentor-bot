@@ -1,6 +1,6 @@
 
 # app/autosignal.py
-import os, json, time, requests
+import os, json, time, requests, asyncio
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 
