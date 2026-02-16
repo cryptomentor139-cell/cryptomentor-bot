@@ -1708,6 +1708,7 @@ _Select an action below:_
             )
             context.user_data['awaiting_input'] = 'admin_add_premium'
             context.user_data['message_id'] = msg.message_id
+            context.user_data['state_timestamp'] = time.time()
 
         elif query.data == "admin_remove_premium":
             msg = await query.edit_message_text(
@@ -1718,6 +1719,7 @@ _Select an action below:_
             )
             context.user_data['awaiting_input'] = 'admin_remove_premium'
             context.user_data['message_id'] = msg.message_id
+            context.user_data['state_timestamp'] = time.time()
 
         elif query.data == "admin_set_lifetime":
             msg = await query.edit_message_text(
@@ -1728,6 +1730,7 @@ _Select an action below:_
             )
             context.user_data['awaiting_input'] = 'admin_set_lifetime'
             context.user_data['message_id'] = msg.message_id
+            context.user_data['state_timestamp'] = time.time()
 
         elif query.data == "admin_grant_autosignal":
             msg = await query.edit_message_text(
@@ -1742,6 +1745,7 @@ _Select an action below:_
             )
             context.user_data['awaiting_input'] = 'admin_grant_autosignal'
             context.user_data['message_id'] = msg.message_id
+            context.user_data['state_timestamp'] = time.time()
 
         elif query.data == "admin_add_credits":
             credits_text = """**🎁 Manage Credits**
@@ -1765,6 +1769,7 @@ Choose an action:
             )
             context.user_data['awaiting_input'] = 'admin_add_credits_manual'
             context.user_data['message_id'] = msg.message_id
+            context.user_data['state_timestamp'] = time.time()
 
         elif query.data == "admin_reset_users_credits":
             await self.handle_admin_reset_below_100(query, context)
@@ -1978,6 +1983,7 @@ _Select an action below:_
             )
             context.user_data['awaiting_input'] = 'admin_search_user'
             context.user_data['message_id'] = msg.message_id
+            context.user_data['state_timestamp'] = time.time()
 
         elif query.data == "admin_list_users":
             from services import get_database
@@ -2017,6 +2023,7 @@ _Select an action below:_
             )
             context.user_data['awaiting_input'] = 'admin_ban_user'
             context.user_data['message_id'] = msg.message_id
+            context.user_data['state_timestamp'] = time.time()
 
         elif query.data == "admin_notif":
             notif_text = """🔔 **Notifications Settings**
@@ -2077,6 +2084,7 @@ Choose action:
             )
             context.user_data['awaiting_input'] = 'admin_broadcast'
             context.user_data['message_id'] = msg.message_id
+            context.user_data['state_timestamp'] = time.time()  # Add timestamp to prevent stale state detection
 
         elif query.data == "admin_db_stats":
             # Show database statistics
