@@ -1500,6 +1500,7 @@ Address:
             [InlineKeyboardButton("👥 User Management", callback_data="admin_user_mgmt")],
             [InlineKeyboardButton("⚙️ Admin Settings", callback_data="admin_settings")],
             [InlineKeyboardButton("💎 Premium Control", callback_data="admin_premium")],
+            [InlineKeyboardButton("📊 Signal Tracking", callback_data="admin_signal_tracking")],
             [InlineKeyboardButton("💰 Reset All Credits", callback_data="admin_reset_credits")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1775,6 +1776,197 @@ Choose an action:
 
         elif query.data == "admin_reset_credits_confirm":
             await self.handle_admin_reset_credits_confirm(query, context)
+
+        elif query.data == "admin_signal_tracking":
+            # Signal Tracking submenu
+            from app.signal_tracker_integration import get_current_winrate
+            from app.signal_logger import signal_logger
+            from pathlib import Path
+            import os
+            
+            # Get stats
+            stats = get_current_winrate(7)
+            
+            # Count files
+            log_dir = Path("signal_logs")
+            total_prompts = 0
+            active_signals = 0
+            completed_signals = 0
+            
+            try:
+                prompt_files = list(log_dir.glob("prompts_*.jsonl"))
+                for file in prompt_files:
+                    with open(file, "r") as f:
+                        total_prompts += sum(1 for _ in f)
+                
+                active_file = log_dir / "active_signals.jsonl"
+                if active_file.exists():
+                    with open(active_file, "r") as f:
+                        active_signals = sum(1 for _ in f)
+                
+                completed_file = log_dir / "completed_signals.jsonl"
+                if completed_file.exists():
+                    with open(completed_file, "r") as f:
+                        completed_signals = sum(1 for _ in f)
+            except Exception as e:
+                print(f"Error counting files: {e}")
+            
+            # Get storage status
+            use_gdrive = os.getenv('USE_GDRIVE', 'true').lower() == 'true'
+            storage_type = "Unknown"
+            storage_status = "❌ Disabled"
+            
+            if use_gdrive and os.path.exists('G:/'):
+                storage_type = "G: Drive (Local)"
+                storage_status = "✅ Enabled"
+            else:
+                try:
+                    from app.supabase_storage import supabase_storage
+                    if supabase_storage.enabled:
+                        storage_type = "Supabase Storage (Cloud)"
+                        storage_status = "✅ Enabled"
+                except:
+                    pass
+            
+            # Build stats text
+            winrate_text = "No data"
+            if stats:
+                winrate_text = f"{stats['winrate']}% ({stats['wins']}W/{stats['losses']}L)"
+            
+            tracking_text = f"""📊 **Signal Tracking Dashboard**
+
+**📈 Performance (7 Days)**
+• Winrate: {winrate_text}
+• Total Signals: {stats['total_signals'] if stats else 0}
+• Avg PnL: {stats['avg_pnl']:+.2f}% if stats else 'N/A'
+
+**📝 Data Stored**
+• User Prompts: {total_prompts}
+• Active Signals: {active_signals}
+• Completed: {completed_signals}
+
+**☁️ Storage**
+• Type: {storage_type}
+• Status: {storage_status}
+
+_Select an action below:_
+"""
+            
+            keyboard = [
+                [InlineKeyboardButton("📊 View Stats", callback_data="admin_st_stats")],
+                [InlineKeyboardButton("📈 Winrate 7d", callback_data="admin_st_winrate_7")],
+                [InlineKeyboardButton("📈 Winrate 30d", callback_data="admin_st_winrate_30")],
+                [InlineKeyboardButton("📄 Weekly Report", callback_data="admin_st_report")],
+                [InlineKeyboardButton("☁️ Upload Logs", callback_data="admin_st_upload")],
+                [InlineKeyboardButton("◀️ Back", callback_data="admin_back")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(tracking_text, reply_markup=reply_markup, parse_mode='MARKDOWN')
+
+        elif query.data == "admin_st_stats":
+            # Show detailed statistics
+            from app.handlers_signal_tracking import cmd_signal_stats
+            # Call the command handler directly
+            await cmd_signal_stats(update, context)
+
+        elif query.data == "admin_st_winrate_7":
+            # Show 7-day winrate
+            from app.signal_tracker_integration import get_current_winrate
+            stats = get_current_winrate(7)
+            
+            if not stats:
+                await query.answer("❌ No winrate data available", show_alert=True)
+                return
+            
+            winrate_text = f"""📊 **WINRATE SIGNAL (7 HARI)**
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📈 **STATISTIK:**
+• Total Signal: {stats['total_signals']}
+• Win: {stats['wins']} ✅
+• Loss: {stats['losses']} ❌
+• Winrate: {stats['winrate']}% 🎯
+• Avg PnL: {stats['avg_pnl']:+.2f}%
+
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+            
+            keyboard = [[InlineKeyboardButton("◀️ Back", callback_data="admin_signal_tracking")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(winrate_text, reply_markup=reply_markup, parse_mode='MARKDOWN')
+
+        elif query.data == "admin_st_winrate_30":
+            # Show 30-day winrate
+            from app.signal_tracker_integration import get_current_winrate
+            stats = get_current_winrate(30)
+            
+            if not stats:
+                await query.answer("❌ No winrate data available", show_alert=True)
+                return
+            
+            winrate_text = f"""📊 **WINRATE SIGNAL (30 HARI)**
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📈 **STATISTIK:**
+• Total Signal: {stats['total_signals']}
+• Win: {stats['wins']} ✅
+• Loss: {stats['losses']} ❌
+• Winrate: {stats['winrate']}% 🎯
+• Avg PnL: {stats['avg_pnl']:+.2f}%
+
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+            
+            keyboard = [[InlineKeyboardButton("◀️ Back", callback_data="admin_signal_tracking")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(winrate_text, reply_markup=reply_markup, parse_mode='MARKDOWN')
+
+        elif query.data == "admin_st_report":
+            # Generate weekly report
+            await query.answer("⏳ Generating report...", show_alert=False)
+            
+            try:
+                from app.weekly_report import weekly_reporter
+                report = await weekly_reporter.generate_report()
+                
+                keyboard = [[InlineKeyboardButton("◀️ Back", callback_data="admin_signal_tracking")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(report, reply_markup=reply_markup, parse_mode='MARKDOWN')
+            except Exception as e:
+                await query.answer(f"❌ Error: {str(e)[:100]}", show_alert=True)
+
+        elif query.data == "admin_st_upload":
+            # Upload logs to storage
+            await query.answer("⏳ Uploading logs...", show_alert=False)
+            
+            try:
+                import os
+                use_gdrive = os.getenv('USE_GDRIVE', 'true').lower() == 'true'
+                
+                if use_gdrive and os.path.exists('G:/'):
+                    from app.local_gdrive_sync import local_gdrive_sync
+                    synced, failed = local_gdrive_sync.sync_all_logs()
+                    result_text = f"""✅ **G: Drive Sync Complete!**
+
+📊 Synced: {synced} files
+❌ Failed: {failed} files
+"""
+                else:
+                    from app.supabase_storage import supabase_storage
+                    uploaded, failed = supabase_storage.upload_all_logs()
+                    result_text = f"""✅ **Supabase Upload Complete!**
+
+📊 Uploaded: {uploaded} files
+❌ Failed: {failed} files
+"""
+                
+                keyboard = [[InlineKeyboardButton("◀️ Back", callback_data="admin_signal_tracking")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(result_text, reply_markup=reply_markup, parse_mode='MARKDOWN')
+            except Exception as e:
+                await query.answer(f"❌ Error: {str(e)[:100]}", show_alert=True)
 
         elif query.data == "admin_search_user":
             msg = await query.edit_message_text(
