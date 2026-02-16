@@ -1308,26 +1308,50 @@ class Database:
                     from supabase_client import supabase
                     if supabase:
                         # Enhanced query with filtering - check if banned column exists
-                        try:
-                            # Try with banned column first
-                            supabase_result = supabase.table('users')\
-                                .select('telegram_id, first_name, username, is_premium, banned')\
-                                .not_.is_('telegram_id', 'null')\
-                                .neq('telegram_id', 0)\
-                                .execute()
-                            has_banned_column = True
-                        except Exception as e:
-                            # If banned column doesn't exist, query without it
-                            if 'banned does not exist' in str(e) or '42703' in str(e):
-                                print("ℹ️  Supabase table doesn't have 'banned' column, querying without it")
+                        # IMPORTANT: Supabase has default limit of 1000 rows
+                        # We need to paginate to get ALL users
+                        all_supabase_users = []
+                        page_size = 1000
+                        offset = 0
+                        has_banned_column = True
+                        
+                        while True:
+                            try:
+                                # Try with banned column first
                                 supabase_result = supabase.table('users')\
-                                    .select('telegram_id, first_name, username, is_premium')\
+                                    .select('telegram_id, first_name, username, is_premium, banned')\
                                     .not_.is_('telegram_id', 'null')\
                                     .neq('telegram_id', 0)\
+                                    .range(offset, offset + page_size - 1)\
                                     .execute()
-                                has_banned_column = False
-                            else:
-                                raise e
+                            except Exception as e:
+                                # If banned column doesn't exist, query without it
+                                if 'banned does not exist' in str(e) or '42703' in str(e):
+                                    print("ℹ️  Supabase table doesn't have 'banned' column, querying without it")
+                                    has_banned_column = False
+                                    supabase_result = supabase.table('users')\
+                                        .select('telegram_id, first_name, username, is_premium')\
+                                        .not_.is_('telegram_id', 'null')\
+                                        .neq('telegram_id', 0)\
+                                        .range(offset, offset + page_size - 1)\
+                                        .execute()
+                                else:
+                                    raise e
+                            
+                            if not supabase_result.data:
+                                break  # No more data
+                            
+                            all_supabase_users.extend(supabase_result.data)
+                            
+                            # If we got less than page_size, we've reached the end
+                            if len(supabase_result.data) < page_size:
+                                break
+                            
+                            offset += page_size
+                            print(f"📄 Fetched {len(all_supabase_users)} users from Supabase so far...")
+                        
+                        supabase_result.data = all_supabase_users
+                        print(f"✅ Total Supabase users fetched: {len(all_supabase_users)}")
                         
                         if supabase_result.data:
                             supabase_unique = 0
