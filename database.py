@@ -476,7 +476,8 @@ class Database:
         try:
             self.cursor.execute("""
                 SELECT telegram_id, first_name, last_name, username, language_code, 
-                       is_premium, credits, subscription_end, referred_by, referral_code, created_at, banned
+                       is_premium, credits, subscription_end, referred_by, referral_code, 
+                       created_at, banned, premium_earnings
                 FROM users WHERE telegram_id = ?
             """, (telegram_id,))
             row = self.cursor.fetchone()
@@ -493,7 +494,8 @@ class Database:
                     'referred_by': row[8],
                     'referral_code': row[9],
                     'created_at': row[10],
-                    'banned': row[11]
+                    'banned': row[11],
+                    'premium_earnings': row[12] if len(row) > 12 else 0
                 }
             return None
         except Exception as e:
