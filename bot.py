@@ -220,6 +220,19 @@ class TelegramBot:
             for handler in sb_handlers:
                 self.application.add_handler(handler)
 
+        # Register signal tracking admin handlers
+        try:
+            from app.handlers_signal_tracking import (
+                cmd_winrate, cmd_weekly_report, cmd_upload_logs, cmd_signal_stats
+            )
+            self.application.add_handler(CommandHandler("winrate", cmd_winrate))
+            self.application.add_handler(CommandHandler("weekly_report", cmd_weekly_report))
+            self.application.add_handler(CommandHandler("upload_logs", cmd_upload_logs))
+            self.application.add_handler(CommandHandler("signal_stats", cmd_signal_stats))
+            print("✅ Signal tracking admin commands registered")
+        except Exception as e:
+            print(f"⚠️ Signal tracking admin commands failed to register: {e}")
+
         # Message handler for menu interactions
         self.application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)

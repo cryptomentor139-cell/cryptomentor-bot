@@ -119,6 +119,15 @@ async def main():
             bot = TelegramBot()
 
             print("🎯 Bot initialized successfully")
+            
+            # Start signal tracking scheduler
+            try:
+                from app.scheduler import task_scheduler
+                asyncio.create_task(task_scheduler.start())
+                print("✅ Signal tracking scheduler started")
+            except Exception as e:
+                print(f"⚠️ Signal tracking scheduler failed to start: {e}")
+            
             print("📡 Starting bot run sequence...")
 
             # Run bot with enhanced logging
