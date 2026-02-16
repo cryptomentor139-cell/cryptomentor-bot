@@ -275,6 +275,27 @@ async def _broadcast(bot, sig: Dict[str, Any]) -> int:
         return 0
     text = format_signal_text(sig)
     sent = 0
+    
+    # Track signal to database for AI iteration
+    signal_id = None
+    try:
+        from app.signal_tracker_integration import track_signal_given
+        # Track signal for first user (representative)
+        if receivers:
+            signal_id = track_signal_given(
+                user_id=receivers[0],  # Use first user as representative
+                symbol=sig.get("symbol", ""),
+                timeframe=sig.get("timeframe", TIMEFRAME),
+                entry_price=sig.get("entry_price", 0),
+                tp1=sig.get("tp1", 0),
+                tp2=sig.get("tp2", 0),
+                sl=sig.get("sl", 0),
+                signal_type=sig.get("side", "LONG")
+            )
+            print(f"[AutoSignal] Tracked signal: {signal_id}")
+    except Exception as e:
+        print(f"[AutoSignal] Failed to track signal: {e}")
+    
     for uid in receivers:
         if get_private_chat_id(uid) is None:
             continue
