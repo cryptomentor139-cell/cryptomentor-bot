@@ -268,8 +268,23 @@ class TelegramBot:
                 code = ref_code[5:]  # Remove 'prem_' prefix
                 referrer_id = db.get_user_by_premium_referral_code(code)
 
-        # Register user in local database
+        # Register user - Supabase FIRST (primary), Local DB second (backup)
         try:
+            # PRIMARY: Register to Supabase using RPC
+            try:
+                from app.sb_repo import upsert_user_strict
+                supabase_result = upsert_user_strict(
+                    user.id,
+                    user.username,
+                    user.first_name,
+                    user.last_name,
+                    referrer_id
+                )
+                print(f"✅ User {user.id} registered to Supabase (primary)")
+            except Exception as sb_error:
+                print(f"⚠️ Supabase registration failed: {sb_error}")
+            
+            # SECONDARY: Register to Local DB (backup + compatibility)
             user_created = db.create_user(
                 user.id,
                 user.username,
@@ -286,20 +301,6 @@ class TelegramBot:
 
         except Exception as e:
             print(f"❌ User registration failed: {e}")
-
-        # Register user if Supabase is available (lazy check)
-        supabase_available, _ = _check_supabase()
-        if supabase_available:
-            try:
-                from app.sb_repo import ensure_user_registered
-                ensure_user_registered(
-                    user.id,
-                    user.username,
-                    user.first_name,
-                    user.last_name
-                )
-            except Exception as e:
-                logger.warning(f"User registration failed: {e}")
 
         # Lazy load menu system
         from menu_system import MenuBuilder, get_menu_text, MAIN_MENU
