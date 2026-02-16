@@ -3064,11 +3064,11 @@ Choose action:
             except Exception as e:
                 print(f"⚠️ SnD Auto-Signals failed to start: {e}")
 
-            # Initialize App AutoSignal scheduler
+            # Initialize App AutoSignal scheduler (FAST version - no AI)
             try:
-                from app.autosignal import start_background_scheduler
+                from app.autosignal_fast import start_background_scheduler
                 start_background_scheduler(self.application)
-                print("📡 App AutoSignal scheduler started")
+                print("📡 App AutoSignal scheduler started (FAST mode)")
             except Exception as e:
                 print(f"⚠️ App AutoSignal scheduler failed to start: {e}")
 
