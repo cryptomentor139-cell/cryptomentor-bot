@@ -11,3 +11,7 @@ supabase==2.28.0
 # Optional but recommended
 certifi>=2023.7.22
 urllib3>=2.0.0
+
+# Note: PyDrive2 not needed anymore in V2.0
+# We use Google Drive for Desktop (G: drive mount) instead
+# Much simpler and more reliable!

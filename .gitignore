@@ -53,3 +53,9 @@ attached_assets/
 
 # Local state
 .local/
+
+# Signal Tracking System
+gdrive_credentials.json
+gdrive_token.json
+signal_logs/
+*.jsonl
