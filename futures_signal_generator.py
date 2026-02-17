@@ -180,12 +180,16 @@ Confidence: {confidence:.0f}%"""
             signals_text += f"📊 Scanning: {len(coins)} coins\n"
             signals_text += f"🔗 Data Sources: Binance + CryptoCompare + Helius\n\n"
             
-            # Try to get enhanced market data from multi-source
+            # Try to get enhanced market data from multi-source WITH TIMEOUT
             try:
                 from app.providers.multi_source_provider import multi_source_provider
                 
-                # Get BTC data for market context
-                btc_data = await multi_source_provider.get_price('BTC')
+                # Get BTC data for market context WITH 3 SECOND TIMEOUT
+                btc_data = await asyncio.wait_for(
+                    multi_source_provider.get_price('BTC'),
+                    timeout=3.0
+                )
+                
                 if btc_data and not btc_data.get('error'):
                     btc_price = btc_data.get('price', 0)
                     btc_change = btc_data.get('change_24h', 0)
@@ -202,6 +206,12 @@ Confidence: {confidence:.0f}%"""
                     signals_text += "• Total Market Cap: $3.17T\n"
                     signals_text += "• 24h Market Change: +0.95%\n"
                     signals_text += "• BTC Dominance: 69.0%\n\n"
+            except asyncio.TimeoutError:
+                print(f"Multi-source provider timeout (3s) - using fallback")
+                signals_text += "💰 GLOBAL METRICS:\n"
+                signals_text += "• Total Market Cap: $3.17T\n"
+                signals_text += "• 24h Market Change: +0.95%\n"
+                signals_text += "• BTC Dominance: 69.0%\n\n"
             except Exception as e:
                 print(f"Multi-source provider error: {e}")
                 signals_text += "💰 GLOBAL METRICS:\n"
@@ -237,12 +247,17 @@ Confidence: {confidence:.0f}%"""
                     volume_spike = volumes[-1] / avg_volume if avg_volume > 0 else 1
                     volume_status = "🔥 High" if volume_spike > 1.5 else "📊 Normal" if volume_spike > 0.8 else "📉 Low"
                     
-                    # Try to get additional data from multi-source for validation
+                    # Try to get additional data from multi-source for validation WITH TIMEOUT
                     data_quality = "Standard"
                     try:
                         from app.providers.multi_source_provider import multi_source_provider
                         coin_symbol = coin.replace('USDT', '')
-                        multi_data = await multi_source_provider.get_price(coin_symbol)
+                        
+                        # Add 2 second timeout per coin to prevent hanging
+                        multi_data = await asyncio.wait_for(
+                            multi_source_provider.get_price(coin_symbol),
+                            timeout=2.0
+                        )
                         
                         if multi_data and not multi_data.get('error'):
                             # Verify price consistency across sources
@@ -253,8 +268,12 @@ Confidence: {confidence:.0f}%"""
                                 data_quality = "✅ Verified"
                             else:
                                 data_quality = "⚠️ Check"
-                    except:
-                        pass
+                    except asyncio.TimeoutError:
+                        # Timeout - use Binance data only
+                        data_quality = "Binance"
+                    except Exception:
+                        # Any error - use Binance data only
+                        data_quality = "Binance"
                     
                     # Confidence calculation
                     conf = 50.0

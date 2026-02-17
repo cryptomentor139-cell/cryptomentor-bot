@@ -34,6 +34,13 @@ class MultiSourceProvider:
             self.session = aiohttp.ClientSession()
         return self.session
     
+    async def get_price(self, symbol: str) -> Dict[str, Any]:
+        """
+        Simple interface to get price with automatic timeout protection
+        TIMEOUT: 5 seconds max
+        """
+        return await self.get_price_multi_source(symbol)
+    
     async def close(self):
         """Close aiohttp session"""
         if self.session and not self.session.closed:
@@ -43,9 +50,10 @@ class MultiSourceProvider:
         """
         Get price from multiple sources simultaneously for speed
         Returns fastest response with fallback
+        CRITICAL: 5 second total timeout to prevent hanging
         """
         try:
-            # Launch all requests in parallel
+            # Launch all requests in parallel WITH TIMEOUT
             tasks = [
                 self._get_coingecko_price(symbol),
                 self._get_cryptocompare_price(symbol),
@@ -55,8 +63,11 @@ class MultiSourceProvider:
             if symbol.upper() in ['SOL', 'BONK', 'JUP', 'PYTH', 'JTO', 'WEN']:
                 tasks.append(self._get_helius_price(symbol))
             
-            # Wait for first successful response
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Wait for first successful response WITH 5 SECOND TIMEOUT
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=5.0
+            )
             
             # Find first successful result
             for result in results:
@@ -69,7 +80,13 @@ class MultiSourceProvider:
                 'symbol': symbol,
                 'attempts': len(tasks)
             }
-            
+        
+        except asyncio.TimeoutError:
+            logging.error(f"Multi-source price fetch timeout (5s) for {symbol}")
+            return {
+                'error': 'Timeout after 5 seconds',
+                'symbol': symbol
+            }
         except Exception as e:
             logging.error(f"Error in multi-source price fetch: {e}")
             return {'error': str(e)}
@@ -78,6 +95,7 @@ class MultiSourceProvider:
         """
         Get price from CoinGecko (FREE, no API key needed)
         Very reliable and fast
+        TIMEOUT: 3 seconds
         """
         try:
             session = await self._get_session()
@@ -124,7 +142,8 @@ class MultiSourceProvider:
                 'include_market_cap': 'true'
             }
             
-            async with session.get(url, params=params, timeout=5) as response:
+            # CRITICAL: 3 second timeout
+            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=3)) as response:
                 if response.status == 200:
                     data = await response.json()
                     
@@ -144,7 +163,7 @@ class MultiSourceProvider:
                 return {'error': f'CoinGecko API returned {response.status}'}
                 
         except asyncio.TimeoutError:
-            return {'error': 'CoinGecko timeout'}
+            return {'error': 'CoinGecko timeout (3s)'}
         except Exception as e:
             return {'error': f'CoinGecko error: {str(e)}'}
     
@@ -152,6 +171,7 @@ class MultiSourceProvider:
         """
         Get price from CryptoCompare (FREE tier available)
         Good for additional data validation
+        TIMEOUT: 3 seconds
         """
         try:
             session = await self._get_session()
@@ -166,7 +186,8 @@ class MultiSourceProvider:
             if self.cryptocompare_api_key:
                 headers['authorization'] = f'Apikey {self.cryptocompare_api_key}'
             
-            async with session.get(url, params=params, headers=headers, timeout=5) as response:
+            # CRITICAL: 3 second timeout
+            async with session.get(url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=3)) as response:
                 if response.status == 200:
                     data = await response.json()
                     
@@ -189,7 +210,7 @@ class MultiSourceProvider:
                 return {'error': f'CryptoCompare API returned {response.status}'}
                 
         except asyncio.TimeoutError:
-            return {'error': 'CryptoCompare timeout'}
+            return {'error': 'CryptoCompare timeout (3s)'}
         except Exception as e:
             return {'error': f'CryptoCompare error: {str(e)}'}
     
@@ -197,6 +218,7 @@ class MultiSourceProvider:
         """
         Get on-chain data from Helius RPC (for Solana tokens)
         Provides real-time on-chain metrics
+        TIMEOUT: 3 seconds
         """
         try:
             if not self.helius_api_key:
@@ -228,7 +250,8 @@ class MultiSourceProvider:
                 'mintAccounts': [mint_address]
             }
             
-            async with session.post(url, params=params, json=payload, timeout=5) as response:
+            # CRITICAL: 3 second timeout
+            async with session.post(url, params=params, json=payload, timeout=aiohttp.ClientTimeout(total=3)) as response:
                 if response.status == 200:
                     data = await response.json()
                     
@@ -252,7 +275,7 @@ class MultiSourceProvider:
                 return {'error': f'Helius API returned {response.status}'}
                 
         except asyncio.TimeoutError:
-            return {'error': 'Helius timeout'}
+            return {'error': 'Helius timeout (3s)'}
         except Exception as e:
             return {'error': f'Helius error: {str(e)}'}
     

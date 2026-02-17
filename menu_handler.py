@@ -506,10 +506,16 @@ async def multi_coin_signals_callback(update: Update, context: ContextTypes.DEFA
     )
     
     async def generate_and_send():
+        """Generate signals with comprehensive error handling and timeout"""
         try:
             from futures_signal_generator import FuturesSignalGenerator
             generator = FuturesSignalGenerator()
-            signals = await generator.generate_multi_signals()
+            
+            # Add 30 second timeout to prevent infinite hanging
+            signals = await asyncio.wait_for(
+                generator.generate_multi_signals(),
+                timeout=30.0
+            )
             
             if len(signals) > 4000:
                 signals = signals[:3900] + "\n\n... (truncated)"
@@ -520,16 +526,31 @@ async def multi_coin_signals_callback(update: Update, context: ContextTypes.DEFA
                 text=signals,
                 parse_mode=None
             )
-        except Exception as e:
-            logger.error(f"Multi-coin signals error: {e}")
+            logger.info(f"✅ Multi-coin signals sent successfully to user {user_id}")
+            
+        except asyncio.TimeoutError:
+            logger.error(f"❌ Multi-coin signals TIMEOUT (30s) for user {user_id}")
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data=FUTURES_SIGNALS)]]
             await context.bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=message_id,
-                text=f"❌ Error generating signals: {str(e)[:100]}\n\nPlease try again.",
+                text="❌ Signal generation timeout (30s)\n\n"
+                     "API sedang lambat. Silakan coba lagi dalam beberapa menit.\n\n"
+                     "💡 Tip: Gunakan saat traffic rendah untuk hasil lebih cepat.",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        except Exception as e:
+            logger.error(f"❌ Multi-coin signals error for user {user_id}: {e}", exc_info=True)
+            keyboard = [[InlineKeyboardButton("🔙 Back", callback_data=FUTURES_SIGNALS)]]
+            error_msg = str(e)[:100] if str(e) else "Unknown error"
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=f"❌ Error generating signals\n\n{error_msg}\n\nSilakan coba lagi.",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
     
+    # Create task with proper error handling
     asyncio.create_task(generate_and_send())
 
 
