@@ -7,6 +7,7 @@ Uses only Binance OHLCV data + AI Reasoning
 
 from typing import List, Optional, Tuple
 from datetime import datetime
+import asyncio
 
 try:
     from app.providers.binance_provider import fetch_klines, get_enhanced_ticker_data
