@@ -1497,8 +1497,7 @@ def register_menu_handlers(application):
     application.add_handler(CallbackQueryHandler(futures_signals_callback, pattern=f"^{FUTURES_SIGNALS}$"))
     application.add_handler(CallbackQueryHandler(portfolio_credits_callback, pattern=f"^{PORTFOLIO_CREDITS}$"))
     application.add_handler(CallbackQueryHandler(premium_referral_callback, pattern=f"^{PREMIUM_REFERRAL}$"))
-    # AI CALLBACKS DISABLED - Feature removed for speed
-    # application.add_handler(CallbackQueryHandler(ask_ai_callback, pattern=f"^{ASK_AI}$"))
+    application.add_handler(CallbackQueryHandler(ask_ai_callback, pattern=f"^{ASK_AI}$"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern=f"^{SETTINGS}$"))
     
     # Price & Market
