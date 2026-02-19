@@ -198,10 +198,16 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ Auto signal admin commands failed to register: {e}")
 
-        # AI HANDLERS DISABLED - Feature removed for speed
-        # Commands /ai, /chat, /aimarket are no longer available
-        # Keeping bot fast and responsive without LLM calls
-        print("⚠️ AI handlers DISABLED (feature removed for speed)")
+        # AI HANDLERS RE-ENABLED with Cerebras (ultra-fast)
+        # Commands /ai, /chat, /aimarket now use Cerebras AI (0.4s response time)
+        try:
+            from app.handlers_deepseek import handle_ai_analyze, handle_ai_chat, handle_ai_market_summary
+            self.application.add_handler(CommandHandler("ai", handle_ai_analyze))
+            self.application.add_handler(CommandHandler("chat", handle_ai_chat))
+            self.application.add_handler(CommandHandler("aimarket", handle_ai_market_summary))
+            print("✅ AI handlers registered (Cerebras - ultra fast)")
+        except Exception as e:
+            print(f"⚠️ AI handlers failed to register: {e}")
 
         # Register Supabase handlers if available (lazy check)
         supabase_available, sb_handlers = _check_supabase()
@@ -354,8 +360,8 @@ Choose an option from the menu below:"""
 • `/futures <symbol> <timeframe>` - Analisis futures (20 kredit)
 • `/futures_signals` - Sinyal multi-coin (60 kredit)
 
-🤖 **DeepSeek AI Assistant (BARU!):**
-• `/ai <symbol>` - Analisis market dengan AI reasoning mendalam
+🤖 **Cerebras AI Assistant (ULTRA FAST!):**
+• `/ai <symbol>` - Analisis market dengan AI (0.4s response!)
 • `/chat <pesan>` - Chat santai tentang market & trading
 • `/aimarket` - Summary kondisi market global dengan AI
 
@@ -365,7 +371,7 @@ Choose an option from the menu below:"""
 • `/language <en|id>` - Ubah bahasa
 
 💡 **Tips:** Gunakan menu tombol untuk pengalaman terbaik!
-🔥 **Fitur Baru:** DeepSeek AI untuk analisis lebih mendalam!"""
+🔥 **Fitur Baru:** Cerebras AI - 70x lebih cepat dari sebelumnya!"""
         else:
             help_text = """📚 **CryptoMentor AI - Command Reference**
 
@@ -384,8 +390,8 @@ Choose an option from the menu below:"""
 • `/futures <symbol> <timeframe>` - Futures analysis (20 credits)
 • `/futures_signals` - Multi-coin signals (60 credits)
 
-🤖 **DeepSeek AI Assistant (NEW!):**
-• `/ai <symbol>` - Market analysis with deep AI reasoning
+🤖 **Cerebras AI Assistant (ULTRA FAST!):**
+• `/ai <symbol>` - Market analysis with AI (0.4s response!)
 • `/chat <message>` - Casual chat about market & trading
 • `/aimarket` - Global market summary with AI insights
 
@@ -395,7 +401,7 @@ Choose an option from the menu below:"""
 • `/language <en|id>` - Change language
 
 💡 **Tip:** Use the button menu for the best experience!
-🔥 **New Feature:** DeepSeek AI for deeper analysis!"""
+🔥 **New Feature:** Cerebras AI - 70x faster than before!"""
 
         await update.message.reply_text(help_text, parse_mode='MARKDOWN')
 

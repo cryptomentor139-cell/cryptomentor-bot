@@ -1,14 +1,15 @@
 """
-Telegram handlers untuk DeepSeek AI integration
+Telegram handlers untuk Cerebras AI integration (was DeepSeek)
+Ultra-fast LLM with Llama 3.1 8B
 """
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from deepseek_ai import DeepSeekAI
+from cerebras_ai import CerebrasAI
 from database import Database
 
-# Initialize DeepSeek AI
-deepseek = DeepSeekAI()
+# Initialize Cerebras AI (ultra-fast)
+cerebras = CerebrasAI()
 
 # Track active AI requests for cancellation
 active_ai_requests = {}
@@ -117,7 +118,7 @@ async def handle_ai_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Get AI analysis with cancellation check
             analysis_task = asyncio.create_task(
-                deepseek.analyze_market_simple(
+                cerebras.analyze_market_simple(
                     symbol=symbol,
                     market_data=market_data,
                     language=user_lang
@@ -226,7 +227,7 @@ async def handle_ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.chat.send_action(action="typing")
         
         # Get AI response
-        response = await deepseek.chat_about_market(
+        response = await cerebras.chat_about_market(
             user_message=user_message,
             language=user_lang
         )
@@ -302,7 +303,7 @@ async def handle_ai_market_summary(update: Update, context: ContextTypes.DEFAULT
                 })
         
         # Create market summary prompt
-        market_summary = deepseek.get_market_summary_prompt(market_data_list)
+        market_summary = cerebras.get_market_summary_prompt(market_data_list)
         
         # Get AI analysis
         if user_lang == 'id':
@@ -310,7 +311,7 @@ async def handle_ai_market_summary(update: Update, context: ContextTypes.DEFAULT
         else:
             prompt = f"{market_summary}\n\nProvide analysis of overall crypto market conditions with clear reasoning. What's happening in the market? What should traders pay attention to?"
         
-        response = await deepseek.chat_about_market(
+        response = await cerebras.chat_about_market(
             user_message=prompt,
             language=user_lang
         )
