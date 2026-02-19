@@ -22,6 +22,7 @@ async def handle_ai_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     try:
         user_id = update.effective_user.id
+        username = update.effective_user.username or update.effective_user.first_name or "Unknown"
         db = Database()
         
         # Get user language
@@ -52,6 +53,13 @@ async def handle_ai_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         symbol = context.args[0].upper()
+        
+        # TRACK USER PROMPT - CRITICAL FOR AI ITERATION
+        try:
+            from app.signal_tracker_integration import track_user_command
+            track_user_command(user_id, username, f"/ai {symbol}", symbol, None)
+        except Exception as e:
+            print(f"Warning: Failed to track user command: {e}")
         
         # Create cancel button
         keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_ai_{user_id}")]]
@@ -173,6 +181,7 @@ async def handle_ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     try:
         user_id = update.effective_user.id
+        username = update.effective_user.username or update.effective_user.first_name or "Unknown"
         db = Database()
         
         # Get user language
@@ -205,6 +214,13 @@ async def handle_ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         user_message = ' '.join(context.args)
+        
+        # TRACK USER PROMPT - CRITICAL FOR AI ITERATION
+        try:
+            from app.signal_tracker_integration import track_user_command
+            track_user_command(user_id, username, f"/chat {user_message}", None, None)
+        except Exception as e:
+            print(f"Warning: Failed to track user command: {e}")
         
         # Send typing action
         await update.message.chat.send_action(action="typing")
@@ -241,10 +257,18 @@ async def handle_ai_market_summary(update: Update, context: ContextTypes.DEFAULT
     """
     try:
         user_id = update.effective_user.id
+        username = update.effective_user.username or update.effective_user.first_name or "Unknown"
         db = Database()
         
         # Get user language
         user_lang = db.get_user_language(user_id)
+        
+        # TRACK USER PROMPT - CRITICAL FOR AI ITERATION
+        try:
+            from app.signal_tracker_integration import track_user_command
+            track_user_command(user_id, username, "/aimarket", None, None)
+        except Exception as e:
+            print(f"Warning: Failed to track user command: {e}")
         
         # Send processing message
         if user_lang == 'id':

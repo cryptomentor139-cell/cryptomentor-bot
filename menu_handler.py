@@ -150,7 +150,7 @@ INPUT_QUESTION = 3
 # =============================================================================
 
 def build_main_menu() -> InlineKeyboardMarkup:
-    """Build main menu with 7 categories"""
+    """Build main menu with 6 categories (AI disabled)"""
     keyboard = [
         [
             InlineKeyboardButton("📈 Price & Market", callback_data=PRICE_MARKET),
@@ -162,7 +162,7 @@ def build_main_menu() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("👑 Premium & Referral", callback_data=PREMIUM_REFERRAL),
-            InlineKeyboardButton("🤖 Ask AI", callback_data=ASK_AI),
+            # AI MENU REMOVED - Feature disabled for speed
         ],
         [
             InlineKeyboardButton("⚙️ Settings", callback_data=SETTINGS),
@@ -1492,7 +1492,8 @@ def register_menu_handlers(application):
     application.add_handler(CallbackQueryHandler(futures_signals_callback, pattern=f"^{FUTURES_SIGNALS}$"))
     application.add_handler(CallbackQueryHandler(portfolio_credits_callback, pattern=f"^{PORTFOLIO_CREDITS}$"))
     application.add_handler(CallbackQueryHandler(premium_referral_callback, pattern=f"^{PREMIUM_REFERRAL}$"))
-    application.add_handler(CallbackQueryHandler(ask_ai_callback, pattern=f"^{ASK_AI}$"))
+    # AI CALLBACKS DISABLED - Feature removed for speed
+    # application.add_handler(CallbackQueryHandler(ask_ai_callback, pattern=f"^{ASK_AI}$"))
     application.add_handler(CallbackQueryHandler(settings_callback, pattern=f"^{SETTINGS}$"))
     
     # Price & Market
@@ -1517,12 +1518,12 @@ def register_menu_handlers(application):
     application.add_handler(CallbackQueryHandler(referral_program_callback, pattern=f"^{REFERRAL_PROGRAM}$"))
     application.add_handler(CallbackQueryHandler(premium_earnings_callback, pattern=f"^{PREMIUM_EARNINGS}$"))
     
-    # Ask AI
-    application.add_handler(CallbackQueryHandler(ask_cryptomentor_callback, pattern=f"^{ASK_CRYPTOMENTOR}$"))
-    application.add_handler(CallbackQueryHandler(ai_chat_prompt_callback, pattern="^ai_chat_prompt$"))
-    application.add_handler(CallbackQueryHandler(ai_analyze_prompt_callback, pattern="^ai_analyze_prompt$"))
-    application.add_handler(CallbackQueryHandler(ai_market_summary_callback, pattern="^ai_market_summary$"))
-    application.add_handler(CallbackQueryHandler(ai_guide_callback, pattern="^ai_guide$"))
+    # AI CALLBACKS DISABLED - Feature removed for speed
+    # application.add_handler(CallbackQueryHandler(ask_cryptomentor_callback, pattern=f"^{ASK_CRYPTOMENTOR}$"))
+    # application.add_handler(CallbackQueryHandler(ai_chat_prompt_callback, pattern="^ai_chat_prompt$"))
+    # application.add_handler(CallbackQueryHandler(ai_analyze_prompt_callback, pattern="^ai_analyze_prompt$"))
+    # application.add_handler(CallbackQueryHandler(ai_market_summary_callback, pattern="^ai_market_summary$"))
+    # application.add_handler(CallbackQueryHandler(ai_guide_callback, pattern="^ai_guide$"))
     
     # Settings & Language
     application.add_handler(CallbackQueryHandler(change_language_callback, pattern=f"^{CHANGE_LANGUAGE}$"))

@@ -24,8 +24,8 @@ class FuturesSignalGenerator:
     """Generate professional futures trading signals with AI reasoning"""
     
     def __init__(self):
-        """Initialize signal generator with AI"""
-        self.ai = DeepSeekAI() if DeepSeekAI else None
+        """Initialize signal generator WITHOUT AI (disabled for speed)"""
+        self.ai = None  # AI DISABLED - too slow
         pass
     
     async def generate_signal(self, symbol: str, timeframe: str) -> str:
@@ -127,36 +127,14 @@ Take Profit:
 ATR-based SL
 RR Ratio ≈ 1:{rr_ratio:.1f}
 
-Confidence: {confidence:.0f}%"""
+Confidence: {confidence:.0f}%
+
+━━━━━━━━━━━━━━━━━━━━━━
+📊 Pure Technical Analysis
+🚀 Fast & Reliable Signals"""
             
-            # Add AI reasoning for premium users
-            market_data = {
-                'current_price': current_price,
-                'symbol': symbol,
-                'timeframe': timeframe
-            }
-            
-            signal_data = {
-                'market_bias': market_bias,
-                'structure': structure,
-                'rsi': rsi,
-                'volume_confirmation': volume_confirmation,
-                'entry_low': entry_zone_low,
-                'entry_high': entry_zone_high,
-                'sl': sl,
-                'tp1': tp1,
-                'tp2': tp2,
-                'rr_ratio': rr_ratio,
-                'confidence': confidence,
-                'demand_low': demand_low,
-                'demand_high': demand_high,
-                'supply_low': supply_low,
-                'supply_high': supply_high
-            }
-            
-            # Generate AI reasoning
-            ai_reasoning = await self.generate_ai_reasoning(symbol, market_data, signal_data)
-            signal_text += ai_reasoning
+            # AI REASONING DISABLED - too slow for production
+            # Keeping signals fast and responsive
             
             return signal_text
             
@@ -387,45 +365,5 @@ Confidence: {confidence:.0f}%"""
         
         return sum(trs[-period:]) / period if trs else 0.0
 
-    async def generate_ai_reasoning(self, symbol: str, market_data: dict, signal_data: dict) -> str:
-        """Generate AI reasoning for the trading signal - ULTRA FAST"""
-        if not self.ai:
-            return ""
-        
-        if not self.ai.available:
-            return ""
-        
-        try:
-            # ULTRA MINIMAL context - only essentials
-            context = f"""Futures {symbol}: ${market_data['current_price']:,.2f}
-Bias: {signal_data['market_bias']} | RSI: {signal_data['rsi']:.0f}
-Entry: ${signal_data['entry_low']:,.0f}-${signal_data['entry_high']:,.0f}
-SL: ${signal_data['sl']:,.0f} | TP: ${signal_data['tp2']:,.0f}
-R:R: 1:{signal_data['rr_ratio']:.1f}"""
-            
-            # ULTRA SHORT prompt for speed
-            system_prompt = """Expert crypto analyst. Berikan reasoning SANGAT SINGKAT (max 80 kata):
-1. Kenapa bias ini?
-2. Kenapa entry optimal?
-3. Risk management
-
-Padat, jelas, actionable."""
-
-            user_prompt = f"{context}\n\nReasoning singkat untuk futures signal ini."
-            
-            # DRASTICALLY reduced tokens for SPEED
-            reasoning = await self.ai._call_deepseek_api(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                temperature=0.5,
-                max_tokens=120  # Reduced from 800 to 120 for ULTRA SPEED
-            )
-            
-            if reasoning:
-                return f"\n\n🤖 **AI INSIGHT**:\n{reasoning}"
-            else:
-                return ""
-                
-        except Exception as e:
-            print(f"Error generating AI reasoning: {e}")
-            return ""
+    # AI REASONING METHOD REMOVED - Feature disabled for speed
+    # Keeping signals fast and responsive without LLM calls

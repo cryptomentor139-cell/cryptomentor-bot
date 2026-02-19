@@ -198,21 +198,10 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ Auto signal admin commands failed to register: {e}")
 
-        # Register DeepSeek AI handlers
-        try:
-            from app.handlers_deepseek import handle_ai_analyze, handle_ai_chat, handle_ai_market_summary
-            from app.handlers_ai_cancel import handle_cancel_ai
-            
-            self.application.add_handler(CommandHandler("ai", handle_ai_analyze))
-            self.application.add_handler(CommandHandler("chat", handle_ai_chat))
-            self.application.add_handler(CommandHandler("aimarket", handle_ai_market_summary))
-            
-            # Register cancel AI callback handler
-            self.application.add_handler(CallbackQueryHandler(handle_cancel_ai, pattern=r'^cancel_ai_'))
-            
-            print("✅ DeepSeek AI handlers registered")
-        except Exception as e:
-            print(f"⚠️ DeepSeek AI handlers failed to register: {e}")
+        # AI HANDLERS DISABLED - Feature removed for speed
+        # Commands /ai, /chat, /aimarket are no longer available
+        # Keeping bot fast and responsive without LLM calls
+        print("⚠️ AI handlers DISABLED (feature removed for speed)")
 
         # Register Supabase handlers if available (lazy check)
         supabase_available, sb_handlers = _check_supabase()
