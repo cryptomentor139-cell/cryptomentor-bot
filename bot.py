@@ -538,7 +538,31 @@ Choose an option from the menu below:"""
             prices.sort(key=lambda x: x[2], reverse=True)
             for idx, (coin, price, change) in enumerate(prices[:5], 1):
                 emoji = "📈" if change > 0 else "📉"
-                market_text += f"• {idx}. {coin}: ${price:,.2f} ({change:+.2f}%) {emoji}\n"
+                
+                # Get SMC trend indicator
+                smc_indicator = ""
+                try:
+                    from smc_analyzer import smc_analyzer
+                    coin_symbol = coin + 'USDT'
+                    smc_result = smc_analyzer.analyze(coin_symbol, '1h', limit=100)
+                    if 'error' not in smc_result:
+                        structure = smc_result.get('structure', {})
+                        trend = structure.trend if hasattr(structure, 'trend') else 'ranging'
+                        ema_21 = smc_result.get('ema_21', 0)
+                        current_price = smc_result.get('current_price', 0)
+                        
+                        if trend == 'uptrend':
+                            smc_indicator = " [HH/HL]"
+                        elif trend == 'downtrend':
+                            smc_indicator = " [LH/LL]"
+                        
+                        if ema_21 > 0 and current_price > 0:
+                            ema_pos = "↑" if current_price > ema_21 else "↓"
+                            smc_indicator += f" EMA21:{ema_pos}"
+                except Exception as e:
+                    print(f"SMC error for {coin}: {e}")
+                
+                market_text += f"• {idx}. {coin}: ${price:,.2f} ({change:+.2f}%) {emoji}{smc_indicator}\n"
 
             market_text += """
 
@@ -762,6 +786,18 @@ Zone {label} – {desc}
             else:
                 response += "  No active supply zone\n"
 
+            # Add SMC Analysis
+            try:
+                from smc_analyzer import smc_analyzer
+                from smc_formatter import format_smc_analysis
+                
+                smc_result = smc_analyzer.analyze(symbol, timeframe, limit=200)
+                smc_text = format_smc_analysis(smc_result, compact=False)
+                response += smc_text
+            except Exception as e:
+                print(f"SMC analysis error: {e}")
+                # Continue without SMC if it fails
+
             response += f"""
 📈 Context:
   • Trend: {trend}
@@ -894,6 +930,20 @@ Zone {label} – {desc}
                         response += f"  • 🎯 TP2: {fmt_price(tp2)}\n"
                 else:
                     response += "\n🔴 <b>SUPPLY ZONES:</b> No active supply zones\n"
+
+                # Add SMC Analysis
+                try:
+                    from smc_analyzer import smc_analyzer
+                    from smc_formatter import format_smc_analysis
+                    
+                    smc_result = smc_analyzer.analyze(symbol, timeframe, limit=200)
+                    smc_text = format_smc_analysis(smc_result, compact=False)
+                    # Convert to HTML format (replace markdown with HTML tags)
+                    smc_text = smc_text.replace('**', '<b>').replace('**', '</b>')
+                    response += smc_text
+                except Exception as e:
+                    print(f"SMC analysis error: {e}")
+                    # Continue without SMC if it fails
 
                 # Add signal status
                 response += f"\n⚡ <b>SIGNAL:</b>"

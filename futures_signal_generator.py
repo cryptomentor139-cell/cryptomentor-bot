@@ -288,8 +288,23 @@ Confidence: {confidence:.0f}%
                     
                     coin_name = coin.replace('USDT', '')
                     
+                    # Get SMC compact summary
+                    smc_summary = ""
+                    try:
+                        from smc_analyzer import smc_analyzer
+                        from smc_formatter import format_smc_analysis
+                        
+                        smc_result = smc_analyzer.analyze(coin, '1h', limit=200)
+                        smc_summary = format_smc_analysis(smc_result, compact=True)
+                    except Exception as e:
+                        print(f"SMC error for {coin}: {e}")
+                        smc_summary = ""
+                    
                     signals_text += f"{idx}. {coin_name} {emoji_dir} {direction} (Confidence: {conf:.1f}%)\n"
-                    signals_text += f"   Data: {data_quality} | Volume: {volume_status}\n\n"
+                    signals_text += f"   Data: {data_quality} | Volume: {volume_status}\n"
+                    if smc_summary:
+                        signals_text += f"   SMC: {smc_summary}\n"
+                    signals_text += "\n"
                     signals_text += f"🛑 Stop Loss: ${sl:,.2f}\n"
                     signals_text += f"➡️ Entry: ${entry:,.2f}\n"
                     signals_text += f"🎯 TP1: ${tp1:,.2f} ({(tp1/current_price-1)*100:+.1f}%)\n"
