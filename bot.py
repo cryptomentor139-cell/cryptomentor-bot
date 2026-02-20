@@ -1254,14 +1254,24 @@ Trading lebih terarah dengan AI berbasis Supply & Demand (SnD), data real-time B
 🔥 <b>LIFETIME (LIMITED SLOT)</b>
 💰 Rp6.500.000 – Sekali Bayar
 
-🚀 Akses Seumur Hidup + Auto Signal
+🚀 Akses Seumur Hidup + Auto Signal + Automaton Access
 
 <b>Benefit LIFETIME:</b>
 ✔ Semua fitur premium (selamanya)
 ✔ Auto Futures & Spot Signal (SnD Based)
 ✔ Priority Signal (zona terbaik lebih dulu)
+✔ <b>🤖 Automaton Access (GRATIS - senilai Rp2.000.000)</b>
 ✔ Akses SETIAP pembaruan fitur CryptoMentor AI ke depan
 ✔ Tidak ada biaya bulanan / tahunan lagi
+
+🤖 <b>AUTOMATON ACCESS (Add-On)</b>
+💰 Rp2.000.000 – Sekali Bayar
+
+<b>Untuk pengguna Premium (Monthly/2 Bulan/1 Tahun):</b>
+✔ Akses fitur Automaton (AI Trading Agent)
+✔ Spawn autonomous trading agents
+✔ Automated trading 24/7
+✔ <b>GRATIS untuk Lifetime users</b>
 
 💳 <b>METODE PEMBAYARAN</b>
 
@@ -1285,7 +1295,7 @@ Address:
 2️⃣ Kirim bukti pembayaran ke admin: 👉 @BillFarr
 3️⃣ Sertakan informasi berikut:
 
-✅ Paket yang dipilih (Monthly / 2 Bulan / 1 Tahun / Lifetime)
+✅ Paket yang dipilih (Monthly / 2 Bulan / 1 Tahun / Lifetime / Automaton Access)
 ✅ UID Telegram kamu: <code>{user_id}</code>
 
 4️⃣ Akun akan diaktifkan setelah dikonfirmasi admin
@@ -1294,7 +1304,8 @@ Address:
 📊 Signal berbasis Supply & Demand, bukan tebak-tebakan
 🤖 Data 100% dari Binance
 🧠 Cocok untuk pemula hingga advanced
-❌ Tidak menjanjikan profit, fokus probability & risk management"""
+❌ Tidak menjanjikan profit, fokus probability & risk management
+🤖 Automaton: Autonomous AI trading agents (requires premium + access fee)"""
         
         keyboard = [
             [InlineKeyboardButton("📞 Contact Admin", url="https://t.me/BillFarr")],

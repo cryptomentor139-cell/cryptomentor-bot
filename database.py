@@ -2290,3 +2290,38 @@ class Database:
         except Exception as e:
             print(f"Error getting all users: {e}")
             return []
+
+    def has_automaton_access(self, telegram_id):
+        """Check if user has paid for Automaton access"""
+        try:
+            self.cursor.execute("""
+                SELECT automaton_access FROM users WHERE telegram_id = ?
+            """, (telegram_id,))
+            row = self.cursor.fetchone()
+            if row:
+                return bool(row[0])
+            return False
+        except Exception as e:
+            print(f"DB Error (has_automaton_access): {e}")
+            return False
+    
+    def grant_automaton_access(self, telegram_id):
+        """Grant Automaton access to a user (after payment)"""
+        try:
+            self.cursor.execute("""
+                UPDATE users SET automaton_access = 1 WHERE telegram_id = ?
+            """, (telegram_id,))
+            self.conn.commit()
+            
+            # Log the access grant
+            self.log_user_activity(
+                telegram_id,
+                'automaton_access_granted',
+                'Automaton access granted (Rp2,000,000 payment)'
+            )
+            
+            print(f"✅ Granted Automaton access to user {telegram_id}")
+            return True
+        except Exception as e:
+            print(f"DB Error (grant_automaton_access): {e}")
+            return False

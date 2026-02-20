@@ -1,0 +1,18 @@
+# Development files
+node_modules/
+.git/
+.kiro/
+
+# Test files
+**/__tests__/
+*.test.ts
+*.spec.ts
+vitest.config.ts
+
+# Documentation
+*.md
+!README.md
+
+# Local config
+.env
+.env.local
