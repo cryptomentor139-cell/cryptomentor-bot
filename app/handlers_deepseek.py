@@ -94,8 +94,7 @@ async def handle_ai_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         try:
             # Get market data from crypto API
-            from crypto_api import CryptoAPI
-            crypto_api = CryptoAPI()
+            from crypto_api import crypto_api
             
             market_data = crypto_api.get_crypto_price(symbol, force_refresh=True)
             
@@ -286,8 +285,7 @@ async def handle_ai_market_summary(update: Update, context: ContextTypes.DEFAULT
             )
         
         # Get market data for top coins
-        from crypto_api import CryptoAPI
-        crypto_api = CryptoAPI()
+        from crypto_api import crypto_api
         
         top_coins = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'DOT', 'MATIC', 'AVAX']
         market_data_list = []
