@@ -139,8 +139,9 @@ async def admin_add_automaton_credits_command(update: Update, context: ContextTy
                          f"• Jumlah: +{amount:,.0f} credits\n"
                          f"• Balance baru: {new_available:,.0f} credits\n\n"
                          f"📝 Note: {note}\n\n"
-                         f"🤖 Credits ini khusus untuk AI Agent (autonomous trading)\n"
-                         f"Terima kasih! Anda sekarang bisa spawn agent dengan /spawn_agent",
+                         f"🤖 Credits ini khusus untuk AI Agent (autonomous trading)\n\n"
+                         f"🎯 *Langkah Selanjutnya:*\n"
+                         f"Klik tombol *🤖 AI Agent* di menu utama untuk spawn agent Anda!",
                     parse_mode=ParseMode.MARKDOWN
                 )
             except Exception as e:
@@ -190,8 +191,9 @@ async def admin_add_automaton_credits_command(update: Update, context: ContextTy
                          f"• Jumlah: +{amount:,.0f} credits\n"
                          f"• Balance baru: {amount:,.0f} credits\n\n"
                          f"📝 Note: {note}\n\n"
-                         f"🤖 Credits ini khusus untuk AI Agent (autonomous trading)\n"
-                         f"Terima kasih! Anda sekarang bisa spawn agent dengan /spawn_agent",
+                         f"🤖 Credits ini khusus untuk AI Agent (autonomous trading)\n\n"
+                         f"🎯 *Langkah Selanjutnya:*\n"
+                         f"Klik tombol *🤖 AI Agent* di menu utama untuk spawn agent Anda!",
                     parse_mode=ParseMode.MARKDOWN
                 )
             except Exception as e:
