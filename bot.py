@@ -244,7 +244,6 @@ class TelegramBot:
             self.application.add_handler(CommandHandler("withdraw", withdraw_command))
             
             # Register callback handlers for spawn parent selection
-            from telegram.ext import CallbackQueryHandler
             self.application.add_handler(CallbackQueryHandler(
                 handle_spawn_parent_callback,
                 pattern="^spawn_(noparent|parent)_"
