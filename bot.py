@@ -134,16 +134,6 @@ class TelegramBot:
         # Clear all pending user states on bot restart
         await self.clear_all_user_states()
 
-        # Add debug logging for all updates
-        async def log_update(update, context):
-            print(f"📥 UPDATE RECEIVED: {update.update_id}")
-            if update.message:
-                print(f"   Message: {update.message.text}")
-                print(f"   From: {update.message.from_user.first_name}")
-        
-        # Register as first handler to log everything
-        self.application.add_handler(MessageHandler(filters.ALL, log_update), group=-1)
-        
         # Register core command handlers
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("menu", self.menu_command))
