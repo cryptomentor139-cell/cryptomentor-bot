@@ -664,91 +664,153 @@ Type your question about cryptocurrency, trading, or blockchain technology.
 
     async def handle_automaton_spawn(self, query, context):
         """Handle Spawn Agent button - trigger spawn_agent_command"""
-        from app.handlers_automaton import spawn_agent_command
-        
-        # Create a fake Update object to pass to the command handler
-        fake_update = Update(
-            update_id=999999,
-            message=query.message,
-            callback_query=query
-        )
-        fake_update.effective_user = query.from_user
-        fake_update.message = query.message
-        
-        # Call the spawn_agent_command handler
-        await spawn_agent_command(fake_update, context)
+        try:
+            from app.handlers_automaton import spawn_agent_command
+            
+            await query.edit_message_text("⏳ Preparing to spawn agent...")
+            
+            # Create a fake Update object to pass to the command handler
+            fake_update = Update(
+                update_id=999999,
+                message=query.message,
+                callback_query=query
+            )
+            fake_update.effective_user = query.from_user
+            fake_update.effective_chat = query.message.chat
+            fake_update.message = query.message
+            
+            # Call the spawn_agent_command handler
+            await spawn_agent_command(fake_update, context)
+        except Exception as e:
+            print(f"❌ Error in handle_automaton_spawn: {e}")
+            import traceback
+            traceback.print_exc()
+            await query.edit_message_text(
+                f"❌ Error spawning agent: {str(e)[:100]}\n\n"
+                f"Please try using /spawn_agent command directly.",
+                reply_markup=MenuBuilder.build_ai_agent_menu(),
+                parse_mode='MARKDOWN'
+            )
 
     async def handle_automaton_status(self, query, context):
         """Handle Agent Status button - trigger agent_status_command"""
-        from app.handlers_automaton import agent_status_command
-        
-        await query.edit_message_text("⏳ Loading agent status...")
-        
-        # Create a fake Update object
-        fake_update = Update(
-            update_id=999999,
-            message=query.message,
-            callback_query=query
-        )
-        fake_update.effective_user = query.from_user
-        fake_update.message = query.message
-        
-        # Call the agent_status_command handler
-        await agent_status_command(fake_update, context)
+        try:
+            from app.handlers_automaton import agent_status_command
+            
+            await query.edit_message_text("⏳ Loading agent status...")
+            
+            # Create a fake Update object
+            fake_update = Update(
+                update_id=999999,
+                message=query.message,
+                callback_query=query
+            )
+            fake_update.effective_user = query.from_user
+            fake_update.effective_chat = query.message.chat
+            fake_update.message = query.message
+            
+            # Call the agent_status_command handler
+            await agent_status_command(fake_update, context)
+        except Exception as e:
+            print(f"❌ Error in handle_automaton_status: {e}")
+            import traceback
+            traceback.print_exc()
+            await query.edit_message_text(
+                f"❌ Error loading agent status: {str(e)[:100]}\n\n"
+                f"Please try using /agent_status command directly.",
+                reply_markup=MenuBuilder.build_ai_agent_menu(),
+                parse_mode='MARKDOWN'
+            )
 
     async def handle_automaton_deposit(self, query, context):
         """Handle Fund Agent button - trigger deposit_command"""
-        from app.handlers_automaton import deposit_command
-        
-        await query.edit_message_text("⏳ Loading deposit information...")
-        
-        # Create a fake Update object
-        fake_update = Update(
-            update_id=999999,
-            message=query.message,
-            callback_query=query
-        )
-        fake_update.effective_user = query.from_user
-        fake_update.message = query.message
-        
-        # Call the deposit_command handler
-        await deposit_command(fake_update, context)
+        try:
+            from app.handlers_automaton import deposit_command
+            
+            await query.edit_message_text("⏳ Loading deposit information...")
+            
+            # Create a fake Update object
+            fake_update = Update(
+                update_id=999999,
+                message=query.message,
+                callback_query=query
+            )
+            fake_update.effective_user = query.from_user
+            fake_update.effective_chat = query.message.chat
+            fake_update.message = query.message
+            
+            # Call the deposit_command handler
+            await deposit_command(fake_update, context)
+        except Exception as e:
+            print(f"❌ Error in handle_automaton_deposit: {e}")
+            import traceback
+            traceback.print_exc()
+            await query.edit_message_text(
+                f"❌ Error loading deposit info: {str(e)[:100]}\n\n"
+                f"Please try using /deposit command directly.",
+                reply_markup=MenuBuilder.build_ai_agent_menu(),
+                parse_mode='MARKDOWN'
+            )
 
     async def handle_automaton_logs(self, query, context):
         """Handle Agent Logs button - trigger agent_logs_command"""
-        from app.handlers_automaton import agent_logs_command
-        
-        await query.edit_message_text("⏳ Loading agent logs...")
-        
-        # Create a fake Update object
-        fake_update = Update(
-            update_id=999999,
-            message=query.message,
-            callback_query=query
-        )
-        fake_update.effective_user = query.from_user
-        fake_update.message = query.message
-        
-        # Call the agent_logs_command handler
-        await agent_logs_command(fake_update, context)
+        try:
+            from app.handlers_automaton import agent_logs_command
+            
+            await query.edit_message_text("⏳ Loading agent logs...")
+            
+            # Create a fake Update object
+            fake_update = Update(
+                update_id=999999,
+                message=query.message,
+                callback_query=query
+            )
+            fake_update.effective_user = query.from_user
+            fake_update.effective_chat = query.message.chat
+            fake_update.message = query.message
+            
+            # Call the agent_logs_command handler
+            await agent_logs_command(fake_update, context)
+        except Exception as e:
+            print(f"❌ Error in handle_automaton_logs: {e}")
+            import traceback
+            traceback.print_exc()
+            await query.edit_message_text(
+                f"❌ Error loading agent logs: {str(e)[:100]}\n\n"
+                f"Please try using /agent_logs command directly.",
+                reply_markup=MenuBuilder.build_ai_agent_menu(),
+                parse_mode='MARKDOWN'
+            )
 
     async def handle_agent_lineage(self, query, context):
         """Handle Agent Lineage button - trigger agent_lineage_command"""
-        from app.handlers_automaton import agent_lineage_command
-        
-        await query.edit_message_text("⏳ Loading lineage tree...")
-        
-        # Create a fake Update object
-        fake_update = Update(
-            update_id=999999,
-            message=query.message,
-            callback_query=query
-        )
-        fake_update.effective_user = query.from_user
-        fake_update.message = query.message
-        
-        # Call the agent_lineage_command handler
-        await agent_lineage_command(fake_update, context)
+        try:
+            from app.handlers_automaton import agent_lineage_command
+            
+            await query.edit_message_text("⏳ Loading lineage tree...")
+            
+            # Create a fake Update object
+            fake_update = Update(
+                update_id=999999,
+                message=query.message,
+                callback_query=query
+            )
+            fake_update.effective_user = query.from_user
+            fake_update.effective_chat = query.message.chat
+            fake_update.message = query.message
+            
+            # Call the agent_lineage_command handler
+            await agent_lineage_command(fake_update, context)
+        except Exception as e:
+            print(f"❌ Error in handle_agent_lineage: {e}")
+            import traceback
+            traceback.print_exc()
+            await query.edit_message_text(
+                f"❌ Error loading lineage tree: {str(e)[:100]}\n\n"
+                f"Please try using /agent_lineage command directly.",
+                reply_markup=MenuBuilder.build_ai_agent_menu(),
+                parse_mode='MARKDOWN'
+            )
 
     async def handle_change_language(self, query, context):
         """Handle language change with interactive buttons"""
