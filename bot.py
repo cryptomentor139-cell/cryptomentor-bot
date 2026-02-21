@@ -2628,6 +2628,37 @@ Choose action:
                 )
                 return
 
+        # Handle agent name input for spawn_agent
+        if user_data.get('awaiting_agent_name') and user_data.get('action') == 'spawn_agent':
+            agent_name = text.strip()
+            
+            # Clear the awaiting state
+            user_data.pop('awaiting_agent_name', None)
+            user_data.pop('action', None)
+            user_data.pop('state_timestamp', None)
+            
+            try:
+                # Import spawn agent handler
+                from app.handlers_automaton import spawn_agent_command
+                
+                # Create fake context with args (agent name)
+                context.args = agent_name.split()  # Split in case of multi-word names
+                
+                # Call the spawn agent command
+                await spawn_agent_command(update, context)
+                return
+                
+            except Exception as e:
+                print(f"❌ Error spawning agent: {e}")
+                import traceback
+                traceback.print_exc()
+                await update.message.reply_text(
+                    f"❌ Error: {str(e)[:100]}\n\n"
+                    f"Silakan coba lagi dengan /spawn_agent <nama_agent>",
+                    parse_mode='Markdown'
+                )
+                return
+
         # Handle admin inputs
         awaiting = user_data.get('awaiting_input')
         if awaiting == 'admin_broadcast':

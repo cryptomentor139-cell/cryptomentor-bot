@@ -666,6 +666,7 @@ Type your question about cryptocurrency, trading, or blockchain technology.
         """Handle Spawn Agent button - direct command execution"""
         try:
             from app.handlers_automaton import spawn_agent_command
+            from datetime import datetime
             
             # Answer callback first
             await query.answer()
@@ -677,9 +678,10 @@ Type your question about cryptocurrency, trading, or blockchain technology.
                 parse_mode='MARKDOWN'
             )
             
-            # Set context for next message
+            # Set context for next message with timestamp
             context.user_data['awaiting_agent_name'] = True
             context.user_data['action'] = 'spawn_agent'
+            context.user_data['state_timestamp'] = datetime.utcnow().isoformat()
             
         except Exception as e:
             print(f"❌ Error in handle_automaton_spawn: {e}")
@@ -702,7 +704,7 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             
             # Create proper Update object with message
             fake_update = Update(
-                update_id=query.update.update_id,
+                update_id=999999,
                 message=query.message
             )
             fake_update.effective_user = query.from_user
@@ -732,7 +734,7 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             
             # Create proper Update object
             fake_update = Update(
-                update_id=query.update.update_id,
+                update_id=999999,
                 message=query.message
             )
             fake_update.effective_user = query.from_user
@@ -762,7 +764,7 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             
             # Create proper Update object
             fake_update = Update(
-                update_id=query.update.update_id,
+                update_id=999999,
                 message=query.message
             )
             fake_update.effective_user = query.from_user
@@ -792,7 +794,7 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             
             # Create proper Update object
             fake_update = Update(
-                update_id=query.update.update_id,
+                update_id=999999,
                 message=query.message
             )
             fake_update.effective_user = query.from_user
