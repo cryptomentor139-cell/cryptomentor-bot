@@ -93,6 +93,10 @@ class MenuCallbackHandler:
                 await self.handle_automaton_deposit(query, context)
             elif callback_data == AUTOMATON_LOGS:
                 await self.handle_automaton_logs(query, context)
+            elif callback_data == "automaton_first_deposit":
+                await self.handle_automaton_first_deposit(query, context)
+            elif callback_data == "deposit_guide":
+                await self.handle_deposit_guide(query, context)
             elif callback_data == CHANGE_LANGUAGE:
                 await self.handle_change_language(query, context)
             elif callback_data == "copy_referral_link":
@@ -219,17 +223,122 @@ class MenuCallbackHandler:
         )
 
     async def show_ai_agent_menu(self, query, context):
-        """Show AI Agent submenu"""
+        """Show AI Agent submenu with deposit check"""
         user_id = query.from_user.id
         from database import Database
         db = Database()
         user_lang = db.get_user_language(user_id)
         
-        await query.edit_message_text(
-            get_menu_text(AI_AGENT_MENU, user_lang),
-            reply_markup=MenuBuilder.build_ai_agent_menu(),
-            parse_mode='MARKDOWN'
-        )
+        # Check if user has made deposit (check new centralized wallet tables)
+        has_deposit = False
+        try:
+            if db.supabase_enabled:
+                # Check user_credits_balance table for any credits
+                credits_result = db.supabase_service.table('user_credits_balance')\
+                    .select('available_credits, total_conway_credits')\
+                    .eq('user_id', user_id)\
+                    .execute()
+                
+                if credits_result.data:
+                    balance = credits_result.data[0]
+                    available_credits = float(balance.get('available_credits', 0))
+                    total_credits = float(balance.get('total_conway_credits', 0))
+                    
+                    # User has deposit if they have any credits
+                    has_deposit = (available_credits > 0 or total_credits > 0)
+        except Exception as e:
+            print(f"Error checking deposit status: {e}")
+            # Fallback: check old custodial_wallets table for backward compatibility
+            try:
+                wallet_result = db.supabase_service.table('custodial_wallets')\
+                    .select('balance_usdc, conway_credits')\
+                    .eq('user_id', user_id)\
+                    .execute()
+                
+                if wallet_result.data:
+                    wallet = wallet_result.data[0]
+                    balance_usdc = float(wallet.get('balance_usdc', 0))
+                    conway_credits = float(wallet.get('conway_credits', 0))
+                    has_deposit = (balance_usdc > 0 or conway_credits > 0)
+            except:
+                pass
+        
+        # If no deposit, show deposit-first menu
+        if not has_deposit:
+            if user_lang == 'id':
+                welcome_text = """🤖 **Selamat Datang di AI Agent!**
+
+💡 **Apa itu AI Agent?**
+AI Agent adalah autonomous trading agent yang menggunakan Conway credits sebagai bahan bakar untuk beroperasi.
+
+⚠️ **Deposit Diperlukan**
+Untuk menggunakan fitur AI Agent, Anda perlu melakukan deposit terlebih dahulu.
+
+💰 **Cara Deposit:**
+1. Klik tombol "💰 Deposit Sekarang" di bawah
+2. Deposit USDT/USDC ke address yang diberikan
+3. Credits akan otomatis ditambahkan setelah 12 konfirmasi
+4. Setelah deposit, Anda bisa spawn agent dan mulai trading!
+
+📊 **Conversion Rate:**
+• 1 USDT = 100 Conway Credits
+• 1 USDC = 100 Conway Credits
+
+🌐 **Supported Networks:**
+• Polygon (Recommended - Low fees)
+• Base
+• Arbitrum
+
+💡 **Minimum Deposit:** 5 USDT/USDC"""
+            else:
+                welcome_text = """🤖 **Welcome to AI Agent!**
+
+💡 **What is AI Agent?**
+AI Agent is an autonomous trading agent that uses Conway credits as fuel to operate.
+
+⚠️ **Deposit Required**
+To use AI Agent features, you need to make a deposit first.
+
+💰 **How to Deposit:**
+1. Click "💰 Deposit Now" button below
+2. Deposit USDT/USDC to the provided address
+3. Credits will be automatically added after 12 confirmations
+4. After deposit, you can spawn agents and start trading!
+
+📊 **Conversion Rate:**
+• 1 USDT = 100 Conway Credits
+• 1 USDC = 100 Conway Credits
+
+🌐 **Supported Networks:**
+• Polygon (Recommended - Low fees)
+• Base
+• Arbitrum
+
+💡 **Minimum Deposit:** 5 USDT/USDC"""
+            
+            # Build deposit-first menu
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [
+                [InlineKeyboardButton("💰 Deposit Sekarang" if user_lang == 'id' else "💰 Deposit Now", 
+                                     callback_data="automaton_first_deposit")],
+                [InlineKeyboardButton("❓ Cara Deposit" if user_lang == 'id' else "❓ How to Deposit", 
+                                     callback_data="deposit_guide")],
+                [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
+                                     callback_data=MAIN_MENU)]
+            ]
+            
+            await query.edit_message_text(
+                welcome_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='MARKDOWN'
+            )
+        else:
+            # User has deposit, show full menu
+            await query.edit_message_text(
+                get_menu_text(AI_AGENT_MENU, user_lang),
+                reply_markup=MenuBuilder.build_ai_agent_menu(),
+                parse_mode='MARKDOWN'
+            )
 
     async def show_settings_menu(self, query, context):
         """Show settings submenu"""
@@ -2243,6 +2352,308 @@ Anda dapat mengajukan withdrawal lagi."""
         except Exception as e:
             print(f"Error setting language: {e}")
             await query.answer("❌ Error mengubah bahasa. Silakan coba lagi." if lang_code == 'id' else "❌ Error updating language. Please try again.", show_alert=True)
+
+    async def handle_automaton_first_deposit(self, query, context):
+        """
+        Handle first deposit flow for AI Agent access - CENTRALIZED WALLET
+        
+        Shows centralized wallet address for deposits. All users deposit to the same wallet
+        which is connected to Conway Dashboard for automatic credit conversion.
+        """
+        user_id = query.from_user.id
+        from database import Database
+        db = Database()
+        user_lang = db.get_user_language(user_id)
+        
+        try:
+            # Check if Supabase is enabled
+            if not db.supabase_enabled:
+                error_msg = "❌ Database tidak tersedia. Silakan coba lagi nanti." if user_lang == 'id' else "❌ Database unavailable. Please try again later."
+                await query.edit_message_text(error_msg, parse_mode='MARKDOWN')
+                return
+            
+            # Get centralized wallet address from environment
+            import os
+            centralized_wallet = os.getenv('CENTRALIZED_WALLET_ADDRESS', '0x63116672bef9f26fd906cd2a57550f7a13925822')
+            
+            # Record that user clicked deposit button (pending deposit)
+            try:
+                # Check if user already has pending deposit
+                existing = db.supabase_service.table('pending_deposits')\
+                    .select('*')\
+                    .eq('user_id', user_id)\
+                    .execute()
+                
+                if not existing.data:
+                    # Create new pending deposit record
+                    db.supabase_service.table('pending_deposits').insert({
+                        'user_id': user_id,
+                        'telegram_username': query.from_user.username,
+                        'telegram_first_name': query.from_user.first_name,
+                        'status': 'waiting'
+                    }).execute()
+                    print(f"✅ Created pending deposit record for user {user_id}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not create pending deposit record: {e}")
+                # Continue anyway, this is not critical
+            
+            # Generate QR code URL
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={centralized_wallet}"
+            
+            # Format deposit instructions based on language
+            if user_lang == 'id':
+                deposit_text = f"""💰 **Deposit USDT/USDC**
+
+📍 **Alamat Deposit (Semua User):**
+`{centralized_wallet}`
+
+📱 **QR Code:**
+[Klik untuk melihat QR Code]({qr_url})
+
+🌐 **Network yang Didukung:**
+• Polygon (Direkomendasikan - Biaya rendah)
+• Base
+• Arbitrum
+
+💱 **Conversion Rate:**
+• 1 USDT = 100 Conway Credits
+• 1 USDC = 100 Conway Credits
+
+📊 **Contoh:**
+• Deposit 5 USDT = 500 Conway Credits
+• Deposit 10 USDC = 1,000 Conway Credits
+• Deposit 50 USDT = 5,000 Conway Credits
+
+⚠️ **Penting:**
+• Minimum deposit: 5 USDT/USDC
+• Hanya kirim USDT atau USDC
+• JANGAN kirim token lain
+• Credits akan ditambahkan otomatis setelah 12 konfirmasi
+
+🔄 **Cara Kerja:**
+1. Kirim USDT/USDC ke address di atas
+2. Conway Dashboard akan detect deposit Anda
+3. Credits otomatis masuk ke akun Anda
+4. Cek balance di menu "📊 Agent Status"
+
+💡 **Tip:** Gunakan network Polygon untuk biaya gas terendah!"""
+            else:
+                deposit_text = f"""💰 **Deposit USDT/USDC**
+
+📍 **Deposit Address (All Users):**
+`{centralized_wallet}`
+
+📱 **QR Code:**
+[Click to view QR Code]({qr_url})
+
+🌐 **Supported Networks:**
+• Polygon (Recommended - Low fees)
+• Base
+• Arbitrum
+
+💱 **Conversion Rate:**
+• 1 USDT = 100 Conway Credits
+• 1 USDC = 100 Conway Credits
+
+📊 **Examples:**
+• Deposit 5 USDT = 500 Conway Credits
+• Deposit 10 USDC = 1,000 Conway Credits
+• Deposit 50 USDT = 5,000 Conway Credits
+
+⚠️ **Important:**
+• Minimum deposit: 5 USDT/USDC
+• Only send USDT or USDC
+• DO NOT send other tokens
+• Credits will be added automatically after 12 confirmations
+
+🔄 **How it Works:**
+1. Send USDT/USDC to the address above
+2. Conway Dashboard will detect your deposit
+3. Credits automatically added to your account
+4. Check balance in "📊 Agent Status" menu
+
+💡 **Tip:** Use Polygon network for lowest gas fees!"""
+            
+            # Build keyboard with back button
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [
+                [InlineKeyboardButton("❓ Cara Deposit" if user_lang == 'id' else "❓ How to Deposit", 
+                                     callback_data="deposit_guide")],
+                [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
+                                     callback_data=AI_AGENT_MENU)]
+            ]
+            
+            await query.edit_message_text(
+                deposit_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='MARKDOWN'
+            )
+            
+        except Exception as e:
+            print(f"❌ Error in handle_automaton_first_deposit: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            error_msg = f"❌ Terjadi kesalahan. Silakan coba lagi atau hubungi support." if user_lang == 'id' else f"❌ Error occurred. Please try again or contact support."
+            
+            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
+            await query.edit_message_text(
+                error_msg,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='MARKDOWN'
+            )
+
+    async def handle_deposit_guide(self, query, context):
+        """
+        Display comprehensive deposit guide
+        
+        Shows step-by-step instructions, supported networks, conversion rates,
+        minimum deposit, and troubleshooting tips.
+        """
+        user_id = query.from_user.id
+        from database import Database
+        db = Database()
+        user_lang = db.get_user_language(user_id)
+        
+        try:
+            # Format guide based on language
+            if user_lang == 'id':
+                guide_text = """❓ **Panduan Deposit USDT/USDC**
+
+📋 **Langkah-langkah Deposit:**
+
+1️⃣ **Klik "💰 Deposit Sekarang"**
+   • Anda akan menerima alamat wallet unik
+   • Salin alamat atau scan QR code
+
+2️⃣ **Pilih Network**
+   • Polygon (Direkomendasikan - Biaya rendah ~$0.01)
+   • Base (Biaya sedang ~$0.05)
+   • Arbitrum (Biaya sedang ~$0.10)
+
+3️⃣ **Kirim USDT atau USDC**
+   • Minimum: 5 USDT/USDC
+   • Gunakan wallet Anda (MetaMask, Trust Wallet, dll)
+   • Pastikan network yang dipilih SAMA
+
+4️⃣ **Tunggu Konfirmasi**
+   • 12 konfirmasi blockchain (~5-10 menit)
+   • Conway credits otomatis ditambahkan
+   • Cek balance dengan klik "📊 Agent Status"
+
+💱 **Conversion Rate:**
+• 1 USDT = 100 Conway Credits
+• 1 USDC = 100 Conway Credits
+
+🌐 **Network yang Didukung:**
+• ✅ Polygon (Recommended)
+• ✅ Base
+• ✅ Arbitrum
+• ❌ Ethereum Mainnet (Biaya terlalu tinggi)
+• ❌ BSC (Tidak didukung)
+
+⚠️ **Troubleshooting:**
+
+**Q: Deposit belum masuk?**
+A: Tunggu 12 konfirmasi (~10 menit). Cek di blockchain explorer.
+
+**Q: Salah network?**
+A: Dana akan hilang! Pastikan network yang benar.
+
+**Q: Minimum deposit?**
+A: 5 USDT/USDC. Deposit di bawah ini tidak akan diproses.
+
+**Q: Berapa lama proses?**
+A: 5-10 menit setelah transaksi dikonfirmasi.
+
+💡 **Tips:**
+• Selalu cek alamat sebelum kirim
+• Gunakan Polygon untuk biaya terendah
+• Test dengan jumlah kecil dulu
+• Simpan transaction hash untuk tracking"""
+            else:
+                guide_text = """❓ **USDT/USDC Deposit Guide**
+
+📋 **Deposit Steps:**
+
+1️⃣ **Click "💰 Deposit Now"**
+   • You'll receive a unique wallet address
+   • Copy address or scan QR code
+
+2️⃣ **Select Network**
+   • Polygon (Recommended - Low fees ~$0.01)
+   • Base (Medium fees ~$0.05)
+   • Arbitrum (Medium fees ~$0.10)
+
+3️⃣ **Send USDT or USDC**
+   • Minimum: 5 USDT/USDC
+   • Use your wallet (MetaMask, Trust Wallet, etc)
+   • Make sure network matches
+
+4️⃣ **Wait for Confirmation**
+   • 12 blockchain confirmations (~5-10 minutes)
+   • Conway credits added automatically
+   • Check balance via "📊 Agent Status"
+
+💱 **Conversion Rate:**
+• 1 USDT = 100 Conway Credits
+• 1 USDC = 100 Conway Credits
+
+🌐 **Supported Networks:**
+• ✅ Polygon (Recommended)
+• ✅ Base
+• ✅ Arbitrum
+• ❌ Ethereum Mainnet (Fees too high)
+• ❌ BSC (Not supported)
+
+⚠️ **Troubleshooting:**
+
+**Q: Deposit not received?**
+A: Wait for 12 confirmations (~10 minutes). Check blockchain explorer.
+
+**Q: Wrong network?**
+A: Funds will be lost! Make sure to use correct network.
+
+**Q: Minimum deposit?**
+A: 5 USDT/USDC. Deposits below this won't be processed.
+
+**Q: How long does it take?**
+A: 5-10 minutes after transaction is confirmed.
+
+💡 **Tips:**
+• Always verify address before sending
+• Use Polygon for lowest fees
+• Test with small amount first
+• Save transaction hash for tracking"""
+            
+            # Build keyboard
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [
+                [InlineKeyboardButton("💰 Deposit Sekarang" if user_lang == 'id' else "💰 Deposit Now", 
+                                     callback_data="automaton_first_deposit")],
+                [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
+                                     callback_data=AI_AGENT_MENU)]
+            ]
+            
+            await query.edit_message_text(
+                guide_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='MARKDOWN'
+            )
+            
+        except Exception as e:
+            print(f"❌ Error in handle_deposit_guide: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            error_msg = "❌ Terjadi kesalahan. Silakan coba lagi." if user_lang == 'id' else "❌ An error occurred. Please try again."
+            
+            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
+            await query.edit_message_text(
+                error_msg,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='MARKDOWN'
+            )
 
 
 def register_menu_handlers(application, bot_instance):
