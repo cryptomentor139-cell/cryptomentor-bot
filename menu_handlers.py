@@ -2478,11 +2478,18 @@ Anda dapat mengajukan withdrawal lagi."""
             if user_lang == 'id':
                 deposit_text = f"""💰 **Deposit USDC (Base Network)**
 
-📍 **Alamat Deposit:**
+🎯 **TUJUAN TRANSFER:**
+📍 **Address Tujuan:**
 `{centralized_wallet}`
 
 📱 **QR Code:**
 [Klik untuk melihat QR Code]({qr_url})
+
+⚠️ **PENTING - Baca Sebelum Transfer:**
+• Kirim USDC ke address di atas
+• HANYA gunakan Base Network
+• Credits akan OTOMATIS masuk setelah 12 konfirmasi
+• Sistem akan detect deposit Anda secara otomatis
 
 🌐 **Network:**
 • Base Network (WAJIB)
@@ -2497,36 +2504,42 @@ Anda dapat mengajukan withdrawal lagi."""
 • Spawn fee: 100.000 credits
 • Total dibutuhkan: ~$1.030 USDC
 
-⚠️ **Penting:**
-• Minimum deposit: $30 USDC
-• HANYA gunakan Base Network
-• HANYA kirim USDC (bukan USDT atau token lain)
-• Credits akan ditambahkan otomatis setelah 12 konfirmasi
-
-🔄 **Cara Kerja:**
-1. Kirim USDC (Base Network) ke address di atas
-2. Conway Dashboard akan detect deposit Anda
-3. Credits otomatis masuk ke akun Anda
-4. Cek balance dengan /agent_status
+🔄 **Cara Kerja Auto-Credit:**
+1. Anda kirim USDC (Base Network) ke address di atas
+2. Conway Dashboard monitor blockchain secara real-time
+3. Setelah 12 konfirmasi (~5-10 menit), sistem detect deposit Anda
+4. Credits OTOMATIS ditambahkan ke akun Anda
+5. Anda akan menerima notifikasi saat credits masuk
+6. Cek balance dengan /agent_status
 
 💡 **Langkah-langkah Deposit:**
-1. Buka wallet Anda (MetaMask, Trust Wallet, dll)
-2. Pastikan network: Base
-3. Kirim minimal $30 USDC ke address di atas
-4. Tunggu 12 konfirmasi (~5-10 menit)
-5. Credits akan otomatis masuk
+1. Copy address di atas atau scan QR code
+2. Buka wallet Anda (MetaMask, Trust Wallet, dll)
+3. Pastikan network: Base
+4. Kirim minimal $30 USDC ke address di atas
+5. Tunggu 12 konfirmasi (~5-10 menit)
+6. Credits akan OTOMATIS masuk ke akun Anda
 
 ⚡ **Catatan:**
 • Admin & Lifetime Premium juga perlu deposit $30
-• Setelah deposit $30, Anda bisa spawn agent"""
+• Setelah deposit $30, Anda bisa spawn agent
+• JANGAN kirim ke network lain (dana akan hilang!)
+• Simpan transaction hash untuk tracking"""
             else:
                 deposit_text = f"""💰 **Deposit USDC (Base Network)**
 
-📍 **Deposit Address:**
+🎯 **TRANSFER DESTINATION:**
+📍 **Destination Address:**
 `{centralized_wallet}`
 
 📱 **QR Code:**
 [Click to view QR Code]({qr_url})
+
+⚠️ **IMPORTANT - Read Before Transfer:**
+• Send USDC to the address above
+• ONLY use Base Network
+• Credits will be AUTOMATICALLY added after 12 confirmations
+• System will detect your deposit automatically
 
 🌐 **Network:**
 • Base Network (REQUIRED)
@@ -2541,28 +2554,27 @@ Anda dapat mengajukan withdrawal lagi."""
 • Spawn fee: 100,000 credits
 • Total needed: ~$1,030 USDC
 
-⚠️ **Important:**
-• Minimum deposit: $30 USDC
-• ONLY use Base Network
-• ONLY send USDC (not USDT or other tokens)
-• Credits will be added automatically after 12 confirmations
-
-🔄 **How it Works:**
-1. Send USDC (Base Network) to the address above
-2. Conway Dashboard will detect your deposit
-3. Credits automatically added to your account
-4. Check balance with /agent_status
+🔄 **How Auto-Credit Works:**
+1. You send USDC (Base Network) to the address above
+2. Conway Dashboard monitors blockchain in real-time
+3. After 12 confirmations (~5-10 minutes), system detects your deposit
+4. Credits are AUTOMATICALLY added to your account
+5. You will receive notification when credits arrive
+6. Check balance with /agent_status
 
 💡 **Deposit Steps:**
-1. Open your wallet (MetaMask, Trust Wallet, etc)
-2. Make sure network: Base
-3. Send minimum $30 USDC to the address above
-4. Wait for 12 confirmations (~5-10 minutes)
-5. Credits will be automatically added
+1. Copy address above or scan QR code
+2. Open your wallet (MetaMask, Trust Wallet, etc)
+3. Make sure network: Base
+4. Send minimum $30 USDC to the address above
+5. Wait for 12 confirmations (~5-10 minutes)
+6. Credits will be AUTOMATICALLY added to your account
 
 ⚡ **Notes:**
 • Admin & Lifetime Premium also need $30 deposit
-• After $30 deposit, you can spawn agent"""
+• After $30 deposit, you can spawn agent
+• DO NOT send to other networks (funds will be lost!)
+• Save transaction hash for tracking"""
             
             # Build keyboard with back button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -2749,10 +2761,10 @@ A: NO. Only USDC is supported.
             # Build keyboard
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             keyboard = [
-                [InlineKeyboardButton("💰 Deposit Sekarang" if user_lang == 'id' else "💰 Deposit Now", 
+                [InlineKeyboardButton("🔙 Kembali ke Deposit" if user_lang == 'id' else "🔙 Back to Deposit", 
                                      callback_data="automaton_first_deposit")],
-                [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
-                                     callback_data=AI_AGENT_MENU)]
+                [InlineKeyboardButton("🏠 Menu Utama" if user_lang == 'id' else "🏠 Main Menu", 
+                                     callback_data=MAIN_MENU)]
             ]
             
             await query.edit_message_text(
