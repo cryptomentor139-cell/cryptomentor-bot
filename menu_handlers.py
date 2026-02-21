@@ -257,8 +257,38 @@ class MenuCallbackHandler:
         """Show AI Agent submenu with deposit check"""
         user_id = query.from_user.id
         from database import Database
+        from app.admin_status import is_admin
         db = Database()
         user_lang = db.get_user_language(user_id)
+        
+        # BYPASS for admin and lifetime premium users
+        is_admin_user = is_admin(user_id)
+        is_lifetime = False
+        
+        try:
+            if db.supabase_enabled:
+                from supabase_client import supabase
+                if supabase:
+                    user_result = supabase.table('users')\
+                        .select('premium_tier')\
+                        .eq('user_id', user_id)\
+                        .execute()
+                    
+                    if user_result.data:
+                        premium_tier = user_result.data[0].get('premium_tier', '')
+                        is_lifetime = (premium_tier == 'lifetime')
+        except Exception as e:
+            print(f"⚠️ Error checking premium tier: {e}")
+        
+        # Admin and Lifetime Premium users bypass deposit check
+        if is_admin_user or is_lifetime:
+            print(f"✅ User {user_id} bypassed deposit check (admin={is_admin_user}, lifetime={is_lifetime})")
+            await query.edit_message_text(
+                get_menu_text(AI_AGENT_MENU, user_lang),
+                reply_markup=MenuBuilder.build_ai_agent_menu(),
+                parse_mode='MARKDOWN'
+            )
+            return
         
         # Check if user has made deposit (check new centralized wallet tables)
         has_deposit = False
