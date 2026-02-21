@@ -2477,11 +2477,11 @@ Anda dapat mengajukan withdrawal lagi."""
             # Generate QR code URL
             qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={centralized_wallet}"
             
-            # Format deposit instructions based on language
+            # Format deposit instructions based on language (Updated: $30 minimum, Base only)
             if user_lang == 'id':
-                deposit_text = f"""💰 **Deposit USDC**
+                deposit_text = f"""💰 **Deposit USDC (Base Network)**
 
-📍 **Alamat Deposit (Semua User):**
+📍 **Alamat Deposit:**
 `{centralized_wallet}`
 
 📱 **QR Code:**
@@ -2489,32 +2489,43 @@ Anda dapat mengajukan withdrawal lagi."""
 
 🌐 **Network:**
 • Base Network (WAJIB)
+• Biaya gas rendah (~$0.01)
 
 💱 **Conversion Rate:**
 • 1 USDC = 100 Conway Credits
+• $30 USDC = 3.000 Credits
 
-📊 **Contoh:**
-• Deposit 5 USDC = 500 Conway Credits
-• Deposit 10 USDC = 1,000 Conway Credits
-• Deposit 50 USDC = 5,000 Conway Credits
+📊 **Minimum untuk Spawn Agent:**
+• Deposit minimum: $30 USDC (3.000 credits)
+• Spawn fee: 100.000 credits
+• Total dibutuhkan: ~$1.030 USDC
 
 ⚠️ **Penting:**
-• Minimum deposit: 5 USDC
-• Hanya kirim USDC di Base Network
-• JANGAN kirim token lain atau network lain
+• Minimum deposit: $30 USDC
+• HANYA gunakan Base Network
+• HANYA kirim USDC (bukan USDT atau token lain)
 • Credits akan ditambahkan otomatis setelah 12 konfirmasi
 
 🔄 **Cara Kerja:**
 1. Kirim USDC (Base Network) ke address di atas
 2. Conway Dashboard akan detect deposit Anda
 3. Credits otomatis masuk ke akun Anda
-4. Cek balance di menu "📊 Agent Status"
+4. Cek balance dengan /agent_status
 
-💡 **Tip:** Pastikan Anda menggunakan Base Network saat mengirim USDC!"""
+💡 **Langkah-langkah Deposit:**
+1. Buka wallet Anda (MetaMask, Trust Wallet, dll)
+2. Pastikan network: Base
+3. Kirim minimal $30 USDC ke address di atas
+4. Tunggu 12 konfirmasi (~5-10 menit)
+5. Credits akan otomatis masuk
+
+⚡ **Catatan:**
+• Admin & Lifetime Premium juga perlu deposit $30
+• Setelah deposit $30, Anda bisa spawn agent"""
             else:
-                deposit_text = f"""💰 **Deposit USDC**
+                deposit_text = f"""💰 **Deposit USDC (Base Network)**
 
-📍 **Deposit Address (All Users):**
+📍 **Deposit Address:**
 `{centralized_wallet}`
 
 📱 **QR Code:**
@@ -2522,28 +2533,39 @@ Anda dapat mengajukan withdrawal lagi."""
 
 🌐 **Network:**
 • Base Network (REQUIRED)
+• Low gas fees (~$0.01)
 
 💱 **Conversion Rate:**
 • 1 USDC = 100 Conway Credits
+• $30 USDC = 3,000 Credits
 
-📊 **Examples:**
-• Deposit 5 USDC = 500 Conway Credits
-• Deposit 10 USDC = 1,000 Conway Credits
-• Deposit 50 USDC = 5,000 Conway Credits
+📊 **Minimum for Spawn Agent:**
+• Minimum deposit: $30 USDC (3,000 credits)
+• Spawn fee: 100,000 credits
+• Total needed: ~$1,030 USDC
 
 ⚠️ **Important:**
-• Minimum deposit: 5 USDC
-• Only send USDC on Base Network
-• DO NOT send other tokens or networks
+• Minimum deposit: $30 USDC
+• ONLY use Base Network
+• ONLY send USDC (not USDT or other tokens)
 • Credits will be added automatically after 12 confirmations
 
 🔄 **How it Works:**
 1. Send USDC (Base Network) to the address above
 2. Conway Dashboard will detect your deposit
 3. Credits automatically added to your account
-4. Check balance in "📊 Agent Status" menu
+4. Check balance with /agent_status
 
-💡 **Tip:** Make sure you use Base Network when sending USDC!"""
+💡 **Deposit Steps:**
+1. Open your wallet (MetaMask, Trust Wallet, etc)
+2. Make sure network: Base
+3. Send minimum $30 USDC to the address above
+4. Wait for 12 confirmations (~5-10 minutes)
+5. Credits will be automatically added
+
+⚡ **Notes:**
+• Admin & Lifetime Premium also need $30 deposit
+• After $30 deposit, you can spawn agent"""
             
             # Build keyboard with back button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -2587,115 +2609,145 @@ Anda dapat mengajukan withdrawal lagi."""
         user_lang = db.get_user_language(user_id)
         
         try:
-            # Format guide based on language
+            # Format guide based on language (Updated: $30 minimum, Base only)
             if user_lang == 'id':
-                guide_text = """❓ **Panduan Deposit USDT/USDC**
+                guide_text = """❓ **Panduan Deposit USDC (Base Network)**
 
 📋 **Langkah-langkah Deposit:**
 
 1️⃣ **Klik "💰 Deposit Sekarang"**
-   • Anda akan menerima alamat wallet unik
+   • Anda akan menerima alamat wallet
    • Salin alamat atau scan QR code
 
-2️⃣ **Pilih Network**
-   • Polygon (Direkomendasikan - Biaya rendah ~$0.01)
-   • Base (Biaya sedang ~$0.05)
-   • Arbitrum (Biaya sedang ~$0.10)
+2️⃣ **Pilih Network: Base**
+   • HANYA gunakan Base Network
+   • Biaya gas rendah (~$0.01)
+   • Network lain TIDAK didukung
 
-3️⃣ **Kirim USDT atau USDC**
-   • Minimum: 5 USDT/USDC
+3️⃣ **Kirim USDC**
+   • Minimum: $30 USDC (untuk spawn agent)
+   • HANYA USDC (bukan USDT atau token lain)
    • Gunakan wallet Anda (MetaMask, Trust Wallet, dll)
-   • Pastikan network yang dipilih SAMA
+   • Pastikan network: Base
 
 4️⃣ **Tunggu Konfirmasi**
    • 12 konfirmasi blockchain (~5-10 menit)
    • Conway credits otomatis ditambahkan
-   • Cek balance dengan klik "📊 Agent Status"
+   • Cek balance dengan /agent_status
 
 💱 **Conversion Rate:**
-• 1 USDT = 100 Conway Credits
 • 1 USDC = 100 Conway Credits
+• $30 USDC = 3.000 Credits
 
-🌐 **Network yang Didukung:**
-• ✅ Polygon (Recommended)
-• ✅ Base
-• ✅ Arbitrum
-• ❌ Ethereum Mainnet (Biaya terlalu tinggi)
+📊 **Minimum untuk Spawn Agent:**
+• Deposit minimum: $30 USDC (3.000 credits)
+• Spawn fee: 100.000 credits
+• Total dibutuhkan: ~$1.030 USDC
+
+🌐 **Network:**
+• ✅ Base Network (WAJIB)
+• ❌ Polygon (Tidak didukung)
+• ❌ Arbitrum (Tidak didukung)
+• ❌ Ethereum Mainnet (Tidak didukung)
 • ❌ BSC (Tidak didukung)
 
 ⚠️ **Troubleshooting:**
 
 **Q: Deposit belum masuk?**
-A: Tunggu 12 konfirmasi (~10 menit). Cek di blockchain explorer.
+A: Tunggu 12 konfirmasi (~10 menit). Cek di Base blockchain explorer.
 
 **Q: Salah network?**
-A: Dana akan hilang! Pastikan network yang benar.
+A: Dana akan hilang! HANYA gunakan Base Network.
 
 **Q: Minimum deposit?**
-A: 5 USDT/USDC. Deposit di bawah ini tidak akan diproses.
+A: $30 USDC untuk spawn agent. Deposit di bawah ini tidak cukup.
 
 **Q: Berapa lama proses?**
 A: 5-10 menit setelah transaksi dikonfirmasi.
 
+**Q: Bisa pakai USDT?**
+A: TIDAK. Hanya USDC yang didukung.
+
 💡 **Tips:**
 • Selalu cek alamat sebelum kirim
-• Gunakan Polygon untuk biaya terendah
-• Test dengan jumlah kecil dulu
-• Simpan transaction hash untuk tracking"""
+• Pastikan network: Base
+• HANYA kirim USDC
+• Minimum $30 untuk spawn agent
+• Simpan transaction hash untuk tracking
+
+⚡ **Catatan Penting:**
+• Admin & Lifetime Premium juga perlu deposit $30
+• Setelah deposit $30, Anda bisa spawn agent
+• Deposit di network lain akan hilang!"""
             else:
-                guide_text = """❓ **USDT/USDC Deposit Guide**
+                guide_text = """❓ **USDC Deposit Guide (Base Network)**
 
 📋 **Deposit Steps:**
 
 1️⃣ **Click "💰 Deposit Now"**
-   • You'll receive a unique wallet address
+   • You'll receive a wallet address
    • Copy address or scan QR code
 
-2️⃣ **Select Network**
-   • Polygon (Recommended - Low fees ~$0.01)
-   • Base (Medium fees ~$0.05)
-   • Arbitrum (Medium fees ~$0.10)
+2️⃣ **Select Network: Base**
+   • ONLY use Base Network
+   • Low gas fees (~$0.01)
+   • Other networks NOT supported
 
-3️⃣ **Send USDT or USDC**
-   • Minimum: 5 USDT/USDC
+3️⃣ **Send USDC**
+   • Minimum: $30 USDC (to spawn agent)
+   • ONLY USDC (not USDT or other tokens)
    • Use your wallet (MetaMask, Trust Wallet, etc)
-   • Make sure network matches
+   • Make sure network: Base
 
 4️⃣ **Wait for Confirmation**
    • 12 blockchain confirmations (~5-10 minutes)
    • Conway credits added automatically
-   • Check balance via "📊 Agent Status"
+   • Check balance with /agent_status
 
 💱 **Conversion Rate:**
-• 1 USDT = 100 Conway Credits
 • 1 USDC = 100 Conway Credits
+• $30 USDC = 3,000 Credits
 
-🌐 **Supported Networks:**
-• ✅ Polygon (Recommended)
-• ✅ Base
-• ✅ Arbitrum
-• ❌ Ethereum Mainnet (Fees too high)
+📊 **Minimum for Spawn Agent:**
+• Minimum deposit: $30 USDC (3,000 credits)
+• Spawn fee: 100,000 credits
+• Total needed: ~$1,030 USDC
+
+🌐 **Network:**
+• ✅ Base Network (REQUIRED)
+• ❌ Polygon (Not supported)
+• ❌ Arbitrum (Not supported)
+• ❌ Ethereum Mainnet (Not supported)
 • ❌ BSC (Not supported)
 
 ⚠️ **Troubleshooting:**
 
 **Q: Deposit not received?**
-A: Wait for 12 confirmations (~10 minutes). Check blockchain explorer.
+A: Wait for 12 confirmations (~10 minutes). Check Base blockchain explorer.
 
 **Q: Wrong network?**
-A: Funds will be lost! Make sure to use correct network.
+A: Funds will be lost! ONLY use Base Network.
 
 **Q: Minimum deposit?**
-A: 5 USDT/USDC. Deposits below this won't be processed.
+A: $30 USDC to spawn agent. Deposits below this are insufficient.
 
 **Q: How long does it take?**
 A: 5-10 minutes after transaction is confirmed.
 
+**Q: Can I use USDT?**
+A: NO. Only USDC is supported.
+
 💡 **Tips:**
 • Always verify address before sending
-• Use Polygon for lowest fees
-• Test with small amount first
-• Save transaction hash for tracking"""
+• Make sure network: Base
+• ONLY send USDC
+• Minimum $30 to spawn agent
+• Save transaction hash for tracking
+
+⚡ **Important Notes:**
+• Admin & Lifetime Premium also need $30 deposit
+• After $30 deposit, you can spawn agent
+• Deposits on other networks will be lost!"""
             
             # Build keyboard
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup

@@ -341,26 +341,34 @@ async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Generate QR code URL
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={deposit_address}"
         
-        # Deposit instructions
+        # Deposit instructions (Updated: $30 minimum, Base network only)
         message = (
-            f"💰 *Deposit USDT/USDC*\n\n"
+            f"💰 *Deposit USDC (Base Network)*\n\n"
             f"📍 *Deposit Address:*\n"
             f"`{deposit_address}`\n\n"
             f"📱 *QR Code:*\n"
             f"{qr_url}\n\n"
-            f"🌐 *Supported Networks:*\n"
-            f"• Polygon (Recommended - Low fees)\n"
-            f"• Base\n"
-            f"• Arbitrum\n\n"
-            f"💱 *Conversion Rates:*\n"
-            f"• 1 USDT = 100 Conway Credits\n"
-            f"• 1 USDC = 100 Conway Credits\n\n"
+            f"🌐 *Network:*\n"
+            f"• Base Network (WAJIB)\n"
+            f"• Biaya gas rendah (~$0.01)\n\n"
+            f"💱 *Conversion Rate:*\n"
+            f"• 1 USDC = 100 Conway Credits\n"
+            f"• $30 USDC = 3.000 Credits\n\n"
             f"⚠️ *Important:*\n"
-            f"• Minimum deposit: 5 USDT/USDC\n"
-            f"• Only send USDT or USDC\n"
-            f"• DO NOT send other tokens\n"
-            f"• Credits will be added automatically after 12 confirmations\n\n"
-            f"💡 Tip: Use Polygon network untuk biaya gas terendah!"
+            f"• Minimum deposit untuk spawn agent: $30 USDC\n"
+            f"• HANYA gunakan Base Network\n"
+            f"• HANYA kirim USDC (bukan USDT atau token lain)\n"
+            f"• Credits akan ditambahkan otomatis setelah 12 konfirmasi\n\n"
+            f"💡 *Cara Deposit:*\n"
+            f"1. Buka wallet Anda (MetaMask, Trust Wallet, dll)\n"
+            f"2. Pastikan network: Base\n"
+            f"3. Kirim USDC ke address di atas\n"
+            f"4. Tunggu 12 konfirmasi (~5-10 menit)\n"
+            f"5. Credits akan otomatis masuk\n\n"
+            f"📊 *Minimum untuk Spawn Agent:*\n"
+            f"• Deposit: $30 USDC (3.000 credits)\n"
+            f"• Spawn fee: 100.000 credits\n"
+            f"• Total: ~$1.030 USDC"
         )
         
         await update.message.reply_text(
