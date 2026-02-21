@@ -276,20 +276,17 @@ Untuk menggunakan fitur AI Agent, Anda perlu melakukan deposit terlebih dahulu.
 
 💰 **Cara Deposit:**
 1. Klik tombol "💰 Deposit Sekarang" di bawah
-2. Deposit USDT/USDC ke address yang diberikan
+2. Deposit USDC (Base Network) ke address yang diberikan
 3. Credits akan otomatis ditambahkan setelah 12 konfirmasi
 4. Setelah deposit, Anda bisa spawn agent dan mulai trading!
 
 📊 **Conversion Rate:**
-• 1 USDT = 100 Conway Credits
 • 1 USDC = 100 Conway Credits
 
-🌐 **Supported Networks:**
-• Polygon (Recommended - Low fees)
-• Base
-• Arbitrum
+🌐 **Network:**
+• Base Network (WAJIB)
 
-💡 **Minimum Deposit:** 5 USDT/USDC"""
+💡 **Minimum Deposit:** 5 USDC"""
             else:
                 welcome_text = """🤖 **Welcome to AI Agent!**
 
@@ -301,20 +298,17 @@ To use AI Agent features, you need to make a deposit first.
 
 💰 **How to Deposit:**
 1. Click "💰 Deposit Now" button below
-2. Deposit USDT/USDC to the provided address
+2. Deposit USDC (Base Network) to the provided address
 3. Credits will be automatically added after 12 confirmations
 4. After deposit, you can spawn agents and start trading!
 
 📊 **Conversion Rate:**
-• 1 USDT = 100 Conway Credits
 • 1 USDC = 100 Conway Credits
 
-🌐 **Supported Networks:**
-• Polygon (Recommended - Low fees)
-• Base
-• Arbitrum
+🌐 **Network:**
+• Base Network (REQUIRED)
 
-💡 **Minimum Deposit:** 5 USDT/USDC"""
+💡 **Minimum Deposit:** 5 USDC"""
             
             # Build deposit-first menu
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -2402,7 +2396,7 @@ Anda dapat mengajukan withdrawal lagi."""
             
             # Format deposit instructions based on language
             if user_lang == 'id':
-                deposit_text = f"""💰 **Deposit USDT/USDC**
+                deposit_text = f"""💰 **Deposit USDC**
 
 📍 **Alamat Deposit (Semua User):**
 `{centralized_wallet}`
@@ -2410,35 +2404,32 @@ Anda dapat mengajukan withdrawal lagi."""
 📱 **QR Code:**
 [Klik untuk melihat QR Code]({qr_url})
 
-🌐 **Network yang Didukung:**
-• Polygon (Direkomendasikan - Biaya rendah)
-• Base
-• Arbitrum
+🌐 **Network:**
+• Base Network (WAJIB)
 
 💱 **Conversion Rate:**
-• 1 USDT = 100 Conway Credits
 • 1 USDC = 100 Conway Credits
 
 📊 **Contoh:**
-• Deposit 5 USDT = 500 Conway Credits
+• Deposit 5 USDC = 500 Conway Credits
 • Deposit 10 USDC = 1,000 Conway Credits
-• Deposit 50 USDT = 5,000 Conway Credits
+• Deposit 50 USDC = 5,000 Conway Credits
 
 ⚠️ **Penting:**
-• Minimum deposit: 5 USDT/USDC
-• Hanya kirim USDT atau USDC
-• JANGAN kirim token lain
+• Minimum deposit: 5 USDC
+• Hanya kirim USDC di Base Network
+• JANGAN kirim token lain atau network lain
 • Credits akan ditambahkan otomatis setelah 12 konfirmasi
 
 🔄 **Cara Kerja:**
-1. Kirim USDT/USDC ke address di atas
+1. Kirim USDC (Base Network) ke address di atas
 2. Conway Dashboard akan detect deposit Anda
 3. Credits otomatis masuk ke akun Anda
 4. Cek balance di menu "📊 Agent Status"
 
-💡 **Tip:** Gunakan network Polygon untuk biaya gas terendah!"""
+💡 **Tip:** Pastikan Anda menggunakan Base Network saat mengirim USDC!"""
             else:
-                deposit_text = f"""💰 **Deposit USDT/USDC**
+                deposit_text = f"""💰 **Deposit USDC**
 
 📍 **Deposit Address (All Users):**
 `{centralized_wallet}`
@@ -2446,33 +2437,30 @@ Anda dapat mengajukan withdrawal lagi."""
 📱 **QR Code:**
 [Click to view QR Code]({qr_url})
 
-🌐 **Supported Networks:**
-• Polygon (Recommended - Low fees)
-• Base
-• Arbitrum
+🌐 **Network:**
+• Base Network (REQUIRED)
 
 💱 **Conversion Rate:**
-• 1 USDT = 100 Conway Credits
 • 1 USDC = 100 Conway Credits
 
 📊 **Examples:**
-• Deposit 5 USDT = 500 Conway Credits
+• Deposit 5 USDC = 500 Conway Credits
 • Deposit 10 USDC = 1,000 Conway Credits
-• Deposit 50 USDT = 5,000 Conway Credits
+• Deposit 50 USDC = 5,000 Conway Credits
 
 ⚠️ **Important:**
-• Minimum deposit: 5 USDT/USDC
-• Only send USDT or USDC
-• DO NOT send other tokens
+• Minimum deposit: 5 USDC
+• Only send USDC on Base Network
+• DO NOT send other tokens or networks
 • Credits will be added automatically after 12 confirmations
 
 🔄 **How it Works:**
-1. Send USDT/USDC to the address above
+1. Send USDC (Base Network) to the address above
 2. Conway Dashboard will detect your deposit
 3. Credits automatically added to your account
 4. Check balance in "📊 Agent Status" menu
 
-💡 **Tip:** Use Polygon network for lowest gas fees!"""
+💡 **Tip:** Make sure you use Base Network when sending USDC!"""
             
             # Build keyboard with back button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
