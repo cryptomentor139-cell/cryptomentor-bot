@@ -37,9 +37,10 @@ class MenuCallbackHandler:
         
         if query_id in processed_queries:
             print(f"⚠️  Duplicate query detected and skipped: {query_id}")
+            # Don't answer again, just return
             return
         
-        # Mark as processed
+        # Mark as processed IMMEDIATELY
         processed_queries.add(query_id)
         context.bot_data['processed_queries'] = processed_queries
         
@@ -49,11 +50,7 @@ class MenuCallbackHandler:
             recent = list(processed_queries)[-50:]
             context.bot_data['processed_queries'] = set(recent)
         
-        # Skip admin callbacks - let them be handled by admin_button_handler in bot.py
-        if callback_data.startswith("admin_"):
-            return
-        
-        # Answer the callback query to remove loading state
+        # Answer the callback query to remove loading state (ONCE)
         try:
             await query.answer()
         except Exception as e:
@@ -2780,12 +2777,16 @@ A: NO. Only USDC is supported.
 
 
 def register_menu_handlers(application, bot_instance):
-    """Register all menu callback handlers"""
+    """Register all menu callback handlers with proper pattern to avoid conflicts"""
     menu_handler = MenuCallbackHandler(bot_instance)
 
-    # Register the main callback handler
+    # Register the main callback handler with negative lookahead to exclude admin_ and signal_tf_
+    # This prevents conflicts with other handlers
     application.add_handler(
-        CallbackQueryHandler(menu_handler.handle_callback_query)
+        CallbackQueryHandler(
+            menu_handler.handle_callback_query,
+            pattern=r'^(?!admin_|signal_tf_|spawn_).*'  # Exclude admin_, signal_tf_, and spawn_ patterns
+        )
     )
 
-    print("✅ Menu system handlers registered successfully")
+    print("✅ Menu system handlers registered successfully (with conflict prevention)")
