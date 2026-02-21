@@ -14,6 +14,7 @@ from app.lineage_integration import (
     get_agent_lineage_tree,
     format_lineage_tree_text
 )
+from app.admin_status import is_admin
 
 # Initialize database
 db = Database()
@@ -43,8 +44,8 @@ async def spawn_agent_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return
         
-        # Check Automaton access
-        if not db.has_automaton_access(user_id):
+        # Check Automaton access (BYPASS for admins)
+        if not is_admin(user_id) and not db.has_automaton_access(user_id):
             await update.message.reply_text(
                 "❌ *Akses Automaton Diperlukan*\n\n"
                 "Untuk menggunakan fitur AI Agent, Anda perlu membayar biaya satu kali sebesar *Rp2.000.000*.\n\n"
@@ -53,8 +54,8 @@ async def spawn_agent_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return
         
-        # Check premium status
-        if not db.is_user_premium(user_id):
+        # Check premium status (BYPASS for admins)
+        if not is_admin(user_id) and not db.is_user_premium(user_id):
             await update.message.reply_text(
                 "❌ *Premium Diperlukan*\n\n"
                 "Fitur AI Agent hanya tersedia untuk pengguna premium.\n\n"

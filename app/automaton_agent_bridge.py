@@ -2,8 +2,11 @@
 Automaton Agent Bridge
 Connects Telegram bot with Automaton dashboard for autonomous trading
 ONLY for Lifetime Premium users
+
+NOTE: Requires Automaton dashboard to be accessible (local or deployed)
 """
 
+import os
 import json
 import subprocess
 from typing import Dict, Optional, Any
@@ -16,21 +19,33 @@ class AutomatonAgentBridge:
     Manages autonomous trading agents for LIFETIME PREMIUM users only
     """
     
-    def __init__(self, db, automaton_manager, automaton_dir="C:/Users/dragon/automaton"):
+    def __init__(self, db, automaton_manager, automaton_dir=None):
         """
         Initialize bridge
         
         Args:
             db: Database instance
             automaton_manager: AutomatonManager instance
-            automaton_dir: Path to Automaton directory
+            automaton_dir: Path to Automaton directory (optional, from env)
         """
         self.db = db
         self.automaton_manager = automaton_manager
+        
+        # Get Automaton directory from environment or default
+        if automaton_dir is None:
+            automaton_dir = os.getenv('AUTOMATON_DIR', 'C:/Users/dragon/automaton')
+        
         self.automaton_dir = Path(automaton_dir)
         self.send_task_script = self.automaton_dir / "send-task.js"
+        self.automaton_available = self.send_task_script.exists()
         
-        print("✅ Automaton Agent Bridge initialized (Lifetime Premium only)")
+        if self.automaton_available:
+            print("✅ Automaton Agent Bridge initialized (Lifetime Premium only)")
+            print(f"   Automaton dir: {self.automaton_dir}")
+        else:
+            print("⚠️  Automaton Agent Bridge initialized (Automaton NOT available)")
+            print(f"   Expected location: {self.automaton_dir}")
+            print("   Autonomous trading will be disabled")
     
     def _check_lifetime_premium(self, user_id: int) -> bool:
         """Check if user has lifetime premium"""
@@ -113,6 +128,13 @@ class AutomatonAgentBridge:
             Dict with success status and agent info
         """
         try:
+            # Check if Automaton is available
+            if not self.automaton_available:
+                return {
+                    'success': False,
+                    'message': 'Automaton dashboard tidak tersedia. Autonomous trading sementara disabled.'
+                }
+            
             # Check if user has lifetime premium
             if not self._check_lifetime_premium(user_id):
                 return {
