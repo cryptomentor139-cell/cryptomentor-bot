@@ -2772,6 +2772,12 @@ Choose action:
 
         # Handle admin inputs
         awaiting = user_data.get('awaiting_input')
+        
+        # Debug logging
+        if awaiting:
+            print(f"🔍 DEBUG: awaiting_input = {awaiting}")
+            print(f"🔍 DEBUG: text = {text[:100]}")
+        
         if awaiting == 'admin_broadcast':
             broadcast_msg = text.strip()
             from services import get_database
@@ -3117,7 +3123,12 @@ Choose action:
                     
                     elif awaiting == 'admin_add_automaton_credits_manual':
                         # Format: user_id amount note
+                        print(f"🎯 AUTOMATON CREDITS HANDLER TRIGGERED!")
+                        print(f"   Parts: {parts}")
+                        print(f"   User ID from parts[0]: {parts[0] if parts else 'NO PARTS'}")
+                        
                         if len(parts) < 3:
+                            print(f"❌ Not enough parts: {len(parts)}")
                             await update.message.reply_text(
                                 "❌ Format salah!\n\n"
                                 "Format: `user_id amount note`\n"
