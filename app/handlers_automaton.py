@@ -64,19 +64,52 @@ async def spawn_agent_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return
         
-        # Check credit balance
-        user = db.get_user(user_id)
-        if not user:
+        # Check minimum deposit requirement ($30 = 3000 credits)
+        # This applies to EVERYONE including admin and lifetime premium
+        MINIMUM_DEPOSIT_CREDITS = 3000  # $30 USDC = 3000 credits
+        
+        user_credits = 0
+        try:
+            if db.supabase_enabled:
+                from supabase_client import supabase
+                if supabase:
+                    # Check user_credits_balance table
+                    credits_result = supabase.table('user_credits_balance')\
+                        .select('available_credits, total_conway_credits')\
+                        .eq('user_id', user_id)\
+                        .execute()
+                    
+                    if credits_result.data:
+                        balance = credits_result.data[0]
+                        available_credits = float(balance.get('available_credits', 0))
+                        total_credits = float(balance.get('total_conway_credits', 0))
+                        user_credits = max(available_credits, total_credits)
+        except Exception as e:
+            print(f"⚠️ Error checking credits: {e}")
+        
+        # Check minimum deposit (applies to everyone)
+        if user_credits < MINIMUM_DEPOSIT_CREDITS:
             await update.message.reply_text(
-                "❌ User tidak ditemukan. Gunakan /start untuk mendaftar.",
+                f"❌ *Deposit Minimum Diperlukan*\n\n"
+                f"Untuk spawn agent, Anda perlu deposit minimal *$30 USDC* (3.000 credits).\n\n"
+                f"💰 Credits Anda saat ini: {user_credits:,.0f}\n"
+                f"💵 Minimum required: {MINIMUM_DEPOSIT_CREDITS:,}\n"
+                f"📊 Kekurangan: {MINIMUM_DEPOSIT_CREDITS - user_credits:,.0f} credits\n\n"
+                f"💡 Cara deposit:\n"
+                f"1. Gunakan /deposit untuk melihat address\n"
+                f"2. Deposit USDC (Base Network)\n"
+                f"3. 1 USDC = 100 credits\n"
+                f"4. Minimum deposit: $5 USDC\n\n"
+                f"Setelah deposit $30, Anda bisa spawn agent!",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
         
-        user_credits = user.get('credits', 0)
-        if user_credits < 100000:
+        # Check spawn fee (100k credits for spawning)
+        SPAWN_FEE = 100000
+        if user_credits < SPAWN_FEE:
             await update.message.reply_text(
-                f"❌ *Kredit Tidak Cukup*\n\n"
+                f"❌ *Kredit Tidak Cukup untuk Spawn*\n\n"
                 f"Spawn agent membutuhkan 100.000 kredit.\n"
                 f"Kredit Anda: {user_credits:,}\n\n"
                 f"Gunakan /credits untuk mendapatkan lebih banyak kredit.",

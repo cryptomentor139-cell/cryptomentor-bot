@@ -261,7 +261,8 @@ class MenuCallbackHandler:
         db = Database()
         user_lang = db.get_user_language(user_id)
         
-        # BYPASS for admin and lifetime premium users
+        # Check if user is admin or lifetime premium (for menu access only)
+        # Note: They still need $30 deposit to spawn agent
         is_admin_user = is_admin(user_id)
         is_lifetime = False
         
@@ -280,18 +281,11 @@ class MenuCallbackHandler:
         except Exception as e:
             print(f"⚠️ Error checking premium tier: {e}")
         
-        # Admin and Lifetime Premium users bypass deposit check
-        if is_admin_user or is_lifetime:
-            print(f"✅ User {user_id} bypassed deposit check (admin={is_admin_user}, lifetime={is_lifetime})")
-            await query.edit_message_text(
-                get_menu_text(AI_AGENT_MENU, user_lang),
-                reply_markup=MenuBuilder.build_ai_agent_menu(),
-                parse_mode='MARKDOWN'
-            )
-            return
-        
-        # Check if user has made deposit (check new centralized wallet tables)
+        # Check if user has made deposit (minimum $30 = 3000 credits)
+        MINIMUM_DEPOSIT_CREDITS = 3000  # $30 USDC = 3000 credits
         has_deposit = False
+        user_credits = 0
+        
         try:
             if db.supabase_enabled:
                 # Import supabase client directly
@@ -308,9 +302,10 @@ class MenuCallbackHandler:
                         balance = credits_result.data[0]
                         available_credits = float(balance.get('available_credits', 0))
                         total_credits = float(balance.get('total_conway_credits', 0))
+                        user_credits = max(available_credits, total_credits)
                         
-                        # User has deposit if they have any credits
-                        has_deposit = (available_credits > 0 or total_credits > 0)
+                        # User has sufficient deposit if >= $30 (3000 credits)
+                        has_deposit = (user_credits >= MINIMUM_DEPOSIT_CREDITS)
                         print(f"✅ User {user_id} credits check: available={available_credits}, total={total_credits}, has_deposit={has_deposit}")
         except Exception as e:
             print(f"⚠️ Error checking deposit status in user_credits_balance: {e}")
@@ -327,57 +322,76 @@ class MenuCallbackHandler:
                         wallet = wallet_result.data[0]
                         balance_usdc = float(wallet.get('balance_usdc', 0))
                         conway_credits = float(wallet.get('conway_credits', 0))
-                        has_deposit = (balance_usdc > 0 or conway_credits > 0)
+                        user_credits = max(balance_usdc * 100, conway_credits)  # 1 USDC = 100 credits
+                        has_deposit = (user_credits >= MINIMUM_DEPOSIT_CREDITS)
                         print(f"✅ User {user_id} fallback check: usdc={balance_usdc}, credits={conway_credits}, has_deposit={has_deposit}")
             except Exception as fallback_error:
                 print(f"⚠️ Fallback check also failed: {fallback_error}")
         
-        # If no deposit, show deposit-first menu
+        # If no sufficient deposit, show deposit-required menu
         if not has_deposit:
             if user_lang == 'id':
-                welcome_text = """🤖 **Selamat Datang di AI Agent!**
+                welcome_text = f"""🤖 **Selamat Datang di AI Agent!**
 
 💡 **Apa itu AI Agent?**
 AI Agent adalah autonomous trading agent yang menggunakan Conway credits sebagai bahan bakar untuk beroperasi.
 
-⚠️ **Deposit Diperlukan**
-Untuk menggunakan fitur AI Agent, Anda perlu melakukan deposit terlebih dahulu.
+⚠️ **Deposit Minimum: $30 USDC**
+Untuk menggunakan fitur AI Agent, Anda perlu deposit minimal **$30 USDC** (3.000 credits).
 
-💰 **Cara Deposit:**
+💰 **Status Deposit Anda:**
+• Credits saat ini: {user_credits:,.0f}
+• Minimum required: 3.000 credits
+• Kekurangan: {max(0, MINIMUM_DEPOSIT_CREDITS - user_credits):,.0f} credits
+
+📝 **Cara Deposit:**
 1. Klik tombol "💰 Deposit Sekarang" di bawah
 2. Deposit USDC (Base Network) ke address yang diberikan
 3. Credits akan otomatis ditambahkan setelah 12 konfirmasi
-4. Setelah deposit, Anda bisa spawn agent dan mulai trading!
+4. Setelah deposit $30, Anda bisa spawn agent dan mulai trading!
 
 📊 **Conversion Rate:**
 • 1 USDC = 100 Conway Credits
+• $30 USDC = 3.000 Credits
 
 🌐 **Network:**
 • Base Network (WAJIB)
 
-💡 **Minimum Deposit:** 5 USDC"""
+💡 **Catatan:**
+• Minimum deposit: $5 USDC
+• Untuk spawn agent: $30 USDC
+• Admin & Lifetime Premium juga perlu deposit $30"""
             else:
-                welcome_text = """🤖 **Welcome to AI Agent!**
+                welcome_text = f"""🤖 **Welcome to AI Agent!**
 
 💡 **What is AI Agent?**
 AI Agent is an autonomous trading agent that uses Conway credits as fuel to operate.
 
-⚠️ **Deposit Required**
-To use AI Agent features, you need to make a deposit first.
+⚠️ **Minimum Deposit: $30 USDC**
+To use AI Agent features, you need a minimum deposit of **$30 USDC** (3,000 credits).
 
-💰 **How to Deposit:**
+💰 **Your Deposit Status:**
+• Current credits: {user_credits:,.0f}
+• Minimum required: 3,000 credits
+• Shortfall: {max(0, MINIMUM_DEPOSIT_CREDITS - user_credits):,.0f} credits
+
+📝 **How to Deposit:**
 1. Click "💰 Deposit Now" button below
 2. Deposit USDC (Base Network) to the provided address
 3. Credits will be automatically added after 12 confirmations
-4. After deposit, you can spawn agents and start trading!
+4. After $30 deposit, you can spawn agents and start trading!
 
 📊 **Conversion Rate:**
 • 1 USDC = 100 Conway Credits
+• $30 USDC = 3,000 Credits
 
 🌐 **Network:**
 • Base Network (REQUIRED)
 
-💡 **Minimum Deposit:** 5 USDC"""
+💡 **Notes:**
+• Minimum deposit: $5 USDC
+• To spawn agent: $30 USDC
+• Admin & Lifetime Premium also need $30 deposit"""
             
             # Build deposit-first menu
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
