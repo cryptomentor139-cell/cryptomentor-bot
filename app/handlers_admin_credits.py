@@ -50,6 +50,12 @@ async def admin_add_automaton_credits_command(update: Update, context: ContextTy
         amount = float(context.args[1])
         note = ' '.join(context.args[2:]) if len(context.args) > 2 else "Manual credit addition by admin"
         
+        print(f"📝 Processing AUTOMATON credit addition:")
+        print(f"   Target user: {target_user_id}")
+        print(f"   Amount: {amount}")
+        print(f"   Note: {note}")
+        print(f"   Admin: {user_id}")
+        
         # Validate amount
         if amount <= 0:
             await update.message.reply_text(
@@ -60,17 +66,22 @@ async def admin_add_automaton_credits_command(update: Update, context: ContextTy
         
         # Check if user exists
         if not db.supabase_enabled:
+            print("❌ Supabase not enabled!")
             await update.message.reply_text(
                 "❌ Database tidak tersedia.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
         
+        print(f"✅ Supabase enabled, checking user existence...")
+        
         # Check if user exists in database
         user_result = db.supabase_service.table('users')\
             .select('user_id, username, first_name')\
             .eq('user_id', target_user_id)\
             .execute()
+        
+        print(f"   User query result: {len(user_result.data) if user_result.data else 0} rows")
         
         if not user_result.data:
             await update.message.reply_text(

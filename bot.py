@@ -3126,23 +3126,45 @@ Choose action:
                             )
                             return
                         
-                        amount = float(parts[1])
-                        note = ' '.join(parts[2:])
-                        
-                        # Call the admin command function
-                        from app.handlers_admin_credits import admin_add_automaton_credits_command
-                        
-                        # Create fake context with args
-                        context.args = [str(user_id), str(amount), note]
-                        await admin_add_automaton_credits_command(update, context)
+                        try:
+                            amount = float(parts[1])
+                            note = ' '.join(parts[2:])
+                            
+                            print(f"🔧 Admin adding AUTOMATON credits: user_id={user_id}, amount={amount}, note={note}")
+                            
+                            # Call the admin command function
+                            from app.handlers_admin_credits import admin_add_automaton_credits_command
+                            
+                            # Create fake context with args
+                            context.args = [str(user_id), str(amount), note]
+                            await admin_add_automaton_credits_command(update, context)
+                        except Exception as e:
+                            print(f"❌ Error adding AUTOMATON credits: {e}")
+                            await update.message.reply_text(
+                                f"❌ Error: {str(e)[:200]}\n\n"
+                                f"Silakan coba lagi atau gunakan command:\n"
+                                f"`/admin_add_automaton_credits {user_id} {parts[1] if len(parts) > 1 else '3000'} {' '.join(parts[2:]) if len(parts) > 2 else 'Manual'}`",
+                                parse_mode='MARKDOWN'
+                            )
                     
                     elif awaiting == 'admin_check_automaton_credits_manual':
                         # Call the admin command function
-                        from app.handlers_admin_credits import admin_check_automaton_credits_command
-                        
-                        # Create fake context with args
-                        context.args = [str(user_id)]
-                        await admin_check_automaton_credits_command(update, context)
+                        try:
+                            print(f"🔧 Admin checking AUTOMATON credits: user_id={user_id}")
+                            
+                            from app.handlers_admin_credits import admin_check_automaton_credits_command
+                            
+                            # Create fake context with args
+                            context.args = [str(user_id)]
+                            await admin_check_automaton_credits_command(update, context)
+                        except Exception as e:
+                            print(f"❌ Error checking AUTOMATON credits: {e}")
+                            await update.message.reply_text(
+                                f"❌ Error: {str(e)[:200]}\n\n"
+                                f"Silakan coba lagi atau gunakan command:\n"
+                                f"`/admin_check_automaton_credits {user_id}`",
+                                parse_mode='MARKDOWN'
+                            )
                 
                 user_data.pop('awaiting_input', None)
                 user_data.pop('message_id', None)
