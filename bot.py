@@ -1786,7 +1786,8 @@ _Select an option below:_
  ➕ Add Premium - Grant premium access
  ➖ Remove Premium - Revoke premium
  ♾️ Set Lifetime - Grant lifetime access
- 🎁 Manage Credits - Add or reset credits
+ 🎁 Manage Credits - Add or reset credits (bot features)
+ 🤖 Manage AUTOMATON Credits - For AI Agent deposits
 
 _Select an action below:_
 """
@@ -1796,6 +1797,7 @@ _Select an action below:_
                 [InlineKeyboardButton("♾️ Set Lifetime", callback_data="admin_set_lifetime")],
                 [InlineKeyboardButton("📡 Grant Auto Signal", callback_data="admin_grant_autosignal")],
                 [InlineKeyboardButton("🎁 Manage Credits", callback_data="admin_add_credits")],
+                [InlineKeyboardButton("🤖 Manage AUTOMATON Credits", callback_data="admin_automaton_credits")],
                 [InlineKeyboardButton("◀️ Back", callback_data="admin_back")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1862,6 +1864,99 @@ Choose an action:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(credits_text, reply_markup=reply_markup, parse_mode='MARKDOWN')
+
+        elif query.data == "admin_automaton_credits":
+            automaton_credits_text = """**🤖 Manage AUTOMATON Credits**
+
+⚠️ **PENTING:** Ini untuk AUTOMATON credits (AI Agent), bukan credits bot biasa!
+
+**AUTOMATON Credits:**
+• Untuk AI Agent (autonomous trading)
+• Deposit USDC → Manual verification
+• 1 USDC = 100 AUTOMATON credits
+• Minimum: $30 USDC (3,000 credits)
+
+**Regular Bot Credits:**
+• Untuk /analyze, /futures, /ai
+• Gunakan menu "🎁 Manage Credits"
+
+Choose an action:
+"""
+            keyboard = [
+                [InlineKeyboardButton("➕ Add AUTOMATON Credits", callback_data="admin_add_automaton_credits_manual")],
+                [InlineKeyboardButton("🔍 Check AUTOMATON Credits", callback_data="admin_check_automaton_credits_manual")],
+                [InlineKeyboardButton("📖 View Guide", callback_data="admin_automaton_guide")],
+                [InlineKeyboardButton("◀️ Back", callback_data="admin_premium")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(automaton_credits_text, reply_markup=reply_markup, parse_mode='MARKDOWN')
+
+        elif query.data == "admin_add_automaton_credits_manual":
+            msg = await query.edit_message_text(
+                "📝 **Add AUTOMATON Credits to User**\n\n"
+                "🆔 Reply with: `user_id amount note`\n\n"
+                "**Example:**\n"
+                "`123456789 3000 Deposit $30 USDC verified`\n\n"
+                "**Conversion:**\n"
+                "• 1 USDC = 100 credits\n"
+                "• $30 = 3,000 credits\n"
+                "• $50 = 5,000 credits\n\n"
+                "⚠️ **PENTING:** Ini untuk AUTOMATON credits (AI Agent)!",
+                parse_mode='MARKDOWN',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_automaton_credits")]])
+            )
+            context.user_data['awaiting_input'] = 'admin_add_automaton_credits_manual'
+            context.user_data['message_id'] = msg.message_id
+            context.user_data['state_timestamp'] = time.time()
+
+        elif query.data == "admin_check_automaton_credits_manual":
+            msg = await query.edit_message_text(
+                "🔍 **Check AUTOMATON Credits**\n\n"
+                "🆔 Reply with user ID to check their AUTOMATON credits\n\n"
+                "**Example:** `123456789`\n\n"
+                "⚠️ **PENTING:** Ini cek AUTOMATON credits (AI Agent)!",
+                parse_mode='MARKDOWN',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_automaton_credits")]])
+            )
+            context.user_data['awaiting_input'] = 'admin_check_automaton_credits_manual'
+            context.user_data['message_id'] = msg.message_id
+            context.user_data['state_timestamp'] = time.time()
+
+        elif query.data == "admin_automaton_guide":
+            guide_text = """📖 **AUTOMATON Credits Guide**
+
+**2 Jenis Credits:**
+
+1️⃣ **Regular Bot Credits** (🎁 Manage Credits)
+   • Untuk: /analyze, /futures, /ai
+   • Command: /grant_credits
+
+2️⃣ **AUTOMATON Credits** (🤖 Manage AUTOMATON Credits)
+   • Untuk: AI Agent, spawn agent
+   • Command: /admin_add_automaton_credits
+
+**Cara Pakai:**
+
+**User deposit USDC untuk AI Agent:**
+1. User kirim bukti transfer
+2. Verify di blockchain (Base Network)
+3. Add AUTOMATON credits via menu ini
+4. User receive notification
+
+**User minta credits untuk /analyze:**
+1. Gunakan menu "🎁 Manage Credits"
+2. Add regular bot credits
+
+**⚠️ JANGAN SAMPAI TERTUKAR!**
+
+**Quick Commands:**
+• Add AUTOMATON: `/admin_add_automaton_credits <id> <amount> <note>`
+• Check AUTOMATON: `/admin_check_automaton_credits <id>`
+• Add Regular: `/grant_credits <id> <amount>`
+"""
+            keyboard = [[InlineKeyboardButton("◀️ Back", callback_data="admin_automaton_credits")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(guide_text, reply_markup=reply_markup, parse_mode='MARKDOWN')
 
         elif query.data == "admin_add_credits_manual":
             msg = await query.edit_message_text(
@@ -3019,6 +3114,35 @@ Choose action:
                             f"💰 Added: {credits}",
                             parse_mode='MARKDOWN'
                         )
+                    
+                    elif awaiting == 'admin_add_automaton_credits_manual':
+                        # Format: user_id amount note
+                        if len(parts) < 3:
+                            await update.message.reply_text(
+                                "❌ Format salah!\n\n"
+                                "Format: `user_id amount note`\n"
+                                "Contoh: `123456789 3000 Deposit $30 USDC verified`",
+                                parse_mode='MARKDOWN'
+                            )
+                            return
+                        
+                        amount = float(parts[1])
+                        note = ' '.join(parts[2:])
+                        
+                        # Call the admin command function
+                        from app.handlers_admin_credits import admin_add_automaton_credits_command
+                        
+                        # Create fake context with args
+                        context.args = [str(user_id), str(amount), note]
+                        await admin_add_automaton_credits_command(update, context)
+                    
+                    elif awaiting == 'admin_check_automaton_credits_manual':
+                        # Call the admin command function
+                        from app.handlers_admin_credits import admin_check_automaton_credits_command
+                        
+                        # Create fake context with args
+                        context.args = [str(user_id)]
+                        await admin_check_automaton_credits_command(update, context)
                 
                 user_data.pop('awaiting_input', None)
                 user_data.pop('message_id', None)
