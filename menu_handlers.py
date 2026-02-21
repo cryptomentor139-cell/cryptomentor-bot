@@ -2474,7 +2474,7 @@ Anda dapat mengajukan withdrawal lagi."""
             # Generate QR code URL
             qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={centralized_wallet}"
             
-            # Format deposit instructions based on language (Updated: $30 minimum, Base only)
+            # Format deposit instructions based on language (Updated: Manual verification by admin)
             if user_lang == 'id':
                 deposit_text = f"""💰 **Deposit USDC (Base Network)**
 
@@ -2488,8 +2488,8 @@ Anda dapat mengajukan withdrawal lagi."""
 ⚠️ **PENTING - Baca Sebelum Transfer:**
 • Kirim USDC ke address di atas
 • HANYA gunakan Base Network
-• Credits akan OTOMATIS masuk setelah 12 konfirmasi
-• Sistem akan detect deposit Anda secara otomatis
+• Setelah transfer, kirim bukti ke admin untuk verifikasi
+• Credits akan ditambahkan manual oleh admin
 
 🌐 **Network:**
 • Base Network (WAJIB)
@@ -2504,21 +2504,22 @@ Anda dapat mengajukan withdrawal lagi."""
 • Spawn fee: 100.000 credits
 • Total dibutuhkan: ~$1.030 USDC
 
-🔄 **Cara Kerja Auto-Credit:**
+🔄 **Cara Kerja Deposit:**
 1. Anda kirim USDC (Base Network) ke address di atas
-2. Conway Dashboard monitor blockchain secara real-time
-3. Setelah 12 konfirmasi (~5-10 menit), sistem detect deposit Anda
-4. Credits OTOMATIS ditambahkan ke akun Anda
-5. Anda akan menerima notifikasi saat credits masuk
-6. Cek balance dengan /agent_status
+2. Screenshot bukti transfer (transaction hash)
+3. Klik tombol "📤 Kirim Bukti Transfer" di bawah
+4. Kirim screenshot ke admin
+5. Admin akan verifikasi dan tambahkan credits
+6. Anda akan menerima notifikasi saat credits masuk
 
 💡 **Langkah-langkah Deposit:**
 1. Copy address di atas atau scan QR code
 2. Buka wallet Anda (MetaMask, Trust Wallet, dll)
 3. Pastikan network: Base
 4. Kirim minimal $30 USDC ke address di atas
-5. Tunggu 12 konfirmasi (~5-10 menit)
-6. Credits akan OTOMATIS masuk ke akun Anda
+5. Screenshot bukti transfer
+6. Klik "📤 Kirim Bukti Transfer" dan kirim ke admin
+7. Tunggu verifikasi admin (biasanya < 1 jam)
 
 ⚡ **Catatan:**
 • Admin & Lifetime Premium juga perlu deposit $30
@@ -2538,8 +2539,8 @@ Anda dapat mengajukan withdrawal lagi."""
 ⚠️ **IMPORTANT - Read Before Transfer:**
 • Send USDC to the address above
 • ONLY use Base Network
-• Credits will be AUTOMATICALLY added after 12 confirmations
-• System will detect your deposit automatically
+• After transfer, send proof to admin for verification
+• Credits will be added manually by admin
 
 🌐 **Network:**
 • Base Network (REQUIRED)
@@ -2554,21 +2555,22 @@ Anda dapat mengajukan withdrawal lagi."""
 • Spawn fee: 100,000 credits
 • Total needed: ~$1,030 USDC
 
-🔄 **How Auto-Credit Works:**
+🔄 **How Deposit Works:**
 1. You send USDC (Base Network) to the address above
-2. Conway Dashboard monitors blockchain in real-time
-3. After 12 confirmations (~5-10 minutes), system detects your deposit
-4. Credits are AUTOMATICALLY added to your account
-5. You will receive notification when credits arrive
-6. Check balance with /agent_status
+2. Screenshot transfer proof (transaction hash)
+3. Click "📤 Send Transfer Proof" button below
+4. Send screenshot to admin
+5. Admin will verify and add credits
+6. You will receive notification when credits arrive
 
 💡 **Deposit Steps:**
 1. Copy address above or scan QR code
 2. Open your wallet (MetaMask, Trust Wallet, etc)
 3. Make sure network: Base
 4. Send minimum $30 USDC to the address above
-5. Wait for 12 confirmations (~5-10 minutes)
-6. Credits will be AUTOMATICALLY added to your account
+5. Screenshot transfer proof
+6. Click "📤 Send Transfer Proof" and send to admin
+7. Wait for admin verification (usually < 1 hour)
 
 ⚡ **Notes:**
 • Admin & Lifetime Premium also need $30 deposit
@@ -2576,9 +2578,20 @@ Anda dapat mengajukan withdrawal lagi."""
 • DO NOT send to other networks (funds will be lost!)
 • Save transaction hash for tracking"""
             
-            # Build keyboard with back button
+            # Build keyboard with send proof button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            
+            # Get admin contact info
+            admin_ids_str = os.getenv('ADMIN_IDS', '')
+            admin_contact = ""
+            if admin_ids_str:
+                # Get first admin ID for contact
+                first_admin_id = admin_ids_str.split(',')[0].strip()
+                admin_contact = f"tg://user?id={first_admin_id}"
+            
             keyboard = [
+                [InlineKeyboardButton("📤 Kirim Bukti Transfer ke Admin" if user_lang == 'id' else "📤 Send Transfer Proof to Admin", 
+                                     url=admin_contact if admin_contact else "https://t.me/")],
                 [InlineKeyboardButton("❓ Cara Deposit" if user_lang == 'id' else "❓ How to Deposit", 
                                      callback_data="deposit_guide")],
                 [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
@@ -2618,7 +2631,7 @@ Anda dapat mengajukan withdrawal lagi."""
         user_lang = db.get_user_language(user_id)
         
         try:
-            # Format guide based on language (Updated: $30 minimum, Base only)
+            # Format guide based on language (Updated: Manual verification by admin)
             if user_lang == 'id':
                 guide_text = """❓ **Panduan Deposit USDC (Base Network)**
 
@@ -2639,10 +2652,22 @@ Anda dapat mengajukan withdrawal lagi."""
    • Gunakan wallet Anda (MetaMask, Trust Wallet, dll)
    • Pastikan network: Base
 
-4️⃣ **Tunggu Konfirmasi**
-   • 12 konfirmasi blockchain (~5-10 menit)
-   • Conway credits otomatis ditambahkan
-   • Cek balance dengan /agent_status
+4️⃣ **Screenshot Bukti Transfer**
+   • Ambil screenshot transaction hash
+   • Atau screenshot dari wallet Anda
+   • Pastikan terlihat: amount, network, address tujuan
+
+5️⃣ **Kirim ke Admin**
+   • Klik tombol "📤 Kirim Bukti Transfer"
+   • Kirim screenshot ke admin
+   • Sertakan User ID Telegram Anda: `{user_id}`
+   • Admin akan verifikasi dalam < 1 jam
+
+6️⃣ **Tunggu Verifikasi**
+   • Admin akan cek transaksi di blockchain
+   • Credits akan ditambahkan manual
+   • Anda akan menerima notifikasi
+   • Cek balance dengan /balance
 
 💱 **Conversion Rate:**
 • 1 USDC = 100 Conway Credits
@@ -2663,7 +2688,7 @@ Anda dapat mengajukan withdrawal lagi."""
 ⚠️ **Troubleshooting:**
 
 **Q: Deposit belum masuk?**
-A: Tunggu 12 konfirmasi (~10 menit). Cek di Base blockchain explorer.
+A: Pastikan Anda sudah kirim bukti transfer ke admin. Admin akan verifikasi dalam < 1 jam.
 
 **Q: Salah network?**
 A: Dana akan hilang! HANYA gunakan Base Network.
@@ -2672,10 +2697,13 @@ A: Dana akan hilang! HANYA gunakan Base Network.
 A: $30 USDC untuk spawn agent. Deposit di bawah ini tidak cukup.
 
 **Q: Berapa lama proses?**
-A: 5-10 menit setelah transaksi dikonfirmasi.
+A: Setelah kirim bukti ke admin, biasanya < 1 jam untuk verifikasi.
 
 **Q: Bisa pakai USDT?**
 A: TIDAK. Hanya USDC yang didukung.
+
+**Q: Bagaimana cara kirim bukti?**
+A: Klik tombol "📤 Kirim Bukti Transfer" di menu deposit, lalu kirim screenshot ke admin.
 
 💡 **Tips:**
 • Selalu cek alamat sebelum kirim
@@ -2683,11 +2711,13 @@ A: TIDAK. Hanya USDC yang didukung.
 • HANYA kirim USDC
 • Minimum $30 untuk spawn agent
 • Simpan transaction hash untuk tracking
+• Sertakan User ID saat kirim bukti: `{user_id}`
 
 ⚡ **Catatan Penting:**
 • Admin & Lifetime Premium juga perlu deposit $30
 • Setelah deposit $30, Anda bisa spawn agent
-• Deposit di network lain akan hilang!"""
+• Deposit di network lain akan hilang!
+• Verifikasi manual untuk keamanan maksimal"""
             else:
                 guide_text = """❓ **USDC Deposit Guide (Base Network)**
 
@@ -2708,10 +2738,22 @@ A: TIDAK. Hanya USDC yang didukung.
    • Use your wallet (MetaMask, Trust Wallet, etc)
    • Make sure network: Base
 
-4️⃣ **Wait for Confirmation**
-   • 12 blockchain confirmations (~5-10 minutes)
-   • Conway credits added automatically
-   • Check balance with /agent_status
+4️⃣ **Screenshot Transfer Proof**
+   • Take screenshot of transaction hash
+   • Or screenshot from your wallet
+   • Make sure visible: amount, network, destination address
+
+5️⃣ **Send to Admin**
+   • Click "📤 Send Transfer Proof" button
+   • Send screenshot to admin
+   • Include your Telegram User ID: `{user_id}`
+   • Admin will verify within < 1 hour
+
+6️⃣ **Wait for Verification**
+   • Admin will check transaction on blockchain
+   • Credits will be added manually
+   • You will receive notification
+   • Check balance with /balance
 
 💱 **Conversion Rate:**
 • 1 USDC = 100 Conway Credits
@@ -2732,7 +2774,7 @@ A: TIDAK. Hanya USDC yang didukung.
 ⚠️ **Troubleshooting:**
 
 **Q: Deposit not received?**
-A: Wait for 12 confirmations (~10 minutes). Check Base blockchain explorer.
+A: Make sure you sent transfer proof to admin. Admin will verify within < 1 hour.
 
 **Q: Wrong network?**
 A: Funds will be lost! ONLY use Base Network.
@@ -2741,10 +2783,13 @@ A: Funds will be lost! ONLY use Base Network.
 A: $30 USDC to spawn agent. Deposits below this are insufficient.
 
 **Q: How long does it take?**
-A: 5-10 minutes after transaction is confirmed.
+A: After sending proof to admin, usually < 1 hour for verification.
 
 **Q: Can I use USDT?**
 A: NO. Only USDC is supported.
+
+**Q: How to send proof?**
+A: Click "📤 Send Transfer Proof" button in deposit menu, then send screenshot to admin.
 
 💡 **Tips:**
 • Always verify address before sending
@@ -2752,11 +2797,13 @@ A: NO. Only USDC is supported.
 • ONLY send USDC
 • Minimum $30 to spawn agent
 • Save transaction hash for tracking
+• Include User ID when sending proof: `{user_id}`
 
 ⚡ **Important Notes:**
 • Admin & Lifetime Premium also need $30 deposit
 • After $30 deposit, you can spawn agent
-• Deposits on other networks will be lost!"""
+• Deposits on other networks will be lost!
+• Manual verification for maximum security"""
             
             # Build keyboard
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup

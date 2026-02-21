@@ -259,6 +259,18 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ Admin automaton handlers failed to register: {e}")
         
+        # Register admin credits handlers (manual deposit verification for AUTOMATON)
+        try:
+            from app.handlers_admin_credits import (
+                admin_add_automaton_credits_command,
+                admin_check_automaton_credits_command
+            )
+            self.application.add_handler(CommandHandler("admin_add_automaton_credits", admin_add_automaton_credits_command))
+            self.application.add_handler(CommandHandler("admin_check_automaton_credits", admin_check_automaton_credits_command))
+            print("✅ Admin AUTOMATON credits handlers registered")
+        except Exception as e:
+            print(f"⚠️ Admin AUTOMATON credits handlers failed to register: {e}")
+        
         # Note: Automaton is for AUTONOMOUS TRADING only (Lifetime Premium)
         # Signal generation uses bot's own system (/analyze, /futures, /ai)
         # No separate Automaton AI handlers needed
