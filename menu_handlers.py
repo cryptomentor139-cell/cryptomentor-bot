@@ -264,35 +264,43 @@ class MenuCallbackHandler:
         has_deposit = False
         try:
             if db.supabase_enabled:
-                # Check user_credits_balance table for any credits
-                credits_result = db.supabase_service.table('user_credits_balance')\
-                    .select('available_credits, total_conway_credits')\
-                    .eq('user_id', user_id)\
-                    .execute()
+                # Import supabase client directly
+                from supabase_client import supabase
                 
-                if credits_result.data:
-                    balance = credits_result.data[0]
-                    available_credits = float(balance.get('available_credits', 0))
-                    total_credits = float(balance.get('total_conway_credits', 0))
+                if supabase:
+                    # Check user_credits_balance table for any credits
+                    credits_result = supabase.table('user_credits_balance')\
+                        .select('available_credits, total_conway_credits')\
+                        .eq('user_id', user_id)\
+                        .execute()
                     
-                    # User has deposit if they have any credits
-                    has_deposit = (available_credits > 0 or total_credits > 0)
+                    if credits_result.data:
+                        balance = credits_result.data[0]
+                        available_credits = float(balance.get('available_credits', 0))
+                        total_credits = float(balance.get('total_conway_credits', 0))
+                        
+                        # User has deposit if they have any credits
+                        has_deposit = (available_credits > 0 or total_credits > 0)
+                        print(f"✅ User {user_id} credits check: available={available_credits}, total={total_credits}, has_deposit={has_deposit}")
         except Exception as e:
-            print(f"Error checking deposit status: {e}")
+            print(f"⚠️ Error checking deposit status in user_credits_balance: {e}")
             # Fallback: check old custodial_wallets table for backward compatibility
             try:
-                wallet_result = db.supabase_service.table('custodial_wallets')\
-                    .select('balance_usdc, conway_credits')\
-                    .eq('user_id', user_id)\
-                    .execute()
-                
-                if wallet_result.data:
-                    wallet = wallet_result.data[0]
-                    balance_usdc = float(wallet.get('balance_usdc', 0))
-                    conway_credits = float(wallet.get('conway_credits', 0))
-                    has_deposit = (balance_usdc > 0 or conway_credits > 0)
-            except:
-                pass
+                from supabase_client import supabase
+                if supabase:
+                    wallet_result = supabase.table('custodial_wallets')\
+                        .select('balance_usdc, conway_credits')\
+                        .eq('user_id', user_id)\
+                        .execute()
+                    
+                    if wallet_result.data:
+                        wallet = wallet_result.data[0]
+                        balance_usdc = float(wallet.get('balance_usdc', 0))
+                        conway_credits = float(wallet.get('conway_credits', 0))
+                        has_deposit = (balance_usdc > 0 or conway_credits > 0)
+                        print(f"✅ User {user_id} fallback check: usdc={balance_usdc}, credits={conway_credits}, has_deposit={has_deposit}")
+            except Exception as fallback_error:
+                print(f"⚠️ Fallback check also failed: {fallback_error}")
         
         # If no deposit, show deposit-first menu
         if not has_deposit:

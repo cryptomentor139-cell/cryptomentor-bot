@@ -258,6 +258,10 @@ class TelegramBot:
             print("✅ Admin automaton handlers registered")
         except Exception as e:
             print(f"⚠️ Admin automaton handlers failed to register: {e}")
+        
+        # Note: Automaton is for AUTONOMOUS TRADING only (Lifetime Premium)
+        # Signal generation uses bot's own system (/analyze, /futures, /ai)
+        # No separate Automaton AI handlers needed
 
         # Message handler for menu interactions
         self.application.add_handler(

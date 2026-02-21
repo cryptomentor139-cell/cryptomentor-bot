@@ -53,6 +53,11 @@ class RateLimiter:
                 'window_seconds': 86400,  # 24 hours (1 day)
                 'description': 'Withdrawal requests'
             },
+            'ai_signal': {
+                'max_requests': 10,
+                'window_seconds': 3600,  # 1 hour
+                'description': 'AI signal requests'
+            },
             'api_call': {
                 'max_failures': 3,
                 'base_backoff': 1,  # 1 second
@@ -383,3 +388,57 @@ def get_rate_limiter(db=None):
     if _rate_limiter is None:
         _rate_limiter = RateLimiter(db)
     return _rate_limiter
+
+    def check_ai_signal_limit(self, user_id: int) -> Tuple[bool, Optional[str]]:
+        """
+        Check if user can request an AI signal
+        
+        Limit: 10 AI signals per hour per user
+        
+        Args:
+            user_id: Telegram user ID
+            
+        Returns:
+            Tuple of (allowed: bool, error_message: Optional[str])
+        """
+        try:
+            operation = 'ai_signal'
+            config = self.limits[operation]
+            
+            # Get user's AI signal history
+            signal_history = self._rate_limits[user_id][operation]
+            
+            # Clean up old entries outside the time window
+            cutoff_time = datetime.now() - timedelta(seconds=config['window_seconds'])
+            signal_history = [ts for ts in signal_history if ts > cutoff_time]
+            self._rate_limits[user_id][operation] = signal_history
+            
+            # Check if limit exceeded
+            if len(signal_history) >= config['max_requests']:
+                # Calculate time until next allowed signal
+                oldest_signal = min(signal_history)
+                next_allowed = oldest_signal + timedelta(seconds=config['window_seconds'])
+                time_remaining = next_allowed - datetime.now()
+                
+                minutes_remaining = int(time_remaining.total_seconds() / 60)
+                
+                error_msg = (
+                    f"⏱️ Rate limit exceeded!\n\n"
+                    f"You can only request {config['max_requests']} AI signals per hour.\n"
+                    f"Please wait {minutes_remaining} minutes before requesting another signal."
+                )
+                
+                print(f"🚫 AI signal rate limit exceeded for user {user_id} - {minutes_remaining} minutes remaining")
+                return False, error_msg
+            
+            # Limit not exceeded, record this attempt
+            signal_history.append(datetime.now())
+            self._rate_limits[user_id][operation] = signal_history
+            
+            print(f"✅ AI signal rate limit check passed for user {user_id} ({len(signal_history)}/{config['max_requests']})")
+            return True, None
+        
+        except Exception as e:
+            print(f"❌ Error checking AI signal rate limit: {e}")
+            # On error, allow the operation (fail open for better UX)
+            return True, None
