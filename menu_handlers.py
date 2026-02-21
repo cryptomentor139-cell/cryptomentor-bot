@@ -24,15 +24,46 @@ class MenuCallbackHandler:
         self.bot = bot_instance
 
     async def handle_callback_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Main callback query handler"""
+        """Main callback query handler with deduplication"""
         query = update.callback_query
         callback_data = query.data
+        
+        # DEDUPLICATION CHECK - Prevent duplicate processing
+        query_id = query.id
+        if not hasattr(context, 'bot_data'):
+            context.bot_data = {}
+        
+        processed_queries = context.bot_data.get('processed_queries', set())
+        
+        if query_id in processed_queries:
+            print(f"⚠️  Duplicate query detected and skipped: {query_id}")
+            return
+        
+        # Mark as processed
+        processed_queries.add(query_id)
+        context.bot_data['processed_queries'] = processed_queries
+        
+        # Clean old queries (keep only last 100 to prevent memory leak)
+        if len(processed_queries) > 100:
+            # Keep only the most recent 50
+            recent = list(processed_queries)[-50:]
+            context.bot_data['processed_queries'] = set(recent)
         
         # Skip admin callbacks - let them be handled by admin_button_handler in bot.py
         if callback_data.startswith("admin_"):
             return
         
-        await query.answer()
+        # Answer the callback query to remove loading state
+        try:
+            await query.answer()
+        except Exception as e:
+            # Query might be too old or already answered
+            if "query is too old" in str(e).lower() or "already" in str(e).lower():
+                print(f"⚠️  Query already answered or too old: {query_id}")
+                return
+            # For other errors, log but continue
+            print(f"⚠️  Error answering query: {e}")
+        
         user_id = query.from_user.id
 
         try:
