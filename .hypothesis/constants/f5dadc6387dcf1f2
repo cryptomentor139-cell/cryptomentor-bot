@@ -1,0 +1,4 @@
+# file: C:\V3-Final-Version\Bismillah\supabase_client.py
+# hypothesis_version: 6.151.9
+
+[100, '*', 'SUPABASE_SERVICE_KEY', 'SUPABASE_URL', 'User not found', 'add_premium', 'add_user', 'admin_grant_credits', 'admin_revoke_premium', 'admin_set_premium', 'connection_healthy', 'count', 'created_at', 'credits', 'd', 'data', 'delete_user', 'error', 'exact', 'first_name', 'get_live_user_count', 'get_user', 'health_check', 'is_premium', 'last_name', 'm', 'revoke_premium', 'set_premium', 'subscription_end', 'success', 'supabase', 'supabase_service', 'tables_accessible', 'telegram_id', 'total_users', 'update_user', 'updated_at', 'username', 'users', 'w']

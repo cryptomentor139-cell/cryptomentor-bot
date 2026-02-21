@@ -9,10 +9,11 @@ from telegram.ext import ContextTypes, CallbackQueryHandler
 from menu_system import (
     MenuBuilder, get_menu_text, MAIN_MENU, PRICE_MARKET, TRADING_ANALYSIS,
     FUTURES_SIGNALS, PORTFOLIO_CREDITS, PREMIUM_REFERRAL, ASK_AI_MENU,
-    SETTINGS_MENU, CHECK_PRICE, MARKET_OVERVIEW, SPOT_ANALYSIS,
+    AI_AGENT_MENU, SETTINGS_MENU, CHECK_PRICE, MARKET_OVERVIEW, SPOT_ANALYSIS,
     FUTURES_ANALYSIS, MULTI_COIN_SIGNALS, AUTO_SIGNAL_INFO, MY_PORTFOLIO,
     ADD_COIN, CHECK_CREDITS, UPGRADE_PREMIUM, REFERRAL_PROGRAM,
-    PREMIUM_EARNINGS, ASK_AI, CHANGE_LANGUAGE, TIME_SETTINGS, TIMEZONES, POPULAR_SYMBOLS
+    PREMIUM_EARNINGS, ASK_AI, CHANGE_LANGUAGE, TIME_SETTINGS, TIMEZONES, POPULAR_SYMBOLS,
+    AUTOMATON_SPAWN, AUTOMATON_STATUS, AUTOMATON_DEPOSIT, AUTOMATON_LOGS
 )
 import asyncio
 
@@ -50,6 +51,8 @@ class MenuCallbackHandler:
                 await self.show_premium_referral_menu(query, context)
             elif callback_data == ASK_AI_MENU:
                 await self.show_ask_ai_menu(query, context)
+            elif callback_data == AI_AGENT_MENU:
+                await self.show_ai_agent_menu(query, context)
             elif callback_data == SETTINGS_MENU:
                 await self.show_settings_menu(query, context)
 
@@ -80,6 +83,16 @@ class MenuCallbackHandler:
                 await self.handle_premium_earnings(query, context)
             elif callback_data == ASK_AI:
                 await self.handle_ask_ai(query, context)
+            elif callback_data == AUTOMATON_SPAWN:
+                await self.handle_automaton_spawn(query, context)
+            elif callback_data == AUTOMATON_STATUS:
+                await self.handle_automaton_status(query, context)
+            elif callback_data == "agent_lineage":
+                await self.handle_agent_lineage(query, context)
+            elif callback_data == AUTOMATON_DEPOSIT:
+                await self.handle_automaton_deposit(query, context)
+            elif callback_data == AUTOMATON_LOGS:
+                await self.handle_automaton_logs(query, context)
             elif callback_data == CHANGE_LANGUAGE:
                 await self.handle_change_language(query, context)
             elif callback_data == "copy_referral_link":
@@ -202,6 +215,19 @@ class MenuCallbackHandler:
         await query.edit_message_text(
             get_menu_text(ASK_AI_MENU),
             reply_markup=MenuBuilder.build_ask_ai_menu(),
+            parse_mode='MARKDOWN'
+        )
+
+    async def show_ai_agent_menu(self, query, context):
+        """Show AI Agent submenu"""
+        user_id = query.from_user.id
+        from database import Database
+        db = Database()
+        user_lang = db.get_user_language(user_id)
+        
+        await query.edit_message_text(
+            get_menu_text(AI_AGENT_MENU, user_lang),
+            reply_markup=MenuBuilder.build_ai_agent_menu(),
             parse_mode='MARKDOWN'
         )
 
@@ -635,6 +661,94 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             reply_markup=back_button,
             parse_mode='MARKDOWN'
         )
+
+    async def handle_automaton_spawn(self, query, context):
+        """Handle Spawn Agent button - trigger spawn_agent_command"""
+        from app.handlers_automaton import spawn_agent_command
+        
+        # Create a fake Update object to pass to the command handler
+        fake_update = Update(
+            update_id=999999,
+            message=query.message,
+            callback_query=query
+        )
+        fake_update.effective_user = query.from_user
+        fake_update.message = query.message
+        
+        # Call the spawn_agent_command handler
+        await spawn_agent_command(fake_update, context)
+
+    async def handle_automaton_status(self, query, context):
+        """Handle Agent Status button - trigger agent_status_command"""
+        from app.handlers_automaton import agent_status_command
+        
+        await query.edit_message_text("⏳ Loading agent status...")
+        
+        # Create a fake Update object
+        fake_update = Update(
+            update_id=999999,
+            message=query.message,
+            callback_query=query
+        )
+        fake_update.effective_user = query.from_user
+        fake_update.message = query.message
+        
+        # Call the agent_status_command handler
+        await agent_status_command(fake_update, context)
+
+    async def handle_automaton_deposit(self, query, context):
+        """Handle Fund Agent button - trigger deposit_command"""
+        from app.handlers_automaton import deposit_command
+        
+        await query.edit_message_text("⏳ Loading deposit information...")
+        
+        # Create a fake Update object
+        fake_update = Update(
+            update_id=999999,
+            message=query.message,
+            callback_query=query
+        )
+        fake_update.effective_user = query.from_user
+        fake_update.message = query.message
+        
+        # Call the deposit_command handler
+        await deposit_command(fake_update, context)
+
+    async def handle_automaton_logs(self, query, context):
+        """Handle Agent Logs button - trigger agent_logs_command"""
+        from app.handlers_automaton import agent_logs_command
+        
+        await query.edit_message_text("⏳ Loading agent logs...")
+        
+        # Create a fake Update object
+        fake_update = Update(
+            update_id=999999,
+            message=query.message,
+            callback_query=query
+        )
+        fake_update.effective_user = query.from_user
+        fake_update.message = query.message
+        
+        # Call the agent_logs_command handler
+        await agent_logs_command(fake_update, context)
+
+    async def handle_agent_lineage(self, query, context):
+        """Handle Agent Lineage button - trigger agent_lineage_command"""
+        from app.handlers_automaton import agent_lineage_command
+        
+        await query.edit_message_text("⏳ Loading lineage tree...")
+        
+        # Create a fake Update object
+        fake_update = Update(
+            update_id=999999,
+            message=query.message,
+            callback_query=query
+        )
+        fake_update.effective_user = query.from_user
+        fake_update.message = query.message
+        
+        # Call the agent_lineage_command handler
+        await agent_lineage_command(fake_update, context)
 
     async def handle_change_language(self, query, context):
         """Handle language change with interactive buttons"""

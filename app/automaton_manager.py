@@ -5,7 +5,7 @@ import os
 import uuid
 from typing import Dict, Optional, Any, List
 from datetime import datetime
-from conway_integration import get_conway_client
+from app.conway_integration import get_conway_client
 
 class AutomatonManager:
     """
@@ -27,7 +27,12 @@ class AutomatonManager:
             db: Database instance (Supabase-enabled)
         """
         self.db = db
-        self.conway = get_conway_client()
+        
+        # Import rate limiter here to avoid circular imports
+        from app.rate_limiter import get_rate_limiter
+        rate_limiter = get_rate_limiter(db)
+        
+        self.conway = get_conway_client(rate_limiter=rate_limiter)
         
         # Spawn fee (100,000 credits)
         self.spawn_fee_credits = 100000
@@ -337,7 +342,7 @@ class AutomatonManager:
         
         Args:
             agent_id: Agent UUID
-            transaction_type: Type (spawn, deposit, earn, spend, performance_fee)
+            transaction_type: Type (spawn, fund, earn, spend, performance_fee, platform_fee)
             amount: Transaction amount
             description: Optional description
             
@@ -361,6 +366,138 @@ class AutomatonManager:
         except Exception as e:
             print(f"❌ Error recording transaction: {e}")
             return False
+    
+    def record_funding_transaction(
+        self,
+        agent_id: str,
+        amount: float,
+        description: Optional[str] = None
+    ) -> bool:
+        """
+        Record funding transaction (deposit)
+        
+        Args:
+            agent_id: Agent UUID
+            amount: Funding amount
+            description: Optional description
+            
+        Returns:
+            True if successful
+        """
+        return self._record_transaction(
+            agent_id=agent_id,
+            transaction_type='fund',
+            amount=amount,
+            description=description or f'Deposit: {amount:,.2f} credits'
+        )
+    
+    def record_earning_transaction(
+        self,
+        agent_id: str,
+        amount: float,
+        description: Optional[str] = None
+    ) -> bool:
+        """
+        Record earning transaction (profit from trading)
+        
+        Args:
+            agent_id: Agent UUID
+            amount: Earning amount
+            description: Optional description
+            
+        Returns:
+            True if successful
+        """
+        try:
+            # Record transaction
+            success = self._record_transaction(
+                agent_id=agent_id,
+                transaction_type='earn',
+                amount=amount,
+                description=description or f'Trading profit: {amount:,.2f}'
+            )
+            
+            # Update total_earnings in agent record
+            if success and self.db.supabase_enabled:
+                result = self.db.supabase_service.table('user_automatons').select('total_earnings').eq('id', agent_id).execute()
+                if result.data:
+                    current_earnings = result.data[0].get('total_earnings', 0)
+                    self.db.supabase_service.table('user_automatons').update({
+                        'total_earnings': current_earnings + amount
+                    }).eq('id', agent_id).execute()
+            
+            return success
+        
+        except Exception as e:
+            print(f"❌ Error recording earning transaction: {e}")
+            return False
+    
+    def record_spending_transaction(
+        self,
+        agent_id: str,
+        amount: float,
+        description: Optional[str] = None
+    ) -> bool:
+        """
+        Record spending transaction (loss from trading or credit consumption)
+        
+        Args:
+            agent_id: Agent UUID
+            amount: Spending amount (positive value)
+            description: Optional description
+            
+        Returns:
+            True if successful
+        """
+        try:
+            # Record transaction (negative amount)
+            success = self._record_transaction(
+                agent_id=agent_id,
+                transaction_type='spend',
+                amount=-abs(amount),
+                description=description or f'Trading loss/consumption: {amount:,.2f}'
+            )
+            
+            # Update total_expenses in agent record
+            if success and self.db.supabase_enabled:
+                result = self.db.supabase_service.table('user_automatons').select('total_expenses').eq('id', agent_id).execute()
+                if result.data:
+                    current_expenses = result.data[0].get('total_expenses', 0)
+                    self.db.supabase_service.table('user_automatons').update({
+                        'total_expenses': current_expenses + abs(amount)
+                    }).eq('id', agent_id).execute()
+            
+            return success
+        
+        except Exception as e:
+            print(f"❌ Error recording spending transaction: {e}")
+            return False
+    
+    def record_fee_transaction(
+        self,
+        agent_id: str,
+        fee_type: str,
+        amount: float,
+        description: Optional[str] = None
+    ) -> bool:
+        """
+        Record fee transaction (performance_fee or platform_fee)
+        
+        Args:
+            agent_id: Agent UUID
+            fee_type: Fee type (performance_fee or platform_fee)
+            amount: Fee amount
+            description: Optional description
+            
+        Returns:
+            True if successful
+        """
+        return self._record_transaction(
+            agent_id=agent_id,
+            transaction_type=fee_type,
+            amount=-abs(amount),
+            description=description or f'{fee_type}: {amount:,.2f}'
+        )
     
     def _record_revenue(
         self,

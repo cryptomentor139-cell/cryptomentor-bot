@@ -16,6 +16,7 @@ FUTURES_SIGNALS = "futures_signals"
 PORTFOLIO_CREDITS = "portfolio_credits"
 PREMIUM_REFERRAL = "premium_referral"
 ASK_AI_MENU = "ask_ai_menu"
+AI_AGENT_MENU = "ai_agent_menu"
 SETTINGS_MENU = "settings_menu"
 
 # Action Constants
@@ -32,6 +33,10 @@ UPGRADE_PREMIUM = "upgrade_premium"
 REFERRAL_PROGRAM = "referral_program"
 PREMIUM_EARNINGS = "premium_earnings"
 ASK_AI = "ask_ai"
+AUTOMATON_SPAWN = "automaton_spawn"
+AUTOMATON_STATUS = "automaton_status"
+AUTOMATON_DEPOSIT = "automaton_deposit"
+AUTOMATON_LOGS = "automaton_logs"
 CHANGE_LANGUAGE = "change_language"
 TIME_SETTINGS = "time_settings"
 
@@ -56,7 +61,7 @@ class MenuBuilder:
 
     @staticmethod
     def build_main_menu() -> InlineKeyboardMarkup:
-        """Build the main menu with 7 categories"""
+        """Build the main menu with 8 categories"""
         keyboard = [
             [InlineKeyboardButton("📈 Price & Market", callback_data=PRICE_MARKET)],
             [InlineKeyboardButton("🧠 Trading Analysis", callback_data=TRADING_ANALYSIS)],
@@ -64,6 +69,7 @@ class MenuBuilder:
             [InlineKeyboardButton("💼 Portfolio & Credits", callback_data=PORTFOLIO_CREDITS)],
             [InlineKeyboardButton("👑 Premium & Referral", callback_data=PREMIUM_REFERRAL)],
             [InlineKeyboardButton("🤖 Ask AI", callback_data=ASK_AI_MENU)],
+            [InlineKeyboardButton("🤖 AI Agent", callback_data=AI_AGENT_MENU)],
             [InlineKeyboardButton("⚙️ Settings", callback_data=SETTINGS_MENU)]
         ]
         return InlineKeyboardMarkup(keyboard)
@@ -125,6 +131,19 @@ class MenuBuilder:
         """Build Ask AI submenu"""
         keyboard = [
             [InlineKeyboardButton("💬 Ask CryptoMentor AI", callback_data=ASK_AI)],
+            [InlineKeyboardButton("🔙 Back to Main Menu", callback_data=MAIN_MENU)]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+
+    @staticmethod
+    def build_ai_agent_menu() -> InlineKeyboardMarkup:
+        """Build AI Agent submenu"""
+        keyboard = [
+            [InlineKeyboardButton("🚀 Spawn Agent", callback_data=AUTOMATON_SPAWN)],
+            [InlineKeyboardButton("📊 Agent Status", callback_data=AUTOMATON_STATUS)],
+            [InlineKeyboardButton("🌳 Agent Lineage", callback_data="agent_lineage")],
+            [InlineKeyboardButton("💰 Fund Agent (Deposit)", callback_data=AUTOMATON_DEPOSIT)],
+            [InlineKeyboardButton("📜 Agent Logs", callback_data=AUTOMATON_LOGS)],
             [InlineKeyboardButton("🔙 Back to Main Menu", callback_data=MAIN_MENU)]
         ]
         return InlineKeyboardMarkup(keyboard)
@@ -224,6 +243,16 @@ Upgrade ke premium dan dapatkan penghasilan melalui program referral.""",
 
 Dapatkan insight ahli dan jawaban untuk pertanyaan cryptocurrency Anda.""",
 
+            AI_AGENT_MENU: """🤖 **AI Agent Menu**
+
+Kelola autonomous trading agents Anda yang menggunakan Conway credits sebagai bahan bakar.
+
+🚀 **Spawn Agent** - Buat agent baru (100k credits)
+📊 **Agent Status** - Cek status dan performa agent
+🌳 **Agent Lineage** - Lihat lineage tree dan passive income
+💰 **Fund Agent** - Deposit USDT/USDC untuk fuel
+📜 **Agent Logs** - Lihat riwayat transaksi agent""",
+
             SETTINGS_MENU: """⚙️ **Pengaturan**
 
 Sesuaikan pengalaman CryptoMentor AI Anda."""
@@ -260,6 +289,16 @@ Upgrade to premium and earn through our referral program.""",
 
 Get expert insights and answers to your cryptocurrency questions.""",
 
+            AI_AGENT_MENU: """🤖 **AI Agent Menu**
+
+Manage your autonomous trading agents powered by Conway credits.
+
+🚀 **Spawn Agent** - Create new agent (100k credits)
+📊 **Agent Status** - Check agent status and performance
+🌳 **Agent Lineage** - View lineage tree and passive income
+💰 **Fund Agent** - Deposit USDT/USDC for fuel
+📜 **Agent Logs** - View agent transaction history""",
+
             SETTINGS_MENU: """⚙️ **Settings**
 
 Customize your CryptoMentor AI experience."""
@@ -278,6 +317,11 @@ __all__ = [
     'PORTFOLIO_CREDITS',
     'PREMIUM_REFERRAL',
     'ASK_AI_MENU',
+    'AI_AGENT_MENU',
     'SETTINGS_MENU',
-    'POPULAR_SYMBOLS'
+    'POPULAR_SYMBOLS',
+    'AUTOMATON_SPAWN',
+    'AUTOMATON_STATUS',
+    'AUTOMATON_DEPOSIT',
+    'AUTOMATON_LOGS'
 ]

@@ -1,0 +1,4 @@
+# file: C:\V3-Final-Version\Bismillah\app\conway_integration.py
+# hypothesis_version: 6.151.9
+
+[200, 201, 400, 404, 500, '/api/v1/agents/spawn', 'Authorization', 'CONWAY_API_KEY', 'CONWAY_API_URL', 'Content-Type', 'GET', 'POST', 'USDC', 'Unknown error', 'address', 'agent_id', 'agent_name', 'application/json', 'balance', 'base', 'deposit_address', 'genesis_prompt', 'is_active', 'last_active', 'limit', 'message', 'network', 'success', 'token', 'total_loss', 'total_profit', 'total_trades', 'transactions', 'user_id']

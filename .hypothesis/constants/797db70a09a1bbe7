@@ -1,0 +1,4 @@
+# file: C:\V3-Final-Version\Bismillah\app\audit_logger.py
+# hypothesis_version: 6.151.9
+
+[100, '*', '...', '/', 'SUPABASE_SERVICE_KEY', 'SUPABASE_URL', 'USDT', '[REDACTED]', 'admin_id', 'admin_operation', 'agent', 'agent_id', 'agent_name', 'agent_spawn', 'amount', 'api_key', 'audit_logs', 'command', 'credits', 'credits_deducted', 'deposit_detection', 'description', 'destination', 'encryption_key', 'error_message', 'event_type', 'fee_collection', 'fee_type', 'metadata', 'mnemonic', 'network', 'operation', 'operation_type', 'parameters', 'password', 'pending', 'polygon', 'private_key', 'secret', 'seed', 'status', 'success', 'target', 'target_user_id', 'timestamp', 'to_address', 'token', 'tx_hash', 'type', 'user_id', 'wallet', 'wallet_address', 'withdrawal_id', 'withdrawal_request']

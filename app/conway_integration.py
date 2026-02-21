@@ -18,9 +18,10 @@ class ConwayIntegration:
     - Spawn autonomous agents
     - Query agent status
     - Retry logic with exponential backoff
+    - Rate limiting with exponential backoff
     """
     
-    def __init__(self):
+    def __init__(self, rate_limiter=None):
         self.api_url = os.getenv('CONWAY_API_URL', 'https://api.conway.tech')
         self.api_key = os.getenv('CONWAY_API_KEY')
         
@@ -31,6 +32,9 @@ class ConwayIntegration:
             'Authorization': f'Bearer {self.api_key}',
             'Content-Type': 'application/json'
         }
+        
+        # Rate limiter for exponential backoff
+        self.rate_limiter = rate_limiter
         
         # Retry configuration
         self.max_retries = 3
@@ -62,6 +66,14 @@ class ConwayIntegration:
             Exception: After max retries exceeded
         """
         url = f"{self.api_url}{endpoint}"
+        api_name = 'conway_api'
+        
+        # Check rate limiter backoff
+        if self.rate_limiter:
+            allowed, wait_seconds = self.rate_limiter.check_api_backoff(api_name)
+            if not allowed and wait_seconds:
+                print(f"⏳ Conway API in backoff - waiting {wait_seconds:.1f}s")
+                time.sleep(wait_seconds)
         
         for attempt in range(self.max_retries):
             try:
@@ -76,6 +88,9 @@ class ConwayIntegration:
                 
                 # Success
                 if response.status_code in [200, 201]:
+                    # Record success to reset backoff
+                    if self.rate_limiter:
+                        self.rate_limiter.record_api_success(api_name)
                     return response.json()
                 
                 # Client error (don't retry)
@@ -90,9 +105,13 @@ class ConwayIntegration:
                     print(f"❌ {error_msg}")
                     raise Exception(error_msg)
                 
-                # Server error (retry)
+                # Server error (retry with backoff)
                 if response.status_code >= 500:
                     print(f"⚠️ Conway API server error: {response.status_code} (attempt {attempt + 1}/{self.max_retries})")
+                    
+                    # Record failure for rate limiting
+                    if self.rate_limiter:
+                        backoff = self.rate_limiter.record_api_failure(api_name)
                     
                     if attempt < self.max_retries - 1:
                         delay = min(self.base_delay * (2 ** attempt), self.max_delay)
@@ -105,6 +124,10 @@ class ConwayIntegration:
             except requests.exceptions.Timeout:
                 print(f"⚠️ Conway API timeout (attempt {attempt + 1}/{self.max_retries})")
                 
+                # Record failure for rate limiting
+                if self.rate_limiter:
+                    backoff = self.rate_limiter.record_api_failure(api_name)
+                
                 if attempt < self.max_retries - 1:
                     delay = min(self.base_delay * (2 ** attempt), self.max_delay)
                     print(f"⏳ Retrying in {delay} seconds...")
@@ -115,6 +138,10 @@ class ConwayIntegration:
             
             except requests.exceptions.ConnectionError:
                 print(f"⚠️ Conway API connection error (attempt {attempt + 1}/{self.max_retries})")
+                
+                # Record failure for rate limiting
+                if self.rate_limiter:
+                    backoff = self.rate_limiter.record_api_failure(api_name)
                 
                 if attempt < self.max_retries - 1:
                     delay = min(self.base_delay * (2 ** attempt), self.max_delay)
@@ -134,12 +161,22 @@ class ConwayIntegration:
         """
         Check if Conway API is accessible
         
+        Uses a simple GET request to verify API connectivity
+        
         Returns:
             True if API is healthy, False otherwise
         """
         try:
-            response = self._make_request('GET', '/api/v1/health')
-            return response.get('status') == 'ok'
+            # Try to make a simple request to verify API is accessible
+            # We'll use a dummy user_id to test the endpoint
+            response = requests.get(
+                f"{self.api_url}/api/v1/wallets/0/deposit-address",
+                headers=self.headers,
+                timeout=10
+            )
+            # API is accessible if we get any response (even 404 is fine)
+            # 404 means API is working, just no wallet for user_id=0
+            return response.status_code in [200, 404]
         except Exception as e:
             print(f"❌ Conway API health check failed: {e}")
             return False
@@ -289,6 +326,53 @@ class ConwayIntegration:
             print(f"❌ Failed to get agent status: {e}")
             return None
     
+    def fund_agent(self, agent_wallet: str, amount: float) -> Dict[str, Any]:
+        """
+        Transfer Conway credits to agent wallet
+        
+        This is the core funding operation that credits an agent's account
+        with Conway credits, enabling the agent to continue operating.
+        
+        Args:
+            agent_wallet: Agent's wallet address (deposit address)
+            amount: Amount of Conway credits to transfer
+            
+        Returns:
+            Dict with 'success', 'new_balance', 'message'
+        """
+        try:
+            data = {
+                'agent_wallet': agent_wallet,
+                'amount': amount
+            }
+            
+            response = self._make_request('POST', '/credits/transfer', data=data)
+            
+            if response.get('success'):
+                new_balance = response.get('new_balance', 0)
+                print(f"✅ Funded agent {agent_wallet} with {amount} credits. New balance: {new_balance}")
+                return {
+                    'success': True,
+                    'new_balance': new_balance,
+                    'message': 'Credits transferred successfully'
+                }
+            else:
+                error_msg = response.get('message', 'Unknown error')
+                print(f"❌ Failed to fund agent: {error_msg}")
+                return {
+                    'success': False,
+                    'new_balance': 0,
+                    'message': error_msg
+                }
+        
+        except Exception as e:
+            print(f"❌ Failed to fund agent: {e}")
+            return {
+                'success': False,
+                'new_balance': 0,
+                'message': str(e)
+            }
+    
     def get_agent_transactions(
         self, 
         deposit_address: str, 
@@ -327,14 +411,17 @@ class ConwayIntegration:
 # Singleton instance
 _conway_client = None
 
-def get_conway_client() -> ConwayIntegration:
+def get_conway_client(rate_limiter=None) -> ConwayIntegration:
     """
     Get singleton Conway API client instance
+    
+    Args:
+        rate_limiter: Optional RateLimiter instance for API backoff
     
     Returns:
         ConwayIntegration instance
     """
     global _conway_client
     if _conway_client is None:
-        _conway_client = ConwayIntegration()
+        _conway_client = ConwayIntegration(rate_limiter=rate_limiter)
     return _conway_client

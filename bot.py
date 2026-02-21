@@ -228,6 +228,48 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ Signal tracking admin commands failed to register: {e}")
 
+        # Register Automaton handlers
+        try:
+            from app.handlers_automaton import (
+                spawn_agent_command, agent_status_command, deposit_command,
+                balance_command, agent_logs_command, withdraw_command,
+                agent_lineage_command, handle_spawn_parent_callback
+            )
+            self.application.add_handler(CommandHandler("spawn_agent", spawn_agent_command))
+            self.application.add_handler(CommandHandler("agent_status", agent_status_command))
+            self.application.add_handler(CommandHandler("agent_lineage", agent_lineage_command))
+            self.application.add_handler(CommandHandler("deposit", deposit_command))
+            self.application.add_handler(CommandHandler("balance", balance_command))
+            self.application.add_handler(CommandHandler("agent_logs", agent_logs_command))
+            self.application.add_handler(CommandHandler("withdraw", withdraw_command))
+            
+            # Register callback handlers for spawn parent selection
+            from telegram.ext import CallbackQueryHandler
+            self.application.add_handler(CallbackQueryHandler(
+                handle_spawn_parent_callback,
+                pattern="^spawn_(noparent|parent)_"
+            ))
+            
+            print("✅ Automaton handlers registered")
+        except Exception as e:
+            print(f"⚠️ Automaton handlers failed to register: {e}")
+        
+        # Register admin automaton handlers
+        try:
+            from app.handlers_admin_automaton import (
+                admin_wallets_command, admin_wallet_details_command,
+                admin_revenue_command, admin_agents_command,
+                admin_process_withdrawal_command
+            )
+            self.application.add_handler(CommandHandler("admin_wallets", admin_wallets_command))
+            self.application.add_handler(CommandHandler("admin_wallet_details", admin_wallet_details_command))
+            self.application.add_handler(CommandHandler("admin_revenue", admin_revenue_command))
+            self.application.add_handler(CommandHandler("admin_agents", admin_agents_command))
+            self.application.add_handler(CommandHandler("admin_process_withdrawal", admin_process_withdrawal_command))
+            print("✅ Admin automaton handlers registered")
+        except Exception as e:
+            print(f"⚠️ Admin automaton handlers failed to register: {e}")
+
         # Message handler for menu interactions
         self.application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
@@ -3142,6 +3184,17 @@ Choose action:
                 print("📡 App AutoSignal scheduler started (FAST mode)")
             except Exception as e:
                 print(f"⚠️ App AutoSignal scheduler failed to start: {e}")
+            
+            # Initialize Automaton Background Services
+            try:
+                from app.background_services import get_background_services
+                from services import get_database
+                db = get_database()
+                self.background_services = get_background_services(db, self.application.bot)
+                await self.background_services.start()
+                print("🤖 Automaton Background Services started")
+            except Exception as e:
+                print(f"⚠️ Automaton Background Services failed to start: {e}")
 
             # Keep running
             while True:
@@ -3154,6 +3207,14 @@ Choose action:
             logger.error(f"Bot error: {e}")
             raise
         finally:
+            # Stop background services
+            if hasattr(self, 'background_services'):
+                try:
+                    await self.background_services.stop()
+                    print("✅ Background services stopped")
+                except Exception as e:
+                    print(f"⚠️ Error stopping background services: {e}")
+            
             # Cleanup
             if self.application:
                 try:
