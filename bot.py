@@ -3168,12 +3168,14 @@ Choose action:
                 
                 user_data.pop('awaiting_input', None)
                 user_data.pop('message_id', None)
+                return  # Stop processing after handling admin input
                 
             except (ValueError, IndexError):
                 await update.message.reply_text(
                     "❌ Invalid format! Please check your input and try again.",
                     parse_mode='MARKDOWN'
                 )
+                return  # Stop processing after error
             return
 
         # Handle manual symbol input
