@@ -1,18 +1,34 @@
-# Development files
-node_modules/
-.git/
-.kiro/
+# Files to ignore during Railway deployment
 
-# Test files
-**/__tests__/
-*.test.ts
-*.spec.ts
-vitest.config.ts
+# Development
+.git/
+.vscode/
+.kiro/
 
 # Documentation
 *.md
 !README.md
 
-# Local config
-.env
+# Tests
+**/__tests__/
+*.test.ts
+*.test.js
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env (use Railway env vars instead)
 .env.local
+.env.*.local
+
+# Build artifacts (will be rebuilt)
+# node_modules/ - Keep this, needed for deployment
+
+# Temporary files
+*.tmp
+*.temp
