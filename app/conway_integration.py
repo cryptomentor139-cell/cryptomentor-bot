@@ -95,6 +95,11 @@ class ConwayIntegration:
                 
                 # Client error (don't retry)
                 if 400 <= response.status_code < 500:
+                    # For 404, return None instead of raising exception
+                    if response.status_code == 404:
+                        print(f"⚠️ Conway API endpoint not found: {url}")
+                        return None
+                    
                     error_msg = f"Conway API client error: {response.status_code}"
                     try:
                         error_data = response.json()
