@@ -190,35 +190,38 @@ class ConwayIntegration:
         """
         Generate a unique deposit address for an agent
         
-        Conway provides USDC deposit addresses on Base network
+        IMPORTANT: Conway uses a CENTRALIZED CUSTODIAL WALLET
+        All users deposit to the same address, tracked by user_id in database
         
         Args:
             user_id: Telegram user ID
             agent_name: Name for the agent
             
         Returns:
-            Deposit address (0x...) or None if failed
+            Centralized deposit address (0x...) or None if failed
         """
         try:
-            data = {
-                'user_id': user_id,
-                'agent_name': agent_name,
-                'network': 'base',
-                'token': 'USDC'
-            }
+            # Get centralized wallet address from environment
+            centralized_wallet = os.getenv('CENTRALIZED_WALLET_ADDRESS')
             
-            response = self._make_request('POST', '/api/v1/agents/address', data=data)
-            
-            address = response.get('deposit_address')
-            if address:
-                print(f"✅ Generated deposit address for user {user_id}: {address}")
-                return address
-            else:
-                print(f"❌ No deposit address in response: {response}")
+            if not centralized_wallet:
+                print("❌ CENTRALIZED_WALLET_ADDRESS not set in environment")
                 return None
+            
+            # Validate address format (should start with 0x and be 42 chars)
+            if not centralized_wallet.startswith('0x') or len(centralized_wallet) != 42:
+                print(f"❌ Invalid wallet address format: {centralized_wallet}")
+                return None
+            
+            print(f"✅ Using centralized deposit address for user {user_id}: {centralized_wallet}")
+            print(f"   Agent: {agent_name}")
+            print(f"   Network: Base")
+            print(f"   Token: USDC")
+            
+            return centralized_wallet
         
         except Exception as e:
-            print(f"❌ Failed to generate deposit address: {e}")
+            print(f"❌ Failed to get deposit address: {e}")
             return None
     
     def get_credit_balance(self, deposit_address: str) -> Optional[float]:
