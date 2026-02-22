@@ -1,1 +1,1 @@
-web: bash start_combined.sh
+web: python main.py
