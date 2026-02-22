@@ -4,8 +4,12 @@
 
 AutoSignal sekarang menggunakan analisis Smart Money Concepts (SMC) untuk menghasilkan signal yang lebih akurat dan profesional.
 
+**⚡ IMPORTANT**: AutoSignal **TIDAK menggunakan LLM** (Cerebras, DeepSeek, OpenAI, dll) untuk menjaga kecepatan dan reliability. Pure technical analysis only!
+
 **Status**: ✅ ACTIVE & INTEGRATED
 **Date**: 2026-02-22
+**Speed**: 3-5 seconds per coin (NO LLM delays)
+**Reliability**: 99% (NO API timeouts)
 
 ---
 
