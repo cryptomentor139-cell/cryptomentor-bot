@@ -5,7 +5,31 @@ from typing import Dict, Any
 from app.supabase_conn import get_supabase_client, health
 from app.sb_repo import stats_totals
 
-ADMIN_IDS = {int(x.strip()) for x in (os.getenv("ADMIN_IDS", "").split(",") if os.getenv("ADMIN_IDS") else [])}
+def _load_admin_ids():
+    """Load admin IDs from various environment variables"""
+    admin_ids = set()
+    
+    # Try ADMIN_IDS (comma-separated)
+    admin_ids_str = os.getenv("ADMIN_IDS", "")
+    if admin_ids_str:
+        for admin_id in admin_ids_str.split(","):
+            try:
+                admin_ids.add(int(admin_id.strip()))
+            except ValueError:
+                pass
+    
+    # Try ADMIN1, ADMIN2, ADMIN3, etc.
+    for key in ['ADMIN1', 'ADMIN2', 'ADMIN3', 'ADMIN_USER_ID', 'ADMIN2_USER_ID']:
+        value = os.getenv(key)
+        if value:
+            try:
+                admin_ids.add(int(value.strip()))
+            except ValueError:
+                pass
+    
+    return admin_ids
+
+ADMIN_IDS = _load_admin_ids()
 
 def is_admin(user_id: int) -> bool:
     """Check if user is admin"""
