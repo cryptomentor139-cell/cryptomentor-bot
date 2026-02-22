@@ -221,10 +221,14 @@ class TelegramBot:
         # Register Automaton handlers
         try:
             from app.handlers_automaton import (
-                spawn_agent_command, agent_status_command, deposit_command,
+                automaton_command, spawn_agent_command, agent_status_command, deposit_command,
                 balance_command, agent_logs_command, withdraw_command,
                 agent_lineage_command, handle_spawn_parent_callback
             )
+            # Main automaton command with subcommands
+            self.application.add_handler(CommandHandler("automaton", automaton_command))
+            
+            # Individual commands (backward compatibility)
             self.application.add_handler(CommandHandler("spawn_agent", spawn_agent_command))
             self.application.add_handler(CommandHandler("agent_status", agent_status_command))
             self.application.add_handler(CommandHandler("agent_lineage", agent_lineage_command))
