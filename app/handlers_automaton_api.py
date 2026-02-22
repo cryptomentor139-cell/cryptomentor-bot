@@ -34,8 +34,9 @@ async def automaton_status_api(update: Update, context: ContextTypes.DEFAULT_TYP
             return
         
         # Get user's deposit address from database
-        result = db.supabase_service.table('user_automatons')\
-            .select('deposit_address, agent_name')\
+        supabase = db.supabase_service()
+        result = supabase.table('user_automatons')\
+            .select('conway_deposit_address, agent_name')\
             .eq('user_id', user_id)\
             .eq('status', 'active')\
             .execute()
@@ -51,7 +52,7 @@ async def automaton_status_api(update: Update, context: ContextTypes.DEFAULT_TYP
         
         # Get status for each agent
         for agent_data in result.data:
-            deposit_address = agent_data['deposit_address']
+            deposit_address = agent_data['conway_deposit_address']
             agent_name = agent_data['agent_name']
             
             # Get status from Automaton API
@@ -142,18 +143,17 @@ async def automaton_spawn_api(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
         
         # Save to database
-        db.supabase_service.table('user_automatons').insert({
+        supabase = db.supabase_service()
+        supabase.table('user_automatons').insert({
             'user_id': user_id,
             'agent_name': agent_name,
-            'deposit_address': deposit_address,
+            'conway_deposit_address': deposit_address,
             'agent_wallet': deposit_address,  # Same as deposit address
             'status': 'pending',  # Will be 'active' after first deposit
-            'balance': 0,
+            'conway_credits': 0,
             'total_earnings': 0,
             'total_expenses': 0,
-            'net_pnl': 0,
-            'survival_tier': 'normal',
-            'runtime_days': 0
+            'survival_tier': 'normal'
         }).execute()
         
         message = (
@@ -195,8 +195,9 @@ async def automaton_balance_api(update: Update, context: ContextTypes.DEFAULT_TY
         conway = get_conway_client()
         
         # Get user's deposit address
-        result = db.supabase_service.table('user_automatons')\
-            .select('deposit_address, agent_name')\
+        supabase = db.supabase_service()
+        result = supabase.table('user_automatons')\
+            .select('conway_deposit_address, agent_name')\
             .eq('user_id', user_id)\
             .execute()
         
@@ -210,7 +211,7 @@ async def automaton_balance_api(update: Update, context: ContextTypes.DEFAULT_TY
         
         # Check balance for each agent
         for agent_data in result.data:
-            deposit_address = agent_data['deposit_address']
+            deposit_address = agent_data['conway_deposit_address']
             agent_name = agent_data['agent_name']
             
             # Get balance from Automaton API
@@ -257,8 +258,9 @@ async def automaton_deposit_info(update: Update, context: ContextTypes.DEFAULT_T
     
     try:
         # Get user's agents
-        result = db.supabase_service.table('user_automatons')\
-            .select('deposit_address, agent_name, balance')\
+        supabase = db.supabase_service()
+        result = supabase.table('user_automatons')\
+            .select('conway_deposit_address, agent_name, conway_credits')\
             .eq('user_id', user_id)\
             .execute()
         
@@ -271,9 +273,9 @@ async def automaton_deposit_info(update: Update, context: ContextTypes.DEFAULT_T
             return
         
         for agent_data in result.data:
-            deposit_address = agent_data['deposit_address']
+            deposit_address = agent_data['conway_deposit_address']
             agent_name = agent_data['agent_name']
-            balance = agent_data.get('balance', 0)
+            balance = agent_data.get('conway_credits', 0)
             
             message = (
                 f"💳 *Deposit Info*\n\n"
