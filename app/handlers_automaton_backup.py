@@ -57,20 +57,15 @@ async def automaton_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     subcommand = context.args[0].lower()
     
-    # Route to appropriate handler - Use API handlers for Automaton integration
-    from app.handlers_automaton_api import (
-        automaton_status_api, automaton_spawn_api,
-        automaton_balance_api, automaton_deposit_info
-    )
-    
+    # Route to appropriate handler
     if subcommand == "status":
-        await automaton_status_api(update, context)
+        await agent_status_command(update, context)
     elif subcommand == "spawn":
-        await automaton_spawn_api(update, context)
+        await spawn_agent_command(update, context)
     elif subcommand == "deposit":
-        await automaton_deposit_info(update, context)
+        await deposit_command(update, context)
     elif subcommand == "balance":
-        await automaton_balance_api(update, context)
+        await balance_command(update, context)
     elif subcommand == "logs":
         await agent_logs_command(update, context)
     elif subcommand == "withdraw":
@@ -282,6 +277,63 @@ async def spawn_agent_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             "❌ Terjadi kesalahan saat spawn agent. Silakan coba lagi.",
             parse_mode=ParseMode.MARKDOWN
         )
+async def automaton_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle /automaton command with subcommands
+
+    Usage:
+    /automaton status - Check agent status
+    /automaton spawn - Spawn new agent
+    /automaton deposit - Deposit funds
+    /automaton balance - Check balance
+    /automaton logs - View logs
+    /automaton withdraw - Withdraw funds
+    /automaton lineage - View lineage tree
+    """
+    if not context.args:
+        help_text = (
+            "🤖 *Automaton Commands*\n\n"
+            "Usage: `/automaton <subcommand>`\n\n"
+            "*Available Subcommands:*\n"
+            "• `status` - Check your agent status\n"
+            "• `spawn` - Spawn a new agent\n"
+            "• `deposit` - Deposit USDC to agent\n"
+            "• `balance` - Check agent balance\n"
+            "• `logs` - View agent activity logs\n"
+            "• `withdraw` - Withdraw funds\n"
+            "• `lineage` - View agent lineage tree\n\n"
+            "*Examples:*\n"
+            "`/automaton status`\n"
+            "`/automaton spawn`\n"
+            "`/automaton balance`"
+        )
+        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    subcommand = context.args[0].lower()
+
+    # Route to appropriate handler
+    if subcommand == "status":
+        await agent_status_command(update, context)
+    elif subcommand == "spawn":
+        await spawn_agent_command(update, context)
+    elif subcommand == "deposit":
+        await deposit_command(update, context)
+    elif subcommand == "balance":
+        await balance_command(update, context)
+    elif subcommand == "logs":
+        await agent_logs_command(update, context)
+    elif subcommand == "withdraw":
+        await withdraw_command(update, context)
+    elif subcommand == "lineage":
+        await agent_lineage_command(update, context)
+    else:
+        await update.message.reply_text(
+            f"❌ Unknown subcommand: `{subcommand}`\n\n"
+            f"Use `/automaton` without arguments to see available commands.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
 
 
 async def agent_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
