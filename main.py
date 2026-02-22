@@ -120,6 +120,15 @@ async def main():
 
             print("🎯 Bot initialized successfully")
             
+            # Start CEO Agent
+            try:
+                from app.ceo_agent import get_ceo_agent
+                ceo_agent = get_ceo_agent(bot.application.bot)
+                asyncio.create_task(ceo_agent.start())
+                print("✅ CEO Agent started")
+            except Exception as e:
+                print(f"⚠️ CEO Agent failed to start: {e}")
+            
             # Start signal tracking scheduler
             try:
                 from app.scheduler import task_scheduler
