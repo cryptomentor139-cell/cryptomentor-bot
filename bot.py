@@ -2948,7 +2948,7 @@ Choose action:
             user_data.pop('message_id', None)
             return
 
-        if awaiting in ['admin_add_premium', 'admin_remove_premium', 'admin_set_lifetime', 'admin_grant_autosignal', 'admin_add_credits_manual', 'admin_search_user', 'admin_ban_user']:
+        if awaiting in ['admin_add_premium', 'admin_remove_premium', 'admin_set_lifetime', 'admin_grant_autosignal', 'admin_add_credits_manual', 'admin_search_user', 'admin_ban_user', 'admin_add_automaton_credits_manual', 'admin_check_automaton_credits_manual']:
             from services import get_database
             from datetime import datetime, timedelta
             
