@@ -1149,6 +1149,8 @@ Zone {label} – {desc}
         premium_until = None
         has_autosignal = False
         autosignal_until = None
+        automaton_credits = 0  # AUTOMATON credits
+        
         try:
             from supabase_client import get_user as supabase_get_user
             user_data = supabase_get_user(user_id)
@@ -1163,6 +1165,21 @@ Zone {label} – {desc}
         except Exception as e:
             print(f"Error fetching credits from Supabase: {e}")
             credits = db.get_user_credits(user_id)
+        
+        # Fetch AUTOMATON credits from user_credits_balance table
+        try:
+            if db.supabase_enabled:
+                from supabase_client import supabase
+                if supabase:
+                    credits_result = supabase.table('user_credits_balance')\
+                        .select('available_credits')\
+                        .eq('user_id', user_id)\
+                        .execute()
+                    
+                    if credits_result.data:
+                        automaton_credits = float(credits_result.data[0].get('available_credits', 0))
+        except Exception as e:
+            print(f"Error fetching AUTOMATON credits: {e}")
         
         # Check Auto Signal status from local JSON file
         try:
@@ -1208,12 +1225,18 @@ Zone {label} – {desc}
                     f"👤 Pengguna: {user_name}\n"
                     f"🆔 UID Telegram: <code>{user_id}</code>\n"
                     f"🏆 Status: {premium_status}\n\n"
+                    f"💰 <b>Credits:</b>\n"
+                    f"• Bot Credits: {credits:,}\n"
+                    f"• AUTOMATON Credits: {automaton_credits:,.0f}\n\n"
                     f"✨ <b>Keuntungan Premium:</b>\n"
                     f"✔ Akses UNLIMITED ke semua fitur\n"
                     f"✔ Tidak membutuhkan kredit\n"
                     f"✔ Spot & Futures Analysis tanpa batas\n"
                     f"✔ Multi-Coin Signals tanpa batas\n"
                     f"{autosignal_text}\n\n"
+                    f"🤖 <b>AUTOMATON Credits:</b>\n"
+                    f"• Untuk AI Agent (autonomous trading)\n"
+                    f"• Minimum spawn: 3.000 credits ($30)\n\n"
                     f"🎉 Nikmati semua fitur tanpa batasan!",
                     parse_mode='HTML'
                 )
@@ -1224,12 +1247,18 @@ Zone {label} – {desc}
                     f"👤 User: {user_name}\n"
                     f"🆔 Telegram UID: <code>{user_id}</code>\n"
                     f"🏆 Status: {premium_status}\n\n"
+                    f"💰 <b>Credits:</b>\n"
+                    f"• Bot Credits: {credits:,}\n"
+                    f"• AUTOMATON Credits: {automaton_credits:,.0f}\n\n"
                     f"✨ <b>Premium Benefits:</b>\n"
                     f"✔ UNLIMITED access to all features\n"
                     f"✔ No credits required\n"
                     f"✔ Unlimited Spot & Futures Analysis\n"
                     f"✔ Unlimited Multi-Coin Signals\n"
                     f"{autosignal_text_en}\n\n"
+                    f"🤖 <b>AUTOMATON Credits:</b>\n"
+                    f"• For AI Agent (autonomous trading)\n"
+                    f"• Minimum spawn: 3,000 credits ($30)\n\n"
                     f"🎉 Enjoy all features without limits!",
                     parse_mode='HTML'
                 )
@@ -1247,11 +1276,16 @@ Zone {label} – {desc}
                     f"💳 <b>Saldo Kredit</b>\n\n"
                     f"👤 Pengguna: {user_name}\n"
                     f"🆔 UID Telegram: <code>{user_id}</code>\n"
-                    f"💰 Kredit: {credits}{autosignal_status_id}\n\n"
-                    f"📊 <b>Biaya Kredit:</b>\n"
+                    f"💰 Bot Credits: {credits}{autosignal_status_id}\n"
+                    f"🤖 AUTOMATON Credits: {automaton_credits:,.0f}\n\n"
+                    f"📊 <b>Biaya Bot Credits:</b>\n"
                     f"• Analisis Spot: 20 kredit\n"
                     f"• Analisis Futures: 20 kredit\n"
                     f"• Sinyal Multi-Coin: 60 kredit\n\n"
+                    f"🤖 <b>AUTOMATON Credits:</b>\n"
+                    f"• Untuk AI Agent (autonomous trading)\n"
+                    f"• Minimum spawn: 3.000 credits ($30)\n"
+                    f"• 1 USDC = 100 credits\n\n"
                     f"⭐ Upgrade ke Premium untuk akses unlimited!",
                     parse_mode='HTML'
                 )
@@ -1260,11 +1294,16 @@ Zone {label} – {desc}
                     f"💳 <b>Credit Balance</b>\n\n"
                     f"👤 User: {user_name}\n"
                     f"🆔 Telegram UID: <code>{user_id}</code>\n"
-                    f"💰 Credits: {credits}{autosignal_status_en}\n\n"
-                    f"📊 <b>Credit Costs:</b>\n"
+                    f"💰 Bot Credits: {credits}{autosignal_status_en}\n"
+                    f"🤖 AUTOMATON Credits: {automaton_credits:,.0f}\n\n"
+                    f"📊 <b>Bot Credit Costs:</b>\n"
                     f"• Spot Analysis: 20 credits\n"
                     f"• Futures Analysis: 20 credits\n"
                     f"• Multi-Coin Signals: 60 credits\n\n"
+                    f"🤖 <b>AUTOMATON Credits:</b>\n"
+                    f"• For AI Agent (autonomous trading)\n"
+                    f"• Minimum spawn: 3,000 credits ($30)\n"
+                    f"• 1 USDC = 100 credits\n\n"
                     f"⭐ Upgrade to Premium for unlimited access!",
                     parse_mode='HTML'
                 )
