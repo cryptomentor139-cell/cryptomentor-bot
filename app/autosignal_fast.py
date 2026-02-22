@@ -138,13 +138,35 @@ def format_signal_text(sig: dict) -> str:
     tp1 = sig.get("tp1")
     tp2 = sig.get("tp2") 
     sl = sig.get("sl")
+    smc_data = sig.get("smc_data", {})
     
     price_line = f"\nPrice: *{_md2(price)}*" if price is not None else ""
     reason_line = f"\nReason: {_md2(', '.join(reasons)[:300])}" if reasons else ""
     
     trading_levels = ""
     if entry and tp1 and tp2 and sl:
-        trading_levels = f"\nEntry: *{_md2(entry)}*\nTP1: *{_md2(tp1)}*\nTP2: *{_md2(tp2)}*\nSL: *{_md2(sl)}*"
+        trading_levels = f"\n\n📊 *Trading Levels:*\nEntry: *{_md2(entry)}*\nTP1: *{_md2(tp1)}*\nTP2: *{_md2(tp2)}*\nSL: *{_md2(sl)}*"
+    
+    # SMC info
+    smc_info = ""
+    if smc_data:
+        structure = smc_data.get('structure', 'unknown')
+        ob_count = smc_data.get('order_blocks', 0)
+        fvg_count = smc_data.get('fvgs', 0)
+        ema_21 = smc_data.get('ema_21', 0)
+        
+        smc_parts = []
+        if structure != 'unknown':
+            smc_parts.append(f"Structure: {structure}")
+        if ob_count > 0:
+            smc_parts.append(f"OB: {ob_count}")
+        if fvg_count > 0:
+            smc_parts.append(f"FVG: {fvg_count}")
+        if ema_21 > 0:
+            smc_parts.append(f"EMA21: {ema_21:.2f}")
+        
+        if smc_parts:
+            smc_info = f"\n\n🧠 *SMC:* {_md2(', '.join(smc_parts))}"
     
     return (
         f"🚨 *AUTO FUTURES SIGNAL*\n"
@@ -152,18 +174,19 @@ def format_signal_text(sig: dict) -> str:
         f"TF: *{_md2(tf)}*\n"
         f"Side: *{_md2(side)}*\n"
         f"Confidence: *{_md2(conf)}%*"
-        f"{price_line}{trading_levels}{reason_line}"
+        f"{price_line}{trading_levels}{reason_line}{smc_info}"
     )
 
-# === FAST Signal Generation (NO AI) ===
+# === FAST Signal Generation with SMC ===
 def compute_signal_fast(base_symbol: str) -> Optional[Dict[str, Any]]:
     """
-    Fast signal generation using simple technical indicators
-    NO AI reasoning - much faster!
+    Fast signal generation using SMC + SnD zones
+    Includes: Order Blocks, FVG, Market Structure, Week High/Low, EMA 21
     """
     try:
         from snd_zone_detector import detect_snd_zones
         from crypto_api import CryptoAPI
+        from smc_analyzer import smc_analyzer
         
         crypto_api = CryptoAPI()
         symbol = base_symbol.upper()
@@ -181,51 +204,120 @@ def compute_signal_fast(base_symbol: str) -> Optional[Dict[str, Any]]:
         change_24h = price_data.get('change_24h', 0)
         volume_24h = price_data.get('volume_24h', 0)
         
+        # Get SMC analysis
+        smc_result = smc_analyzer.analyze(full_symbol, TIMEFRAME, limit=200)
+        if 'error' in smc_result:
+            print(f"SMC analysis failed for {full_symbol}: {smc_result.get('error')}")
+            smc_result = {}
+        
         # Get SnD zones (fast - no AI)
         snd_result = detect_snd_zones(full_symbol, TIMEFRAME, limit=50)
         if 'error' in snd_result:
-            return None
+            snd_result = {}
         
         demand_zones = snd_result.get('demand_zones', [])
         supply_zones = snd_result.get('supply_zones', [])
         
-        if not demand_zones and not supply_zones:
-            return None
+        # SMC data
+        order_blocks = smc_result.get('order_blocks', [])
+        fvgs = smc_result.get('fvgs', [])
+        structure = smc_result.get('structure', {})
+        week_high = smc_result.get('week_high', 0)
+        week_low = smc_result.get('week_low', 0)
+        ema_21 = smc_result.get('ema_21', 0)
         
-        # Simple signal logic (FAST)
+        # Signal logic with SMC
         reasons = []
         side = None
         confidence = 50
         
-        # Check if price near demand zone (BUY signal)
-        if demand_zones:
+        # 1. Check Order Blocks (SMC)
+        bullish_ob = [ob for ob in order_blocks if ob.type == 'bullish']
+        bearish_ob = [ob for ob in order_blocks if ob.type == 'bearish']
+        
+        if bullish_ob:
+            nearest_ob = min(bullish_ob, key=lambda ob: abs(current_price - ob.low))
+            if abs(current_price - nearest_ob.low) / current_price < 0.015:  # Within 1.5%
+                side = "LONG"
+                confidence = min(90, 70 + nearest_ob.strength / 5)
+                reasons.append(f"Bullish OB (strength: {nearest_ob.strength:.0f})")
+        
+        if bearish_ob and side is None:
+            nearest_ob = min(bearish_ob, key=lambda ob: abs(current_price - ob.high))
+            if abs(current_price - nearest_ob.high) / current_price < 0.015:  # Within 1.5%
+                side = "SHORT"
+                confidence = min(90, 70 + nearest_ob.strength / 5)
+                reasons.append(f"Bearish OB (strength: {nearest_ob.strength:.0f})")
+        
+        # 2. Check FVG (Fair Value Gap)
+        if fvgs and side is None:
+            bullish_fvg = [fvg for fvg in fvgs if fvg.type == 'bullish']
+            bearish_fvg = [fvg for fvg in fvgs if fvg.type == 'bearish']
+            
+            if bullish_fvg:
+                nearest_fvg = bullish_fvg[0]
+                if current_price >= nearest_fvg.bottom and current_price <= nearest_fvg.top:
+                    side = "LONG"
+                    confidence = 80
+                    reasons.append("Inside bullish FVG")
+            
+            if bearish_fvg and side is None:
+                nearest_fvg = bearish_fvg[0]
+                if current_price >= nearest_fvg.bottom and current_price <= nearest_fvg.top:
+                    side = "SHORT"
+                    confidence = 80
+                    reasons.append("Inside bearish FVG")
+        
+        # 3. Check Market Structure
+        if structure and side is None:
+            trend = structure.get('trend', 'ranging')
+            if trend == 'uptrend' and change_24h > 2:
+                side = "LONG"
+                confidence = 75
+                reasons.append("Uptrend structure + momentum")
+            elif trend == 'downtrend' and change_24h < -2:
+                side = "SHORT"
+                confidence = 75
+                reasons.append("Downtrend structure + momentum")
+        
+        # 4. Check SnD zones (fallback)
+        if demand_zones and side is None:
             nearest_demand = min(demand_zones, key=lambda z: abs(current_price - z.midpoint))
             distance_pct = abs(current_price - nearest_demand.midpoint) / current_price * 100
             
             if distance_pct < 2:  # Within 2% of demand
                 side = "LONG"
-                confidence = min(90, 70 + nearest_demand.strength / 5)
+                confidence = min(85, 70 + nearest_demand.strength / 5)
                 reasons.append(f"Near demand zone")
-                
-                if change_24h < -3:
-                    confidence += 5
-                    reasons.append(f"Dip: {change_24h:.1f}%")
         
-        # Check if price near supply zone (SELL signal)
         if supply_zones and side is None:
             nearest_supply = min(supply_zones, key=lambda z: abs(current_price - z.midpoint))
             distance_pct = abs(current_price - nearest_supply.midpoint) / current_price * 100
             
             if distance_pct < 2:  # Within 2% of supply
                 side = "SHORT"
-                confidence = min(90, 70 + nearest_supply.strength / 5)
+                confidence = min(85, 70 + nearest_supply.strength / 5)
                 reasons.append(f"Near supply zone")
-                
-                if change_24h > 3:
-                    confidence += 5
-                    reasons.append(f"Pump: {change_24h:+.1f}%")
         
-        # Strong momentum signals
+        # 5. EMA 21 confirmation
+        if ema_21 > 0 and side:
+            if side == "LONG" and current_price > ema_21:
+                confidence += 5
+                reasons.append(f"Above EMA21")
+            elif side == "SHORT" and current_price < ema_21:
+                confidence += 5
+                reasons.append(f"Below EMA21")
+        
+        # 6. Week High/Low context
+        if week_high > 0 and week_low > 0:
+            if side == "LONG" and current_price < week_low * 1.02:
+                confidence += 5
+                reasons.append("Near week low")
+            elif side == "SHORT" and current_price > week_high * 0.98:
+                confidence += 5
+                reasons.append("Near week high")
+        
+        # 7. Strong momentum signals (fallback)
         if side is None:
             if change_24h > 5 and volume_24h > 1000000:
                 side = "LONG"
@@ -239,17 +331,31 @@ def compute_signal_fast(base_symbol: str) -> Optional[Dict[str, Any]]:
         if side is None or confidence < MIN_CONFIDENCE:
             return None
         
-        # Calculate trading levels (simple)
+        # Calculate trading levels using SMC
         if side == "LONG":
             entry = current_price
-            tp1 = current_price * 1.02  # 2% profit
-            tp2 = current_price * 1.04  # 4% profit
-            sl = current_price * 0.98   # 2% stop loss
+            # Use Order Block or FVG for better TP/SL
+            if bullish_ob:
+                nearest_ob = min(bullish_ob, key=lambda ob: abs(current_price - ob.low))
+                sl = nearest_ob.low * 0.995  # Just below OB
+                tp1 = current_price * 1.025  # 2.5% profit
+                tp2 = current_price * 1.05   # 5% profit
+            else:
+                tp1 = current_price * 1.02  # 2% profit
+                tp2 = current_price * 1.04  # 4% profit
+                sl = current_price * 0.98   # 2% stop loss
         else:  # SHORT
             entry = current_price
-            tp1 = current_price * 0.98  # 2% profit
-            tp2 = current_price * 0.96  # 4% profit
-            sl = current_price * 1.02   # 2% stop loss
+            # Use Order Block or FVG for better TP/SL
+            if bearish_ob:
+                nearest_ob = min(bearish_ob, key=lambda ob: abs(current_price - ob.high))
+                sl = nearest_ob.high * 1.005  # Just above OB
+                tp1 = current_price * 0.975  # 2.5% profit
+                tp2 = current_price * 0.95   # 5% profit
+            else:
+                tp1 = current_price * 0.98  # 2% profit
+                tp2 = current_price * 0.96  # 4% profit
+                sl = current_price * 1.02   # 2% stop loss
         
         return {
             "symbol": full_symbol,
@@ -261,11 +367,21 @@ def compute_signal_fast(base_symbol: str) -> Optional[Dict[str, Any]]:
             "entry_price": entry,
             "tp1": tp1,
             "tp2": tp2,
-            "sl": sl
+            "sl": sl,
+            "smc_data": {
+                "order_blocks": len(order_blocks),
+                "fvgs": len(fvgs),
+                "structure": structure.get('trend', 'ranging') if structure else 'unknown',
+                "ema_21": ema_21,
+                "week_high": week_high,
+                "week_low": week_low
+            }
         }
         
     except Exception as e:
         print(f"Error computing fast signal for {base_symbol}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 # === Broadcast ===
@@ -373,4 +489,4 @@ def start_background_scheduler(application):
 
     jq.run_repeating(_tick, interval=SCAN_INTERVAL_SEC, first=10, name="autosignal_fast")
     print(f"[AutoSignal FAST] ✅ started (interval={SCAN_INTERVAL_SEC}s ≈ {SCAN_INTERVAL_SEC//60}m, top={TOP_N}, minConf={MIN_CONFIDENCE}%, tf={TIMEFRAME})")
-    print(f"[AutoSignal FAST] 🚀 Using FAST mode (no AI reasoning)")
+    print(f"[AutoSignal FAST] 🧠 Using SMC Analysis (Order Blocks, FVG, Market Structure, EMA21)")
