@@ -57,15 +57,20 @@ async def automaton_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     subcommand = context.args[0].lower()
     
-    # Route to appropriate handler
+    # Route to appropriate handler - Use API handlers for Automaton integration
+    from app.handlers_automaton_api import (
+        automaton_status_api, automaton_spawn_api,
+        automaton_balance_api, automaton_deposit_info
+    )
+    
     if subcommand == "status":
-        await agent_status_command(update, context)
+        await automaton_status_api(update, context)
     elif subcommand == "spawn":
-        await spawn_agent_command(update, context)
+        await automaton_spawn_api(update, context)
     elif subcommand == "deposit":
-        await deposit_command(update, context)
+        await automaton_deposit_info(update, context)
     elif subcommand == "balance":
-        await balance_command(update, context)
+        await automaton_balance_api(update, context)
     elif subcommand == "logs":
         await agent_logs_command(update, context)
     elif subcommand == "withdraw":
