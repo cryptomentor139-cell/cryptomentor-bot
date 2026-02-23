@@ -81,20 +81,6 @@ class MenuCallbackHandler:
                 await self.show_ask_ai_menu(query, context)
             elif callback_data == AI_AGENT_MENU:
                 await self.show_ai_agent_menu(query, context)
-            elif callback_data == "show_ai_education":
-                from app.handlers_ai_agent_education import show_ai_agent_education
-                await show_ai_agent_education(query, context)
-            elif callback_data == "show_ai_example":
-                from app.handlers_ai_agent_education import show_ai_example_portfolio
-                await show_ai_example_portfolio(query, context)
-            elif callback_data == "ai_agent_faq":
-                from app.handlers_ai_agent_education import show_ai_agent_faq
-                await show_ai_agent_faq(query, context)
-            elif callback_data == "activate_ai_agent":
-                # This will go to actual activation flow (existing handler)
-                await self.handle_automaton_spawn(query, context)
-            elif callback_data == "back_to_menu":
-                await self.show_main_menu(query, context)
             elif callback_data == SETTINGS_MENU:
                 await self.show_settings_menu(query, context)
 
@@ -265,14 +251,53 @@ class MenuCallbackHandler:
         )
 
     async def show_ai_agent_menu(self, query, context):
-        """Show AI Agent education first, then menu"""
+        """Show AI Agent submenu with deposit check"""
         user_id = query.from_user.id
+        from database import Database
+        from app.admin_status import is_admin
+        db = Database()
+        user_lang = db.get_user_language(user_id)
         
-        # Import education handler
-        from app.handlers_ai_agent_education import show_ai_agent_education
+        # Check if user is admin or lifetime premium (for menu access only)
+        # Note: They still need $30 deposit to spawn agent
+        is_admin_user = is_admin(user_id)
+        is_lifetime = False
         
-        # Show education message instead of direct menu
-        await show_ai_agent_education(query, context)
+        try:
+            if db.supabase_enabled:
+                from supabase_client import supabase
+                if supabase:
+                    user_result = supabase.table('users')\
+                        .select('premium_tier')\
+                        .eq('user_id', user_id)\
+                        .execute()
+                    
+                    if user_result.data:
+                        premium_tier = user_result.data[0].get('premium_tier', '')
+                        is_lifetime = (premium_tier == 'lifetime')
+        except Exception as e:
+            print(f"⚠️ Error checking premium tier: {e}")
+        
+        # Check if user has made deposit (minimum $30 = 3000 credits)
+        MINIMUM_DEPOSIT_CREDITS = 3000  # $30 USDC = 3000 credits
+        has_deposit = False
+        user_credits = 0
+        
+        try:
+            if db.supabase_enabled:
+                # Import supabase client directly
+                from supabase_client import supabase
+                
+                if supabase:
+                    # Check user_credits_balance table for any credits
+                    credits_result = supabase.table('user_credits_balance')\
+                        .select('available_credits, total_conway_credits')\
+                        .eq('user_id', user_id)\
+                        .execute()
+                    
+                    if credits_result.data:
+                        balance = credits_result.data[0]
+                        available_credits = float(balance.get('available_credits', 0))
                         total_credits = float(balance.get('total_conway_credits', 0))
                         user_credits = max(available_credits, total_credits)
                         
