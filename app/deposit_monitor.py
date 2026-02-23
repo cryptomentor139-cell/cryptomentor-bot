@@ -157,7 +157,8 @@ class DepositMonitor:
         2. Calculate platform fee and Conway credits
         3. Update database records
         4. Credit Conway credits via API
-        5. Send notification to user
+        5. Create isolated AI instance for user (if autonomous trading enabled)
+        6. Send notification to user
         
         Args:
             wallet_id: Database wallet ID
@@ -196,7 +197,7 @@ class DepositMonitor:
                 self._update_wallet_balance(wallet_id, deposit_amount, conway_credits)
                 
                 # Record deposit in database
-                self._record_deposit(
+                deposit_id = self._record_deposit(
                     wallet_id=wallet_id,
                     user_id=user_id,
                     amount=deposit_amount,
@@ -206,6 +207,44 @@ class DepositMonitor:
                 
                 # Record platform revenue
                 self._record_platform_fee(user_id, platform_fee)
+                
+                # Create isolated AI instance if autonomous trading is enabled
+                try:
+                    from app.isolated_ai_manager import get_isolated_ai_manager
+                    
+                    # Check if user has autonomous trading enabled
+                    user = self.db.execute(
+                        "SELECT autonomous_trading_enabled FROM users WHERE id = ?",
+                        (user_id,)
+                    ).fetchone()
+                    
+                    if user and user['autonomous_trading_enabled']:
+                        isolated_ai = get_isolated_ai_manager(self.db)
+                        
+                        # Create main AI agent for user with net amount (after fee)
+                        agent = isolated_ai.create_user_main_agent(
+                            user_id=user_id,
+                            initial_balance=net_amount
+                        )
+                        
+                        # Link AI agent to deposit
+                        self.db.execute(
+                            """
+                            UPDATE automaton_agents 
+                            SET initial_deposit_id = ?
+                            WHERE agent_id = ?
+                            """,
+                            (deposit_id, agent['agent_id'])
+                        )
+                        self.db.commit()
+                        
+                        print(f"🤖 Created isolated AI instance: {agent['agent_id']}")
+                        print(f"   Balance: {net_amount} USDC")
+                        print(f"   Generation: 1 (Main Agent)")
+                    
+                except Exception as ai_error:
+                    print(f"⚠️ Failed to create AI instance: {ai_error}")
+                    # Don't fail the deposit if AI creation fails
                 
                 # TODO: Send Telegram notification to user
                 print(f"✅ Deposit processed successfully for user {user_id}")
@@ -257,7 +296,7 @@ class DepositMonitor:
         amount: float,
         platform_fee: float,
         credited_conway: float
-    ):
+    ) -> int:
         """
         Record deposit in wallet_deposits table
         
@@ -267,6 +306,9 @@ class DepositMonitor:
             amount: Deposit amount in USDC
             platform_fee: Platform fee deducted
             credited_conway: Conway credits credited
+            
+        Returns:
+            deposit_id: ID of the created deposit record
         """
         try:
             # Generate a pseudo tx_hash for tracking (since we're using Conway API)
@@ -278,7 +320,7 @@ class DepositMonitor:
                  status, confirmations, detected_at, confirmed_at, credited_conway, platform_fee)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
-            self.db.execute_query(
+            cursor = self.db.execute_query(
                 query,
                 (
                     wallet_id, user_id, tx_hash, 'conway_api', amount, 'USDC', 'base',
@@ -286,9 +328,13 @@ class DepositMonitor:
                     datetime.now().isoformat(), credited_conway, platform_fee
                 )
             )
-            print(f"✅ Recorded deposit in database")
+            deposit_id = cursor.lastrowid
+            print(f"✅ Recorded deposit in database (ID: {deposit_id})")
+            return deposit_id
         
         except Exception as e:
+            print(f"❌ Error recording deposit: {e}")
+            return None
             print(f"❌ Error recording deposit: {e}")
     
     def _record_platform_fee(self, user_id: int, fee_amount: float):
