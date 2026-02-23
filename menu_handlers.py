@@ -125,6 +125,12 @@ class MenuCallbackHandler:
                 await self.handle_automaton_first_deposit(query, context)
             elif callback_data == "deposit_guide":
                 await self.handle_deposit_guide(query, context)
+            elif callback_data == "ai_agent_education":
+                await self.handle_ai_agent_education(query, context)
+            elif callback_data == "ai_agent_faq":
+                await self.handle_ai_agent_faq(query, context)
+            elif callback_data == "ai_agent_docs":
+                await self.handle_ai_agent_docs(query, context)
             elif callback_data == CHANGE_LANGUAGE:
                 await self.handle_change_language(query, context)
             elif callback_data == "copy_referral_link":
@@ -251,12 +257,23 @@ class MenuCallbackHandler:
         )
 
     async def show_ai_agent_menu(self, query, context):
-        """Show AI Agent submenu with deposit check"""
+        """Show AI Agent submenu with deposit check and education"""
         user_id = query.from_user.id
         from database import Database
         from app.admin_status import is_admin
+        from app.database import get_user_data
         db = Database()
         user_lang = db.get_user_language(user_id)
+        
+        # Check if user has seen education before
+        user_data = get_user_data(user_id)
+        has_seen_education = user_data.get('has_seen_ai_agent_education', False)
+        
+        # If first time, show education instead of menu
+        if not has_seen_education:
+            from app.handlers_ai_agent_education import show_ai_agent_education
+            await show_ai_agent_education(query, context)
+            return
         
         # Check if user is admin or lifetime premium (for menu access only)
         # Note: They still need $30 deposit to spawn agent
@@ -333,66 +350,80 @@ class MenuCallbackHandler:
 💡 **Apa itu AI Agent?**
 AI Agent adalah autonomous trading agent yang menggunakan Conway credits sebagai bahan bakar untuk beroperasi.
 
-⚠️ **Deposit Minimum: $30 USDC**
-Untuk menggunakan fitur AI Agent, Anda perlu deposit minimal **$30 USDC** (3.000 credits).
+⚠️ **PENTING - Spawn Fee: 100,000 credits (1,000 USDC)**
+Untuk spawn AI Agent, Anda perlu **100,000 credits** (1,000 USDC).
 
 💰 **Status Deposit Anda:**
 • Credits saat ini: {user_credits:,.0f}
-• Minimum required: 3.000 credits
-• Kekurangan: {max(0, MINIMUM_DEPOSIT_CREDITS - user_credits):,.0f} credits
+• Untuk spawn agent: 100,000 credits (1,000 USDC)
+• Kekurangan: {max(0, 100000 - user_credits):,.0f} credits
+
+💵 **Opsi Deposit:**
+• $5 USDC: Testing only (TIDAK BISA spawn)
+• $30 USDC: Small operations (TIDAK BISA spawn)
+• $1,030 USDC: Minimum untuk spawn 1 agent
+• $2,000+ USDC: Spawn + trading capital
 
 📝 **Cara Deposit:**
 1. Klik tombol "💰 Deposit Sekarang" di bawah
 2. Deposit USDC (Base Network) ke address yang diberikan
 3. Credits akan otomatis ditambahkan setelah 12 konfirmasi
-4. Setelah deposit $30, Anda bisa spawn agent dan mulai trading!
+4. Setelah deposit $1,030+, Anda bisa spawn agent dan mulai trading!
 
 📊 **Conversion Rate:**
 • 1 USDC = 100 Conway Credits
-• $30 USDC = 3.000 Credits
+• $1,030 USDC = 103,000 Credits (cukup untuk spawn)
 
 🌐 **Network:**
 • Base Network (WAJIB)
 
 💡 **Catatan:**
-• Minimum deposit: $5 USDC
-• Untuk spawn agent: $30 USDC
-• Admin & Lifetime Premium juga perlu deposit $30"""
+• Platform fee: 2% dari deposit
+• Spawn fee: 100,000 credits (1,000 USDC)
+• Operational costs: ~100-500 credits/day
             else:
                 welcome_text = f"""🤖 **Welcome to AI Agent!**
 
 💡 **What is AI Agent?**
 AI Agent is an autonomous trading agent that uses Conway credits as fuel to operate.
 
-⚠️ **Minimum Deposit: $30 USDC**
-To use AI Agent features, you need a minimum deposit of **$30 USDC** (3,000 credits).
+⚠️ **IMPORTANT - Spawn Fee: 100,000 credits (1,000 USDC)**
+To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
 
 💰 **Your Deposit Status:**
 • Current credits: {user_credits:,.0f}
-• Minimum required: 3,000 credits
-• Shortfall: {max(0, MINIMUM_DEPOSIT_CREDITS - user_credits):,.0f} credits
+• To spawn agent: 100,000 credits (1,000 USDC)
+• Shortfall: {max(0, 100000 - user_credits):,.0f} credits
+
+💵 **Deposit Options:**
+• $5 USDC: Testing only (CANNOT spawn)
+• $30 USDC: Small operations (CANNOT spawn)
+• $1,030 USDC: Minimum to spawn 1 agent
+• $2,000+ USDC: Spawn + trading capital
 
 📝 **How to Deposit:**
 1. Click "💰 Deposit Now" button below
 2. Deposit USDC (Base Network) to the provided address
 3. Credits will be automatically added after 12 confirmations
-4. After $30 deposit, you can spawn agents and start trading!
+4. After $1,030+ deposit, you can spawn agents and start trading!
 
 📊 **Conversion Rate:**
 • 1 USDC = 100 Conway Credits
-• $30 USDC = 3,000 Credits
+• $1,030 USDC = 103,000 Credits (enough to spawn)
 
 🌐 **Network:**
 • Base Network (REQUIRED)
 
 💡 **Notes:**
-• Minimum deposit: $5 USDC
-• To spawn agent: $30 USDC
-• Admin & Lifetime Premium also need $30 deposit"""
+• Platform fee: 2% of deposit
+• Spawn fee: 100,000 credits (1,000 USDC)
+• Operational costs: ~100-500 credits/day"""
             
-            # Build deposit-first menu
+            # Build deposit-first menu with education button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             keyboard = [
+                [InlineKeyboardButton("📚 Pelajari AI Agent" if user_lang == 'id' else "📚 Learn About AI Agent", 
+                                     callback_data="ai_agent_education")],
                 [InlineKeyboardButton("💰 Deposit Sekarang" if user_lang == 'id' else "💰 Deposit Now", 
                                      callback_data="automaton_first_deposit")],
                 [InlineKeyboardButton("❓ Cara Deposit" if user_lang == 'id' else "❓ How to Deposit", 
@@ -2833,6 +2864,27 @@ A: Click "📤 Send Transfer Proof" button in deposit menu, then send screenshot
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='MARKDOWN'
             )
+
+    async def handle_ai_agent_education(self, query, context):
+        """
+        Handle AI Agent education callback - show comprehensive education
+        """
+        from app.handlers_ai_agent_education import show_ai_agent_education
+        await show_ai_agent_education(query, context)
+
+    async def handle_ai_agent_faq(self, query, context):
+        """
+        Handle AI Agent FAQ callback
+        """
+        from app.handlers_ai_agent_education import show_ai_agent_faq
+        await show_ai_agent_faq(query, context)
+
+    async def handle_ai_agent_docs(self, query, context):
+        """
+        Handle AI Agent documentation callback
+        """
+        from app.handlers_ai_agent_education import show_ai_agent_docs
+        await show_ai_agent_docs(query, context)
 
 
 def register_menu_handlers(application, bot_instance):
