@@ -25,12 +25,34 @@ async def automaton_status_api(update: Update, context: ContextTypes.DEFAULT_TYP
         conway = get_conway_client()
         
         # Health check first
-        if not conway.health_check():
-            await update.message.reply_text(
-                "❌ *Automaton Service Offline*\n\n"
-                "Automaton service sedang tidak tersedia. Silakan coba lagi nanti.",
-                parse_mode=ParseMode.MARKDOWN
-            )
+        health = conway.health_check()
+        
+        if not health['healthy']:
+            # Provide specific error message based on status code
+            if health['status_code'] == 502:
+                error_msg = (
+                    "❌ *Automaton Service Crashed*\n\n"
+                    "Automaton service mengalami crash (502 Bad Gateway).\n\n"
+                    "🔧 *Solusi:*\n"
+                    "1. Cek Railway Automaton logs untuk error\n"
+                    "2. Restart Automaton service di Railway\n"
+                    "3. Pastikan semua dependencies terinstall\n\n"
+                    "💡 *Tip:* Ini bukan masalah environment variable, tapi aplikasi Automaton yang crash."
+                )
+            elif health['status_code'] == 503:
+                error_msg = (
+                    "⚠️ *Automaton Service Unavailable*\n\n"
+                    "Service sedang restart atau maintenance.\n"
+                    "Silakan coba lagi dalam 1-2 menit."
+                )
+            else:
+                error_msg = (
+                    f"❌ *Automaton Service Offline*\n\n"
+                    f"Status: {health['message']}\n\n"
+                    f"Silakan coba lagi nanti atau hubungi admin."
+                )
+            
+            await update.message.reply_text(error_msg, parse_mode=ParseMode.MARKDOWN)
             return
         
         # Get user's deposit address from database
@@ -130,10 +152,18 @@ async def automaton_spawn_api(update: Update, context: ContextTypes.DEFAULT_TYPE
         conway = get_conway_client()
         
         # Health check
-        if not conway.health_check():
-            await update.message.reply_text(
-                "❌ Automaton service offline. Silakan coba lagi nanti."
-            )
+        health = conway.health_check()
+        
+        if not health['healthy']:
+            if health['status_code'] == 502:
+                error_msg = (
+                    "❌ *Automaton Service Crashed*\n\n"
+                    "Service mengalami crash. Cek Railway logs dan restart service."
+                )
+            else:
+                error_msg = f"❌ Automaton service offline: {health['message']}"
+            
+            await update.message.reply_text(error_msg, parse_mode=ParseMode.MARKDOWN)
             return
         
         await update.message.reply_text(

@@ -162,14 +162,14 @@ class ConwayIntegration:
         
         raise Exception("Conway API request failed after all retries")
     
-    def health_check(self) -> bool:
+    def health_check(self) -> Dict[str, Any]:
         """
         Check if Conway API is accessible
         
         Uses a simple GET request to verify API connectivity
         
         Returns:
-            True if API is healthy, False otherwise
+            Dict with 'healthy' (bool), 'status_code' (int), 'message' (str)
         """
         try:
             # Try to make a simple request to verify API is accessible
@@ -179,12 +179,61 @@ class ConwayIntegration:
                 headers=self.headers,
                 timeout=10
             )
-            # API is accessible if we get any response (even 404 is fine)
-            # 404 means API is working, just no wallet for user_id=0
-            return response.status_code in [200, 404]
+            
+            status_code = response.status_code
+            
+            # 502 = Service deployed but application crashed
+            if status_code == 502:
+                return {
+                    'healthy': False,
+                    'status_code': 502,
+                    'message': 'Automaton service crashed (502 Bad Gateway). Check Railway logs.'
+                }
+            
+            # 503 = Service unavailable
+            if status_code == 503:
+                return {
+                    'healthy': False,
+                    'status_code': 503,
+                    'message': 'Automaton service unavailable (503). Service may be restarting.'
+                }
+            
+            # 200/404 = Service is running (404 is expected for dummy request)
+            if status_code in [200, 404]:
+                return {
+                    'healthy': True,
+                    'status_code': status_code,
+                    'message': 'Automaton service is healthy'
+                }
+            
+            # Other status codes
+            return {
+                'healthy': False,
+                'status_code': status_code,
+                'message': f'Unexpected status code: {status_code}'
+            }
+        
+        except requests.exceptions.Timeout:
+            return {
+                'healthy': False,
+                'status_code': 0,
+                'message': 'Connection timeout. Automaton service not responding.'
+            }
+        
+        except requests.exceptions.ConnectionError:
+            return {
+                'healthy': False,
+                'status_code': 0,
+                'message': 'Connection error. Cannot reach Automaton service.'
+            }
+        
         except Exception as e:
             print(f"❌ Conway API health check failed: {e}")
-            return False
+            return {
+                'healthy': False,
+                'status_code': 0,
+                'message': f'Health check error: {str(e)}'
+            }
     
     def generate_deposit_address(self, user_id: int, agent_name: str) -> Optional[str]:
         """
