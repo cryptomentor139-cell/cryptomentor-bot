@@ -289,6 +289,11 @@ class TelegramBot:
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command with menu integration and referral processing"""
         user = update.effective_user
+        
+        # CRITICAL: Store user's chat_id for autosignal delivery
+        from app.chat_store import remember_chat
+        remember_chat(user.id, update.effective_chat.id)
+        print(f"✅ Stored chat_id for user {user.id}")
 
         # Use shared database instance
         from services import get_database
@@ -377,6 +382,11 @@ Choose an option from the menu below:"""
 
     async def menu_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show main menu"""
+        # Store user's chat_id for autosignal delivery
+        if update.effective_user and update.effective_chat:
+            from app.chat_store import remember_chat
+            remember_chat(update.effective_user.id, update.effective_chat.id)
+        
         from menu_system import MenuBuilder, get_menu_text, MAIN_MENU
         await update.message.reply_text(
             get_menu_text(MAIN_MENU),
@@ -2739,6 +2749,11 @@ Choose action:
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle text messages for menu interactions"""
+        # CRITICAL: Store user's chat_id for autosignal delivery (on any interaction)
+        if update.effective_user and update.effective_chat:
+            from app.chat_store import remember_chat
+            remember_chat(update.effective_user.id, update.effective_chat.id)
+        
         user_data = context.user_data
         text = update.message.text
         
