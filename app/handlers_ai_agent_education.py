@@ -25,130 +25,130 @@ async def show_ai_agent_education(update: Update, context: ContextTypes.DEFAULT_
     
     # Teks edukasi yang transparan dan informatif
     education_text = """
-[AI] <b>Selamat Datang di AI Agent!</b>
+🤖 <b>Selamat Datang di AI Agent!</b>
 
-<b> Apa itu AI Agent?</b>
+<b>🎯 Apa itu AI Agent?</b>
 AI Agent adalah asisten trading otomatis yang bekerja 24/7 untuk Anda. Seperti memiliki trader profesional pribadi yang tidak pernah tidur!
 
-<b> Cara Kerja (Full Transparansi):</b>
+<b>⚙️ Cara Kerja (Full Transparansi):</b>
 
 1⃣ <b>Isolated AI Instance</b>
-    Setiap user mendapat AI pribadi
-    Berjalan di server terpisah (Conway)
-    Data trading Anda TIDAK tercampur dengan user lain
-    Privacy & keamanan terjaga
+   🔒 Setiap user mendapat AI pribadi
+   🖥️ Berjalan di server terpisah (Conway)
+   🚫 Data trading Anda TIDAK tercampur dengan user lain
+   ✅ Privacy & keamanan terjaga
 
 2⃣ <b>Sistem Deposit & Credits</b>
-    Deposit USDC ke wallet Anda
-    1 USDC = 100 credits
-    Credits digunakan untuk:
-     - Spawn AI Agent (100 credits)
-     - Biaya operasional AI ("bensin")
-     - Eksekusi trading
+   💰 Deposit USDC ke wallet Anda
+   💵 1 USDC = 100 credits
+   📊 Credits digunakan untuk:
+     • Spawn AI Agent (100 credits)
+     • Biaya operasional AI ("bensin")
+     • Eksekusi trading
 
 3⃣ <b>Autonomous Trading</b>
-    AI menganalisis market real-time
-    Menggunakan Smart Money Concepts (SMC)
-    Eksekusi otomatis saat ada peluang
-    Anda bisa monitor kapan saja
+   📈 AI menganalisis market real-time
+   🎯 Menggunakan Smart Money Concepts (SMC)
+   ⚡ Eksekusi otomatis saat ada peluang
+   👀 Anda bisa monitor kapan saja
 
 4⃣ <b>Revenue Sharing Otomatis</b>
-    Setiap profit trading → 10% ke parent (jika ada)
-    OTOMATIS terpotong, tidak perlu manual
-    Recursive: parent share ke grandparent
-    Passive income dari children agents!
+   💸 Setiap profit trading → 10% ke parent (jika ada)
+   🤖 OTOMATIS terpotong, tidak perlu manual
+   🔄 Recursive: parent share ke grandparent
+   💰 Passive income dari children agents!
 
 5⃣ <b>Spawn Child System</b>
-    Agent bisa "melahirkan" child agent (otomatis)
-    Child trading sendiri (isolated)
-    10% profit child → Parent Anda
-    Build lineage tree untuk passive income!
+   👶 Agent bisa "melahirkan" child agent (otomatis)
+   🔒 Child trading sendiri (isolated)
+   💵 10% profit child → Parent Anda
+   🌳 Build lineage tree untuk passive income!
 
-<b> Manfaat untuk Anda:</b>
+<b>✨ Manfaat untuk Anda:</b>
 
- <b>Trading 24/7</b> - AI tidak pernah lelah
- <b>Emotion-Free</b> - Keputusan berdasarkan data
- <b>Multi-Timeframe</b> - Analisis lengkap
- <b>Risk Management</b> - Stop loss otomatis
- <b>Transparent</b> - Semua log bisa dilihat
- <b>Scalable</b> - Spawn multiple agents
- <b>Passive Income</b> - 10% dari children profits
- <b>Lineage System</b> - Build agent family tree
+✅ <b>Trading 24/7</b> - AI tidak pernah lelah
+🧠 <b>Emotion-Free</b> - Keputusan berdasarkan data
+📊 <b>Multi-Timeframe</b> - Analisis lengkap
+🛡️ <b>Risk Management</b> - Stop loss otomatis
+🔍 <b>Transparent</b> - Semua log bisa dilihat
+📈 <b>Scalable</b> - Spawn multiple agents
+💰 <b>Passive Income</b> - 10% dari children profits
+🌳 <b>Lineage System</b> - Build agent family tree
 
-<b> Biaya & Pricing:</b>
+<b>💵 Biaya & Pricing:</b>
 
- <b>Spawn Agent:</b> 100,000 credits (1,000 USDC)
- <b>Minimum Deposit:</b> 5 USDC (technical minimum)
- <b>Recommended Deposit:</b> 1,030+ USDC (untuk spawn + operations)
- <b>Platform Fee:</b> 2% dari deposit (untuk pengembangan)
- <b>Operasional AI:</b> Credits untuk "bensin" automaton
- <b>Trading Capital:</b> Sisanya untuk trading
- <b>Withdrawal:</b> Kapan saja (min 5 USDC)
+🤖 <b>Spawn Agent:</b> 100,000 credits (1,000 USDC)
+💰 <b>Minimum Deposit:</b> 5 USDC (technical minimum)
+✅ <b>Recommended Deposit:</b> 1,030+ USDC (untuk spawn + operations)
+🏦 <b>Platform Fee:</b> 2% dari deposit (untuk pengembangan)
+⛽ <b>Operasional AI:</b> Credits untuk "bensin" automaton
+💵 <b>Trading Capital:</b> Sisanya untuk trading
+💸 <b>Withdrawal:</b> Kapan saja (min 5 USDC)
 
- <b>Penting - Spawn Fee:</b>
- Spawn 1 agent: 100,000 credits = $1,000 USDC
- Kenapa mahal? Agent berjalan 24/7, konsumsi resources
- One-time fee per agent
- Tercatat di transaction log
+⚠️ <b>Penting - Spawn Fee:</b>
+• Spawn 1 agent: 100,000 credits = $1,000 USDC
+• Kenapa mahal? Agent berjalan 24/7, konsumsi resources
+• One-time fee per agent
+• Tercatat di transaction log
 
- <b>Minimum Deposit Options:</b>
- $5 USDC: Technical minimum (testing only, CANNOT spawn)
- $30 USDC: Small operations (monitoring, analysis, CANNOT spawn)
- $1,030 USDC: Spawn 1 agent + operations
- $2,000+ USDC: Spawn + trading capital
+💰 <b>Minimum Deposit Options:</b>
+• $5 USDC: Technical minimum (testing only, CANNOT spawn)
+• $30 USDC: Small operations (monitoring, analysis, CANNOT spawn)
+• $1,030 USDC: Spawn 1 agent + operations
+• $2,000+ USDC: Spawn + trading capital
 
- <b>Contoh Deposit $1,030 USDC:</b>
- Platform fee: 2% ($20.60) → CryptoMentor AI
- Net received: $1,009.40 = 100,940 credits
- Spawn agent: 100,000 credits ($1,000)
- Remaining: 940 credits ($9.40) untuk operasional
- Trading capital: Perlu deposit tambahan
+📊 <b>Contoh Deposit $1,030 USDC:</b>
+• Platform fee: 2% ($20.60) → CryptoMentor AI
+• Net received: $1,009.40 = 100,940 credits
+• Spawn agent: 100,000 credits ($1,000)
+• Remaining: 940 credits ($9.40) untuk operasional
+• Trading capital: Perlu deposit tambahan
 
- <b>Kenapa ada Platform Fee 2%?</b>
- Pengembangan fitur baru
- Maintenance server & infrastructure
- Support & customer service
- Keamanan & audit sistem
- Continuous improvement
+❓ <b>Kenapa ada Platform Fee 2%?</b>
+• Pengembangan fitur baru
+• Maintenance server & infrastructure
+• Support & customer service
+• Keamanan & audit sistem
+• Continuous improvement
 
- <b>Transparansi Platform Fee:</b>
- 2% fixed rate (tidak berubah)
- Dipotong saat deposit
- Tercatat di transaction log
- Digunakan untuk pengembangan platform
+🔍 <b>Transparansi Platform Fee:</b>
+• 2% fixed rate (tidak berubah)
+• Dipotong saat deposit
+• Tercatat di transaction log
+• Digunakan untuk pengembangan platform
 
-<b> Keamanan:</b>
+<b>🔒 Keamanan:</b>
 
- Wallet custodial (kami kelola)
- Private key terenkripsi
- Audit log semua transaksi
- Rate limiting untuk proteksi
- Admin approval untuk withdrawal
+✅ Wallet custodial (kami kelola)
+🔐 Private key terenkripsi
+📝 Audit log semua transaksi
+🛡️ Rate limiting untuk proteksi
+👮 Admin approval untuk withdrawal
 
-<b> Teknologi:</b>
+<b>⚙️ Teknologi:</b>
 
- <b>AI Model:</b> DeepSeek R1 (reasoning)
- <b>Data Source:</b> Binance Futures API
- <b>Blockchain:</b> Base Network (USDC)
- <b>Infrastructure:</b> Conway + Railway
+🤖 <b>AI Model:</b> DeepSeek R1 (reasoning)
+📊 <b>Data Source:</b> Binance Futures API
+⛓️ <b>Blockchain:</b> Base Network (USDC)
+🖥️ <b>Infrastructure:</b> Conway + Railway
 
-<b> Siap Memulai?</b>
+<b>🚀 Siap Memulai?</b>
 
 Klik tombol di bawah untuk:
 1. Deposit USDC pertama Anda
 2. Spawn AI Agent pertama
 3. Mulai autonomous trading!
 
-<i> Ada pertanyaan? Hubungi admin atau baca dokumentasi lengkap.</i>
+<i>❓ Ada pertanyaan? Hubungi admin atau baca dokumentasi lengkap.</i>
 """
     
     # Keyboard dengan opsi
     keyboard = [
-        [InlineKeyboardButton(" Deposit Sekarang", callback_data="deposit")],
-        [InlineKeyboardButton("[AI] Spawn AI Agent", callback_data="spawn_agent")],
-        [InlineKeyboardButton(" Baca Dokumentasi", callback_data="ai_agent_docs")],
-        [InlineKeyboardButton(" FAQ", callback_data="ai_agent_faq")],
-        [InlineKeyboardButton(" Kembali ke Menu", callback_data="menu_main")]
+        [InlineKeyboardButton("💰 Deposit Sekarang", callback_data="automaton_deposit")],
+        [InlineKeyboardButton("🤖 Spawn AI Agent", callback_data="automaton_spawn")],
+        [InlineKeyboardButton("📚 Baca Dokumentasi", callback_data="ai_agent_docs")],
+        [InlineKeyboardButton("❓ FAQ", callback_data="ai_agent_faq")],
+        [InlineKeyboardButton("🔙 Kembali ke Menu", callback_data="ai_agent_menu")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -320,8 +320,8 @@ A: Gunakan command:
 """
     
     keyboard = [
-        [InlineKeyboardButton(" Kembali", callback_data="ai_agent_education")],
-        [InlineKeyboardButton(" Menu Utama", callback_data="menu_main")]
+        [InlineKeyboardButton("🔙 Kembali", callback_data="ai_agent_education")],
+        [InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -497,8 +497,8 @@ Children:
 """
     
     keyboard = [
-        [InlineKeyboardButton(" Kembali", callback_data="ai_agent_education")],
-        [InlineKeyboardButton(" Menu Utama", callback_data="menu_main")]
+        [InlineKeyboardButton("🔙 Kembali", callback_data="ai_agent_education")],
+        [InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
