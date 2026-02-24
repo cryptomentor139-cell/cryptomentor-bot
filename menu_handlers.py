@@ -257,7 +257,7 @@ class MenuCallbackHandler:
         )
 
     async def show_ai_agent_menu(self, query, context):
-        """Show AI Agent submenu with deposit check and education"""
+        """Show AI Agent submenu - requires lifetime premium"""
         user_id = query.from_user.id
         from database import Database
         from app.admin_status import is_admin
@@ -275,8 +275,7 @@ class MenuCallbackHandler:
             await _show_education_content(query, context)
             return
         
-        # Check if user is admin or lifetime premium (for menu access only)
-        # Note: They still need $30 deposit to spawn agent
+        # Check if user is admin or lifetime premium
         is_admin_user = is_admin(user_id)
         is_lifetime = False
         
@@ -293,8 +292,90 @@ class MenuCallbackHandler:
                         premium_tier = user_result.data[0].get('premium_tier', '')
                         is_lifetime = (premium_tier == 'lifetime')
         except Exception as e:
-            print(f" Error checking premium tier: {e}")
+            print(f"⚠️ Error checking premium tier: {e}")
         
+        # REQUIREMENT: Must be lifetime premium (or admin) to access AI Agent
+        if not is_lifetime and not is_admin_user:
+            # Show upgrade required message
+            if user_lang == 'id':
+                upgrade_text = """🤖 **AI Agent - Lifetime Premium Required**
+
+⚠️ **Akses Terbatas**
+
+Fitur AI Agent hanya tersedia untuk **Lifetime Premium** members.
+
+🎯 **Kenapa Lifetime Premium?**
+• AI Agent adalah fitur advanced yang membutuhkan resources besar
+• Lifetime members mendapat akses unlimited ke semua fitur
+• Investasi one-time untuk benefit selamanya
+
+💎 **Benefit Lifetime Premium:**
+✅ AI Agent access (autonomous trading)
+✅ Unlimited AI analysis
+✅ Auto signals 24/7
+✅ Priority support
+✅ All future features
+✅ No monthly fees
+
+💰 **Cara Upgrade:**
+1. Klik tombol "💎 Upgrade Lifetime" di bawah
+2. Ikuti instruksi pembayaran
+3. Setelah upgrade, Anda bisa akses AI Agent
+
+📚 **Pelajari Lebih Lanjut:**
+Klik "🎓 Tentang AI Agent" untuk memahami fitur ini sebelum upgrade.
+
+---
+<i>Note: Setelah upgrade Lifetime, Anda masih perlu deposit USDC untuk spawn AI Agent.</i>"""
+            else:
+                upgrade_text = """🤖 **AI Agent - Lifetime Premium Required**
+
+⚠️ **Access Restricted**
+
+AI Agent feature is only available for **Lifetime Premium** members.
+
+🎯 **Why Lifetime Premium?**
+• AI Agent is an advanced feature requiring significant resources
+• Lifetime members get unlimited access to all features
+• One-time investment for lifetime benefits
+
+💎 **Lifetime Premium Benefits:**
+✅ AI Agent access (autonomous trading)
+✅ Unlimited AI analysis
+✅ Auto signals 24/7
+✅ Priority support
+✅ All future features
+✅ No monthly fees
+
+💰 **How to Upgrade:**
+1. Click "💎 Upgrade Lifetime" button below
+2. Follow payment instructions
+3. After upgrade, you can access AI Agent
+
+📚 **Learn More:**
+Click "🎓 About AI Agent" to understand this feature before upgrading.
+
+---
+<i>Note: After Lifetime upgrade, you still need to deposit USDC to spawn AI Agent.</i>"""
+            
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [
+                [InlineKeyboardButton("🎓 Tentang AI Agent" if user_lang == 'id' else "🎓 About AI Agent", 
+                                     callback_data="ai_agent_education")],
+                [InlineKeyboardButton("💎 Upgrade Lifetime" if user_lang == 'id' else "💎 Upgrade Lifetime", 
+                                     callback_data=UPGRADE_PREMIUM)],
+                [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
+                                     callback_data=MAIN_MENU)]
+            ]
+            
+            await query.edit_message_text(
+                upgrade_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='MARKDOWN'
+            )
+            return
+        
+        # User is lifetime premium or admin, check deposit status
         # Check if user has made deposit (minimum $30 = 3000 credits)
         MINIMUM_DEPOSIT_CREDITS = 3000  # $30 USDC = 3000 credits
         has_deposit = False
@@ -320,9 +401,9 @@ class MenuCallbackHandler:
                         
                         # User has sufficient deposit if >= $30 (3000 credits)
                         has_deposit = (user_credits >= MINIMUM_DEPOSIT_CREDITS)
-                        print(f" User {user_id} credits check: available={available_credits}, total={total_credits}, has_deposit={has_deposit}")
+                        print(f"✅ User {user_id} credits check: available={available_credits}, total={total_credits}, has_deposit={has_deposit}")
         except Exception as e:
-            print(f" Error checking deposit status in user_credits_balance: {e}")
+            print(f"⚠️ Error checking deposit status in user_credits_balance: {e}")
             # Fallback: check old custodial_wallets table for backward compatibility
             try:
                 from supabase_client import supabase
@@ -338,97 +419,101 @@ class MenuCallbackHandler:
                         conway_credits = float(wallet.get('conway_credits', 0))
                         user_credits = max(balance_usdc * 100, conway_credits)  # 1 USDC = 100 credits
                         has_deposit = (user_credits >= MINIMUM_DEPOSIT_CREDITS)
-                        print(f" User {user_id} fallback check: usdc={balance_usdc}, credits={conway_credits}, has_deposit={has_deposit}")
+                        print(f"✅ User {user_id} fallback check: usdc={balance_usdc}, credits={conway_credits}, has_deposit={has_deposit}")
             except Exception as fallback_error:
-                print(f" Fallback check also failed: {fallback_error}")
+                print(f"⚠️ Fallback check also failed: {fallback_error}")
         
         # If no sufficient deposit, show deposit-required menu
         if not has_deposit:
             if user_lang == 'id':
-                welcome_text = f"""[AI] **Selamat Datang di AI Agent!**
+                welcome_text = f"""🤖 **Selamat Datang di AI Agent!**
 
- **Apa itu AI Agent?**
+✅ **Status:** Lifetime Premium Active
+
+💰 **Apa itu AI Agent?**
 AI Agent adalah autonomous trading agent yang menggunakan Conway credits sebagai bahan bakar untuk beroperasi.
 
- **PENTING - Spawn Fee: 100,000 credits (1,000 USDC)**
+⚠️ **PENTING - Spawn Fee: 100,000 credits (1,000 USDC)**
 Untuk spawn AI Agent, Anda perlu **100,000 credits** (1,000 USDC).
 
- **Status Deposit Anda:**
- Credits saat ini: {user_credits:,.0f}
- Untuk spawn agent: 100,000 credits (1,000 USDC)
- Kekurangan: {max(0, 100000 - user_credits):,.0f} credits
+📊 **Status Deposit Anda:**
+💵 Credits saat ini: {user_credits:,.0f}
+🎯 Untuk spawn agent: 100,000 credits (1,000 USDC)
+📉 Kekurangan: {max(0, 100000 - user_credits):,.0f} credits
 
- **Opsi Deposit:**
- $5 USDC: Testing only (TIDAK BISA spawn)
- $30 USDC: Small operations (TIDAK BISA spawn)
- $1,030 USDC: Minimum untuk spawn 1 agent
- $2,000+ USDC: Spawn + trading capital
+💰 **Opsi Deposit:**
+• $5 USDC: Testing only (TIDAK BISA spawn)
+• $30 USDC: Small operations (TIDAK BISA spawn)
+• $1,030 USDC: Minimum untuk spawn 1 agent
+• $2,000+ USDC: Spawn + trading capital
 
- **Cara Deposit:**
-1. Klik tombol " Deposit Sekarang" di bawah
+📝 **Cara Deposit:**
+1. Klik tombol "💰 Deposit Sekarang" di bawah
 2. Deposit USDC (Base Network) ke address yang diberikan
 3. Credits akan otomatis ditambahkan setelah 12 konfirmasi
 4. Setelah deposit $1,030+, Anda bisa spawn agent dan mulai trading!
 
- **Conversion Rate:**
- 1 USDC = 100 Conway Credits
- $1,030 USDC = 103,000 Credits (cukup untuk spawn)
+💱 **Conversion Rate:**
+💵 1 USDC = 100 Conway Credits
+💰 $1,030 USDC = 103,000 Credits (cukup untuk spawn)
 
- **Network:**
- Base Network (WAJIB)
+🌐 **Network:**
+⛓️ Base Network (WAJIB)
 
- **Catatan:**
- Platform fee: 2% dari deposit
- Spawn fee: 100,000 credits (1,000 USDC)
- Operational costs: ~100-500 credits/day"""
+📌 **Catatan:**
+• Platform fee: 2% dari deposit
+• Spawn fee: 100,000 credits (1,000 USDC)
+• Operational costs: ~100-500 credits/day"""
             else:
-                welcome_text = f"""[AI] **Welcome to AI Agent!**
+                welcome_text = f"""🤖 **Welcome to AI Agent!**
 
- **What is AI Agent?**
+✅ **Status:** Lifetime Premium Active
+
+💰 **What is AI Agent?**
 AI Agent is an autonomous trading agent that uses Conway credits as fuel to operate.
 
- **IMPORTANT - Spawn Fee: 100,000 credits (1,000 USDC)**
+⚠️ **IMPORTANT - Spawn Fee: 100,000 credits (1,000 USDC)**
 To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
 
- **Your Deposit Status:**
- Current credits: {user_credits:,.0f}
- To spawn agent: 100,000 credits (1,000 USDC)
- Shortfall: {max(0, 100000 - user_credits):,.0f} credits
+📊 **Your Deposit Status:**
+💵 Current credits: {user_credits:,.0f}
+🎯 To spawn agent: 100,000 credits (1,000 USDC)
+📉 Shortfall: {max(0, 100000 - user_credits):,.0f} credits
 
- **Deposit Options:**
- $5 USDC: Testing only (CANNOT spawn)
- $30 USDC: Small operations (CANNOT spawn)
- $1,030 USDC: Minimum to spawn 1 agent
- $2,000+ USDC: Spawn + trading capital
+💰 **Deposit Options:**
+• $5 USDC: Testing only (CANNOT spawn)
+• $30 USDC: Small operations (CANNOT spawn)
+• $1,030 USDC: Minimum to spawn 1 agent
+• $2,000+ USDC: Spawn + trading capital
 
- **How to Deposit:**
-1. Click " Deposit Now" button below
+📝 **How to Deposit:**
+1. Click "💰 Deposit Now" button below
 2. Deposit USDC (Base Network) to the provided address
 3. Credits will be automatically added after 12 confirmations
 4. After $1,030+ deposit, you can spawn agents and start trading!
 
- **Conversion Rate:**
- 1 USDC = 100 Conway Credits
- $1,030 USDC = 103,000 Credits (enough to spawn)
+💱 **Conversion Rate:**
+💵 1 USDC = 100 Conway Credits
+💰 $1,030 USDC = 103,000 Credits (enough to spawn)
 
- **Network:**
- Base Network (REQUIRED)
+🌐 **Network:**
+⛓️ Base Network (REQUIRED)
 
- **Notes:**
- Platform fee: 2% of deposit
- Spawn fee: 100,000 credits (1,000 USDC)
- Operational costs: ~100-500 credits/day"""
+📌 **Notes:**
+• Platform fee: 2% of deposit
+• Spawn fee: 100,000 credits (1,000 USDC)
+• Operational costs: ~100-500 credits/day"""
             
             # Build deposit-first menu with education button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             keyboard = [
-                [InlineKeyboardButton(" Pelajari AI Agent" if user_lang == 'id' else " Learn About AI Agent", 
+                [InlineKeyboardButton("🎓 Pelajari AI Agent" if user_lang == 'id' else "🎓 Learn About AI Agent", 
                                      callback_data="ai_agent_education")],
-                [InlineKeyboardButton(" Deposit Sekarang" if user_lang == 'id' else " Deposit Now", 
+                [InlineKeyboardButton("💰 Deposit Sekarang" if user_lang == 'id' else "💰 Deposit Now", 
                                      callback_data="automaton_first_deposit")],
-                [InlineKeyboardButton(" Cara Deposit" if user_lang == 'id' else " How to Deposit", 
+                [InlineKeyboardButton("📚 Cara Deposit" if user_lang == 'id' else "📚 How to Deposit", 
                                      callback_data="deposit_guide")],
-                [InlineKeyboardButton(" Kembali" if user_lang == 'id' else " Back", 
+                [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
                                      callback_data=MAIN_MENU)]
             ]
             
