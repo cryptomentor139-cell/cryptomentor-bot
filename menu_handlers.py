@@ -36,7 +36,7 @@ class MenuCallbackHandler:
         processed_queries = context.bot_data.get('processed_queries', set())
         
         if query_id in processed_queries:
-            print(f"⚠️  Duplicate query detected and skipped: {query_id}")
+            print(f"  Duplicate query detected and skipped: {query_id}")
             # Don't answer again, just return
             return
         
@@ -56,10 +56,10 @@ class MenuCallbackHandler:
         except Exception as e:
             # Query might be too old or already answered
             if "query is too old" in str(e).lower() or "already" in str(e).lower():
-                print(f"⚠️  Query already answered or too old: {query_id}")
+                print(f"  Query already answered or too old: {query_id}")
                 return
             # For other errors, log but continue
-            print(f"⚠️  Error answering query: {e}")
+            print(f"  Error answering query: {e}")
         
         user_id = query.from_user.id
 
@@ -181,7 +181,7 @@ class MenuCallbackHandler:
         except Exception as e:
             print(f"Error in callback handler: {e}")
             await query.edit_message_text(
-                "❌ Terjadi kesalahan. Silakan coba lagi atau gunakan command manual.",
+                " Terjadi kesalahan. Silakan coba lagi atau gunakan command manual.",
                 reply_markup=MenuBuilder.build_main_menu()
             )
 
@@ -293,7 +293,7 @@ class MenuCallbackHandler:
                         premium_tier = user_result.data[0].get('premium_tier', '')
                         is_lifetime = (premium_tier == 'lifetime')
         except Exception as e:
-            print(f"⚠️ Error checking premium tier: {e}")
+            print(f" Error checking premium tier: {e}")
         
         # Check if user has made deposit (minimum $30 = 3000 credits)
         MINIMUM_DEPOSIT_CREDITS = 3000  # $30 USDC = 3000 credits
@@ -320,9 +320,9 @@ class MenuCallbackHandler:
                         
                         # User has sufficient deposit if >= $30 (3000 credits)
                         has_deposit = (user_credits >= MINIMUM_DEPOSIT_CREDITS)
-                        print(f"✅ User {user_id} credits check: available={available_credits}, total={total_credits}, has_deposit={has_deposit}")
+                        print(f" User {user_id} credits check: available={available_credits}, total={total_credits}, has_deposit={has_deposit}")
         except Exception as e:
-            print(f"⚠️ Error checking deposit status in user_credits_balance: {e}")
+            print(f" Error checking deposit status in user_credits_balance: {e}")
             # Fallback: check old custodial_wallets table for backward compatibility
             try:
                 from supabase_client import supabase
@@ -338,97 +338,97 @@ class MenuCallbackHandler:
                         conway_credits = float(wallet.get('conway_credits', 0))
                         user_credits = max(balance_usdc * 100, conway_credits)  # 1 USDC = 100 credits
                         has_deposit = (user_credits >= MINIMUM_DEPOSIT_CREDITS)
-                        print(f"✅ User {user_id} fallback check: usdc={balance_usdc}, credits={conway_credits}, has_deposit={has_deposit}")
+                        print(f" User {user_id} fallback check: usdc={balance_usdc}, credits={conway_credits}, has_deposit={has_deposit}")
             except Exception as fallback_error:
-                print(f"⚠️ Fallback check also failed: {fallback_error}")
+                print(f" Fallback check also failed: {fallback_error}")
         
         # If no sufficient deposit, show deposit-required menu
         if not has_deposit:
             if user_lang == 'id':
-                welcome_text = f"""🤖 **Selamat Datang di AI Agent!**
+                welcome_text = f"""[AI] **Selamat Datang di AI Agent!**
 
-💡 **Apa itu AI Agent?**
+ **Apa itu AI Agent?**
 AI Agent adalah autonomous trading agent yang menggunakan Conway credits sebagai bahan bakar untuk beroperasi.
 
-⚠️ **PENTING - Spawn Fee: 100,000 credits (1,000 USDC)**
+ **PENTING - Spawn Fee: 100,000 credits (1,000 USDC)**
 Untuk spawn AI Agent, Anda perlu **100,000 credits** (1,000 USDC).
 
-💰 **Status Deposit Anda:**
-• Credits saat ini: {user_credits:,.0f}
-• Untuk spawn agent: 100,000 credits (1,000 USDC)
-• Kekurangan: {max(0, 100000 - user_credits):,.0f} credits
+ **Status Deposit Anda:**
+ Credits saat ini: {user_credits:,.0f}
+ Untuk spawn agent: 100,000 credits (1,000 USDC)
+ Kekurangan: {max(0, 100000 - user_credits):,.0f} credits
 
-💵 **Opsi Deposit:**
-• $5 USDC: Testing only (TIDAK BISA spawn)
-• $30 USDC: Small operations (TIDAK BISA spawn)
-• $1,030 USDC: Minimum untuk spawn 1 agent
-• $2,000+ USDC: Spawn + trading capital
+ **Opsi Deposit:**
+ $5 USDC: Testing only (TIDAK BISA spawn)
+ $30 USDC: Small operations (TIDAK BISA spawn)
+ $1,030 USDC: Minimum untuk spawn 1 agent
+ $2,000+ USDC: Spawn + trading capital
 
-📝 **Cara Deposit:**
-1. Klik tombol "💰 Deposit Sekarang" di bawah
+ **Cara Deposit:**
+1. Klik tombol " Deposit Sekarang" di bawah
 2. Deposit USDC (Base Network) ke address yang diberikan
 3. Credits akan otomatis ditambahkan setelah 12 konfirmasi
 4. Setelah deposit $1,030+, Anda bisa spawn agent dan mulai trading!
 
-📊 **Conversion Rate:**
-• 1 USDC = 100 Conway Credits
-• $1,030 USDC = 103,000 Credits (cukup untuk spawn)
+ **Conversion Rate:**
+ 1 USDC = 100 Conway Credits
+ $1,030 USDC = 103,000 Credits (cukup untuk spawn)
 
-🌐 **Network:**
-• Base Network (WAJIB)
+ **Network:**
+ Base Network (WAJIB)
 
-💡 **Catatan:**
-• Platform fee: 2% dari deposit
-• Spawn fee: 100,000 credits (1,000 USDC)
-• Operational costs: ~100-500 credits/day
+ **Catatan:**
+ Platform fee: 2% dari deposit
+ Spawn fee: 100,000 credits (1,000 USDC)
+ Operational costs: ~100-500 credits/day"""
             else:
-                welcome_text = f"""🤖 **Welcome to AI Agent!**
+                welcome_text = f"""[AI] **Welcome to AI Agent!**
 
-💡 **What is AI Agent?**
+ **What is AI Agent?**
 AI Agent is an autonomous trading agent that uses Conway credits as fuel to operate.
 
-⚠️ **IMPORTANT - Spawn Fee: 100,000 credits (1,000 USDC)**
+ **IMPORTANT - Spawn Fee: 100,000 credits (1,000 USDC)**
 To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
 
-💰 **Your Deposit Status:**
-• Current credits: {user_credits:,.0f}
-• To spawn agent: 100,000 credits (1,000 USDC)
-• Shortfall: {max(0, 100000 - user_credits):,.0f} credits
+ **Your Deposit Status:**
+ Current credits: {user_credits:,.0f}
+ To spawn agent: 100,000 credits (1,000 USDC)
+ Shortfall: {max(0, 100000 - user_credits):,.0f} credits
 
-💵 **Deposit Options:**
-• $5 USDC: Testing only (CANNOT spawn)
-• $30 USDC: Small operations (CANNOT spawn)
-• $1,030 USDC: Minimum to spawn 1 agent
-• $2,000+ USDC: Spawn + trading capital
+ **Deposit Options:**
+ $5 USDC: Testing only (CANNOT spawn)
+ $30 USDC: Small operations (CANNOT spawn)
+ $1,030 USDC: Minimum to spawn 1 agent
+ $2,000+ USDC: Spawn + trading capital
 
-📝 **How to Deposit:**
-1. Click "💰 Deposit Now" button below
+ **How to Deposit:**
+1. Click " Deposit Now" button below
 2. Deposit USDC (Base Network) to the provided address
 3. Credits will be automatically added after 12 confirmations
 4. After $1,030+ deposit, you can spawn agents and start trading!
 
-📊 **Conversion Rate:**
-• 1 USDC = 100 Conway Credits
-• $1,030 USDC = 103,000 Credits (enough to spawn)
+ **Conversion Rate:**
+ 1 USDC = 100 Conway Credits
+ $1,030 USDC = 103,000 Credits (enough to spawn)
 
-🌐 **Network:**
-• Base Network (REQUIRED)
+ **Network:**
+ Base Network (REQUIRED)
 
-💡 **Notes:**
-• Platform fee: 2% of deposit
-• Spawn fee: 100,000 credits (1,000 USDC)
-• Operational costs: ~100-500 credits/day"""
+ **Notes:**
+ Platform fee: 2% of deposit
+ Spawn fee: 100,000 credits (1,000 USDC)
+ Operational costs: ~100-500 credits/day"""
             
             # Build deposit-first menu with education button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             keyboard = [
-                [InlineKeyboardButton("📚 Pelajari AI Agent" if user_lang == 'id' else "📚 Learn About AI Agent", 
+                [InlineKeyboardButton(" Pelajari AI Agent" if user_lang == 'id' else " Learn About AI Agent", 
                                      callback_data="ai_agent_education")],
-                [InlineKeyboardButton("💰 Deposit Sekarang" if user_lang == 'id' else "💰 Deposit Now", 
+                [InlineKeyboardButton(" Deposit Sekarang" if user_lang == 'id' else " Deposit Now", 
                                      callback_data="automaton_first_deposit")],
-                [InlineKeyboardButton("❓ Cara Deposit" if user_lang == 'id' else "❓ How to Deposit", 
+                [InlineKeyboardButton(" Cara Deposit" if user_lang == 'id' else " How to Deposit", 
                                      callback_data="deposit_guide")],
-                [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
+                [InlineKeyboardButton(" Kembali" if user_lang == 'id' else " Back", 
                                      callback_data=MAIN_MENU)]
             ]
             
@@ -462,18 +462,18 @@ To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
         tz_info = TIMEZONES.get(current_tz, TIMEZONES['WIB'])
         
         await query.edit_message_text(
-            f"🕐 **Time Settings**\n\n"
-            f"📍 **Current Timezone:** {tz_info['name']}\n\n"
+            f" **Time Settings**\n\n"
+            f" **Current Timezone:** {tz_info['name']}\n\n"
             f"Select your preferred timezone:\n\n"
-            f"🇮🇩 **Indonesia:**\n"
-            f"• WIB - Jakarta, Sumatra, Java (UTC+7)\n"
-            f"• WITA - Bali, Makassar (UTC+8)\n"
-            f"• WIT - Papua (UTC+9)\n\n"
-            f"🌏 **Other Countries:**\n"
-            f"• Singapore, Malaysia (UTC+8)\n"
-            f"• Dubai (UTC+4)\n"
-            f"• UK (UTC+0)\n"
-            f"• US East/West (UTC-5/-8)",
+            f" **Indonesia:**\n"
+            f" WIB - Jakarta, Sumatra, Java (UTC+7)\n"
+            f" WITA - Bali, Makassar (UTC+8)\n"
+            f" WIT - Papua (UTC+9)\n\n"
+            f" **Other Countries:**\n"
+            f" Singapore, Malaysia (UTC+8)\n"
+            f" Dubai (UTC+4)\n"
+            f" UK (UTC+0)\n"
+            f" US East/West (UTC-5/-8)",
             reply_markup=MenuBuilder.build_timezone_menu(),
             parse_mode='MARKDOWN'
         )
@@ -496,9 +496,9 @@ To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
         user_time = (datetime.utcnow() + timedelta(hours=tz_info['offset'])).strftime('%H:%M:%S')
         
         await query.edit_message_text(
-            f"✅ **Timezone Updated!**\n\n"
-            f"🕐 **Your Timezone:** {tz_info['name']}\n"
-            f"🏙️ **City:** {tz_info['city']}\n"
+            f" **Timezone Updated!**\n\n"
+            f" **Your Timezone:** {tz_info['name']}\n"
+            f" **City:** {tz_info['city']}\n"
             f"⏰ **Current Time:** {user_time}\n\n"
             f"All timestamps will now display in your selected timezone.",
             reply_markup=MenuBuilder.build_settings_menu(),
@@ -511,7 +511,7 @@ To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
         context.user_data['awaiting_symbol'] = True
 
         await query.edit_message_text(
-            "🔹 **Check Price** - Select a cryptocurrency:\n\n"
+            " **Check Price** - Select a cryptocurrency:\n\n"
             "Choose from popular options below or type manually:",
             reply_markup=MenuBuilder.build_symbol_selection(),
             parse_mode='MARKDOWN'
@@ -538,7 +538,7 @@ To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
         context.user_data['awaiting_symbol'] = True
 
         await query.edit_message_text(
-            "📊 **Spot Analysis (SnD)** - 20 Credits\n\n"
+            " **Spot Analysis (SnD)** - 20 Credits\n\n"
             "Select a cryptocurrency for comprehensive analysis:",
             reply_markup=MenuBuilder.build_symbol_selection(),
             parse_mode='MARKDOWN'
@@ -550,7 +550,7 @@ To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
         context.user_data['awaiting_symbol'] = True
 
         await query.edit_message_text(
-            "📉 **Futures Analysis (SnD)** - 20 Credits\n\n"
+            " **Futures Analysis (SnD)** - 20 Credits\n\n"
             "Select a cryptocurrency for futures trading analysis:",
             reply_markup=MenuBuilder.build_symbol_selection(),
             parse_mode='MARKDOWN'
@@ -569,26 +569,26 @@ To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
             ok, remain, msg = require_credits(user_id, 60)
             if not ok:
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⭐ Upgrade Premium", callback_data=UPGRADE_PREMIUM)],
-                    [InlineKeyboardButton("🔙 Back", callback_data=FUTURES_SIGNALS)]
+                    [InlineKeyboardButton(" Upgrade Premium", callback_data=UPGRADE_PREMIUM)],
+                    [InlineKeyboardButton(" Back", callback_data=FUTURES_SIGNALS)]
                 ])
                 await query.edit_message_text(
-                    text=f"❌ {msg}\n\n⭐ Upgrade ke Premium untuk akses unlimited!",
+                    text=f" {msg}\n\n Upgrade ke Premium untuk akses unlimited!",
                     reply_markup=keyboard
                 )
                 return
-            print(f"✅ Credit deducted for user {user_id}: 60 credits (multi-coin), remaining: {remain}", flush=True)
+            print(f" Credit deducted for user {user_id}: 60 credits (multi-coin), remaining: {remain}", flush=True)
         except Exception as e:
-            print(f"❌ Credit check error for user {user_id}: {e}", flush=True)
+            print(f" Credit check error for user {user_id}: {e}", flush=True)
             import traceback
             traceback.print_exc()
             await query.edit_message_text(
-                text="❌ Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=FUTURES_SIGNALS)]])
+                text=" Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(" Back", callback_data=FUTURES_SIGNALS)]])
             )
             return
         
-        await query.edit_message_text("⏳ Generating futures signals with Supply & Demand analysis...\n\n💡 Proses berjalan di background, bot tetap responsif untuk user lain.")
+        await query.edit_message_text("⏳ Generating futures signals with Supply & Demand analysis...\n\n Proses berjalan di background, bot tetap responsif untuk user lain.")
 
         # Run heavy operation in background task to not block other users
         async def generate_signals_background():
@@ -614,12 +614,12 @@ To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
                 )
                 
             except Exception as e:
-                print(f"❌ Multi-coin signal error for user {user_id}: {e}", flush=True)
+                print(f" Multi-coin signal error for user {user_id}: {e}", flush=True)
                 try:
                     await context.bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=message_id,
-                        text=f"❌ Error generating signals: {str(e)[:100]}...\n\nPlease try again in a few seconds.",
+                        text=f" Error generating signals: {str(e)[:100]}...\n\nPlease try again in a few seconds.",
                         parse_mode='MARKDOWN'
                     )
                 except:
@@ -630,32 +630,32 @@ To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
 
     async def handle_auto_signal_info(self, query, context):
         """Handle auto signal info"""
-        info_text = """👑 **Auto Signal Information**
+        info_text = """ **Auto Signal Information**
 
-🤖 **What is Auto Signal?**
+[AUTO] **What is Auto Signal?**
 Automated trading signals delivered directly to your chat every 5 minutes when high-confidence opportunities are detected.
 
-🎯 **Features:**
-• Real-time signal delivery
-• Supply & Demand analysis
-• Multiple timeframes
-• Professional entry/exit points
-• Risk management included
+ **Features:**
+ Real-time signal delivery
+ Supply & Demand analysis
+ Multiple timeframes
+ Professional entry/exit points
+ Risk management included
 
-🔒 **Availability:**
+ **Availability:**
 Currently available for **Lifetime Premium users only**
 
-💎 **How to Access:**
+ **How to Access:**
 Upgrade to Lifetime Premium via `/subscribe` to unlock this exclusive feature.
 
-📊 **Signal Quality:**
-• Minimum 75% confidence
-• Advanced SnD algorithms
-• Anti-spam protection
-• Quality over quantity approach"""
+ **Signal Quality:**
+ Minimum 75% confidence
+ Advanced SnD algorithms
+ Anti-spam protection
+ Quality over quantity approach"""
 
         back_button = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back to Futures Menu", callback_data=FUTURES_SIGNALS)]
+            [InlineKeyboardButton(" Back to Futures Menu", callback_data=FUTURES_SIGNALS)]
         ])
 
         await query.edit_message_text(
@@ -683,7 +683,7 @@ Upgrade to Lifetime Premium via `/subscribe` to unlock this exclusive feature.
         context.user_data['step'] = 'symbol'
 
         await query.edit_message_text(
-            "➕ **Add Coin to Portfolio**\n\n"
+            " **Add Coin to Portfolio**\n\n"
             "Step 1/2: Select the cryptocurrency to add:",
             reply_markup=MenuBuilder.build_symbol_selection(),
             parse_mode='MARKDOWN'
@@ -736,7 +736,7 @@ Upgrade to Lifetime Premium via `/subscribe` to unlock this exclusive feature.
             # Get user referral codes
             referral_codes = db.get_user_referral_codes(user_id)
             if not referral_codes:
-                await query.edit_message_text("❌ Error loading referral data. Please try /start first.")
+                await query.edit_message_text(" Error loading referral data. Please try /start first.")
                 return
                 
             free_referral_code = referral_codes.get('free_referral_code', 'INVALID')
@@ -754,36 +754,36 @@ Upgrade to Lifetime Premium via `/subscribe` to unlock this exclusive feature.
             next_requirement = 10 if tier_info['level']==1 else 25 if tier_info['level']==2 else 50 if tier_info['level']==3 else 100 if tier_info['level']==4 else 100
             progress = min(100, (earnings_summary['total_referrals'] / next_requirement * 100))
             
-            referral_text = f"""🎁 **REFERRAL PROGRAM - {tier_info['tier']} TIER**
+            referral_text = f""" **REFERRAL PROGRAM - {tier_info['tier']} TIER**
 
-👤 **{user_name}** | Level {tier_info['level']}/5
+ **{user_name}** | Level {tier_info['level']}/5
 
-🔗 **YOUR REFERRAL LINKS:**
+ **YOUR REFERRAL LINKS:**
 
-🆓 **FREE REFERRAL:**
+ **FREE REFERRAL:**
 `{free_link}`
-💰 Reward: {5 + int(5 * tier_info['bonus']/100)} credits per referral
+ Reward: {5 + int(5 * tier_info['bonus']/100)} credits per referral
 
-💎 **PREMIUM REFERRAL:**
+ **PREMIUM REFERRAL:**
 `{premium_link}`  
-💰 Reward: Rp {int(10000 * tier_info['money_multiplier']):,} per premium subscriber
+ Reward: Rp {int(10000 * tier_info['money_multiplier']):,} per premium subscriber
 
-📊 **PERFORMANCE DASHBOARD:**
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Total Referrals: {earnings_summary['total_referrals']:>15} ┃
-┃ Free Referrals: {earnings_summary['free_referrals']:>16} ┃
-┃ Premium Referrals: {earnings_summary['premium_referrals']:>13} ┃
-┃ Credits Earned: {earnings_summary['credit_earnings']:>16} ┃
-┃ Money Earned: Rp {earnings_summary['money_earnings']:>13,} ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ **PERFORMANCE DASHBOARD:**
 
-🏆 **{tier_info['tier']} TIER STATUS:**
-• Credit Bonus: +{tier_info['bonus']}%
-• Money Multiplier: {tier_info['money_multiplier']}x
-• Progress to next tier: {progress:.1f}%
-{'▓' * int(progress/10)}{'░' * (10-int(progress/10))} {earnings_summary['total_referrals']}/{next_requirement}
+ Total Referrals: {earnings_summary['total_referrals']:>15} 
+ Free Referrals: {earnings_summary['free_referrals']:>16} 
+ Premium Referrals: {earnings_summary['premium_referrals']:>13} 
+ Credits Earned: {earnings_summary['credit_earnings']:>16} 
+ Money Earned: Rp {earnings_summary['money_earnings']:>13,} 
 
-💡 **EARNING STRATEGIES:**
+
+ **{tier_info['tier']} TIER STATUS:**
+ Credit Bonus: +{tier_info['bonus']}%
+ Money Multiplier: {tier_info['money_multiplier']}x
+ Progress to next tier: {progress:.1f}%
+{'' * int(progress/10)}{'' * (10-int(progress/10))} {earnings_summary['total_referrals']}/{next_requirement}
+
+ **EARNING STRATEGIES:**
 1. Share free link in crypto groups
 2. Premium link for serious traders
 3. Build long-term referral network
@@ -793,15 +793,15 @@ Upgrade to Lifetime Premium via `/subscribe` to unlock this exclusive feature.
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             keyboard = [
                 [
-                    InlineKeyboardButton("📊 Detailed Stats", callback_data="referral_stats"),
-                    InlineKeyboardButton("💡 Strategy Guide", callback_data="referral_guide")
+                    InlineKeyboardButton(" Detailed Stats", callback_data="referral_stats"),
+                    InlineKeyboardButton(" Strategy Guide", callback_data="referral_guide")
                 ],
                 [
-                    InlineKeyboardButton("🎯 Tier System", callback_data="tier_system_guide"),
-                    InlineKeyboardButton("💰 Withdrawal", callback_data="referral_withdrawal")
+                    InlineKeyboardButton(" Tier System", callback_data="tier_system_guide"),
+                    InlineKeyboardButton(" Withdrawal", callback_data="referral_withdrawal")
                 ],
                 [
-                    InlineKeyboardButton("🔙 Back to Menu", callback_data=PREMIUM_REFERRAL)
+                    InlineKeyboardButton(" Back to Menu", callback_data=PREMIUM_REFERRAL)
                 ]
             ]
             
@@ -814,7 +814,7 @@ Upgrade to Lifetime Premium via `/subscribe` to unlock this exclusive feature.
         except Exception as e:
             print(f"Error in referral program handler: {e}")
             await query.edit_message_text(
-                f"❌ Error loading referral data: {str(e)[:100]}\n\n"
+                f" Error loading referral data: {str(e)[:100]}\n\n"
                 f"Please try /referral command directly.",
                 parse_mode='MARKDOWN'
             )
@@ -822,25 +822,25 @@ Upgrade to Lifetime Premium via `/subscribe` to unlock this exclusive feature.
     async def handle_premium_earnings(self, query, context):
         """Handle premium earnings"""
         # For now, show a message since this command might not exist
-        earnings_text = """💰 **Premium Earnings Dashboard**
+        earnings_text = """ **Premium Earnings Dashboard**
 
-🎯 **Referral Earnings:**
-• Total Referrals: 0
-• Credits Earned: 0
-• Money Earned: Rp 0
+ **Referral Earnings:**
+ Total Referrals: 0
+ Credits Earned: 0
+ Money Earned: Rp 0
 
-💡 **How to Earn:**
+ **How to Earn:**
 1. Share your referral link from `/referral`
 2. When referred users subscribe premium, you earn money
 3. All users give you credits immediately
 
-📊 **Current Status:**
+ **Current Status:**
 Premium users earn Rp 10,000 per premium referral
 
-🔧 **Note:** Full earnings dashboard coming in future updates!"""
+ **Note:** Full earnings dashboard coming in future updates!"""
 
         back_button = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back to Premium Menu", callback_data=PREMIUM_REFERRAL)]
+            [InlineKeyboardButton(" Back to Premium Menu", callback_data=PREMIUM_REFERRAL)]
         ])
 
         await query.edit_message_text(
@@ -854,20 +854,20 @@ Premium users earn Rp 10,000 per premium referral
         context.user_data['current_action'] = 'ask_ai'
         context.user_data['awaiting_question'] = True
 
-        prompt_text = """💬 **Ask CryptoMentor AI**
+        prompt_text = """ **Ask CryptoMentor AI**
 
 Type your question about cryptocurrency, trading, or blockchain technology.
 
-📚 **Examples:**
-• "What is DeFi?"
-• "Explain Bitcoin halving"
-• "How to read candlestick charts?"
-• "What is supply and demand in trading?"
+ **Examples:**
+ "What is DeFi?"
+ "Explain Bitcoin halving"
+ "How to read candlestick charts?"
+ "What is supply and demand in trading?"
 
-💡 Just type your question in the next message!"""
+ Just type your question in the next message!"""
 
         back_button = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancel", callback_data=ASK_AI_MENU)]
+            [InlineKeyboardButton(" Cancel", callback_data=ASK_AI_MENU)]
         ])
 
         await query.edit_message_text(
@@ -898,11 +898,11 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             context.user_data['state_timestamp'] = datetime.utcnow().isoformat()
             
         except Exception as e:
-            print(f"❌ Error in handle_automaton_spawn: {e}")
+            print(f" Error in handle_automaton_spawn: {e}")
             import traceback
             traceback.print_exc()
             await query.message.reply_text(
-                f"❌ Error: {str(e)[:100]}\n\n"
+                f" Error: {str(e)[:100]}\n\n"
                 f"Please use /spawn_agent command directly.",
                 parse_mode='MARKDOWN'
             )
@@ -928,11 +928,11 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             await agent_status_command(fake_update, context)
             
         except Exception as e:
-            print(f"❌ Error in handle_automaton_status: {e}")
+            print(f" Error in handle_automaton_status: {e}")
             import traceback
             traceback.print_exc()
             await query.message.reply_text(
-                f"❌ Error: {str(e)[:100]}\n\n"
+                f" Error: {str(e)[:100]}\n\n"
                 f"Please use /agent_status command directly.",
                 parse_mode='MARKDOWN'
             )
@@ -958,11 +958,11 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             await deposit_command(fake_update, context)
             
         except Exception as e:
-            print(f"❌ Error in handle_automaton_deposit: {e}")
+            print(f" Error in handle_automaton_deposit: {e}")
             import traceback
             traceback.print_exc()
             await query.message.reply_text(
-                f"❌ Error: {str(e)[:100]}\n\n"
+                f" Error: {str(e)[:100]}\n\n"
                 f"Please use /deposit command directly.",
                 parse_mode='MARKDOWN'
             )
@@ -988,11 +988,11 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             await agent_logs_command(fake_update, context)
             
         except Exception as e:
-            print(f"❌ Error in handle_automaton_logs: {e}")
+            print(f" Error in handle_automaton_logs: {e}")
             import traceback
             traceback.print_exc()
             await query.message.reply_text(
-                f"❌ Error: {str(e)[:100]}\n\n"
+                f" Error: {str(e)[:100]}\n\n"
                 f"Please use /agent_logs command directly.",
                 parse_mode='MARKDOWN'
             )
@@ -1018,11 +1018,11 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             await agent_lineage_command(fake_update, context)
             
         except Exception as e:
-            print(f"❌ Error in handle_agent_lineage: {e}")
+            print(f" Error in handle_agent_lineage: {e}")
             import traceback
             traceback.print_exc()
             await query.message.reply_text(
-                f"❌ Error: {str(e)[:100]}\n\n"
+                f" Error: {str(e)[:100]}\n\n"
                 f"Please use /agent_lineage command directly.",
                 parse_mode='MARKDOWN'
             )
@@ -1041,33 +1041,33 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             current_name = 'Bahasa Indonesia'
 
         if current_lang == 'id':
-            language_text = f"""🌐 **Pengaturan Bahasa**
+            language_text = f""" **Pengaturan Bahasa**
 
-📍 **Bahasa Saat Ini:** {current_name} (`{current_lang}`)
+ **Bahasa Saat Ini:** {current_name} (`{current_lang}`)
 
-🗣️ **Bahasa Tersedia:**
-• 🇺🇸 English - Fitur lengkap
-• 🇮🇩 Bahasa Indonesia - Fitur lengkap
+ **Bahasa Tersedia:**
+  English - Fitur lengkap
+  Bahasa Indonesia - Fitur lengkap
 
-💡 **Pilih bahasa yang Anda inginkan:**"""
+ **Pilih bahasa yang Anda inginkan:**"""
         else:
-            language_text = f"""🌐 **Language Settings**
+            language_text = f""" **Language Settings**
 
-📍 **Current Language:** {current_name} (`{current_lang}`)
+ **Current Language:** {current_name} (`{current_lang}`)
 
-🗣️ **Available Languages:**
-• 🇺🇸 English - Full features
-• 🇮🇩 Bahasa Indonesia - Fitur lengkap
+ **Available Languages:**
+  English - Full features
+  Bahasa Indonesia - Fitur lengkap
 
-💡 **Select your preferred language:**"""
+ **Select your preferred language:**"""
 
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         keyboard = [
             [
-                InlineKeyboardButton("🇺🇸 English", callback_data="set_lang_en"),
-                InlineKeyboardButton("🇮🇩 Bahasa Indonesia", callback_data="set_lang_id")
+                InlineKeyboardButton(" English", callback_data="set_lang_en"),
+                InlineKeyboardButton(" Bahasa Indonesia", callback_data="set_lang_id")
             ],
-            [InlineKeyboardButton("🔙 Back to Settings", callback_data=SETTINGS_MENU)]
+            [InlineKeyboardButton(" Back to Settings", callback_data=SETTINGS_MENU)]
         ]
 
         await query.edit_message_text(
@@ -1102,16 +1102,16 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             'add_coin': 'add to portfolio'
         }.get(current_action, 'process')
 
-        prompt_text = f"""⌨️ **Manual Symbol Input**
+        prompt_text = f"""⌨ **Manual Symbol Input**
 
 Type the cryptocurrency symbol you want to {action_text}.
 
-💡 **Examples:** BTC, ETH, DOGE, SHIB, etc.
+ **Examples:** BTC, ETH, DOGE, SHIB, etc.
 
 Just type the symbol in your next message!"""
 
         back_button = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancel", callback_data=MAIN_MENU)]
+            [InlineKeyboardButton(" Cancel", callback_data=MAIN_MENU)]
         ])
 
         await query.edit_message_text(
@@ -1123,7 +1123,7 @@ Just type the symbol in your next message!"""
     async def show_futures_timeframe_selection(self, query, context, symbol):
         """Show timeframe selection for futures analysis"""
         await query.edit_message_text(
-            f"📉 <b>Futures Analysis: {symbol}</b>\n\n"
+            f" <b>Futures Analysis: {symbol}</b>\n\n"
             f"Select timeframe: 15m, 30m, 1h, 4h, 1d",
             reply_markup=MenuBuilder.build_timeframe_selection(symbol),
             parse_mode='HTML'
@@ -1142,22 +1142,22 @@ Just type the symbol in your next message!"""
             ok, remain, msg = require_credits(user_id, 20)
             if not ok:
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⭐ Upgrade Premium", callback_data=UPGRADE_PREMIUM)],
-                    [InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]
+                    [InlineKeyboardButton(" Upgrade Premium", callback_data=UPGRADE_PREMIUM)],
+                    [InlineKeyboardButton(" Back", callback_data=TRADING_ANALYSIS)]
                 ])
                 await query.edit_message_text(
-                    text=f"❌ {msg}\n\n⭐ Upgrade ke Premium untuk akses unlimited!",
+                    text=f" {msg}\n\n Upgrade ke Premium untuk akses unlimited!",
                     reply_markup=keyboard
                 )
                 return
-            print(f"✅ Credit deducted for user {user_id}: 20 credits (futures analysis), remaining: {remain}", flush=True)
+            print(f" Credit deducted for user {user_id}: 20 credits (futures analysis), remaining: {remain}", flush=True)
         except Exception as e:
-            print(f"❌ Credit check error for user {user_id}: {e}", flush=True)
+            print(f" Credit check error for user {user_id}: {e}", flush=True)
             import traceback
             traceback.print_exc()
             await query.edit_message_text(
-                text="❌ Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]])
+                text=" Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(" Back", callback_data=TRADING_ANALYSIS)]])
             )
             return
         
@@ -1172,7 +1172,7 @@ Just type the symbol in your next message!"""
                 symbol = symbol + 'USDT'
 
             await query.edit_message_text(
-                f"⏳ Analyzing {symbol} {timeframe} with Supply & Demand zones...\n\n💡 Bot tetap responsif untuk user lain.",
+                f"⏳ Analyzing {symbol} {timeframe} with Supply & Demand zones...\n\n Bot tetap responsif untuk user lain.",
                 parse_mode=None
             )
 
@@ -1209,52 +1209,52 @@ Just type the symbol in your next message!"""
                         if current_price > mid_range * 1.02:
                             sentiment, sentiment_emoji = "BULLISH", "🟢"
                         elif current_price < mid_range * 0.98:
-                            sentiment, sentiment_emoji = "BEARISH", "🔴"
+                            sentiment, sentiment_emoji = "BEARISH", ""
                         else:
                             sentiment, sentiment_emoji = "SIDEWAYS", "🟡"
                     else:
-                        sentiment, sentiment_emoji = "NEUTRAL", "⚪"
+                        sentiment, sentiment_emoji = "NEUTRAL", ""
 
                     display_symbol = symbol.replace('USDT', '')
-                    response = f"📊 FUTURES ANALYSIS: {display_symbol} ({timeframe.upper()})\n\n💰 Current Price: {fmt_price(current_price)}\n{sentiment_emoji} Market Sentiment: {sentiment}\n\n"
+                    response = f" FUTURES ANALYSIS: {display_symbol} ({timeframe.upper()})\n\n Current Price: {fmt_price(current_price)}\n{sentiment_emoji} Market Sentiment: {sentiment}\n\n"
 
                     if sentiment == "BULLISH":
-                        response += "🎯 RECOMMENDED: LIMIT LONG at Demand Zone\n\n"
+                        response += " RECOMMENDED: LIMIT LONG at Demand Zone\n\n"
                         if demand_zones:
                             best_zone = demand_zones[0]
                             zone_width = best_zone.high - best_zone.low
                             sl = best_zone.low - (zone_width * 0.75)
                             tp1 = current_price + (current_price - best_zone.midpoint) * 1.5
                             tp2 = current_price + (current_price - best_zone.midpoint) * 2.5
-                            response += f"🟢 ENTRY ZONE (LONG):\n📍 Demand Zone: {fmt_price(best_zone.low)} - {fmt_price(best_zone.high)}\n💪 Strength: {best_zone.strength:.0f}%\n🛑 Stop Loss: {fmt_price(sl)}\n🎯 TP1: {fmt_price(tp1)}\n🎯 TP2: {fmt_price(tp2)}\n\n"
+                            response += f"🟢 ENTRY ZONE (LONG):\n Demand Zone: {fmt_price(best_zone.low)} - {fmt_price(best_zone.high)}\n Strength: {best_zone.strength:.0f}%\n Stop Loss: {fmt_price(sl)}\n TP1: {fmt_price(tp1)}\n TP2: {fmt_price(tp2)}\n\n"
                         else:
-                            response += "⚠️ No demand zones found for LONG entry\n\n"
+                            response += " No demand zones found for LONG entry\n\n"
                     elif sentiment == "BEARISH":
-                        response += "🎯 RECOMMENDED: LIMIT SHORT at Supply Zone\n\n"
+                        response += " RECOMMENDED: LIMIT SHORT at Supply Zone\n\n"
                         if supply_zones:
                             best_zone = supply_zones[0]
                             zone_width = best_zone.high - best_zone.low
                             sl = best_zone.high + (zone_width * 0.75)
                             tp1 = current_price - (best_zone.midpoint - current_price) * 1.5
                             tp2 = current_price - (best_zone.midpoint - current_price) * 2.5
-                            response += f"🔴 ENTRY ZONE (SHORT):\n📍 Supply Zone: {fmt_price(best_zone.low)} - {fmt_price(best_zone.high)}\n💪 Strength: {best_zone.strength:.0f}%\n🛑 Stop Loss: {fmt_price(sl)}\n🎯 TP1: {fmt_price(tp1)}\n🎯 TP2: {fmt_price(tp2)}\n\n"
+                            response += f" ENTRY ZONE (SHORT):\n Supply Zone: {fmt_price(best_zone.low)} - {fmt_price(best_zone.high)}\n Strength: {best_zone.strength:.0f}%\n Stop Loss: {fmt_price(sl)}\n TP1: {fmt_price(tp1)}\n TP2: {fmt_price(tp2)}\n\n"
                         else:
-                            response += "⚠️ No supply zones found for SHORT entry\n\n"
+                            response += " No supply zones found for SHORT entry\n\n"
                     else:
-                        response += "🎯 RECOMMENDED: Wait for Breakout\n\n⚠️ Market is ranging - wait for clear direction\n\n"
+                        response += " RECOMMENDED: Wait for Breakout\n\n Market is ranging - wait for clear direction\n\n"
                         if demand_zones:
                             best_demand = demand_zones[0]
-                            response += f"🟢 If Bullish Breakout → LONG at:\n📍 Demand: {fmt_price(best_demand.low)} - {fmt_price(best_demand.high)}\n\n"
+                            response += f"🟢 If Bullish Breakout → LONG at:\n Demand: {fmt_price(best_demand.low)} - {fmt_price(best_demand.high)}\n\n"
                         if supply_zones:
                             best_supply = supply_zones[0]
-                            response += f"🔴 If Bearish Breakout → SHORT at:\n📍 Supply: {fmt_price(best_supply.low)} - {fmt_price(best_supply.high)}\n\n"
+                            response += f" If Bearish Breakout → SHORT at:\n Supply: {fmt_price(best_supply.low)} - {fmt_price(best_supply.high)}\n\n"
 
-                    response += "⚠️ RISK MANAGEMENT:\n• Use LIMIT orders at zone levels\n• Do NOT use market orders\n• Risk max 1-2% per trade\n• Always set Stop Loss\n\n💡 Wait for price to enter zone before placing order"
+                    response += " RISK MANAGEMENT:\n Use LIMIT orders at zone levels\n Do NOT use market orders\n Risk max 1-2% per trade\n Always set Stop Loss\n\n Wait for price to enter zone before placing order"
 
                     await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response, parse_mode=None)
 
                 except Exception as e:
-                    print(f"❌ Futures analysis error: {e}", flush=True)
+                    print(f" Futures analysis error: {e}", flush=True)
                     try:
                         await context.bot.edit_message_text(
                             chat_id=chat_id, message_id=message_id,
@@ -1272,19 +1272,19 @@ Just type the symbol in your next message!"""
         context.user_data['step'] = 'amount'
         context.user_data['awaiting_amount'] = True
 
-        prompt_text = f"""➕ **Add {symbol} to Portfolio**
+        prompt_text = f""" **Add {symbol} to Portfolio**
 
 Step 2/2: Enter the amount of {symbol} you own.
 
-💡 **Examples:**
-• 0.5 (for 0.5 {symbol})
-• 100 (for 100 {symbol})
-• 0.001234 (for small amounts)
+ **Examples:**
+ 0.5 (for 0.5 {symbol})
+ 100 (for 100 {symbol})
+ 0.001234 (for small amounts)
 
 Just type the number in your next message!"""
 
         back_button = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancel", callback_data=PORTFOLIO_CREDITS)]
+            [InlineKeyboardButton(" Cancel", callback_data=PORTFOLIO_CREDITS)]
         ])
 
         await query.edit_message_text(
@@ -1320,22 +1320,22 @@ Just type the number in your next message!"""
             ok, remain, msg = require_credits(user_id, 20)
             if not ok:
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⭐ Upgrade Premium", callback_data=UPGRADE_PREMIUM)],
-                    [InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]
+                    [InlineKeyboardButton(" Upgrade Premium", callback_data=UPGRADE_PREMIUM)],
+                    [InlineKeyboardButton(" Back", callback_data=TRADING_ANALYSIS)]
                 ])
                 await query.edit_message_text(
-                    text=f"❌ {msg}\n\n⭐ Upgrade ke Premium untuk akses unlimited!",
+                    text=f" {msg}\n\n Upgrade ke Premium untuk akses unlimited!",
                     reply_markup=keyboard
                 )
                 return
-            print(f"✅ Credit deducted for user {user_id}: 20 credits (spot analysis), remaining: {remain}", flush=True)
+            print(f" Credit deducted for user {user_id}: 20 credits (spot analysis), remaining: {remain}", flush=True)
         except Exception as e:
-            print(f"❌ Credit check error for user {user_id}: {e}", flush=True)
+            print(f" Credit check error for user {user_id}: {e}", flush=True)
             import traceback
             traceback.print_exc()
             await query.edit_message_text(
-                text="❌ Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=TRADING_ANALYSIS)]])
+                text=" Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(" Back", callback_data=TRADING_ANALYSIS)]])
             )
             return
         
@@ -1346,7 +1346,7 @@ Just type the number in your next message!"""
         timeframe = "1h"
         
         await query.edit_message_text(
-            f"🔄 <b>Analyzing {symbol}...</b>\n\n📊 Fetching Binance data...\n🎯 Detecting S&D zones...\n\n💡 Bot tetap responsif untuk user lain.",
+            f" <b>Analyzing {symbol}...</b>\n\n Fetching Binance data...\n Detecting S&D zones...\n\n Bot tetap responsif untuk user lain.",
             parse_mode='HTML'
         )
         
@@ -1361,7 +1361,7 @@ Just type the number in your next message!"""
                 if 'error' in snd_result:
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=message_id,
-                        text=f"❌ <b>Error:</b> {snd_result['error']}\n\n💡 Try a different symbol like BTC, ETH, etc.",
+                        text=f" <b>Error:</b> {snd_result['error']}\n\n Try a different symbol like BTC, ETH, etc.",
                         parse_mode='HTML'
                     )
                     return
@@ -1398,7 +1398,7 @@ Just type the number in your next message!"""
                 confidence = min(95, base_confidence)
                 
                 display_symbol = symbol.replace('USDT', '')
-                response = f"📊 <b>Spot Signal – {display_symbol} ({timeframe.upper()})</b>\n\n💰 <b>Price:</b> {fmt_price(current_price)}\n\n🟢 <b>BUY ZONES</b>\n"
+                response = f" <b>Spot Signal – {display_symbol} ({timeframe.upper()})</b>\n\n <b>Price:</b> {fmt_price(current_price)}\n\n🟢 <b>BUY ZONES</b>\n"
                 
                 zone_labels = [("A", "Strong", "40%"), ("B", "Discount", "35%"), ("C", "Deep", "25%")]
                 sorted_demands = sorted(demand_zones, key=lambda z: abs(current_price - z.midpoint))
@@ -1415,14 +1415,14 @@ Just type the number in your next message!"""
                 else:
                     response += "\n⏳ No active demand zones detected\n"
                 
-                response += "\n🔴 <b>SELL ZONE</b>\n"
+                response += "\n <b>SELL ZONE</b>\n"
                 if supply_zones:
                     best_supply = supply_zones[0]
                     response += f"{fmt_price(best_supply.low)} – {fmt_price(best_supply.high)} (Take Profit)\n"
                 else:
                     response += "No active supply zone\n"
                 
-                response += f"\n📈 <b>Context:</b>\n• Trend: {trend}\n• Volume: {volume_status}\n\n🔥 <b>Confidence:</b> {confidence:.0f}%\n💡 <b>Strategy:</b> DCA on demand zones\n\n<i>⚠️ Spot only • Entry range, not market buy</i>"
+                response += f"\n <b>Context:</b>\n Trend: {trend}\n Volume: {volume_status}\n\n <b>Confidence:</b> {confidence:.0f}%\n <b>Strategy:</b> DCA on demand zones\n\n<i> Spot only  Entry range, not market buy</i>"
                 
                 # Add AI reasoning for premium users
                 try:
@@ -1476,11 +1476,11 @@ Just type the number in your next message!"""
                 await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response, parse_mode='HTML')
             
             except Exception as e:
-                print(f"❌ Spot analysis error: {e}", flush=True)
+                print(f" Spot analysis error: {e}", flush=True)
                 try:
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=message_id,
-                        text=f"❌ <b>Error</b>: {str(e)[:100]}\n\n💡 Please try again or check symbol format",
+                        text=f" <b>Error</b>: {str(e)[:100]}\n\n Please try again or check symbol format",
                         parse_mode='HTML'
                     )
                 except:
@@ -1497,7 +1497,7 @@ Just type the number in your next message!"""
         referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
 
         await query.answer(
-            f"✅ Link copied!\n{referral_link}",
+            f" Link copied!\n{referral_link}",
             show_alert=True
         )
 
@@ -1537,54 +1537,54 @@ Just type the number in your next message!"""
         money_value = total_earnings
         estimated_monthly = self.calculate_monthly_potential(total_referrals, active_referrals)
 
-        stats_text = f"""🏆 **REFERRAL DASHBOARD - {current_tier['name']} TIER**
+        stats_text = f""" **REFERRAL DASHBOARD - {current_tier['name']} TIER**
 
-👤 **{user_name}** | Level {current_tier['level']}/5
+ **{user_name}** | Level {current_tier['level']}/5
 
-📊 **PERFORMANCE METRICS:**
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Total Referrals: {total_referrals:>15} ┃
-┃ Free Referrals: {total_referrals - premium_referrals:>16} ┃
-┃ Premium Referrals: {premium_referrals:>13} ┃
-┃ Success Rate: {(active_referrals/max(total_referrals,1)*100):>17.1f}% ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ **PERFORMANCE METRICS:**
 
-💎 **CURRENT TIER: {current_tier['name']}**
+ Total Referrals: {total_referrals:>15} 
+ Free Referrals: {total_referrals - premium_referrals:>16} 
+ Premium Referrals: {premium_referrals:>13} 
+ Success Rate: {(active_referrals/max(total_referrals,1)*100):>17.1f}% 
+
+
+ **CURRENT TIER: {current_tier['name']}**
 {current_tier['icon']} **Benefits:**
-• Credit Bonus: +{current_tier['bonus']}% pada setiap referral
-• Money Multiplier: {current_tier['money_multiplier']}x cash rewards
-• Badge: {current_tier['badge']}
-• Special Access: {current_tier['access']}
+ Credit Bonus: +{current_tier['bonus']}% pada setiap referral
+ Money Multiplier: {current_tier['money_multiplier']}x cash rewards
+ Badge: {current_tier['badge']}
+ Special Access: {current_tier['access']}
 
-🎯 **PROGRESSION TO {next_tier['name']}:**
+ **PROGRESSION TO {next_tier['name']}:**
 Progress: {total_referrals}/{next_tier['requirement']} ({(total_referrals/next_tier['requirement']*100):.1f}%)
-{'▓' * int(total_referrals/next_tier['requirement']*10)}{'░' * (10-int(total_referrals/next_tier['requirement']*10))}
+{'' * int(total_referrals/next_tier['requirement']*10)}{'' * (10-int(total_referrals/next_tier['requirement']*10))}
 Needed: {max(0, next_tier['requirement'] - total_referrals)} more referrals
 
-💰 **EARNINGS OVERVIEW:**
-• Credits Earned: {credit_value:,} credits (≈ Rp {credit_value * 500:,})
-• Cash Earned: Rp {money_value:,}
-• Bulan Ini: Rp {this_month_earnings:,}
-• Estimated Monthly: Rp {estimated_monthly:,}
+ **EARNINGS OVERVIEW:**
+ Credits Earned: {credit_value:,} credits (≈ Rp {credit_value * 500:,})
+ Cash Earned: Rp {money_value:,}
+ Bulan Ini: Rp {this_month_earnings:,}
+ Estimated Monthly: Rp {estimated_monthly:,}
 
-📈 **GROWTH STRATEGY:**
+ **GROWTH STRATEGY:**
 {self.get_tier_specific_tips(current_tier['level'])}
 
-🎁 **REWARDS UNLOCKED:**
+ **REWARDS UNLOCKED:**
 {self.get_rewards_display(current_tier['level'], total_referrals)}
 
-⚡ **TIER BONUSES AKTIF:**
-• Credit boost: {current_tier['bonus']}% extra
-• Withdrawal priority: {current_tier['withdrawal_priority']}
-• Customer support: {current_tier['support_level']}"""
+ **TIER BONUSES AKTIF:**
+ Credit boost: {current_tier['bonus']}% extra
+ Withdrawal priority: {current_tier['withdrawal_priority']}
+ Customer support: {current_tier['support_level']}"""
 
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         keyboard = [
-            [InlineKeyboardButton("📋 Copy Link", callback_data="copy_referral_link"),
-             InlineKeyboardButton("💡 Tips & Guide", callback_data="referral_guide")],
-            [InlineKeyboardButton("🎯 Tier Guide", callback_data="tier_system_guide"),
-             InlineKeyboardButton("💰 Withdrawal", callback_data="referral_withdrawal")],
-            [InlineKeyboardButton("🔙 Back", callback_data="referral_program")],
+            [InlineKeyboardButton(" Copy Link", callback_data="copy_referral_link"),
+             InlineKeyboardButton(" Tips & Guide", callback_data="referral_guide")],
+            [InlineKeyboardButton(" Tier Guide", callback_data="tier_system_guide"),
+             InlineKeyboardButton(" Withdrawal", callback_data="referral_withdrawal")],
+            [InlineKeyboardButton(" Back", callback_data="referral_program")],
         ]
 
         await query.edit_message_text(
@@ -1628,13 +1628,13 @@ Needed: {max(0, next_tier['requirement'] - total_referrals)} more referrals
         if has_pending:
             withdrawal_text = f"""⏳ <b>WITHDRAWAL REQUEST PENDING</b>
 
-👤 <b>User:</b> {user_name}
-🆔 <b>UID:</b> <code>{user_id}</code>
+ <b>User:</b> {user_name}
+ <b>UID:</b> <code>{user_id}</code>
 
-💰 <b>Jumlah:</b> Rp {pending_info.get('amount', 0):,}
-📝 <b>Metode:</b> {pending_info.get('method', 'N/A')}
-📋 <b>Detail:</b> {pending_info.get('account_info', 'N/A')}
-📅 <b>Tanggal Request:</b> {pending_info.get('requested_at', 'N/A')[:10]}
+ <b>Jumlah:</b> Rp {pending_info.get('amount', 0):,}
+ <b>Metode:</b> {pending_info.get('method', 'N/A')}
+ <b>Detail:</b> {pending_info.get('account_info', 'N/A')}
+ <b>Tanggal Request:</b> {pending_info.get('requested_at', 'N/A')[:10]}
 
 ⏳ <b>Status:</b> Menunggu verifikasi admin
 
@@ -1643,8 +1643,8 @@ Mohon tunggu admin memproses request Anda."""
 
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             keyboard = [
-                [InlineKeyboardButton("❌ Cancel Request", callback_data="wd_cancel")],
-                [InlineKeyboardButton("🔙 Back", callback_data="referral_program")],
+                [InlineKeyboardButton(" Cancel Request", callback_data="wd_cancel")],
+                [InlineKeyboardButton(" Back", callback_data="referral_program")],
             ]
             await query.edit_message_text(
                 text=withdrawal_text,
@@ -1653,35 +1653,35 @@ Mohon tunggu admin memproses request Anda."""
             )
             return
 
-        withdrawal_text = f"""💰 <b>WITHDRAWAL REFERRAL EARNINGS</b>
+        withdrawal_text = f""" <b>WITHDRAWAL REFERRAL EARNINGS</b>
 
-👤 <b>User:</b> {user_name}
-🆔 <b>UID:</b> <code>{user_id}</code>
+ <b>User:</b> {user_name}
+ <b>UID:</b> <code>{user_id}</code>
 
-💳 <b>Saldo Tersedia:</b> Rp {total_earnings:,}
+ <b>Saldo Tersedia:</b> Rp {total_earnings:,}
 
-📝 <b>Pilih Metode Withdrawal:</b>
+ <b>Pilih Metode Withdrawal:</b>
 
-🏦 <b>Bank Transfer</b>
-• Fee: Rp 2,500
-• Processing: 1-3 hari kerja
+ <b>Bank Transfer</b>
+ Fee: Rp 2,500
+ Processing: 1-3 hari kerja
 
-📱 <b>E-Wallet</b> (OVO/DANA/GoPay)
-• Fee: Rp 1,000
-• Processing: Instant - 24 jam
+ <b>E-Wallet</b> (OVO/DANA/GoPay)
+ Fee: Rp 1,000
+ Processing: Instant - 24 jam
 
-💎 <b>Crypto</b> (USDT BEP20)
-• Fee: 1 USDT
-• Processing: 2-6 jam
+ <b>Crypto</b> (USDT BEP20)
+ Fee: 1 USDT
+ Processing: 2-6 jam
 
-⚠️ <b>Minimum withdrawal:</b> Rp 50,000"""
+ <b>Minimum withdrawal:</b> Rp 50,000"""
 
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         keyboard = [
-            [InlineKeyboardButton("🏦 Bank Transfer", callback_data="wd_method_bank")],
-            [InlineKeyboardButton("📱 E-Wallet", callback_data="wd_method_ewallet")],
-            [InlineKeyboardButton("💎 Crypto USDT", callback_data="wd_method_crypto")],
-            [InlineKeyboardButton("🔙 Back", callback_data="referral_program")],
+            [InlineKeyboardButton(" Bank Transfer", callback_data="wd_method_bank")],
+            [InlineKeyboardButton(" E-Wallet", callback_data="wd_method_ewallet")],
+            [InlineKeyboardButton(" Crypto USDT", callback_data="wd_method_crypto")],
+            [InlineKeyboardButton(" Back", callback_data="referral_program")],
         ]
 
         await query.edit_message_text(
@@ -1703,9 +1703,9 @@ Mohon tunggu admin memproses request Anda."""
             total_earnings = 0
 
         method_info = {
-            'bank': {'name': 'Bank Transfer', 'fee': 2500, 'icon': '🏦', 'placeholder': 'Nama Bank + No Rekening + Nama Pemilik\nContoh: BCA 1234567890 John Doe'},
-            'ewallet': {'name': 'E-Wallet', 'fee': 1000, 'icon': '📱', 'placeholder': 'Jenis E-Wallet + Nomor\nContoh: DANA 081234567890'},
-            'crypto': {'name': 'Crypto USDT BEP20', 'fee': 15000, 'icon': '💎', 'placeholder': 'Alamat Wallet BEP20\nContoh: 0x1234...abcd'}
+            'bank': {'name': 'Bank Transfer', 'fee': 2500, 'icon': '', 'placeholder': 'Nama Bank + No Rekening + Nama Pemilik\nContoh: BCA 1234567890 John Doe'},
+            'ewallet': {'name': 'E-Wallet', 'fee': 1000, 'icon': '', 'placeholder': 'Jenis E-Wallet + Nomor\nContoh: DANA 081234567890'},
+            'crypto': {'name': 'Crypto USDT BEP20', 'fee': 15000, 'icon': '', 'placeholder': 'Alamat Wallet BEP20\nContoh: 0x1234...abcd'}
         }
         
         info = method_info.get(method, method_info['bank'])
@@ -1719,18 +1719,18 @@ Mohon tunggu admin memproses request Anda."""
         
         text = f"""{info['icon']} <b>WITHDRAWAL via {info['name']}</b>
 
-💰 <b>Saldo:</b> Rp {total_earnings:,}
-💸 <b>Fee:</b> Rp {info['fee']:,}
-✅ <b>Yang Diterima:</b> Rp {net_amount:,}
+ <b>Saldo:</b> Rp {total_earnings:,}
+ <b>Fee:</b> Rp {info['fee']:,}
+ <b>Yang Diterima:</b> Rp {net_amount:,}
 
-📝 <b>Kirim detail akun Anda:</b>
+ <b>Kirim detail akun Anda:</b>
 {info['placeholder']}
 
-⚠️ <b>PENTING:</b> Pastikan data benar karena tidak bisa diubah setelah submit!"""
+ <b>PENTING:</b> Pastikan data benar karena tidak bisa diubah setelah submit!"""
 
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         keyboard = [
-            [InlineKeyboardButton("❌ Cancel", callback_data="referral_withdrawal")],
+            [InlineKeyboardButton(" Cancel", callback_data="referral_withdrawal")],
         ]
 
         await query.edit_message_text(
@@ -1791,22 +1791,22 @@ Mohon tunggu admin memproses request Anda."""
         # Notify user
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         
-        user_text = f"""✅ <b>WITHDRAWAL REQUEST SUBMITTED!</b>
+        user_text = f""" <b>WITHDRAWAL REQUEST SUBMITTED!</b>
 
-🆔 <b>UID:</b> <code>{user_id}</code>
-💰 <b>Jumlah:</b> Rp {amount:,}
-💸 <b>Fee:</b> Rp {fee:,}
-✅ <b>Yang Diterima:</b> Rp {net_amount:,}
+ <b>UID:</b> <code>{user_id}</code>
+ <b>Jumlah:</b> Rp {amount:,}
+ <b>Fee:</b> Rp {fee:,}
+ <b>Yang Diterima:</b> Rp {net_amount:,}
 
-📝 <b>Metode:</b> {method_name}
-📋 <b>Detail:</b> {account_info}
+ <b>Metode:</b> {method_name}
+ <b>Detail:</b> {account_info}
 
 ⏳ <b>Status:</b> Menunggu verifikasi admin
 
 Admin akan memproses withdrawal Anda dalam 1-3 hari kerja.
 Anda akan menerima notifikasi setelah pembayaran dikirim."""
 
-        keyboard = [[InlineKeyboardButton("🔙 Menu Utama", callback_data="main_menu")]]
+        keyboard = [[InlineKeyboardButton(" Menu Utama", callback_data="main_menu")]]
         
         await update.message.reply_text(
             text=user_text,
@@ -1824,24 +1824,24 @@ Anda akan menerima notifikasi setelah pembayaran dikirim."""
         if admin2: admin_ids.append(int(admin2))
         if admin3: admin_ids.append(int(admin3))
         
-        admin_text = f"""🔔 <b>NEW WITHDRAWAL REQUEST</b>
+        admin_text = f""" <b>NEW WITHDRAWAL REQUEST</b>
 
-👤 <b>User:</b> {user_name} (@{username})
-🆔 <b>UID:</b> <code>{user_id}</code>
+ <b>User:</b> {user_name} (@{username})
+ <b>UID:</b> <code>{user_id}</code>
 
-💰 <b>Jumlah:</b> Rp {amount:,}
-💸 <b>Fee:</b> Rp {fee:,}
-✅ <b>Net Amount:</b> Rp {net_amount:,}
+ <b>Jumlah:</b> Rp {amount:,}
+ <b>Fee:</b> Rp {fee:,}
+ <b>Net Amount:</b> Rp {net_amount:,}
 
-📝 <b>Metode:</b> {method_name}
-📋 <b>Detail Akun:</b>
+ <b>Metode:</b> {method_name}
+ <b>Detail Akun:</b>
 <code>{account_info}</code>
 
-📅 <b>Tanggal:</b> {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"""
+ <b>Tanggal:</b> {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"""
 
         admin_keyboard = [
-            [InlineKeyboardButton("✅ Approve (Sudah Transfer)", callback_data=f"wd_approve_{user_id}")],
-            [InlineKeyboardButton("❌ Reject", callback_data=f"wd_reject_{user_id}")],
+            [InlineKeyboardButton(" Approve (Sudah Transfer)", callback_data=f"wd_approve_{user_id}")],
+            [InlineKeyboardButton(" Reject", callback_data=f"wd_reject_{user_id}")],
         ]
         
         for admin_id in admin_ids:
@@ -1955,32 +1955,32 @@ Anda akan menerima notifikasi setelah pembayaran dikirim."""
         
         # Update admin message
         await query.edit_message_text(
-            f"✅ <b>WITHDRAWAL APPROVED</b>\n\n"
-            f"👤 User: {withdrawal_info.get('user_name', 'N/A')} (@{withdrawal_info.get('username', 'N/A')})\n"
-            f"🆔 UID: <code>{target_user_id}</code>\n\n"
-            f"💰 Amount: Rp {withdrawal_info.get('amount', 0):,}\n"
-            f"📝 Method: {withdrawal_info.get('method', 'N/A')}\n"
-            f"📋 Account: {withdrawal_info.get('account_info', 'N/A')}\n\n"
-            f"✅ Premium earnings reset to Rp 0\n"
-            f"📊 {local_status} | {supabase_status}\n"
-            f"📅 Approved: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
+            f" <b>WITHDRAWAL APPROVED</b>\n\n"
+            f" User: {withdrawal_info.get('user_name', 'N/A')} (@{withdrawal_info.get('username', 'N/A')})\n"
+            f" UID: <code>{target_user_id}</code>\n\n"
+            f" Amount: Rp {withdrawal_info.get('amount', 0):,}\n"
+            f" Method: {withdrawal_info.get('method', 'N/A')}\n"
+            f" Account: {withdrawal_info.get('account_info', 'N/A')}\n\n"
+            f" Premium earnings reset to Rp 0\n"
+            f" {local_status} | {supabase_status}\n"
+            f" Approved: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
             parse_mode='HTML'
         )
         
         # Notify user
         try:
-            user_text = f"""✅ <b>WITHDRAWAL APPROVED!</b>
+            user_text = f""" <b>WITHDRAWAL APPROVED!</b>
 
-🎉 Pembayaran Anda telah diproses!
+ Pembayaran Anda telah diproses!
 
-💰 <b>Jumlah:</b> Rp {withdrawal_info.get('amount', 0):,}
-💸 <b>Fee:</b> Rp {withdrawal_info.get('fee', 0):,}
-✅ <b>Diterima:</b> Rp {withdrawal_info.get('net_amount', 0):,}
+ <b>Jumlah:</b> Rp {withdrawal_info.get('amount', 0):,}
+ <b>Fee:</b> Rp {withdrawal_info.get('fee', 0):,}
+ <b>Diterima:</b> Rp {withdrawal_info.get('net_amount', 0):,}
 
-📝 <b>Metode:</b> {withdrawal_info.get('method', 'N/A')}
-📋 <b>Ke:</b> {withdrawal_info.get('account_info', 'N/A')}
+ <b>Metode:</b> {withdrawal_info.get('method', 'N/A')}
+ <b>Ke:</b> {withdrawal_info.get('account_info', 'N/A')}
 
-💳 <b>Saldo Premium Earnings:</b> Rp 0
+ <b>Saldo Premium Earnings:</b> Rp 0
 (Reset setelah withdrawal)
 
 Terima kasih telah menggunakan CryptoMentor AI!
@@ -2030,38 +2030,38 @@ Terus ajak teman untuk mendapatkan lebih banyak earnings!"""
         
         # Update admin message
         await query.edit_message_text(
-            f"❌ <b>WITHDRAWAL REJECTED</b>\n\n"
-            f"👤 User: {withdrawal_info.get('user_name', 'N/A')} (@{withdrawal_info.get('username', 'N/A')})\n"
-            f"🆔 UID: <code>{target_user_id}</code>\n\n"
-            f"💰 Amount: Rp {withdrawal_info.get('amount', 0):,}\n"
-            f"📝 Method: {withdrawal_info.get('method', 'N/A')}\n\n"
-            f"⚠️ Premium earnings NOT reset (user can request again)\n"
-            f"📅 Rejected: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
+            f" <b>WITHDRAWAL REJECTED</b>\n\n"
+            f" User: {withdrawal_info.get('user_name', 'N/A')} (@{withdrawal_info.get('username', 'N/A')})\n"
+            f" UID: <code>{target_user_id}</code>\n\n"
+            f" Amount: Rp {withdrawal_info.get('amount', 0):,}\n"
+            f" Method: {withdrawal_info.get('method', 'N/A')}\n\n"
+            f" Premium earnings NOT reset (user can request again)\n"
+            f" Rejected: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
             parse_mode='HTML'
         )
         
         # Notify user
         try:
-            user_text = f"""❌ <b>WITHDRAWAL REJECTED</b>
+            user_text = f""" <b>WITHDRAWAL REJECTED</b>
 
 Maaf, request withdrawal Anda ditolak oleh admin.
 
-💰 <b>Jumlah:</b> Rp {withdrawal_info.get('amount', 0):,}
-📝 <b>Metode:</b> {withdrawal_info.get('method', 'N/A')}
+ <b>Jumlah:</b> Rp {withdrawal_info.get('amount', 0):,}
+ <b>Metode:</b> {withdrawal_info.get('method', 'N/A')}
 
-⚠️ <b>Alasan yang mungkin:</b>
-• Detail akun tidak valid
-• Informasi tidak lengkap
-• Perlu verifikasi tambahan
+ <b>Alasan yang mungkin:</b>
+ Detail akun tidak valid
+ Informasi tidak lengkap
+ Perlu verifikasi tambahan
 
-💡 <b>Saran:</b>
+ <b>Saran:</b>
 Silakan hubungi admin untuk klarifikasi atau submit ulang dengan data yang benar.
 
 Saldo premium earnings Anda TIDAK berubah.
 Anda dapat mengajukan withdrawal lagi."""
 
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            keyboard = [[InlineKeyboardButton("💰 Request Ulang", callback_data="referral_withdrawal")]]
+            keyboard = [[InlineKeyboardButton(" Request Ulang", callback_data="referral_withdrawal")]]
             
             await context.bot.send_message(
                 chat_id=target_user_id,
@@ -2079,7 +2079,7 @@ Anda dapat mengajukan withdrawal lagi."""
         if total_referrals >= 100:
             return {
                 'name': 'DIAMOND', 'level': 5, 'bonus': 30, 'money_multiplier': 3.0,
-                'icon': '💎', 'badge': '👑 Diamond Elite',
+                'icon': '', 'badge': ' Diamond Elite',
                 'access': 'VIP Community + Direct Admin Access',
                 'withdrawal_priority': 'Instant (0-2 hours)',
                 'support_level': 'White-glove Priority Support'
@@ -2087,7 +2087,7 @@ Anda dapat mengajukan withdrawal lagi."""
         elif total_referrals >= 50:
             return {
                 'name': 'GOLD', 'level': 4, 'bonus': 20, 'money_multiplier': 2.5,
-                'icon': '🥇', 'badge': '🏆 Gold Champion',
+                'icon': '', 'badge': ' Gold Champion',
                 'access': 'Premium Community + Beta Features',
                 'withdrawal_priority': 'Fast Track (2-6 hours)',
                 'support_level': 'Priority Support'
@@ -2095,7 +2095,7 @@ Anda dapat mengajukan withdrawal lagi."""
         elif total_referrals >= 25:
             return {
                 'name': 'SILVER', 'level': 3, 'bonus': 15, 'money_multiplier': 2.0,
-                'icon': '🥈', 'badge': '⚡ Silver Elite',
+                'icon': '', 'badge': ' Silver Elite',
                 'access': 'Silver Community + Early Access',
                 'withdrawal_priority': 'Accelerated (6-12 hours)',
                 'support_level': 'Enhanced Support'
@@ -2103,7 +2103,7 @@ Anda dapat mengajukan withdrawal lagi."""
         elif total_referrals >= 10:
             return {
                 'name': 'BRONZE', 'level': 2, 'bonus': 10, 'money_multiplier': 1.5,
-                'icon': '🥉', 'badge': '🔥 Bronze Achiever',
+                'icon': '', 'badge': ' Bronze Achiever',
                 'access': 'Member Community',
                 'withdrawal_priority': 'Standard (12-24 hours)',
                 'support_level': 'Standard Support'
@@ -2111,7 +2111,7 @@ Anda dapat mengajukan withdrawal lagi."""
         else:
             return {
                 'name': 'STARTER', 'level': 1, 'bonus': 5, 'money_multiplier': 1.0,
-                'icon': '⭐', 'badge': '🌟 Rising Star',
+                'icon': '', 'badge': ' Rising Star',
                 'access': 'Basic Community',
                 'withdrawal_priority': 'Normal (24-48 hours)',
                 'support_level': 'Community Support'
@@ -2149,11 +2149,11 @@ Anda dapat mengajukan withdrawal lagi."""
     def get_tier_specific_tips(self, tier_level):
         """Get tier-specific growth tips"""
         tips = {
-            1: "🚀 **STARTER STRATEGY:**\n• Share di 2-3 grup crypto\n• Ajak 5 teman trading pertama\n• Focus quality over quantity",
-            2: "📈 **BRONZE GROWTH:**\n• Expand ke 5+ crypto communities\n• Create tutorial content\n• Build personal crypto network",
-            3: "⚡ **SILVER SCALING:**\n• Launch referral campaign\n• Partner dengan crypto influencers\n• Host crypto learning sessions",
-            4: "🏆 **GOLD MASTERY:**\n• Build referral sub-network\n• Mentor bronze/silver members\n• Create premium content strategy",
-            5: "💎 **DIAMOND EXCELLENCE:**\n• Lead community initiatives\n• Develop scalable systems\n• Mentor entire referral network"
+            1: " **STARTER STRATEGY:**\n Share di 2-3 grup crypto\n Ajak 5 teman trading pertama\n Focus quality over quantity",
+            2: " **BRONZE GROWTH:**\n Expand ke 5+ crypto communities\n Create tutorial content\n Build personal crypto network",
+            3: " **SILVER SCALING:**\n Launch referral campaign\n Partner dengan crypto influencers\n Host crypto learning sessions",
+            4: " **GOLD MASTERY:**\n Build referral sub-network\n Mentor bronze/silver members\n Create premium content strategy",
+            5: " **DIAMOND EXCELLENCE:**\n Lead community initiatives\n Develop scalable systems\n Mentor entire referral network"
         }
         return tips.get(tier_level, tips[1])
 
@@ -2162,84 +2162,84 @@ Anda dapat mengajukan withdrawal lagi."""
         rewards = []
         
         if tier_level >= 1:
-            rewards.append("✅ 5 credits per free referral")
+            rewards.append(" 5 credits per free referral")
         if tier_level >= 2:
-            rewards.append("✅ 10% bonus credits")
-            rewards.append("✅ Bronze badge & community access")
+            rewards.append(" 10% bonus credits")
+            rewards.append(" Bronze badge & community access")
         if tier_level >= 3:
-            rewards.append("✅ 15% bonus credits")
-            rewards.append("✅ Early access to features")
+            rewards.append(" 15% bonus credits")
+            rewards.append(" Early access to features")
         if tier_level >= 4:
-            rewards.append("✅ 20% bonus credits")
-            rewards.append("✅ VIP support channel")
+            rewards.append(" 20% bonus credits")
+            rewards.append(" VIP support channel")
         if tier_level >= 5:
-            rewards.append("✅ 30% bonus credits")
-            rewards.append("✅ Direct admin access")
+            rewards.append(" 30% bonus credits")
+            rewards.append(" Direct admin access")
             
         # Milestone rewards
         milestones = [
-            (5, "🎁 50 bonus credits"),
-            (15, "🎁 100 bonus credits + 1 day premium"),
-            (30, "🎁 1 week premium trial"),
-            (75, "🎁 1 month premium"),
+            (5, " 50 bonus credits"),
+            (15, " 100 bonus credits + 1 day premium"),
+            (30, " 1 week premium trial"),
+            (75, " 1 month premium"),
         ]
         
         for milestone, reward in milestones:
             if total_referrals >= milestone:
-                rewards.append(f"✅ {reward}")
+                rewards.append(f" {reward}")
         
-        return "\n".join(rewards) if rewards else "🔒 Complete first referral to unlock rewards"
+        return "\n".join(rewards) if rewards else " Complete first referral to unlock rewards"
 
     async def handle_referral_guide(self, query, context):
         """Show comprehensive referral guide"""
-        guide_text = """📚 **PANDUAN REFERRAL MASTER**
+        guide_text = """ **PANDUAN REFERRAL MASTER**
 
-🎯 **STRATEGI DASAR:**
+ **STRATEGI DASAR:**
 
-**1. TARGET AUDIENCE YANG TEPAT** 🎪
-• Trader crypto pemula (butuh guidance)
-• Member grup crypto aktif
-• Followers crypto influencers
-• Teman yang tertarik investasi
+**1. TARGET AUDIENCE YANG TEPAT** 
+ Trader crypto pemula (butuh guidance)
+ Member grup crypto aktif
+ Followers crypto influencers
+ Teman yang tertarik investasi
 
-**2. PLATFORM SHARING OPTIMAL** 📱
-• WhatsApp: Personal approach, trust tinggi
-• Telegram Groups: Crypto communities
-• Discord: Gaming + crypto communities  
-• Twitter/X: Crypto Twitter audience
-• Instagram Stories: Visual appeal
+**2. PLATFORM SHARING OPTIMAL** 
+ WhatsApp: Personal approach, trust tinggi
+ Telegram Groups: Crypto communities
+ Discord: Gaming + crypto communities  
+ Twitter/X: Crypto Twitter audience
+ Instagram Stories: Visual appeal
 
-**3. CONTENT STRATEGY** ✍️
-• Screenshot profit dari bot signals
-• Tutorial cara pakai bot (video)
-• Testimonial hasil trading
-• Before/After portfolio growth
-• Educational crypto content
+**3. CONTENT STRATEGY** 
+ Screenshot profit dari bot signals
+ Tutorial cara pakai bot (video)
+ Testimonial hasil trading
+ Before/After portfolio growth
+ Educational crypto content
 
 **4. TIMING YANG TEPAT** ⏰
-• Bull market: Share profit screenshots
-• Bear market: Share risk management tips
-• News events: Share quick analysis
-• Weekend: Educational content
-• Asian hours: Indonesian audience
+ Bull market: Share profit screenshots
+ Bear market: Share risk management tips
+ News events: Share quick analysis
+ Weekend: Educational content
+ Asian hours: Indonesian audience
 
-**5. CONVERSION TACTICS** 💡
-• Offer free 1-on-1 crypto guidance
-• Share exclusive trading tips
-• Create beginner-friendly tutorials
-• Build trust through consistency
-• Follow up dengan referrals
+**5. CONVERSION TACTICS** 
+ Offer free 1-on-1 crypto guidance
+ Share exclusive trading tips
+ Create beginner-friendly tutorials
+ Build trust through consistency
+ Follow up dengan referrals
 
-🏆 **PRO TIPS:**
-• Authenticity > Hard selling
-• Educational content builds trust  
-• Personal success story works best
-• Community building = long-term success
-• Quality referrals > Quantity spam"""
+ **PRO TIPS:**
+ Authenticity > Hard selling
+ Educational content builds trust  
+ Personal success story works best
+ Community building = long-term success
+ Quality referrals > Quantity spam"""
 
         keyboard = [
-            [InlineKeyboardButton("🎯 Advanced Strategies", callback_data="advanced_referral_guide")],
-            [InlineKeyboardButton("📊 Back to Stats", callback_data="referral_stats")],
+            [InlineKeyboardButton(" Advanced Strategies", callback_data="advanced_referral_guide")],
+            [InlineKeyboardButton(" Back to Stats", callback_data="referral_stats")],
         ]
 
         await query.edit_message_text(
@@ -2250,69 +2250,69 @@ Anda dapat mengajukan withdrawal lagi."""
 
     async def handle_tier_system_guide(self, query, context):
         """Show comprehensive tier system guide"""
-        tier_guide = """🏆 **TIER SYSTEM GUIDE - PATH TO DIAMOND**
+        tier_guide = """ **TIER SYSTEM GUIDE - PATH TO DIAMOND**
 
-🌟 **TIER OVERVIEW:**
+ **TIER OVERVIEW:**
 
-**⭐ STARTER (0 referrals)**
-• Bonus: 5% extra credits
-• Rewards: Learning phase
-• Goal: First 10 referrals
+** STARTER (0 referrals)**
+ Bonus: 5% extra credits
+ Rewards: Learning phase
+ Goal: First 10 referrals
 
-**🥉 BRONZE (10-24 referrals)** 
-• Bonus: 10% extra credits + 1.5x money
-• Rewards: Community access
-• Goal: Build foundation network
+** BRONZE (10-24 referrals)** 
+ Bonus: 10% extra credits + 1.5x money
+ Rewards: Community access
+ Goal: Build foundation network
 
-**🥈 SILVER (25-49 referrals)**
-• Bonus: 15% extra credits + 2x money  
-• Rewards: Early feature access
-• Goal: Scale & systematize
+** SILVER (25-49 referrals)**
+ Bonus: 15% extra credits + 2x money  
+ Rewards: Early feature access
+ Goal: Scale & systematize
 
-**🥇 GOLD (50-99 referrals)**
-• Bonus: 20% extra credits + 2.5x money
-• Rewards: VIP community + priority support
-• Goal: Leadership & mentoring
+** GOLD (50-99 referrals)**
+ Bonus: 20% extra credits + 2.5x money
+ Rewards: VIP community + priority support
+ Goal: Leadership & mentoring
 
-**💎 DIAMOND (100+ referrals)**
-• Bonus: 30% extra credits + 3x money
-• Rewards: Elite access + admin connection
-• Goal: Master referral ecosystem
+** DIAMOND (100+ referrals)**
+ Bonus: 30% extra credits + 3x money
+ Rewards: Elite access + admin connection
+ Goal: Master referral ecosystem
 
-📈 **PROGRESSION STRATEGY:**
+ **PROGRESSION STRATEGY:**
 
 **Phase 1: Foundation (0→10)**
-• Duration: 2-4 weeks
-• Focus: Friends & family
-• Method: Personal recommendation
+ Duration: 2-4 weeks
+ Focus: Friends & family
+ Method: Personal recommendation
 
 **Phase 2: Growth (10→25)**  
-• Duration: 1-2 months
-• Focus: Community expansion
-• Method: Content + networking
+ Duration: 1-2 months
+ Focus: Community expansion
+ Method: Content + networking
 
 **Phase 3: Scale (25→50)**
-• Duration: 2-3 months  
-• Focus: System building
-• Method: Partnerships + automation
+ Duration: 2-3 months  
+ Focus: System building
+ Method: Partnerships + automation
 
 **Phase 4: Mastery (50→100)**
-• Duration: 3-6 months
-• Focus: Leadership
-• Method: Team building + mentoring
+ Duration: 3-6 months
+ Focus: Leadership
+ Method: Team building + mentoring
 
-💰 **EARNING POTENTIAL:**
-• STARTER: ~Rp 50K/month
-• BRONZE: ~Rp 200K/month
-• SILVER: ~Rp 500K/month  
-• GOLD: ~Rp 1.5M/month
-• DIAMOND: ~Rp 5M+/month
+ **EARNING POTENTIAL:**
+ STARTER: ~Rp 50K/month
+ BRONZE: ~Rp 200K/month
+ SILVER: ~Rp 500K/month  
+ GOLD: ~Rp 1.5M/month
+ DIAMOND: ~Rp 5M+/month
 
 *Estimasi berdasarkan 10% conversion rate ke premium*"""
 
         keyboard = [
-            [InlineKeyboardButton("📊 My Progress", callback_data="referral_stats")],
-            [InlineKeyboardButton("💡 Strategy Guide", callback_data="referral_guide")],
+            [InlineKeyboardButton(" My Progress", callback_data="referral_stats")],
+            [InlineKeyboardButton(" Strategy Guide", callback_data="referral_guide")],
         ]
 
         await query.edit_message_text(
@@ -2323,79 +2323,79 @@ Anda dapat mengajukan withdrawal lagi."""
 
     async def handle_advanced_referral_guide(self, query, context):
         """Show advanced referral strategies"""
-        advanced_guide = """🚀 **ADVANCED REFERRAL MASTERY**
+        advanced_guide = """ **ADVANCED REFERRAL MASTERY**
 
-💡 **PSYCHOLOGICAL TRIGGERS:**
+ **PSYCHOLOGICAL TRIGGERS:**
 
 **1. SCARCITY & URGENCY** ⏰
-• "Limited 100 credits bonus berakhir minggu ini"
-• "Premium trial hanya untuk 50 orang pertama"
-• "Exclusive early access buat referral hari ini"
+ "Limited 100 credits bonus berakhir minggu ini"
+ "Premium trial hanya untuk 50 orang pertama"
+ "Exclusive early access buat referral hari ini"
 
-**2. SOCIAL PROOF** 👥
-• Screenshot testimonial success stories
-• "Join 10,000+ active traders di Indonesia"
-• Share leaderboard achievements
+**2. SOCIAL PROOF** 
+ Screenshot testimonial success stories
+ "Join 10,000+ active traders di Indonesia"
+ Share leaderboard achievements
 
-**3. RECIPROCITY PRINCIPLE** 🎁
-• Berikan free value dulu (tips, analysis)
-• Free crypto education sebelum referral
-• Help solve their trading problems first
+**3. RECIPROCITY PRINCIPLE** 
+ Berikan free value dulu (tips, analysis)
+ Free crypto education sebelum referral
+ Help solve their trading problems first
 
-**4. AUTHORITY POSITIONING** 👔
-• Share your trading wins/credentials
-• Educational content yang valuable
-• Position as crypto mentor/guide
+**4. AUTHORITY POSITIONING** 
+ Share your trading wins/credentials
+ Educational content yang valuable
+ Position as crypto mentor/guide
 
-🔥 **CONVERSION OPTIMIZATION:**
+ **CONVERSION OPTIMIZATION:**
 
 **A. LANDING EXPERIENCE**
-• Personal onboarding untuk setiap referral
-• Custom welcome message
-• Free consultation offer
+ Personal onboarding untuk setiap referral
+ Custom welcome message
+ Free consultation offer
 
 **B. RETENTION STRATEGY**  
-• Weekly check-in dengan referrals
-• Share exclusive trading insights
-• Build long-term relationships
+ Weekly check-in dengan referrals
+ Share exclusive trading insights
+ Build long-term relationships
 
 **C. UPSELLING FUNNEL**
-• Free user → Credits exhausted → Premium push
-• Social proof dari existing premium users
-• Limited-time upgrade discounts
+ Free user → Credits exhausted → Premium push
+ Social proof dari existing premium users
+ Limited-time upgrade discounts
 
-📊 **TRACKING & ANALYTICS:**
+ **TRACKING & ANALYTICS:**
 
 **Conversion Metrics:**
-• Click-through rate dari link
-• Free registration rate
-• Premium conversion rate
-• Monthly retention rate
+ Click-through rate dari link
+ Free registration rate
+ Premium conversion rate
+ Monthly retention rate
 
 **Optimization Points:**
-• A/B test different messaging
-• Track which platforms perform best  
-• Identify highest-value referral sources
-• Optimize timing untuk maximum impact
+ A/B test different messaging
+ Track which platforms perform best  
+ Identify highest-value referral sources
+ Optimize timing untuk maximum impact
 
-🎯 **AUTOMATION TOOLS:**
+ **AUTOMATION TOOLS:**
 
-• Auto-follow up messages
-• Scheduled content sharing
-• Referral performance tracking
-• Reward notifications
+ Auto-follow up messages
+ Scheduled content sharing
+ Referral performance tracking
+ Reward notifications
 
-💎 **DIAMOND-TIER SECRETS:**
-• Build referral teams (MLM-style)
-• Create crypto trading courses
-• Host exclusive webinars
-• Partner dengan crypto projects
-• Develop personal brand as crypto expert"""
+ **DIAMOND-TIER SECRETS:**
+ Build referral teams (MLM-style)
+ Create crypto trading courses
+ Host exclusive webinars
+ Partner dengan crypto projects
+ Develop personal brand as crypto expert"""
 
         keyboard = [
-            [InlineKeyboardButton("📚 Basic Guide", callback_data="referral_guide")],
-            [InlineKeyboardButton("🏆 Tier System", callback_data="tier_system_guide")],
-            [InlineKeyboardButton("📊 Back to Stats", callback_data="referral_stats")],
+            [InlineKeyboardButton(" Basic Guide", callback_data="referral_guide")],
+            [InlineKeyboardButton(" Tier System", callback_data="tier_system_guide")],
+            [InlineKeyboardButton(" Back to Stats", callback_data="referral_stats")],
         ]
 
         await query.edit_message_text(
@@ -2410,7 +2410,7 @@ Anda dapat mengajukan withdrawal lagi."""
         lang_code = query.data.split('_')[-1]  # Extract 'en' or 'id' from 'set_lang_en'
         
         if lang_code not in ['en', 'id']:
-            await query.answer("❌ Invalid language selection", show_alert=True)
+            await query.answer(" Invalid language selection", show_alert=True)
             return
             
         try:
@@ -2424,39 +2424,39 @@ Anda dapat mengajukan withdrawal lagi."""
                 lang_names = {'en': 'English', 'id': 'Bahasa Indonesia'}
                 
                 if lang_code == 'id':
-                    success_msg = f"""✅ **Bahasa berhasil diubah ke {lang_names[lang_code]}!**
+                    success_msg = f""" **Bahasa berhasil diubah ke {lang_names[lang_code]}!**
 
-🎯 **Perubahan yang aktif:**
-• Menu dan pesan dalam Bahasa Indonesia  
-• Analisis trading dalam bahasa Indonesia
-• Support customer dalam bahasa Indonesia
+ **Perubahan yang aktif:**
+ Menu dan pesan dalam Bahasa Indonesia  
+ Analisis trading dalam bahasa Indonesia
+ Support customer dalam bahasa Indonesia
 
-💡 **Catatan:** Bot sekarang akan merespons dalam Bahasa Indonesia."""
-                    await query.answer("✅ Bahasa berhasil diubah ke Bahasa Indonesia!")
+ **Catatan:** Bot sekarang akan merespons dalam Bahasa Indonesia."""
+                    await query.answer(" Bahasa berhasil diubah ke Bahasa Indonesia!")
                 else:
-                    success_msg = f"""✅ **Language changed to {lang_names[lang_code]}!**
+                    success_msg = f""" **Language changed to {lang_names[lang_code]}!**
 
-🎯 **Active Changes:**
-• Menus and messages in English
-• Trading analysis in English  
-• Customer support in English
+ **Active Changes:**
+ Menus and messages in English
+ Trading analysis in English  
+ Customer support in English
 
-💡 **Note:** Bot will now respond in English."""
-                    await query.answer("✅ Language changed to English!")
+ **Note:** Bot will now respond in English."""
+                    await query.answer(" Language changed to English!")
                 
                 # Show success message with proper language
                 await query.edit_message_text(
                     success_msg,
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali ke Pengaturan" if lang_code == 'id' else "🔙 Back to Settings", callback_data=SETTINGS_MENU)]]),
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(" Kembali ke Pengaturan" if lang_code == 'id' else " Back to Settings", callback_data=SETTINGS_MENU)]]),
                     parse_mode='MARKDOWN'
                 )
                 
             else:
-                await query.answer("❌ Gagal mengubah bahasa. Silakan coba lagi." if lang_code == 'id' else "❌ Failed to update language. Please try again.", show_alert=True)
+                await query.answer(" Gagal mengubah bahasa. Silakan coba lagi." if lang_code == 'id' else " Failed to update language. Please try again.", show_alert=True)
                 
         except Exception as e:
             print(f"Error setting language: {e}")
-            await query.answer("❌ Error mengubah bahasa. Silakan coba lagi." if lang_code == 'id' else "❌ Error updating language. Please try again.", show_alert=True)
+            await query.answer(" Error mengubah bahasa. Silakan coba lagi." if lang_code == 'id' else " Error updating language. Please try again.", show_alert=True)
 
     async def handle_automaton_first_deposit(self, query, context):
         """
@@ -2473,7 +2473,7 @@ Anda dapat mengajukan withdrawal lagi."""
         try:
             # Check if Supabase is enabled
             if not db.supabase_enabled:
-                error_msg = "❌ Database tidak tersedia. Silakan coba lagi nanti." if user_lang == 'id' else "❌ Database unavailable. Please try again later."
+                error_msg = " Database tidak tersedia. Silakan coba lagi nanti." if user_lang == 'id' else " Database unavailable. Please try again later."
                 await query.edit_message_text(error_msg, parse_mode='MARKDOWN')
                 return
             
@@ -2497,9 +2497,9 @@ Anda dapat mengajukan withdrawal lagi."""
                         'telegram_first_name': query.from_user.first_name,
                         'status': 'waiting'
                     }).execute()
-                    print(f"✅ Created pending deposit record for user {user_id}")
+                    print(f" Created pending deposit record for user {user_id}")
             except Exception as e:
-                print(f"⚠️  Warning: Could not create pending deposit record: {e}")
+                print(f"  Warning: Could not create pending deposit record: {e}")
                 # Continue anyway, this is not critical
             
             # Generate QR code URL
@@ -2507,107 +2507,107 @@ Anda dapat mengajukan withdrawal lagi."""
             
             # Format deposit instructions based on language (Updated: Manual verification by admin)
             if user_lang == 'id':
-                deposit_text = f"""💰 **Deposit USDC (Base Network)**
+                deposit_text = f""" **Deposit USDC (Base Network)**
 
-🎯 **TUJUAN TRANSFER:**
-📍 **Address Tujuan:**
+ **TUJUAN TRANSFER:**
+ **Address Tujuan:**
 `{centralized_wallet}`
 
-📱 **QR Code:**
+ **QR Code:**
 [Klik untuk melihat QR Code]({qr_url})
 
-⚠️ **PENTING - Baca Sebelum Transfer:**
-• Kirim USDC ke address di atas
-• HANYA gunakan Base Network
-• Setelah transfer, kirim bukti ke admin untuk verifikasi
-• Credits akan ditambahkan manual oleh admin
+ **PENTING - Baca Sebelum Transfer:**
+ Kirim USDC ke address di atas
+ HANYA gunakan Base Network
+ Setelah transfer, kirim bukti ke admin untuk verifikasi
+ Credits akan ditambahkan manual oleh admin
 
-🌐 **Network:**
-• Base Network (WAJIB)
-• Biaya gas rendah (~$0.01)
+ **Network:**
+ Base Network (WAJIB)
+ Biaya gas rendah (~$0.01)
 
-💱 **Conversion Rate:**
-• 1 USDC = 100 Conway Credits
-• $30 USDC = 3.000 Credits
+ **Conversion Rate:**
+ 1 USDC = 100 Conway Credits
+ $30 USDC = 3.000 Credits
 
-📊 **Minimum untuk Spawn Agent:**
-• Deposit minimum: $30 USDC (3.000 credits)
-• Spawn fee: 100.000 credits
-• Total dibutuhkan: ~$1.030 USDC
+ **Minimum untuk Spawn Agent:**
+ Deposit minimum: $30 USDC (3.000 credits)
+ Spawn fee: 100.000 credits
+ Total dibutuhkan: ~$1.030 USDC
 
-🔄 **Cara Kerja Deposit:**
+ **Cara Kerja Deposit:**
 1. Anda kirim USDC (Base Network) ke address di atas
 2. Screenshot bukti transfer (transaction hash)
-3. Klik tombol "📤 Kirim Bukti Transfer" di bawah
+3. Klik tombol " Kirim Bukti Transfer" di bawah
 4. Kirim screenshot ke admin
 5. Admin akan verifikasi dan tambahkan credits
 6. Anda akan menerima notifikasi saat credits masuk
 
-💡 **Langkah-langkah Deposit:**
+ **Langkah-langkah Deposit:**
 1. Copy address di atas atau scan QR code
 2. Buka wallet Anda (MetaMask, Trust Wallet, dll)
 3. Pastikan network: Base
 4. Kirim minimal $30 USDC ke address di atas
 5. Screenshot bukti transfer
-6. Klik "📤 Kirim Bukti Transfer" dan kirim ke admin
+6. Klik " Kirim Bukti Transfer" dan kirim ke admin
 7. Tunggu verifikasi admin (biasanya < 1 jam)
 
-⚡ **Catatan:**
-• Admin & Lifetime Premium juga perlu deposit $30
-• Setelah deposit $30, Anda bisa spawn agent
-• JANGAN kirim ke network lain (dana akan hilang!)
-• Simpan transaction hash untuk tracking"""
+ **Catatan:**
+ Admin & Lifetime Premium juga perlu deposit $30
+ Setelah deposit $30, Anda bisa spawn agent
+ JANGAN kirim ke network lain (dana akan hilang!)
+ Simpan transaction hash untuk tracking"""
             else:
-                deposit_text = f"""💰 **Deposit USDC (Base Network)**
+                deposit_text = f""" **Deposit USDC (Base Network)**
 
-🎯 **TRANSFER DESTINATION:**
-📍 **Destination Address:**
+ **TRANSFER DESTINATION:**
+ **Destination Address:**
 `{centralized_wallet}`
 
-📱 **QR Code:**
+ **QR Code:**
 [Click to view QR Code]({qr_url})
 
-⚠️ **IMPORTANT - Read Before Transfer:**
-• Send USDC to the address above
-• ONLY use Base Network
-• After transfer, send proof to admin for verification
-• Credits will be added manually by admin
+ **IMPORTANT - Read Before Transfer:**
+ Send USDC to the address above
+ ONLY use Base Network
+ After transfer, send proof to admin for verification
+ Credits will be added manually by admin
 
-🌐 **Network:**
-• Base Network (REQUIRED)
-• Low gas fees (~$0.01)
+ **Network:**
+ Base Network (REQUIRED)
+ Low gas fees (~$0.01)
 
-💱 **Conversion Rate:**
-• 1 USDC = 100 Conway Credits
-• $30 USDC = 3,000 Credits
+ **Conversion Rate:**
+ 1 USDC = 100 Conway Credits
+ $30 USDC = 3,000 Credits
 
-📊 **Minimum for Spawn Agent:**
-• Minimum deposit: $30 USDC (3,000 credits)
-• Spawn fee: 100,000 credits
-• Total needed: ~$1,030 USDC
+ **Minimum for Spawn Agent:**
+ Minimum deposit: $30 USDC (3,000 credits)
+ Spawn fee: 100,000 credits
+ Total needed: ~$1,030 USDC
 
-🔄 **How Deposit Works:**
+ **How Deposit Works:**
 1. You send USDC (Base Network) to the address above
 2. Screenshot transfer proof (transaction hash)
-3. Click "📤 Send Transfer Proof" button below
+3. Click " Send Transfer Proof" button below
 4. Send screenshot to admin
 5. Admin will verify and add credits
 6. You will receive notification when credits arrive
 
-💡 **Deposit Steps:**
+ **Deposit Steps:**
 1. Copy address above or scan QR code
 2. Open your wallet (MetaMask, Trust Wallet, etc)
 3. Make sure network: Base
 4. Send minimum $30 USDC to the address above
 5. Screenshot transfer proof
-6. Click "📤 Send Transfer Proof" and send to admin
+6. Click " Send Transfer Proof" and send to admin
 7. Wait for admin verification (usually < 1 hour)
 
-⚡ **Notes:**
-• Admin & Lifetime Premium also need $30 deposit
-• After $30 deposit, you can spawn agent
-• DO NOT send to other networks (funds will be lost!)
-• Save transaction hash for tracking"""
+ **Notes:**
+ Admin & Lifetime Premium also need $30 deposit
+ After $30 deposit, you can spawn agent
+ DO NOT send to other networks (funds will be lost!)
+ Save transaction hash for tracking"""
             
             # Build keyboard with send proof button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -2621,11 +2621,11 @@ Anda dapat mengajukan withdrawal lagi."""
                 admin_contact = f"tg://user?id={first_admin_id}"
             
             keyboard = [
-                [InlineKeyboardButton("📤 Kirim Bukti Transfer ke Admin" if user_lang == 'id' else "📤 Send Transfer Proof to Admin", 
+                [InlineKeyboardButton(" Kirim Bukti Transfer ke Admin" if user_lang == 'id' else " Send Transfer Proof to Admin", 
                                      url=admin_contact if admin_contact else "https://t.me/")],
-                [InlineKeyboardButton("❓ Cara Deposit" if user_lang == 'id' else "❓ How to Deposit", 
+                [InlineKeyboardButton(" Cara Deposit" if user_lang == 'id' else " How to Deposit", 
                                      callback_data="deposit_guide")],
-                [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
+                [InlineKeyboardButton(" Kembali" if user_lang == 'id' else " Back", 
                                      callback_data=AI_AGENT_MENU)]
             ]
             
@@ -2636,13 +2636,13 @@ Anda dapat mengajukan withdrawal lagi."""
             )
             
         except Exception as e:
-            print(f"❌ Error in handle_automaton_first_deposit: {e}")
+            print(f" Error in handle_automaton_first_deposit: {e}")
             import traceback
             traceback.print_exc()
             
-            error_msg = f"❌ Terjadi kesalahan. Silakan coba lagi atau hubungi support." if user_lang == 'id' else f"❌ Error occurred. Please try again or contact support."
+            error_msg = f" Terjadi kesalahan. Silakan coba lagi atau hubungi support." if user_lang == 'id' else f" Error occurred. Please try again or contact support."
             
-            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
+            keyboard = [[InlineKeyboardButton(" Kembali" if user_lang == 'id' else " Back", callback_data=AI_AGENT_MENU)]]
             await query.edit_message_text(
                 error_msg,
                 reply_markup=InlineKeyboardMarkup(keyboard),
@@ -2664,59 +2664,59 @@ Anda dapat mengajukan withdrawal lagi."""
         try:
             # Format guide based on language (Updated: Manual verification by admin)
             if user_lang == 'id':
-                guide_text = """❓ **Panduan Deposit USDC (Base Network)**
+                guide_text = """ **Panduan Deposit USDC (Base Network)**
 
-📋 **Langkah-langkah Deposit:**
+ **Langkah-langkah Deposit:**
 
-1️⃣ **Klik "💰 Deposit Sekarang"**
-   • Anda akan menerima alamat wallet
-   • Salin alamat atau scan QR code
+1⃣ **Klik " Deposit Sekarang"**
+    Anda akan menerima alamat wallet
+    Salin alamat atau scan QR code
 
-2️⃣ **Pilih Network: Base**
-   • HANYA gunakan Base Network
-   • Biaya gas rendah (~$0.01)
-   • Network lain TIDAK didukung
+2⃣ **Pilih Network: Base**
+    HANYA gunakan Base Network
+    Biaya gas rendah (~$0.01)
+    Network lain TIDAK didukung
 
-3️⃣ **Kirim USDC**
-   • Minimum: $30 USDC (untuk spawn agent)
-   • HANYA USDC (bukan USDT atau token lain)
-   • Gunakan wallet Anda (MetaMask, Trust Wallet, dll)
-   • Pastikan network: Base
+3⃣ **Kirim USDC**
+    Minimum: $30 USDC (untuk spawn agent)
+    HANYA USDC (bukan USDT atau token lain)
+    Gunakan wallet Anda (MetaMask, Trust Wallet, dll)
+    Pastikan network: Base
 
-4️⃣ **Screenshot Bukti Transfer**
-   • Ambil screenshot transaction hash
-   • Atau screenshot dari wallet Anda
-   • Pastikan terlihat: amount, network, address tujuan
+4⃣ **Screenshot Bukti Transfer**
+    Ambil screenshot transaction hash
+    Atau screenshot dari wallet Anda
+    Pastikan terlihat: amount, network, address tujuan
 
-5️⃣ **Kirim ke Admin**
-   • Klik tombol "📤 Kirim Bukti Transfer"
-   • Kirim screenshot ke admin
-   • Sertakan User ID Telegram Anda: `{user_id}`
-   • Admin akan verifikasi dalam < 1 jam
+5⃣ **Kirim ke Admin**
+    Klik tombol " Kirim Bukti Transfer"
+    Kirim screenshot ke admin
+    Sertakan User ID Telegram Anda: `{user_id}`
+    Admin akan verifikasi dalam < 1 jam
 
-6️⃣ **Tunggu Verifikasi**
-   • Admin akan cek transaksi di blockchain
-   • Credits akan ditambahkan manual
-   • Anda akan menerima notifikasi
-   • Cek balance dengan /balance
+6⃣ **Tunggu Verifikasi**
+    Admin akan cek transaksi di blockchain
+    Credits akan ditambahkan manual
+    Anda akan menerima notifikasi
+    Cek balance dengan /balance
 
-💱 **Conversion Rate:**
-• 1 USDC = 100 Conway Credits
-• $30 USDC = 3.000 Credits
+ **Conversion Rate:**
+ 1 USDC = 100 Conway Credits
+ $30 USDC = 3.000 Credits
 
-📊 **Minimum untuk Spawn Agent:**
-• Deposit minimum: $30 USDC (3.000 credits)
-• Spawn fee: 100.000 credits
-• Total dibutuhkan: ~$1.030 USDC
+ **Minimum untuk Spawn Agent:**
+ Deposit minimum: $30 USDC (3.000 credits)
+ Spawn fee: 100.000 credits
+ Total dibutuhkan: ~$1.030 USDC
 
-🌐 **Network:**
-• ✅ Base Network (WAJIB)
-• ❌ Polygon (Tidak didukung)
-• ❌ Arbitrum (Tidak didukung)
-• ❌ Ethereum Mainnet (Tidak didukung)
-• ❌ BSC (Tidak didukung)
+ **Network:**
+  Base Network (WAJIB)
+  Polygon (Tidak didukung)
+  Arbitrum (Tidak didukung)
+  Ethereum Mainnet (Tidak didukung)
+  BSC (Tidak didukung)
 
-⚠️ **Troubleshooting:**
+ **Troubleshooting:**
 
 **Q: Deposit belum masuk?**
 A: Pastikan Anda sudah kirim bukti transfer ke admin. Admin akan verifikasi dalam < 1 jam.
@@ -2734,75 +2734,75 @@ A: Setelah kirim bukti ke admin, biasanya < 1 jam untuk verifikasi.
 A: TIDAK. Hanya USDC yang didukung.
 
 **Q: Bagaimana cara kirim bukti?**
-A: Klik tombol "📤 Kirim Bukti Transfer" di menu deposit, lalu kirim screenshot ke admin.
+A: Klik tombol " Kirim Bukti Transfer" di menu deposit, lalu kirim screenshot ke admin.
 
-💡 **Tips:**
-• Selalu cek alamat sebelum kirim
-• Pastikan network: Base
-• HANYA kirim USDC
-• Minimum $30 untuk spawn agent
-• Simpan transaction hash untuk tracking
-• Sertakan User ID saat kirim bukti: `{user_id}`
+ **Tips:**
+ Selalu cek alamat sebelum kirim
+ Pastikan network: Base
+ HANYA kirim USDC
+ Minimum $30 untuk spawn agent
+ Simpan transaction hash untuk tracking
+ Sertakan User ID saat kirim bukti: `{user_id}`
 
-⚡ **Catatan Penting:**
-• Admin & Lifetime Premium juga perlu deposit $30
-• Setelah deposit $30, Anda bisa spawn agent
-• Deposit di network lain akan hilang!
-• Verifikasi manual untuk keamanan maksimal"""
+ **Catatan Penting:**
+ Admin & Lifetime Premium juga perlu deposit $30
+ Setelah deposit $30, Anda bisa spawn agent
+ Deposit di network lain akan hilang!
+ Verifikasi manual untuk keamanan maksimal"""
             else:
-                guide_text = """❓ **USDC Deposit Guide (Base Network)**
+                guide_text = """ **USDC Deposit Guide (Base Network)**
 
-📋 **Deposit Steps:**
+ **Deposit Steps:**
 
-1️⃣ **Click "💰 Deposit Now"**
-   • You'll receive a wallet address
-   • Copy address or scan QR code
+1⃣ **Click " Deposit Now"**
+    You'll receive a wallet address
+    Copy address or scan QR code
 
-2️⃣ **Select Network: Base**
-   • ONLY use Base Network
-   • Low gas fees (~$0.01)
-   • Other networks NOT supported
+2⃣ **Select Network: Base**
+    ONLY use Base Network
+    Low gas fees (~$0.01)
+    Other networks NOT supported
 
-3️⃣ **Send USDC**
-   • Minimum: $30 USDC (to spawn agent)
-   • ONLY USDC (not USDT or other tokens)
-   • Use your wallet (MetaMask, Trust Wallet, etc)
-   • Make sure network: Base
+3⃣ **Send USDC**
+    Minimum: $30 USDC (to spawn agent)
+    ONLY USDC (not USDT or other tokens)
+    Use your wallet (MetaMask, Trust Wallet, etc)
+    Make sure network: Base
 
-4️⃣ **Screenshot Transfer Proof**
-   • Take screenshot of transaction hash
-   • Or screenshot from your wallet
-   • Make sure visible: amount, network, destination address
+4⃣ **Screenshot Transfer Proof**
+    Take screenshot of transaction hash
+    Or screenshot from your wallet
+    Make sure visible: amount, network, destination address
 
-5️⃣ **Send to Admin**
-   • Click "📤 Send Transfer Proof" button
-   • Send screenshot to admin
-   • Include your Telegram User ID: `{user_id}`
-   • Admin will verify within < 1 hour
+5⃣ **Send to Admin**
+    Click " Send Transfer Proof" button
+    Send screenshot to admin
+    Include your Telegram User ID: `{user_id}`
+    Admin will verify within < 1 hour
 
-6️⃣ **Wait for Verification**
-   • Admin will check transaction on blockchain
-   • Credits will be added manually
-   • You will receive notification
-   • Check balance with /balance
+6⃣ **Wait for Verification**
+    Admin will check transaction on blockchain
+    Credits will be added manually
+    You will receive notification
+    Check balance with /balance
 
-💱 **Conversion Rate:**
-• 1 USDC = 100 Conway Credits
-• $30 USDC = 3,000 Credits
+ **Conversion Rate:**
+ 1 USDC = 100 Conway Credits
+ $30 USDC = 3,000 Credits
 
-📊 **Minimum for Spawn Agent:**
-• Minimum deposit: $30 USDC (3,000 credits)
-• Spawn fee: 100,000 credits
-• Total needed: ~$1,030 USDC
+ **Minimum for Spawn Agent:**
+ Minimum deposit: $30 USDC (3,000 credits)
+ Spawn fee: 100,000 credits
+ Total needed: ~$1,030 USDC
 
-🌐 **Network:**
-• ✅ Base Network (REQUIRED)
-• ❌ Polygon (Not supported)
-• ❌ Arbitrum (Not supported)
-• ❌ Ethereum Mainnet (Not supported)
-• ❌ BSC (Not supported)
+ **Network:**
+  Base Network (REQUIRED)
+  Polygon (Not supported)
+  Arbitrum (Not supported)
+  Ethereum Mainnet (Not supported)
+  BSC (Not supported)
 
-⚠️ **Troubleshooting:**
+ **Troubleshooting:**
 
 **Q: Deposit not received?**
 A: Make sure you sent transfer proof to admin. Admin will verify within < 1 hour.
@@ -2820,28 +2820,28 @@ A: After sending proof to admin, usually < 1 hour for verification.
 A: NO. Only USDC is supported.
 
 **Q: How to send proof?**
-A: Click "📤 Send Transfer Proof" button in deposit menu, then send screenshot to admin.
+A: Click " Send Transfer Proof" button in deposit menu, then send screenshot to admin.
 
-💡 **Tips:**
-• Always verify address before sending
-• Make sure network: Base
-• ONLY send USDC
-• Minimum $30 to spawn agent
-• Save transaction hash for tracking
-• Include User ID when sending proof: `{user_id}`
+ **Tips:**
+ Always verify address before sending
+ Make sure network: Base
+ ONLY send USDC
+ Minimum $30 to spawn agent
+ Save transaction hash for tracking
+ Include User ID when sending proof: `{user_id}`
 
-⚡ **Important Notes:**
-• Admin & Lifetime Premium also need $30 deposit
-• After $30 deposit, you can spawn agent
-• Deposits on other networks will be lost!
-• Manual verification for maximum security"""
+ **Important Notes:**
+ Admin & Lifetime Premium also need $30 deposit
+ After $30 deposit, you can spawn agent
+ Deposits on other networks will be lost!
+ Manual verification for maximum security"""
             
             # Build keyboard
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             keyboard = [
-                [InlineKeyboardButton("🔙 Kembali ke Deposit" if user_lang == 'id' else "🔙 Back to Deposit", 
+                [InlineKeyboardButton(" Kembali ke Deposit" if user_lang == 'id' else " Back to Deposit", 
                                      callback_data="automaton_first_deposit")],
-                [InlineKeyboardButton("🏠 Menu Utama" if user_lang == 'id' else "🏠 Main Menu", 
+                [InlineKeyboardButton(" Menu Utama" if user_lang == 'id' else " Main Menu", 
                                      callback_data=MAIN_MENU)]
             ]
             
@@ -2852,13 +2852,13 @@ A: Click "📤 Send Transfer Proof" button in deposit menu, then send screenshot
             )
             
         except Exception as e:
-            print(f"❌ Error in handle_deposit_guide: {e}")
+            print(f" Error in handle_deposit_guide: {e}")
             import traceback
             traceback.print_exc()
             
-            error_msg = "❌ Terjadi kesalahan. Silakan coba lagi." if user_lang == 'id' else "❌ An error occurred. Please try again."
+            error_msg = " Terjadi kesalahan. Silakan coba lagi." if user_lang == 'id' else " An error occurred. Please try again."
             
-            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
+            keyboard = [[InlineKeyboardButton(" Kembali" if user_lang == 'id' else " Back", callback_data=AI_AGENT_MENU)]]
             await query.edit_message_text(
                 error_msg,
                 reply_markup=InlineKeyboardMarkup(keyboard),
@@ -2900,4 +2900,4 @@ def register_menu_handlers(application, bot_instance):
         )
     )
 
-    print("✅ Menu system handlers registered successfully (with conflict prevention)")
+    print(" Menu system handlers registered successfully (with conflict prevention)")
