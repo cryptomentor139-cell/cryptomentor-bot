@@ -17,6 +17,11 @@ async def show_ai_agent_education(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     await query.answer()
     
+    await _show_education_content(query, context)
+
+
+async def _show_education_content(query, context):
+    """Internal function to show education content"""
     user_id = query.from_user.id
     user_data = get_user_data(user_id)
     

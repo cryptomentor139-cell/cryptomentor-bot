@@ -271,8 +271,8 @@ class MenuCallbackHandler:
         
         # If first time, show education instead of menu
         if not has_seen_education:
-            from app.handlers_ai_agent_education import show_ai_agent_education
-            await show_ai_agent_education(query, context)
+            from app.handlers_ai_agent_education import _show_education_content
+            await _show_education_content(query, context)
             return
         
         # Check if user is admin or lifetime premium (for menu access only)
@@ -2869,8 +2869,8 @@ A: Click " Send Transfer Proof" button in deposit menu, then send screenshot to 
         """
         Handle AI Agent education callback - show comprehensive education
         """
-        from app.handlers_ai_agent_education import show_ai_agent_education
-        await show_ai_agent_education(query, context)
+        from app.handlers_ai_agent_education import _show_education_content
+        await _show_education_content(query, context)
 
     async def handle_ai_agent_faq(self, query, context):
         """
