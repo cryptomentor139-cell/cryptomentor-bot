@@ -436,37 +436,47 @@ Click "🎓 About AI Agent" to understand this feature before upgrading.
 💰 **Apa itu AI Agent?**
 AI Agent adalah autonomous trading agent yang menggunakan Conway credits sebagai bahan bakar untuk beroperasi.
 
-⚠️ **PENTING - Spawn Fee: 100,000 credits (1,000 USDC)**
-Untuk spawn AI Agent, Anda perlu **100,000 credits** (1,000 USDC).
+💵 **Minimum Deposit: $30 USDC**
+⚠️ **CATATAN PENTING:**
+• $30 BUKAN pure dana trading
+• Termasuk biaya operasional AI Agent
+• Termasuk biaya API untuk trading
+• Termasuk biaya komputasi AI
 
 📊 **Status Deposit Anda:**
 💵 Credits saat ini: {user_credits:,.0f}
-🎯 Untuk spawn agent: 100,000 credits (1,000 USDC)
-📉 Kekurangan: {max(0, 100000 - user_credits):,.0f} credits
+🎯 Minimum untuk mulai: 3,000 credits ($30)
 
-💰 **Opsi Deposit:**
-• $5 USDC: Testing only (TIDAK BISA spawn)
-• $30 USDC: Small operations (TIDAK BISA spawn)
-• $1,030 USDC: Minimum untuk spawn 1 agent
-• $2,000+ USDC: Spawn + trading capital
+💡 **Rekomendasi Deposit:**
+• $30 USDC: Testing/trial (3,000 credits)
+• $100 USDC: Trading serius (10,000 credits) ⭐ RECOMMENDED
+• $500+ USDC: Trading optimal (50,000+ credits)
+
+⚠️ **Mengapa $100+ Disarankan?**
+• AI butuh resources untuk analisis mendalam
+• API calls untuk data real-time
+• Komputasi untuk decision making
+• Buffer untuk operasional 24/7
 
 📝 **Cara Deposit:**
 1. Klik tombol "💰 Deposit Sekarang" di bawah
 2. Deposit USDC (Base Network) ke address yang diberikan
-3. Credits akan otomatis ditambahkan setelah 12 konfirmasi
-4. Setelah deposit $1,030+, Anda bisa spawn agent dan mulai trading!
+3. Screenshot bukti transfer
+4. Kirim ke admin untuk verifikasi
+5. Credits akan ditambahkan manual (< 1 jam)
 
 💱 **Conversion Rate:**
 💵 1 USDC = 100 Conway Credits
-💰 $1,030 USDC = 103,000 Credits (cukup untuk spawn)
+💰 $30 USDC = 3,000 Credits (minimum)
+💰 $100 USDC = 10,000 Credits (recommended)
 
 🌐 **Network:**
 ⛓️ Base Network (WAJIB)
 
 📌 **Catatan:**
 • Platform fee: 2% dari deposit
-• Spawn fee: 100,000 credits (1,000 USDC)
-• Operational costs: ~100-500 credits/day"""
+• Operational costs: ~100-500 credits/day
+• Semakin besar modal, semakin optimal AI bekerja"""
             else:
                 welcome_text = f"""🤖 **Welcome to AI Agent!**
 
@@ -475,37 +485,47 @@ Untuk spawn AI Agent, Anda perlu **100,000 credits** (1,000 USDC).
 💰 **What is AI Agent?**
 AI Agent is an autonomous trading agent that uses Conway credits as fuel to operate.
 
-⚠️ **IMPORTANT - Spawn Fee: 100,000 credits (1,000 USDC)**
-To spawn an AI Agent, you need **100,000 credits** (1,000 USDC).
+💵 **Minimum Deposit: $30 USDC**
+⚠️ **IMPORTANT NOTE:**
+• $30 is NOT pure trading capital
+• Includes AI Agent operational costs
+• Includes API fees for trading
+• Includes AI computation costs
 
 📊 **Your Deposit Status:**
 💵 Current credits: {user_credits:,.0f}
-🎯 To spawn agent: 100,000 credits (1,000 USDC)
-📉 Shortfall: {max(0, 100000 - user_credits):,.0f} credits
+🎯 Minimum to start: 3,000 credits ($30)
 
-💰 **Deposit Options:**
-• $5 USDC: Testing only (CANNOT spawn)
-• $30 USDC: Small operations (CANNOT spawn)
-• $1,030 USDC: Minimum to spawn 1 agent
-• $2,000+ USDC: Spawn + trading capital
+💡 **Deposit Recommendations:**
+• $30 USDC: Testing/trial (3,000 credits)
+• $100 USDC: Serious trading (10,000 credits) ⭐ RECOMMENDED
+• $500+ USDC: Optimal trading (50,000+ credits)
+
+⚠️ **Why $100+ Recommended?**
+• AI needs resources for deep analysis
+• API calls for real-time data
+• Computation for decision making
+• Buffer for 24/7 operations
 
 📝 **How to Deposit:**
 1. Click "💰 Deposit Now" button below
 2. Deposit USDC (Base Network) to the provided address
-3. Credits will be automatically added after 12 confirmations
-4. After $1,030+ deposit, you can spawn agents and start trading!
+3. Screenshot transfer proof
+4. Send to admin for verification
+5. Credits will be added manually (< 1 hour)
 
 💱 **Conversion Rate:**
 💵 1 USDC = 100 Conway Credits
-💰 $1,030 USDC = 103,000 Credits (enough to spawn)
+💰 $30 USDC = 3,000 Credits (minimum)
+💰 $100 USDC = 10,000 Credits (recommended)
 
 🌐 **Network:**
 ⛓️ Base Network (REQUIRED)
 
 📌 **Notes:**
 • Platform fee: 2% of deposit
-• Spawn fee: 100,000 credits (1,000 USDC)
-• Operational costs: ~100-500 credits/day"""
+• Operational costs: ~100-500 credits/day
+• Larger capital = more optimal AI performance"""
             
             # Build deposit-first menu with education button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
