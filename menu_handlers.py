@@ -1038,7 +1038,7 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             )
 
     async def handle_automaton_deposit(self, query, context):
-        """Handle Fund Agent button - show deposit info for existing agents"""
+        """Handle Fund Agent button - show deposit info for existing agents OR first deposit"""
         user_id = query.from_user.id
         
         try:
@@ -1055,25 +1055,101 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             agents = automaton_manager.get_user_agents(user_id)
             
             if not agents:
-                # User doesn't have agent yet, redirect to first deposit
-                error_msg = "❌ Anda belum memiliki agent. Silakan deposit terlebih dahulu untuk spawn agent." if user_lang == 'id' else "❌ You don't have an agent yet. Please deposit first to spawn an agent."
+                # User doesn't have agent yet - show CENTRALIZED WALLET for first deposit
+                print(f"🔍 User {user_id} has no agents, showing centralized wallet for first deposit")
+                
+                # Get centralized wallet address from environment
+                centralized_wallet = os.getenv('CENTRALIZED_WALLET_ADDRESS', '0x63116672bef9f26fd906cd2a57550f7a13925822')
+                
+                # Generate QR code URL
+                qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={centralized_wallet}"
+                
+                # Show centralized wallet deposit instructions
+                if user_lang == 'id':
+                    message = (
+                        f"💰 *Deposit USDC (Base Network)*\n\n"
+                        f"📍 *Deposit Address (Centralized):*\n"
+                        f"`{centralized_wallet}`\n\n"
+                        f"📱 *QR Code:*\n"
+                        f"[Klik untuk melihat QR Code]({qr_url})\n\n"
+                        f"⚠️ *PENTING - Anda Belum Punya Agent*\n"
+                        f"• Deposit ke address ini untuk mendapatkan credits\n"
+                        f"• Setelah deposit, admin akan verifikasi dan tambahkan credits\n"
+                        f"• Dengan credits, Anda bisa spawn AI Agent\n\n"
+                        f"🌐 *Network:*\n"
+                        f"• Base Network (WAJIB)\n"
+                        f"• Biaya gas rendah (~$0.01)\n\n"
+                        f"💱 *Conversion Rate:*\n"
+                        f"• 1 USDC = 100 Conway Credits\n"
+                        f"• $30 USDC = 3.000 Credits\n\n"
+                        f"📊 *Minimum untuk Spawn Agent:*\n"
+                        f"• Deposit: $30 USDC (3.000 credits)\n"
+                        f"• Spawn fee: 100.000 credits\n"
+                        f"• Total: ~$1.030 USDC\n\n"
+                        f"💡 *Cara Deposit:*\n"
+                        f"1. Copy address di atas atau scan QR code\n"
+                        f"2. Buka wallet Anda (MetaMask, Trust Wallet, dll)\n"
+                        f"3. Pastikan network: Base\n"
+                        f"4. Kirim USDC ke address di atas\n"
+                        f"5. Screenshot bukti transfer\n"
+                        f"6. Kirim ke admin untuk verifikasi\n"
+                        f"7. Credits akan ditambahkan manual"
+                    )
+                else:
+                    message = (
+                        f"� *Deposit USDC (Base Network)*\n\n"
+                        f"�📍 *Deposit Address (Centralized):*\n"
+                        f"`{centralized_wallet}`\n\n"
+                        f"📱 *QR Code:*\n"
+                        f"[Click to view QR Code]({qr_url})\n\n"
+                        f"⚠️ *IMPORTANT - You Don't Have an Agent Yet*\n"
+                        f"• Deposit to this address to get credits\n"
+                        f"• After deposit, admin will verify and add credits\n"
+                        f"• With credits, you can spawn an AI Agent\n\n"
+                        f"🌐 *Network:*\n"
+                        f"• Base Network (REQUIRED)\n"
+                        f"• Low gas fees (~$0.01)\n\n"
+                        f"💱 *Conversion Rate:*\n"
+                        f"• 1 USDC = 100 Conway Credits\n"
+                        f"• $30 USDC = 3,000 Credits\n\n"
+                        f"📊 *Minimum to Spawn Agent:*\n"
+                        f"• Deposit: $30 USDC (3,000 credits)\n"
+                        f"• Spawn fee: 100,000 credits\n"
+                        f"• Total: ~$1,030 USDC\n\n"
+                        f"💡 *How to Deposit:*\n"
+                        f"1. Copy address above or scan QR code\n"
+                        f"2. Open your wallet (MetaMask, Trust Wallet, etc)\n"
+                        f"3. Make sure network: Base\n"
+                        f"4. Send USDC to the address above\n"
+                        f"5. Screenshot transfer proof\n"
+                        f"6. Send to admin for verification\n"
+                        f"7. Credits will be added manually"
+                    )
                 
                 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                
+                # Get admin contact
+                admin_ids_str = os.getenv('ADMIN_IDS', '')
+                admin_contact = ""
+                if admin_ids_str:
+                    first_admin_id = admin_ids_str.split(',')[0].strip()
+                    admin_contact = f"tg://user?id={first_admin_id}"
+                
                 keyboard = [
-                    [InlineKeyboardButton("💰 Deposit Sekarang" if user_lang == 'id' else "💰 Deposit Now", 
-                                         callback_data="automaton_first_deposit")],
+                    [InlineKeyboardButton("� Kirim Bukti ke Admin" if user_lang == 'id' else "📤 Send Proof to Admin", 
+                                         url=admin_contact if admin_contact else "https://t.me/")],
                     [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
                                          callback_data=AI_AGENT_MENU)]
                 ]
                 
                 await query.edit_message_text(
-                    error_msg,
+                    message,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='MARKDOWN'
                 )
                 return
             
-            # Get first agent's deposit address
+            # User HAS agent - show agent-specific deposit address
             agent = agents[0]
             deposit_address = agent.get('deposit_address', '')
             
@@ -1093,11 +1169,11 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             # Generate QR code URL
             qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={deposit_address}"
             
-            # Deposit instructions
+            # Deposit instructions for agent
             if user_lang == 'id':
                 message = (
                     f"💰 *Deposit USDC (Base Network)*\n\n"
-                    f"📍 *Deposit Address:*\n"
+                    f"📍 *Deposit Address (Agent):*\n"
                     f"`{deposit_address}`\n\n"
                     f"📱 *QR Code:*\n"
                     f"[Klik untuk melihat QR Code]({qr_url})\n\n"
@@ -1121,7 +1197,7 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             else:
                 message = (
                     f"💰 *Deposit USDC (Base Network)*\n\n"
-                    f"📍 *Deposit Address:*\n"
+                    f"📍 *Deposit Address (Agent):*\n"
                     f"`{deposit_address}`\n\n"
                     f"📱 *QR Code:*\n"
                     f"[Click to view QR Code]({qr_url})\n\n"
