@@ -996,7 +996,7 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             )
 
     async def handle_automaton_status(self, query, context):
-        """Handle Agent Status button - direct command execution"""
+        """Handle Agent Status button - show agent status"""
         try:
             from app.handlers_automaton import agent_status_command
             from telegram import Update
@@ -1004,110 +1004,158 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             # Answer callback
             await query.answer()
             
-            # Create proper Update object with message
-            fake_update = Update(
-                update_id=999999,
-                message=query.message
-            )
-            fake_update.effective_user = query.from_user
-            fake_update.effective_chat = query.message.chat
+            # Create Update-like object that handlers can use
+            # We'll pass query but handlers need to check for callback_query
+            class UpdateWrapper:
+                def __init__(self, callback_query):
+                    self.callback_query = callback_query
+                    self.effective_user = callback_query.from_user
+                    self.effective_chat = callback_query.message.chat
+                    self.message = callback_query.message
             
-            # Call handler
-            await agent_status_command(fake_update, context)
+            wrapped_update = UpdateWrapper(query)
+            await agent_status_command(wrapped_update, context)
             
         except Exception as e:
-            print(f" Error in handle_automaton_status: {e}")
+            print(f"⚠️ Error in handle_automaton_status: {e}")
             import traceback
             traceback.print_exc()
-            await query.message.reply_text(
-                f" Error: {str(e)[:100]}\n\n"
-                f"Please use /agent_status command directly.",
+            
+            user_id = query.from_user.id
+            from database import Database
+            db = Database()
+            user_lang = db.get_user_language(user_id)
+            
+            error_msg = "❌ Terjadi kesalahan. Silakan gunakan command /agent_status" if user_lang == 'id' else "❌ Error occurred. Please use /agent_status command"
+            
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
+            
+            await query.edit_message_text(
+                error_msg,
+                reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='MARKDOWN'
             )
 
     async def handle_automaton_deposit(self, query, context):
-        """Handle Fund Agent button - direct command execution"""
+        """Handle Fund Agent button - show deposit info"""
         try:
             from app.handlers_automaton import deposit_command
-            from telegram import Update
             
             # Answer callback
             await query.answer()
             
-            # Create proper Update object
-            fake_update = Update(
-                update_id=999999,
-                message=query.message
-            )
-            fake_update.effective_user = query.from_user
-            fake_update.effective_chat = query.message.chat
+            # Create Update-like object
+            class UpdateWrapper:
+                def __init__(self, callback_query):
+                    self.callback_query = callback_query
+                    self.effective_user = callback_query.from_user
+                    self.effective_chat = callback_query.message.chat
+                    self.message = callback_query.message
             
-            # Call handler
-            await deposit_command(fake_update, context)
+            wrapped_update = UpdateWrapper(query)
+            await deposit_command(wrapped_update, context)
             
         except Exception as e:
-            print(f" Error in handle_automaton_deposit: {e}")
+            print(f"⚠️ Error in handle_automaton_deposit: {e}")
             import traceback
             traceback.print_exc()
-            await query.message.reply_text(
-                f" Error: {str(e)[:100]}\n\n"
-                f"Please use /deposit command directly.",
+            
+            user_id = query.from_user.id
+            from database import Database
+            db = Database()
+            user_lang = db.get_user_language(user_id)
+            
+            error_msg = "❌ Terjadi kesalahan. Silakan gunakan command /deposit" if user_lang == 'id' else "❌ Error occurred. Please use /deposit command"
+            
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
+            
+            await query.edit_message_text(
+                error_msg,
+                reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='MARKDOWN'
             )
 
     async def handle_automaton_logs(self, query, context):
-        """Handle Agent Logs button - direct command execution"""
+        """Handle Agent Logs button - show agent logs"""
         try:
             from app.handlers_automaton import agent_logs_command
-            from telegram import Update
             
             # Answer callback
             await query.answer()
             
-            # Create proper Update object
-            fake_update = Update(
-                update_id=999999,
-                message=query.message
-            )
-            fake_update.effective_user = query.from_user
-            fake_update.effective_chat = query.message.chat
+            # Create Update-like object
+            class UpdateWrapper:
+                def __init__(self, callback_query):
+                    self.callback_query = callback_query
+                    self.effective_user = callback_query.from_user
+                    self.effective_chat = callback_query.message.chat
+                    self.message = callback_query.message
             
-            # Call handler
-            await agent_logs_command(fake_update, context)
+            wrapped_update = UpdateWrapper(query)
+            await agent_logs_command(wrapped_update, context)
             
         except Exception as e:
-            print(f" Error in handle_automaton_logs: {e}")
+            print(f"⚠️ Error in handle_automaton_logs: {e}")
             import traceback
             traceback.print_exc()
-            await query.message.reply_text(
-                f" Error: {str(e)[:100]}\n\n"
-                f"Please use /agent_logs command directly.",
+            
+            user_id = query.from_user.id
+            from database import Database
+            db = Database()
+            user_lang = db.get_user_language(user_id)
+            
+            error_msg = "❌ Terjadi kesalahan. Silakan gunakan command /agent_logs" if user_lang == 'id' else "❌ Error occurred. Please use /agent_logs command"
+            
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
+            
+            await query.edit_message_text(
+                error_msg,
+                reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='MARKDOWN'
             )
 
     async def handle_agent_lineage(self, query, context):
-        """Handle Agent Lineage button - direct command execution"""
+        """Handle Agent Lineage button - show agent lineage"""
         try:
             from app.handlers_automaton import agent_lineage_command
-            from telegram import Update
             
             # Answer callback
             await query.answer()
             
-            # Create proper Update object
-            fake_update = Update(
-                update_id=999999,
-                message=query.message
-            )
-            fake_update.effective_user = query.from_user
-            fake_update.effective_chat = query.message.chat
+            # Create Update-like object
+            class UpdateWrapper:
+                def __init__(self, callback_query):
+                    self.callback_query = callback_query
+                    self.effective_user = callback_query.from_user
+                    self.effective_chat = callback_query.message.chat
+                    self.message = callback_query.message
             
-            # Call handler
-            await agent_lineage_command(fake_update, context)
+            wrapped_update = UpdateWrapper(query)
+            await agent_lineage_command(wrapped_update, context)
             
         except Exception as e:
-            print(f" Error in handle_agent_lineage: {e}")
+            print(f"⚠️ Error in handle_agent_lineage: {e}")
             import traceback
+            traceback.print_exc()
+            
+            user_id = query.from_user.id
+            from database import Database
+            db = Database()
+            user_lang = db.get_user_language(user_id)
+            
+            error_msg = "❌ Terjadi kesalahan. Silakan gunakan command /agent_lineage" if user_lang == 'id' else "❌ Error occurred. Please use /agent_lineage command"
+            
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
+            
+            await query.edit_message_text(
+                error_msg,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='MARKDOWN'
+            )
             traceback.print_exc()
             await query.message.reply_text(
                 f" Error: {str(e)[:100]}\n\n"
