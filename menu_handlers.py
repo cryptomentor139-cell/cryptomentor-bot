@@ -1038,35 +1038,130 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             )
 
     async def handle_automaton_deposit(self, query, context):
-        """Handle Fund Agent button - show deposit info"""
+        """Handle Fund Agent button - show deposit info for existing agents"""
+        user_id = query.from_user.id
+        
         try:
-            from app.handlers_automaton import deposit_command
-            
-            # Answer callback
             await query.answer()
             
-            # Create Update-like object
-            class UpdateWrapper:
-                def __init__(self, callback_query):
-                    self.callback_query = callback_query
-                    self.effective_user = callback_query.from_user
-                    self.effective_chat = callback_query.message.chat
-                    self.message = callback_query.message
+            from database import Database
+            from app.automaton_manager import automaton_manager
+            import os
             
-            wrapped_update = UpdateWrapper(query)
-            await deposit_command(wrapped_update, context)
+            db = Database()
+            user_lang = db.get_user_language(user_id)
+            
+            # Get user's agents
+            agents = automaton_manager.get_user_agents(user_id)
+            
+            if not agents:
+                # User doesn't have agent yet, redirect to first deposit
+                error_msg = "❌ Anda belum memiliki agent. Silakan deposit terlebih dahulu untuk spawn agent." if user_lang == 'id' else "❌ You don't have an agent yet. Please deposit first to spawn an agent."
+                
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                keyboard = [
+                    [InlineKeyboardButton("💰 Deposit Sekarang" if user_lang == 'id' else "💰 Deposit Now", 
+                                         callback_data="automaton_first_deposit")],
+                    [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
+                                         callback_data=AI_AGENT_MENU)]
+                ]
+                
+                await query.edit_message_text(
+                    error_msg,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='MARKDOWN'
+                )
+                return
+            
+            # Get first agent's deposit address
+            agent = agents[0]
+            deposit_address = agent.get('deposit_address', '')
+            
+            if not deposit_address:
+                error_msg = "❌ Agent deposit address tidak ditemukan." if user_lang == 'id' else "❌ Agent deposit address not found."
+                
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
+                
+                await query.edit_message_text(
+                    error_msg,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='MARKDOWN'
+                )
+                return
+            
+            # Generate QR code URL
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={deposit_address}"
+            
+            # Deposit instructions
+            if user_lang == 'id':
+                message = (
+                    f"💰 *Deposit USDC (Base Network)*\n\n"
+                    f"📍 *Deposit Address:*\n"
+                    f"`{deposit_address}`\n\n"
+                    f"📱 *QR Code:*\n"
+                    f"[Klik untuk melihat QR Code]({qr_url})\n\n"
+                    f"🌐 *Network:*\n"
+                    f"• Base Network (WAJIB)\n"
+                    f"• Biaya gas rendah (~$0.01)\n\n"
+                    f"💱 *Conversion Rate:*\n"
+                    f"• 1 USDC = 100 Conway Credits\n"
+                    f"• $30 USDC = 3.000 Credits\n\n"
+                    f"⚠️ *Penting:*\n"
+                    f"• HANYA gunakan Base Network\n"
+                    f"• HANYA kirim USDC (bukan USDT atau token lain)\n"
+                    f"• Credits akan ditambahkan otomatis setelah 12 konfirmasi\n\n"
+                    f"💡 *Cara Deposit:*\n"
+                    f"1. Buka wallet Anda (MetaMask, Trust Wallet, dll)\n"
+                    f"2. Pastikan network: Base\n"
+                    f"3. Kirim USDC ke address di atas\n"
+                    f"4. Tunggu 12 konfirmasi (~5-10 menit)\n"
+                    f"5. Credits akan otomatis masuk"
+                )
+            else:
+                message = (
+                    f"💰 *Deposit USDC (Base Network)*\n\n"
+                    f"📍 *Deposit Address:*\n"
+                    f"`{deposit_address}`\n\n"
+                    f"📱 *QR Code:*\n"
+                    f"[Click to view QR Code]({qr_url})\n\n"
+                    f"🌐 *Network:*\n"
+                    f"• Base Network (REQUIRED)\n"
+                    f"• Low gas fees (~$0.01)\n\n"
+                    f"💱 *Conversion Rate:*\n"
+                    f"• 1 USDC = 100 Conway Credits\n"
+                    f"• $30 USDC = 3,000 Credits\n\n"
+                    f"⚠️ *Important:*\n"
+                    f"• ONLY use Base Network\n"
+                    f"• ONLY send USDC (not USDT or other tokens)\n"
+                    f"• Credits will be added automatically after 12 confirmations\n\n"
+                    f"💡 *How to Deposit:*\n"
+                    f"1. Open your wallet (MetaMask, Trust Wallet, etc)\n"
+                    f"2. Make sure network: Base\n"
+                    f"3. Send USDC to the address above\n"
+                    f"4. Wait for 12 confirmations (~5-10 minutes)\n"
+                    f"5. Credits will be added automatically"
+                )
+            
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
+            
+            await query.edit_message_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='MARKDOWN'
+            )
             
         except Exception as e:
             print(f"⚠️ Error in handle_automaton_deposit: {e}")
             import traceback
             traceback.print_exc()
             
-            user_id = query.from_user.id
             from database import Database
             db = Database()
             user_lang = db.get_user_language(user_id)
             
-            error_msg = "❌ Terjadi kesalahan. Silakan gunakan command /deposit" if user_lang == 'id' else "❌ Error occurred. Please use /deposit command"
+            error_msg = "❌ Terjadi kesalahan saat mengambil deposit address. Silakan coba lagi." if user_lang == 'id' else "❌ Error occurred while getting deposit address. Please try again."
             
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
