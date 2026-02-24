@@ -1045,11 +1045,14 @@ Type your question about cryptocurrency, trading, or blockchain technology.
             await query.answer()
             
             from database import Database
-            from app.automaton_manager import automaton_manager
+            from app.automaton_manager import get_automaton_manager
             import os
             
             db = Database()
             user_lang = db.get_user_language(user_id)
+            
+            # Get automaton manager instance
+            automaton_manager = get_automaton_manager(db)
             
             # Get user's agents
             agents = automaton_manager.get_user_agents(user_id)
