@@ -28,6 +28,8 @@ class MenuCallbackHandler:
         query = update.callback_query
         callback_data = query.data
         
+        print(f"🔍 DEBUG: Callback received - data: {callback_data}, user: {query.from_user.id}")
+        
         # DEDUPLICATION CHECK - Prevent duplicate processing
         query_id = query.id
         if not hasattr(context, 'bot_data'):
@@ -122,6 +124,7 @@ class MenuCallbackHandler:
             elif callback_data == AUTOMATON_LOGS:
                 await self.handle_automaton_logs(query, context)
             elif callback_data == "automaton_first_deposit":
+                print(f"🔍 DEBUG: Routing to handle_automaton_first_deposit for callback_data: {callback_data}")
                 await self.handle_automaton_first_deposit(query, context)
             elif callback_data == "deposit_guide":
                 await self.handle_deposit_guide(query, context)
@@ -2550,10 +2553,12 @@ Anda dapat mengajukan withdrawal lagi."""
         Shows centralized wallet address for deposits. All users deposit to the same wallet
         which is connected to Conway Dashboard for automatic credit conversion.
         """
+        print(f"🔍 DEBUG: handle_automaton_first_deposit called for user {query.from_user.id}")
         user_id = query.from_user.id
         from database import Database
         db = Database()
         user_lang = db.get_user_language(user_id)
+        print(f"🔍 DEBUG: User language: {user_lang}")
         
         try:
             # Check if Supabase is enabled
