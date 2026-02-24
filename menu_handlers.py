@@ -1131,16 +1131,9 @@ Type your question about cryptocurrency, trading, or blockchain technology.
                 
                 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
                 
-                # Get admin contact
-                admin_ids_str = os.getenv('ADMIN_IDS', '')
-                admin_contact = ""
-                if admin_ids_str:
-                    first_admin_id = admin_ids_str.split(',')[0].strip()
-                    admin_contact = f"tg://user?id={first_admin_id}"
-                
                 keyboard = [
-                    [InlineKeyboardButton("� Kirim Bukti ke Admin" if user_lang == 'id' else "📤 Send Proof to Admin", 
-                                         url=admin_contact if admin_contact else "https://t.me/")],
+                    [InlineKeyboardButton("📤 Kirim Bukti ke Admin" if user_lang == 'id' else "📤 Send Proof to Admin", 
+                                         url="https://t.me/BillFarr")],
                     [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
                                          callback_data=AI_AGENT_MENU)]
                 ]
