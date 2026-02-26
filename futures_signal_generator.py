@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Professional Futures Signal Generator
-Generates concise trading signals matching CryptoMentor AI 2.0 format
+Generates concise trading signals matching CryptoMentor AI 3.0 format
 Uses only Binance OHLCV data + AI Reasoning
 """
 
@@ -29,7 +29,7 @@ class FuturesSignalGenerator:
         pass
     
     async def generate_signal(self, symbol: str, timeframe: str) -> str:
-        """Generate signal in CryptoMentor AI 2.0 format"""
+        """Generate signal in CryptoMentor AI 3.0 format"""
         try:
             # Fetch data
             klines = fetch_klines(symbol, timeframe, limit=200)
@@ -99,7 +99,7 @@ class FuturesSignalGenerator:
             volume_confirmation = "✔" if volumes[-1] > avg_vol * 1.1 else "✗"
             
             # Format output - EXACT USER FORMAT
-            signal_text = f"""📊 CRYPTOMENTOR AI 2.0 – TRADING SIGNAL
+            signal_text = f"""📊 CRYPTOMENTOR AI 3.0 – TRADING SIGNAL
 
 Asset      : {symbol.replace('USDT', '')}/USDT
 Timeframe  : {timeframe.upper()}

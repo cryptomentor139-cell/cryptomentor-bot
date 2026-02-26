@@ -356,7 +356,7 @@ class TelegramBot:
         # Lazy load menu system
         from menu_system import MenuBuilder, get_menu_text, MAIN_MENU
 
-        welcome_text = f"""🤖 **Welcome to CryptoMentor AI 2.0**
+        welcome_text = f"""🤖 **Welcome to CryptoMentor AI 3.0**
 
 Hello {user.first_name}! 👋
 
@@ -1328,31 +1328,31 @@ Zone {label} – {desc}
         
         user_id = update.effective_user.id
         
-        subscription_text = f"""🚀 <b>CryptoMentor AI 2.0 – Paket Berlangganan</b>
+        subscription_text = f"""🚀 <b>CryptoMentor AI 3.0 – Paket Berlangganan</b>
 
 Trading lebih terarah dengan AI berbasis Supply & Demand (SnD), data real-time Binance, dan sistem signal profesional tanpa hambatan credits (Unlimited access).
 
 💎 <b>PILIH PAKET PREMIUM</b>
 
 🔹 <b>Monthly</b>
-💰 Rp320.000 / bulan
+💰 Rp368.000 / bulan
 ✔ Futures & Spot SnD Signals
 ✔ Analisis on-demand
 ✔ Semua fitur premium
 
 🔹 <b>2 Bulan</b>
-💰 Rp600.000 / 2 bulan
+💰 Rp690.000 / 2 bulan
 ✔ Lebih hemat dari bulanan
 ✔ Semua fitur premium
 ✔ Cocok untuk swing trader
 
 🔹 ⭐ <b>1 Tahun (Most Popular)</b>
-💰 Rp3.500.000 / tahun
+💰 Rp4.025.000 / tahun
 ✔ Semua fitur premium
 ✔ Lebih hemat & tanpa perpanjang bulanan
 
 🔥 <b>LIFETIME (LIMITED SLOT)</b>
-💰 Rp6.500.000 – Sekali Bayar
+💰 Rp7.475.000 – Sekali Bayar
 
 🚀 Akses Seumur Hidup + Auto Signal + Automaton Access
 
@@ -1360,12 +1360,12 @@ Trading lebih terarah dengan AI berbasis Supply & Demand (SnD), data real-time B
 ✔ Semua fitur premium (selamanya)
 ✔ Auto Futures & Spot Signal (SnD Based)
 ✔ Priority Signal (zona terbaik lebih dulu)
-✔ <b>🤖 Automaton Access (GRATIS - senilai Rp2.000.000)</b>
+✔ <b>🤖 Automaton Access (GRATIS - senilai Rp2.300.000)</b>
 ✔ Akses SETIAP pembaruan fitur CryptoMentor AI ke depan
 ✔ Tidak ada biaya bulanan / tahunan lagi
 
 🤖 <b>AUTOMATON ACCESS (Add-On)</b>
-💰 Rp2.000.000 – Sekali Bayar
+💰 Rp2.300.000 – Sekali Bayar
 
 <b>Untuk pengguna Premium (Monthly/2 Bulan/1 Tahun):</b>
 ✔ Akses fitur Automaton (AI Trading Agent)
@@ -1642,7 +1642,7 @@ Address:
         minutes, seconds = divmod(remainder, 60)
         uptime_str = f"{hours}h {minutes}m {seconds}s"
 
-        admin_panel_text = f"""**CryptoMentorAI V2.0** | Admin Panel
+        admin_panel_text = f"""**CryptoMentorAI V3.0** | Admin Panel
 
 • 📊 **STATUS**
 ⏰ {local_time} {user_tz}
@@ -2409,7 +2409,7 @@ Choose action:
             minutes, seconds = divmod(remainder, 60)
             uptime_str = f"{hours}h {minutes}m {seconds}s"
 
-            admin_panel_text = f"""**CryptoMentorAI V2.0** | Admin Panel
+            admin_panel_text = f"""**CryptoMentorAI V3.0** | Admin Panel
 
 • 📊 **STATUS**
 ⏰ {local_time} {user_tz}

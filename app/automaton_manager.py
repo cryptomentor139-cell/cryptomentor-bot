@@ -73,7 +73,7 @@ class AutomatonManager:
             if not self.db.has_automaton_access(user_id):
                 return {
                     'success': False,
-                    'message': 'Automaton access required. Pay Rp2,000,000 one-time fee via /subscribe'
+                    'message': 'Automaton access required. Pay Rp2,300,000 one-time fee via /subscribe'
                 }
             
             # 2. Verify user is premium

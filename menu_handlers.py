@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-CryptoMentor AI 2.0 - Menu Callback Handlers
+CryptoMentor AI 3.0 - Menu Callback Handlers
 Handles all InlineKeyboard interactions and maps to existing commands
 """
 

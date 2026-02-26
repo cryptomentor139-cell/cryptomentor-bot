@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-CryptoMentor AI 2.0 - Button-Based Menu System
+CryptoMentor AI 3.0 - Button-Based Menu System
 Complete InlineKeyboard system that maps all existing commands
 """
 
@@ -213,7 +213,7 @@ def get_menu_text(menu_key: str, user_lang: str = 'en') -> str:
     """Get menu text by key with language support"""
     if user_lang == 'id':
         texts = {
-            MAIN_MENU: """ **CryptoMentor AI 2.0**
+            MAIN_MENU: """ **CryptoMentor AI 3.0**
 
 Selamat datang di platform analisis cryptocurrency canggih!
 
@@ -259,7 +259,7 @@ Sesuaikan pengalaman CryptoMentor AI Anda."""
         }
     else:
         texts = {
-            MAIN_MENU: """ **CryptoMentor AI 2.0**
+            MAIN_MENU: """ **CryptoMentor AI 3.0**
 
 Welcome to the advanced cryptocurrency analysis platform!
 

@@ -761,7 +761,7 @@ async def upgrade_premium_callback(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
     
     # Exact same text as /subscribe command in bot.py
-    subscription_text = f"""🚀 <b>CryptoMentor AI 2.0 – Paket Berlangganan</b>
+    subscription_text = f"""🚀 <b>CryptoMentor AI 3.0 – Paket Berlangganan</b>
 
 Trading lebih terarah dengan AI berbasis Supply & Demand (SnD), data real-time Binance, dan sistem signal profesional tanpa hambatan credits (Unlimited access).
 

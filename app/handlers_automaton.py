@@ -111,7 +111,7 @@ async def spawn_agent_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not is_admin(user_id) and not db.has_automaton_access(user_id):
             await update.message.reply_text(
                 "❌ *Akses Automaton Diperlukan*\n\n"
-                "Untuk menggunakan fitur AI Agent, Anda perlu membayar biaya satu kali sebesar *Rp2.000.000*.\n\n"
+                "Untuk menggunakan fitur AI Agent, Anda perlu membayar biaya satu kali sebesar *Rp2.300.000*.\n\n"
                 "Gunakan /subscribe untuk upgrade ke Automaton access.",
                 parse_mode=ParseMode.MARKDOWN
             )
