@@ -127,9 +127,9 @@ async def spawn_agent_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return
         
-        # Check minimum deposit requirement ($30 = 3000 credits)
+        # Check minimum deposit requirement ($10 = 1000 credits)
         # This applies to EVERYONE including admin and lifetime premium
-        MINIMUM_DEPOSIT_CREDITS = 3000  # $30 USDC = 3000 credits
+        MINIMUM_DEPOSIT_CREDITS = 1000  # $10 USDC = 1000 credits
         
         user_credits = 0
         try:

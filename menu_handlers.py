@@ -287,90 +287,13 @@ class MenuCallbackHandler:
         except Exception as e:
             print(f"⚠️ Error checking premium tier: {e}")
         
-        # REQUIREMENT: Must be lifetime premium (or admin) to access AI Agent
-        if not is_lifetime and not is_admin_user:
-            # Show upgrade required message
-            if user_lang == 'id':
-                upgrade_text = """🤖 **AI Agent - Lifetime Premium Required**
-
-⚠️ **Akses Terbatas**
-
-Fitur AI Agent hanya tersedia untuk **Lifetime Premium** members.
-
-🎯 **Kenapa Lifetime Premium?**
-• AI Agent adalah fitur advanced yang membutuhkan resources besar
-• Lifetime members mendapat akses unlimited ke semua fitur
-• Investasi one-time untuk benefit selamanya
-
-💎 **Benefit Lifetime Premium:**
-✅ AI Agent access (autonomous trading)
-✅ Unlimited AI analysis
-✅ Auto signals 24/7
-✅ Priority support
-✅ All future features
-✅ No monthly fees
-
-💰 **Cara Upgrade:**
-1. Klik tombol "💎 Upgrade Lifetime" di bawah
-2. Ikuti instruksi pembayaran
-3. Setelah upgrade, Anda bisa akses AI Agent
-
-📚 **Pelajari Lebih Lanjut:**
-Klik "🎓 Tentang AI Agent" untuk memahami fitur ini sebelum upgrade.
-
----
-<i>Note: Setelah upgrade Lifetime, Anda masih perlu deposit USDC untuk spawn AI Agent.</i>"""
-            else:
-                upgrade_text = """🤖 **AI Agent - Lifetime Premium Required**
-
-⚠️ **Access Restricted**
-
-AI Agent feature is only available for **Lifetime Premium** members.
-
-🎯 **Why Lifetime Premium?**
-• AI Agent is an advanced feature requiring significant resources
-• Lifetime members get unlimited access to all features
-• One-time investment for lifetime benefits
-
-💎 **Lifetime Premium Benefits:**
-✅ AI Agent access (autonomous trading)
-✅ Unlimited AI analysis
-✅ Auto signals 24/7
-✅ Priority support
-✅ All future features
-✅ No monthly fees
-
-💰 **How to Upgrade:**
-1. Click "💎 Upgrade Lifetime" button below
-2. Follow payment instructions
-3. After upgrade, you can access AI Agent
-
-📚 **Learn More:**
-Click "🎓 About AI Agent" to understand this feature before upgrading.
-
----
-<i>Note: After Lifetime upgrade, you still need to deposit USDC to spawn AI Agent.</i>"""
-            
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            keyboard = [
-                [InlineKeyboardButton("🎓 Tentang AI Agent" if user_lang == 'id' else "🎓 About AI Agent", 
-                                     callback_data="ai_agent_education")],
-                [InlineKeyboardButton("💎 Upgrade Lifetime" if user_lang == 'id' else "💎 Upgrade Lifetime", 
-                                     callback_data=UPGRADE_PREMIUM)],
-                [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
-                                     callback_data=MAIN_MENU)]
-            ]
-            
-            await query.edit_message_text(
-                upgrade_text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='MARKDOWN'
-            )
-            return
+        # ✅ BETA TEST: AI Agent terbuka untuk SEMUA user
+        # Tidak ada pembatasan lifetime premium
+        # User hanya perlu deposit untuk spawn agent
         
-        # User is lifetime premium or admin, check deposit status
-        # Check if user has made deposit (minimum $30 = 3000 credits)
-        MINIMUM_DEPOSIT_CREDITS = 3000  # $30 USDC = 3000 credits
+        # User can access AI Agent menu, check deposit status
+        # Check if user has made deposit (minimum $10 = 1000 credits)
+        MINIMUM_DEPOSIT_CREDITS = 1000  # $10 USDC = 1000 credits
         has_deposit = False
         user_credits = 0
         
