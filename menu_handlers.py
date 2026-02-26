@@ -2846,107 +2846,121 @@ Anda dapat mengajukan withdrawal lagi."""
             
             # Format deposit instructions based on language (Updated: Manual verification by admin)
             if user_lang == 'id':
-                deposit_text = f""" **Deposit USDC (Base Network)**
+                deposit_text = f"""💰 **Deposit USDC (Base Network)**
 
- **TUJUAN TRANSFER:**
- **Address Tujuan:**
+🎯 **TUJUAN TRANSFER:**
+📍 **Address Tujuan:**
 `{centralized_wallet}`
 
- **QR Code:**
+📱 **QR Code:**
 [Klik untuk melihat QR Code]({qr_url})
 
- **PENTING - Baca Sebelum Transfer:**
- Kirim USDC ke address di atas
- HANYA gunakan Base Network
- Setelah transfer, kirim bukti ke admin untuk verifikasi
- Credits akan ditambahkan manual oleh admin
+⚠️ **PENTING - Baca Sebelum Transfer:**
+✅ Kirim USDC ke address di atas
+✅ HANYA gunakan Base Network
+✅ Setelah transfer, kirim bukti ke admin untuk verifikasi
+✅ Credits akan ditambahkan manual oleh admin
 
- **Network:**
- Base Network (WAJIB)
- Biaya gas rendah (~$0.01)
+🌐 **Network:**
+✅ Base Network (WAJIB)
+⚡ Biaya gas rendah (~$0.01)
 
- **Conversion Rate:**
- 1 USDC = 100 Conway Credits
- $30 USDC = 3.000 Credits
+💱 **Conversion Rate:**
+💵 1 USDC = 100 Conway Credits
+💵 $10 USDC = 1.000 Credits
 
- **Minimum untuk Spawn Agent:**
- Deposit minimum: $30 USDC (3.000 credits)
- Spawn fee: 100.000 credits
- Total dibutuhkan: ~$1.030 USDC
+💰 **MINIMAL DEPOSIT: $10 USDC**
+⚠️ **Perlu Diketahui:**
+$10 bukan pure modal trading AI, tapi ada campuran:
+• Modal trading AI Agent Anda
+• Biaya operasional AI (bensin Automaton = USDC)
+• Biaya infrastruktur Conway + Railway
 
- **Cara Kerja Deposit:**
+🤖 **Minimum untuk Spawn Agent:**
+💰 Deposit minimum: $10 USDC (1.000 credits)
+🚀 Spawn fee: 100.000 credits
+📊 Total dibutuhkan: ~$1.010 USDC
+
+📋 **Cara Kerja Deposit:**
 1. Anda kirim USDC (Base Network) ke address di atas
 2. Screenshot bukti transfer (transaction hash)
-3. Klik tombol " Kirim Bukti Transfer" di bawah
+3. Klik tombol "📤 Kirim Bukti Transfer" di bawah
 4. Kirim screenshot ke admin
 5. Admin akan verifikasi dan tambahkan credits
 6. Anda akan menerima notifikasi saat credits masuk
 
- **Langkah-langkah Deposit:**
+📝 **Langkah-langkah Deposit:**
 1. Copy address di atas atau scan QR code
 2. Buka wallet Anda (MetaMask, Trust Wallet, dll)
 3. Pastikan network: Base
-4. Kirim minimal $30 USDC ke address di atas
+4. Kirim minimal $10 USDC ke address di atas
 5. Screenshot bukti transfer
-6. Klik " Kirim Bukti Transfer" dan kirim ke admin
+6. Klik "📤 Kirim Bukti Transfer" dan kirim ke admin
 7. Tunggu verifikasi admin (biasanya < 1 jam)
 
- **Catatan:**
- Admin & Lifetime Premium juga perlu deposit $30
- Setelah deposit $30, Anda bisa spawn agent
- JANGAN kirim ke network lain (dana akan hilang!)
- Simpan transaction hash untuk tracking"""
+📌 **Catatan:**
+⚠️ Semua user (termasuk admin) bisa deposit minimal $10
+✅ Ini fase BETA TEST - akses terbuka untuk semua
+❌ JANGAN kirim ke network lain (dana akan hilang!)
+💾 Simpan transaction hash untuk tracking"""
             else:
-                deposit_text = f""" **Deposit USDC (Base Network)**
+                deposit_text = f"""💰 **Deposit USDC (Base Network)**
 
- **TRANSFER DESTINATION:**
- **Destination Address:**
+🎯 **TRANSFER DESTINATION:**
+📍 **Destination Address:**
 `{centralized_wallet}`
 
- **QR Code:**
+📱 **QR Code:**
 [Click to view QR Code]({qr_url})
 
- **IMPORTANT - Read Before Transfer:**
- Send USDC to the address above
- ONLY use Base Network
- After transfer, send proof to admin for verification
- Credits will be added manually by admin
+⚠️ **IMPORTANT - Read Before Transfer:**
+✅ Send USDC to the address above
+✅ ONLY use Base Network
+✅ After transfer, send proof to admin for verification
+✅ Credits will be added manually by admin
 
- **Network:**
- Base Network (REQUIRED)
- Low gas fees (~$0.01)
+🌐 **Network:**
+✅ Base Network (REQUIRED)
+⚡ Low gas fees (~$0.01)
 
- **Conversion Rate:**
- 1 USDC = 100 Conway Credits
- $30 USDC = 3,000 Credits
+💱 **Conversion Rate:**
+💵 1 USDC = 100 Conway Credits
+💵 $10 USDC = 1,000 Credits
 
- **Minimum for Spawn Agent:**
- Minimum deposit: $30 USDC (3,000 credits)
- Spawn fee: 100,000 credits
- Total needed: ~$1,030 USDC
+💰 **MINIMUM DEPOSIT: $10 USDC**
+⚠️ **Please Note:**
+$10 is not pure AI trading capital, it includes:
+• Your AI Agent trading capital
+• AI operational costs (Automaton fuel = USDC)
+• Conway + Railway infrastructure fees
 
- **How Deposit Works:**
+🤖 **Minimum for Spawn Agent:**
+💰 Minimum deposit: $10 USDC (1,000 credits)
+🚀 Spawn fee: 100,000 credits
+📊 Total needed: ~$1,010 USDC
+
+📋 **How Deposit Works:**
 1. You send USDC (Base Network) to the address above
 2. Screenshot transfer proof (transaction hash)
-3. Click " Send Transfer Proof" button below
+3. Click "📤 Send Transfer Proof" button below
 4. Send screenshot to admin
 5. Admin will verify and add credits
 6. You will receive notification when credits arrive
 
- **Deposit Steps:**
+📝 **Deposit Steps:**
 1. Copy address above or scan QR code
 2. Open your wallet (MetaMask, Trust Wallet, etc)
 3. Make sure network: Base
-4. Send minimum $30 USDC to the address above
+4. Send minimum $10 USDC to the address above
 5. Screenshot transfer proof
-6. Click " Send Transfer Proof" and send to admin
+6. Click "📤 Send Transfer Proof" and send to admin
 7. Wait for admin verification (usually < 1 hour)
 
- **Notes:**
- Admin & Lifetime Premium also need $30 deposit
- After $30 deposit, you can spawn agent
- DO NOT send to other networks (funds will be lost!)
- Save transaction hash for tracking"""
+📌 **Notes:**
+⚠️ All users (including admin) can deposit minimum $10
+✅ This is BETA TEST phase - open access for everyone
+❌ DO NOT send to other networks (funds will be lost!)
+💾 Save transaction hash for tracking"""
             
             # Build keyboard with send proof button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
