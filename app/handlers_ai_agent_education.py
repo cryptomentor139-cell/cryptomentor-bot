@@ -149,11 +149,11 @@ Klik tombol di bawah untuk:
     
     # Keyboard dengan opsi
     keyboard = [
-        [InlineKeyboardButton("💰 Deposit Sekarang", callback_data="automaton_deposit")],
+        [InlineKeyboardButton("💰 Deposit Sekarang", callback_data="automaton_first_deposit")],
         [InlineKeyboardButton("🤖 Spawn AI Agent", callback_data="automaton_spawn")],
         [InlineKeyboardButton("📚 Baca Dokumentasi", callback_data="ai_agent_docs")],
         [InlineKeyboardButton("❓ FAQ", callback_data="ai_agent_faq")],
-        [InlineKeyboardButton("🔙 Kembali ke Menu", callback_data="ai_agent_menu")]
+        [InlineKeyboardButton("🔙 Kembali ke Menu", callback_data="main_menu")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)

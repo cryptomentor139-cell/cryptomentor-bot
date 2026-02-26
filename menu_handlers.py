@@ -268,16 +268,6 @@ class MenuCallbackHandler:
         db = Database()
         user_lang = db.get_user_language(user_id)
         
-        # Check if user has seen education before
-        user_data = get_user_data(user_id)
-        has_seen_education = user_data.get('has_seen_ai_agent_education', False)
-        
-        # If first time, show education instead of menu
-        if not has_seen_education:
-            from app.handlers_ai_agent_education import _show_education_content
-            await _show_education_content(query, context)
-            return
-        
         # Check if user is admin or lifetime premium
         is_admin_user = is_admin(user_id)
         is_lifetime = False
