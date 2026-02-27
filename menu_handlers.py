@@ -2803,8 +2803,8 @@ $10 bukan pure modal trading AI, tapi ada campuran:
 
 🤖 **Minimum untuk Spawn Agent:**
 💰 Deposit minimum: $10 USDC (1.000 credits)
-🚀 Spawn fee: 100.000 credits
-📊 Total dibutuhkan: ~$1.010 USDC
+✅ Spawn: GRATIS (no spawn fee)
+📊 Total dibutuhkan: $10 USDC
 
 📋 **Cara Kerja Deposit:**
 1. Anda kirim USDC (Base Network) ke address di atas
@@ -2861,8 +2861,8 @@ $10 is not pure AI trading capital, it includes:
 
 🤖 **Minimum for Spawn Agent:**
 💰 Minimum deposit: $10 USDC (1,000 credits)
-🚀 Spawn fee: 100,000 credits
-📊 Total needed: ~$1,010 USDC
+✅ Spawn: FREE (no spawn fee)
+📊 Total needed: $10 USDC
 
 📋 **How Deposit Works:**
 1. You send USDC (Base Network) to the address above
@@ -2983,9 +2983,9 @@ $10 is not pure AI trading capital, it includes:
  $30 USDC = 3.000 Credits
 
  **Minimum untuk Spawn Agent:**
- Deposit minimum: $30 USDC (3.000 credits)
- Spawn fee: 100.000 credits
- Total dibutuhkan: ~$1.030 USDC
+ Deposit minimum: $10 USDC (1.000 credits)
+ Spawn: GRATIS (no spawn fee)
+ Total dibutuhkan: $10 USDC
 
  **Network:**
   Base Network (WAJIB)
@@ -3069,9 +3069,9 @@ A: Klik tombol " Kirim Bukti Transfer" di menu deposit, lalu kirim screenshot ke
  $30 USDC = 3,000 Credits
 
  **Minimum for Spawn Agent:**
- Minimum deposit: $30 USDC (3,000 credits)
- Spawn fee: 100,000 credits
- Total needed: ~$1,030 USDC
+ Minimum deposit: $10 USDC (1,000 credits)
+ Spawn: FREE (no spawn fee)
+ Total needed: $10 USDC
 
  **Network:**
   Base Network (REQUIRED)

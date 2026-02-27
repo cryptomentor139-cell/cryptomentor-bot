@@ -432,9 +432,9 @@ async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"4. Tunggu 12 konfirmasi (~5-10 menit)\n"
             f"5. Credits akan otomatis masuk\n\n"
             f"📊 *Minimum untuk Spawn Agent:*\n"
-            f"• Deposit: $30 USDC (3.000 credits)\n"
-            f"• Spawn fee: 100.000 credits\n"
-            f"• Total: ~$1.030 USDC"
+            f"• Deposit: $10 USDC (1.000 credits)\n"
+            f"• Spawn: GRATIS (no spawn fee)\n"
+            f"• Total: $10 USDC"
         )
         
         await update.message.reply_text(

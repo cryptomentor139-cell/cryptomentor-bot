@@ -247,7 +247,7 @@ Dapatkan insight ahli dan jawaban untuk pertanyaan cryptocurrency Anda.""",
 
 Kelola autonomous trading agents Anda yang menggunakan Conway credits sebagai bahan bakar.
 
- **Spawn Agent** - Buat agent baru (100k credits)
+ **Spawn Agent** - Buat agent baru (1,000 credits / $10 USDC)
  **Agent Status** - Cek status dan performa agent
  **Agent Lineage** - Lihat lineage tree dan passive income
  **Fund Agent** - Deposit USDT/USDC untuk fuel
@@ -293,7 +293,7 @@ Get expert insights and answers to your cryptocurrency questions.""",
 
 Manage your autonomous trading agents powered by Conway credits.
 
- **Spawn Agent** - Create new agent (100k credits)
+ **Spawn Agent** - Create new agent (1,000 credits / $10 USDC)
  **Agent Status** - Check agent status and performance
  **Agent Lineage** - View lineage tree and passive income
  **Fund Agent** - Deposit USDT/USDC for fuel
