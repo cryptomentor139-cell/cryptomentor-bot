@@ -34,8 +34,9 @@ class AutomatonManager:
         
         self.conway = get_conway_client(rate_limiter=rate_limiter)
         
-        # Spawn fee (100,000 credits)
-        self.spawn_fee_credits = 100000
+        # Spawn fee is FREE - Conway API handles actual spawn cost
+        # User only needs minimum deposit ($10 = 1000 credits)
+        self.spawn_fee_credits = 0
         
         # Survival tier thresholds
         self.tier_thresholds = {

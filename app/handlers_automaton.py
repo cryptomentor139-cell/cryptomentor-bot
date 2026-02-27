@@ -180,17 +180,8 @@ async def spawn_agent_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return
         
-        # Check spawn fee (100k credits for spawning)
-        SPAWN_FEE = 100000
-        if user_credits < SPAWN_FEE:
-            await update.message.reply_text(
-                f"❌ *Kredit Tidak Cukup untuk Spawn*\n\n"
-                f"Spawn agent membutuhkan 100.000 kredit.\n"
-                f"Kredit Anda: {user_credits:,}\n\n"
-                f"Gunakan /credits untuk mendapatkan lebih banyak kredit.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
+        # Spawn fee is FREE - only need minimum deposit
+        # Conway API handles the actual spawn cost
         
         # Prompt for agent name
         if not context.args:
