@@ -451,37 +451,6 @@ $10 USDC is NOT pure trading capital, but *operational fuel* for your AI Agent.
 • Platform fee: 2% of deposit
 • Operational costs: ~100-500 credits/day
 • Larger capital = more optimal AI performance"""
-
-💡 **Deposit Recommendations:**
-• $30 USDC: Testing/trial (3,000 credits)
-• $100 USDC: Serious trading (10,000 credits) ⭐ RECOMMENDED
-• $500+ USDC: Optimal trading (50,000+ credits)
-
-⚠️ **Why $100+ Recommended?**
-• AI needs resources for deep analysis
-• API calls for real-time data
-• Computation for decision making
-• Buffer for 24/7 operations
-
-📝 **How to Deposit:**
-1. Click "💰 Deposit Now" button below
-2. Deposit USDC (Base Network) to the provided address
-3. Screenshot transfer proof
-4. Send to admin for verification
-5. Credits will be added manually (< 1 hour)
-
-💱 **Conversion Rate:**
-💵 1 USDC = 100 Conway Credits
-💰 $30 USDC = 3,000 Credits (minimum)
-💰 $100 USDC = 10,000 Credits (recommended)
-
-🌐 **Network:**
-⛓️ Base Network (REQUIRED)
-
-📌 **Notes:**
-• Platform fee: 2% of deposit
-• Operational costs: ~100-500 credits/day
-• Larger capital = more optimal AI performance"""
             
             # Build deposit-first menu with education button
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
