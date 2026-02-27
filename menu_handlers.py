@@ -349,23 +349,29 @@ class MenuCallbackHandler:
 💰 **Apa itu AI Agent?**
 AI Agent adalah autonomous trading agent yang menggunakan Conway credits sebagai bahan bakar untuk beroperasi.
 
-💵 **Minimum Deposit: $30 USDC**
+💵 **Minimum Deposit: $10 USDC**
 ⚠️ **CATATAN PENTING:**
-• $30 BUKAN pure dana trading
-• Termasuk biaya operasional AI Agent
-• Termasuk biaya API untuk trading
-• Termasuk biaya komputasi AI
+$10 USDC ini BUKAN pure dana trading, melainkan *bensin operasional AI Agent* Anda.
+
+🔋 **Penggunaan $10 USDC untuk:**
+• 💻 *Compute Resources:* Server processing untuk AI analysis
+• 🧠 *AI Model Inference:* Biaya running AI decision-making
+• 📊 *Real-time Data:* Akses market data & price feeds
+• 🔄 *API Calls:* Komunikasi dengan exchange & blockchain
+• 📡 *Network Fees:* Gas fees untuk on-chain operations
+• 💾 *Storage:* Menyimpan trading history & analytics
 
 📊 **Status Deposit Anda:**
 💵 Credits saat ini: {user_credits:,.0f}
-🎯 Minimum untuk mulai: 3,000 credits ($30)
+🎯 Minimum untuk mulai: 1,000 credits ($10)
 
 💡 **Rekomendasi Deposit:**
-• $30 USDC: Testing/trial (3,000 credits)
-• $100 USDC: Trading serius (10,000 credits) ⭐ RECOMMENDED
-• $500+ USDC: Trading optimal (50,000+ credits)
+• $10 USDC: Testing/trial (1,000 credits) - Minimum
+• $20 USDC: Learning phase (2,000 credits)
+• $50 USDC: Trading serius (5,000 credits) ⭐ RECOMMENDED
+• $100+ USDC: Trading optimal (10,000+ credits)
 
-⚠️ **Mengapa $100+ Disarankan?**
+⚠️ **Mengapa $50+ Disarankan?**
 • AI butuh resources untuk analisis mendalam
 • API calls untuk data real-time
 • Komputasi untuk decision making
@@ -380,8 +386,8 @@ AI Agent adalah autonomous trading agent yang menggunakan Conway credits sebagai
 
 💱 **Conversion Rate:**
 💵 1 USDC = 100 Conway Credits
-💰 $30 USDC = 3,000 Credits (minimum)
-💰 $100 USDC = 10,000 Credits (recommended)
+💰 $10 USDC = 1,000 Credits (minimum)
+💰 $50 USDC = 5,000 Credits (recommended)
 
 🌐 **Network:**
 ⛓️ Base Network (WAJIB)
@@ -398,16 +404,53 @@ AI Agent adalah autonomous trading agent yang menggunakan Conway credits sebagai
 💰 **What is AI Agent?**
 AI Agent is an autonomous trading agent that uses Conway credits as fuel to operate.
 
-💵 **Minimum Deposit: $30 USDC**
+💵 **Minimum Deposit: $10 USDC**
 ⚠️ **IMPORTANT NOTE:**
-• $30 is NOT pure trading capital
-• Includes AI Agent operational costs
-• Includes API fees for trading
-• Includes AI computation costs
+$10 USDC is NOT pure trading capital, but *operational fuel* for your AI Agent.
+
+🔋 **$10 USDC Usage:**
+• 💻 *Compute Resources:* Server processing for AI analysis
+• 🧠 *AI Model Inference:* Cost of running AI decision-making
+• 📊 *Real-time Data:* Access to market data & price feeds
+• 🔄 *API Calls:* Communication with exchanges & blockchain
+• 📡 *Network Fees:* Gas fees for on-chain operations
+• 💾 *Storage:* Storing trading history & analytics
 
 📊 **Your Deposit Status:**
 💵 Current credits: {user_credits:,.0f}
-🎯 Minimum to start: 3,000 credits ($30)
+🎯 Minimum to start: 1,000 credits ($10)
+
+💡 **Recommended Deposits:**
+• $10 USDC: Testing/trial (1,000 credits) - Minimum
+• $20 USDC: Learning phase (2,000 credits)
+• $50 USDC: Serious trading (5,000 credits) ⭐ RECOMMENDED
+• $100+ USDC: Optimal trading (10,000+ credits)
+
+⚠️ **Why $50+ Recommended?**
+• AI needs resources for deep analysis
+• API calls for real-time data
+• Computation for decision making
+• Buffer for 24/7 operations
+
+📝 **How to Deposit:**
+1. Click "💰 Deposit Now" button below
+2. Deposit USDC (Base Network) to given address
+3. Screenshot transfer proof
+4. Send to admin for verification
+5. Credits will be added manually (< 1 hour)
+
+💱 **Conversion Rate:**
+💵 1 USDC = 100 Conway Credits
+💰 $10 USDC = 1,000 Credits (minimum)
+💰 $50 USDC = 5,000 Credits (recommended)
+
+🌐 **Network:**
+⛓️ Base Network (REQUIRED)
+
+📌 **Notes:**
+• Platform fee: 2% of deposit
+• Operational costs: ~100-500 credits/day
+• Larger capital = more optimal AI performance"""
 
 💡 **Deposit Recommendations:**
 • $30 USDC: Testing/trial (3,000 credits)

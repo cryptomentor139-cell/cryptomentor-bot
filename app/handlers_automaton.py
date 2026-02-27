@@ -154,16 +154,28 @@ async def spawn_agent_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         if user_credits < MINIMUM_DEPOSIT_CREDITS:
             await update.message.reply_text(
                 f"❌ *Deposit Minimum Diperlukan*\n\n"
-                f"Untuk spawn agent, Anda perlu deposit minimal *$30 USDC* (3.000 credits).\n\n"
+                f"Untuk spawn agent, Anda perlu deposit minimal *$10 USDC* (1.000 credits).\n\n"
                 f"💰 Credits Anda saat ini: {user_credits:,.0f}\n"
                 f"💵 Minimum required: {MINIMUM_DEPOSIT_CREDITS:,}\n"
                 f"📊 Kekurangan: {MINIMUM_DEPOSIT_CREDITS - user_credits:,.0f} credits\n\n"
-                f"💡 Cara deposit:\n"
+                f"⚠️ *CATATAN PENTING:*\n"
+                f"$10 USDC ini BUKAN pure dana trading, melainkan *bensin operasional AI Agent* Anda.\n\n"
+                f"🔋 *Penggunaan $10 USDC untuk:*\n"
+                f"• 💻 *Compute Resources:* Server processing untuk AI analysis\n"
+                f"• 🧠 *AI Model Inference:* Biaya running AI decision-making\n"
+                f"• 📊 *Real-time Data:* Akses market data & price feeds\n"
+                f"• 🔄 *API Calls:* Komunikasi dengan exchange & blockchain\n"
+                f"• 📡 *Network Fees:* Gas fees untuk on-chain operations\n"
+                f"• 💾 *Storage:* Menyimpan trading history & analytics\n\n"
+                f"💡 *Cara deposit:*\n"
                 f"1. Gunakan /deposit untuk melihat address\n"
                 f"2. Deposit USDC (Base Network)\n"
                 f"3. 1 USDC = 100 credits\n"
-                f"4. Minimum deposit: $5 USDC\n\n"
-                f"Setelah deposit $30, Anda bisa spawn agent!",
+                f"4. Minimum deposit: $10 USDC\n\n"
+                f"📈 *Rekomendasi:*\n"
+                f"• Deposit $10-20 untuk testing & learning\n"
+                f"• Deposit $50+ untuk serious trading operations\n\n"
+                f"Setelah deposit $10, Anda bisa spawn agent!",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
