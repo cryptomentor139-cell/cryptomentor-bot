@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automaton Control Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .status-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .status-card h3 {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .status-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .main-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .panel h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .command-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .log-container {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .log-entry {
+            padding: 8px;
+            margin-bottom: 5px;
+            border-left: 3px solid #667eea;
+            background: white;
+            border-radius: 4px;
+        }
+        
+        .log-entry.success {
+            border-left-color: #28a745;
+        }
+        
+        .log-entry.error {
+            border-left-color: #dc3545;
+        }
+        
+        .quick-commands {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .quick-btn {
+            padding: 10px;
+            font-size: 14px;
+            background: #f8f9fa;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+        
+        .quick-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        @media (max-width: 768px) {
+            .main-panel {
+                grid-template-columns: 1fr;
+            }
+            
+            .quick-commands {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Automaton Control Panel</h1>
+            <p>Autonomous Research Agent - Bill Jr.</p>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-card">
+                <h3>Status</h3>
+                <div class="value" id="status">Loading...</div>
+            </div>
+            <div class="status-card">
+                <h3>Credits</h3>
+                <div class="value" id="credits">$0.00</div>
+            </div>
+            <div class="status-card">
+                <h3>USDC Balance</h3>
+                <div class="value" id="usdc">0.00</div>
+            </div>
+            <div class="status-card">
+                <h3>Turns</h3>
+                <div class="value" id="turns">0</div>
+            </div>
+        </div>
+        
+        <div class="main-panel">
+            <div class="panel">
+                <h2>📝 Send Command</h2>
+                <div class="command-form">
+                    <textarea id="commandInput" placeholder="Enter your command here...
+Examples:
+- Research the Automaton codebase structure
+- Create a business plan for AI startup
+- Analyze competitor landscape
+- Draft a technical specification"></textarea>
+                    <button onclick="sendCommand()">🚀 Execute Command</button>
+                    
+                    <div class="quick-commands">
+                        <button class="quick-btn" onclick="quickCommand('Check status')">📊 Check Status</button>
+                        <button class="quick-btn" onclick="quickCommand('Check credits')">💰 Check Credits</button>
+                        <button class="quick-btn" onclick="quickCommand('Research Automaton codebase')">🔍 Research Code</button>
+                        <button class="quick-btn" onclick="quickCommand('Create business plan')">📄 Business Plan</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>📋 Activity Log</h2>
+                <div class="log-container" id="logContainer">
+                    <div class="log-entry">
+                        <strong>System:</strong> Control panel ready. Send a command to start.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Update status every 5 seconds
+        setInterval(updateStatus, 5000);
+        updateStatus();
+        
+        async function updateStatus() {
+            try {
+                const response = await fetch('http://localhost:3001/status');
+                const data = await response.json();
+                
+                document.getElementById('status').textContent = data.state || 'Unknown';
+                document.getElementById('credits').textContent = '$' + (data.credits / 100).toFixed(2);
+                document.getElementById('usdc').textContent = data.usdc.toFixed(6);
+                document.getElementById('turns').textContent = data.turns;
+            } catch (error) {
+                console.error('Failed to update status:', error);
+            }
+        }
+        
+        async function sendCommand() {
+            const command = document.getElementById('commandInput').value.trim();
+            if (!command) {
+                addLog('Please enter a command', 'error');
+                return;
+            }
+            
+            addLog('Sending command: ' + command, 'success');
+            
+            try {
+                const response = await fetch('http://localhost:3001/command', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ command })
+                });
+                
+                const data = await response.json();
+                addLog('✅ Command sent! Task ID: ' + data.taskId, 'success');
+                addLog('Automaton will execute within 60 seconds', 'success');
+                
+                document.getElementById('commandInput').value = '';
+            } catch (error) {
+                addLog('❌ Error: ' + error.message, 'error');
+            }
+        }
+        
+        function quickCommand(cmd) {
+            document.getElementById('commandInput').value = cmd;
+            sendCommand();
+        }
+        
+        function addLog(message, type = '') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            entry.innerHTML = '<strong>' + new Date().toLocaleTimeString() + ':</strong> ' + message;
+            logContainer.insertBefore(entry, logContainer.firstChild);
+            
+            // Keep only last 20 entries
+            while (logContainer.children.length > 20) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+        }
+        
+        // Enter key to send
+        document.getElementById('commandInput').addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                sendCommand();
+            }
+        });
+    </script>
+</body>
+</html>
