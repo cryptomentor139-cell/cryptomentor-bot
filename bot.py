@@ -142,17 +142,34 @@ class TelegramBot:
         # Basic command handlers
         self.application.add_handler(CommandHandler("price", self.price_command))
         self.application.add_handler(CommandHandler("market", self.market_command))
-        self.application.add_handler(CommandHandler("analyze", self.analyze_command))
-        self.application.add_handler(CommandHandler("futures", self.futures_command))
-        self.application.add_handler(CommandHandler("futures_signals", self.futures_signals_command))
-        self.application.add_handler(CommandHandler("signal", self.signal_command))
-        self.application.add_handler(CommandHandler("signals", self.signals_command))
         self.application.add_handler(CommandHandler("portfolio", self.portfolio_command))
         self.application.add_handler(CommandHandler("credits", self.credits_command))
         self.application.add_handler(CommandHandler("subscribe", self.subscribe_command))
         self.application.add_handler(CommandHandler("referral", self.referral_command))
         self.application.add_handler(CommandHandler("language", self.language_command))
         self.application.add_handler(CommandHandler("id", self.id_command))
+
+        # Register manual signal handlers (Task 3: Manual Signal Generation Fix)
+        try:
+            from app.handlers_manual_signals import (
+                cmd_analyze, cmd_futures, cmd_futures_signals,
+                cmd_signal, cmd_signals
+            )
+            self.application.add_handler(CommandHandler("analyze", cmd_analyze))
+            self.application.add_handler(CommandHandler("futures", cmd_futures))
+            self.application.add_handler(CommandHandler("futures_signals", cmd_futures_signals))
+            self.application.add_handler(CommandHandler("signal", cmd_signal))
+            self.application.add_handler(CommandHandler("signals", cmd_signals))
+            print("✅ Manual signal handlers registered (with premium check & rate limiting)")
+        except Exception as e:
+            print(f"⚠️ Manual signal handlers failed to register: {e}")
+            # Fallback to old handlers if new ones fail
+            self.application.add_handler(CommandHandler("analyze", self.analyze_command))
+            self.application.add_handler(CommandHandler("futures", self.futures_command))
+            self.application.add_handler(CommandHandler("futures_signals", self.futures_signals_command))
+            self.application.add_handler(CommandHandler("signal", self.signal_command))
+            self.application.add_handler(CommandHandler("signals", self.signals_command))
+            print("⚠️ Using fallback signal handlers")
 
         # Admin command handler
         self.application.add_handler(CommandHandler("admin", self.admin_command))
@@ -416,10 +433,15 @@ Choose an option from the menu below:"""
 • `/portfolio` - Lihat kepemilikan Anda
 • `/credits` - Cek saldo kredit
 
-🧠 **Perintah Analisis (Perlu Kredit):**
-• `/analyze <symbol>` - Analisis spot dengan SnD (20 kredit)
-• `/futures <symbol> <timeframe>` - Analisis futures (20 kredit)
+🧠 **Perintah Generate Sinyal Manual:**
+• `/analyze <symbol>` - Analisis single coin (20 kredit)
+  Contoh: `/analyze BTCUSDT`
+• `/futures <symbol> <timeframe>` - Sinyal futures (20 kredit)
+  Contoh: `/futures ETHUSDT 4h`
 • `/futures_signals` - Sinyal multi-coin (60 kredit)
+  Contoh: `/futures_signals`
+
+👑 **Lifetime Premium:** Semua command GRATIS (tanpa biaya kredit)
 
 🤖 **Cerebras AI Assistant (ULTRA FAST!):**
 • `/ai <symbol>` - Analisis market dengan AI (0.4s response!)
@@ -446,10 +468,15 @@ Choose an option from the menu below:"""
 • `/portfolio` - View your holdings
 • `/credits` - Check credit balance
 
-🧠 **Analysis Commands (Credits Required):**
-• `/analyze <symbol>` - Spot analysis with SnD (20 credits)
-• `/futures <symbol> <timeframe>` - Futures analysis (20 credits)
+🧠 **Manual Signal Generation:**
+• `/analyze <symbol>` - Single coin analysis (20 credits)
+  Example: `/analyze BTCUSDT`
+• `/futures <symbol> <timeframe>` - Futures signal (20 credits)
+  Example: `/futures ETHUSDT 4h`
 • `/futures_signals` - Multi-coin signals (60 credits)
+  Example: `/futures_signals`
+
+👑 **Lifetime Premium:** All commands FREE (no credit charge)
 
 🤖 **Cerebras AI Assistant (ULTRA FAST!):**
 • `/ai <symbol>` - Market analysis with AI (0.4s response!)
