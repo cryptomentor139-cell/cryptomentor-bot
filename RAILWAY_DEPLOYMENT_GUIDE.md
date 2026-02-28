@@ -1,468 +1,341 @@
-# 🚀 Railway Deployment Guide - CryptoMentor Bot
+# Railway Deployment Guide for CryptoMentor Telegram Bot
 
-## ✅ Kenapa Railway?
+## Overview
 
-### Keunggulan Railway:
-- ✅ **Network Bagus** - Bisa akses semua crypto APIs (Binance, CoinGecko, dll)
-- ✅ **Free Tier** - $5 credit gratis per bulan (cukup untuk bot kecil)
-- ✅ **Easy Deploy** - Connect GitHub dan auto-deploy
-- ✅ **Environment Variables** - Mudah manage `.env`
-- ✅ **Logs & Monitoring** - Real-time logs
-- ✅ **Auto Restart** - Jika bot crash, auto restart
-- ✅ **Custom Domain** - Bisa pakai domain sendiri (optional)
+This guide will walk you through deploying the CryptoMentor Telegram Bot to Railway platform. The deployment process involves initializing a Railway project, configuring environment variables, deploying the code, and verifying the bot is working correctly.
 
-### Railway vs Alternatives:
+## Prerequisites
 
-| Platform | Network | Free Tier | Ease | Recommended |
-|----------|---------|-----------|------|-------------|
-| **Railway** | ✅ Excellent | $5/month | ⭐⭐⭐⭐⭐ | ✅ YES |
-| Heroku | ✅ Good | ❌ Paid only | ⭐⭐⭐⭐ | ⚠️ Paid |
-| Replit | ❌ Blocked | ✅ Free | ⭐⭐⭐ | ❌ NO |
-| DigitalOcean | ✅ Excellent | ❌ $4/month | ⭐⭐⭐ | ⚠️ Paid |
-| AWS EC2 | ✅ Excellent | ✅ 12 months | ⭐⭐ | ⚠️ Complex |
+Before starting, ensure you have:
+- ✅ Railway CLI installed (install from: https://docs.railway.app/develop/cli)
+- ✅ Railway account created (sign up at: https://railway.app)
+- ✅ Telegram Bot Token: `8025048597:AAEng-pPhDmTKsiRb1BtJ50P8CC-FamGCb4`
+- ✅ Automaton API URL: `https://automaton-production-a899.up.railway.app`
+- ✅ Automaton API Key: `0d69e61760114de226da6292ed388ef8b9873c30438eb8ceab62e92e33029024`
 
-**Kesimpulan**: Railway adalah pilihan terbaik! 🏆
+## Step 1: Install Railway CLI
 
----
+If you haven't installed the Railway CLI yet:
 
-## 📋 Prerequisites
+### Windows (PowerShell):
+```powershell
+iwr https://railway.app/install.ps1 | iex
+```
 
-### 1. GitHub Account
-- Buat akun di https://github.com jika belum punya
-- Install Git di komputer
-
-### 2. Railway Account
-- Buat akun di https://railway.app
-- Login dengan GitHub (recommended)
-
-### 3. Project Files
-- Pastikan semua file bot sudah siap
-- `.env` file dengan semua API keys
-
----
-
-## 🔧 Step-by-Step Deployment
-
-### Step 1: Prepare Project Files
-
-#### A. Create `requirements.txt`
+### macOS/Linux:
 ```bash
-# Di folder Bismillah
-pip freeze > requirements.txt
+curl -fsSL https://railway.app/install.sh | sh
 ```
 
-Atau buat manual:
-```txt
-python-telegram-bot==20.7
-requests>=2.31.0
-python-dotenv>=1.0.0
-supabase>=2.0.0
-pytz>=2023.3
-aiohttp>=3.9.0
-```
-
-#### B. Create `Procfile`
+### Verify Installation:
 ```bash
-# Di folder Bismillah, buat file bernama "Procfile" (tanpa extension)
-web: python main.py
+railway --version
 ```
 
-#### C. Create `railway.json` (Optional - untuk config)
-```json
-{
-  "$schema": "https://railway.app/railway.schema.json",
-  "build": {
-    "builder": "NIXPACKS"
-  },
-  "deploy": {
-    "startCommand": "python main.py",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
-  }
-}
-```
+## Step 2: Login to Railway
 
-#### D. Create `.gitignore`
-```txt
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-build/
-dist/
-*.egg-info/
-
-# Environment
-.env
-.env.local
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Logs
-*.log
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Temporary files
-*.tmp
-*.bak
-```
-
-### Step 2: Push to GitHub
+Open your terminal in the `cryptomentor-bot` directory and login:
 
 ```bash
-# Di folder Bismillah
-cd Bismillah
-
-# Initialize git (jika belum)
-git init
-
-# Add all files
-git add .
-
-# Commit
-git commit -m "Initial commit - CryptoMentor Bot"
-
-# Create repo di GitHub (via web), lalu:
-git remote add origin https://github.com/YOUR_USERNAME/cryptomentor-bot.git
-git branch -M main
-git push -u origin main
+railway login
 ```
 
-### Step 3: Deploy ke Railway
+This will open your browser for authentication. Complete the login process.
 
-#### A. Login ke Railway
-1. Buka https://railway.app
-2. Login dengan GitHub
-3. Klik "New Project"
+## Step 3: Initialize Railway Project
 
-#### B. Connect GitHub Repo
-1. Pilih "Deploy from GitHub repo"
-2. Pilih repository `cryptomentor-bot`
-3. Klik "Deploy Now"
+### 3.1 Create New Project
 
-#### C. Add Environment Variables
-1. Klik project yang baru dibuat
-2. Klik tab "Variables"
-3. Klik "Raw Editor"
-4. Copy-paste semua dari `.env` file:
-
-```env
-# Telegram Bot
-TELEGRAM_BOT_TOKEN=5888741423:AAEuKYz_wM0eq1j0cyH53xIr-3qRiMLIp-Q
-TOKEN=5888741423:AAEuKYz_wM0eq1j0cyH53xIr-3qRiMLIp-Q
-
-# Admin IDs
-ADMIN1=1187119989
-ADMIN2=7079544380
-ADMIN3=Optional
-
-# StepFun AI Configuration
-DEEPSEEK_API_KEY=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
-DEEPSEEK_BASE_URL=https://openrouter.ai/api/v1
-AI_MODEL=stepfun/step-3.5-flash
-
-# Multi-Source Data Providers
-HELIUS_API_KEY=3b32e914-4a27-417d-8dab-a70a1a9d1e8c
-CRYPTOCOMPARE_API_KEY=44d575a1b1df76144a11214917bd37649345ffc2f8a88aee907671850dd662a9
-
-# Supabase Configuration
-SUPABASE_URL=https://xrbqnocovfymdikngaza.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-
-# Other configs
-WELCOME_CREDITS=100
-SESSION_SECRET=FZ+1sD4r0TLgs7r7vs1bZtPNerUjVDwtdgFM0DQ8TAJcKbs6wwGd6rSSZFdtIYGjsCoG4ANGf6+rdW+0tz6/XA==
-USE_LEGACY_FUTURES_SIGNALS=true
-```
-
-5. Klik "Save"
-
-#### D. Deploy!
-Railway akan otomatis:
-1. Detect Python project
-2. Install dependencies dari `requirements.txt`
-3. Run `python main.py`
-4. Bot akan online! 🎉
-
-### Step 4: Verify Deployment
-
-#### A. Check Logs
-1. Di Railway dashboard, klik tab "Deployments"
-2. Klik deployment yang sedang running
-3. Lihat logs real-time
-
-Expected logs:
-```
-✅ CryptoMentor AI initialized (Provider: OpenRouter, Model: stepfun/step-3.5-flash)
-✅ Bot started successfully
-✅ Polling started
-```
-
-#### B. Test Bot
-```
-/start
-/ai btc
-/price eth
-```
-
-Semua harus bekerja dengan baik!
-
----
-
-## 🔧 Railway Configuration
-
-### Auto-Deploy on Push
-Railway otomatis deploy setiap kali Anda push ke GitHub:
+Run the following command:
 
 ```bash
-# Make changes
-git add .
-git commit -m "Update bot"
-git push
-
-# Railway will auto-deploy! 🚀
+railway init
 ```
 
-### Custom Start Command
-Jika perlu custom command:
-1. Klik "Settings"
-2. Scroll ke "Deploy"
-3. Edit "Start Command": `python main.py`
+When prompted:
+1. **Select**: "Create new project"
+2. **Project Name**: Enter `cryptomentor-telegram-bot`
+3. Press Enter to confirm
 
-### Resource Limits
-Free tier Railway:
-- **Memory**: 512MB - 1GB
-- **CPU**: Shared
-- **Network**: Unlimited
-- **Storage**: 1GB
+### 3.2 Verify Project Creation
 
-Cukup untuk bot Telegram!
-
----
-
-## 💰 Railway Pricing
-
-### Free Tier
-- **$5 credit per bulan** (gratis)
-- Cukup untuk bot kecil-menengah
-- ~500 hours runtime per bulan
-
-### Estimasi Usage
-Bot Telegram 24/7:
-- **CPU**: ~$0.01/hour = ~$7/month
-- **Memory**: ~$0.01/hour = ~$7/month
-- **Total**: ~$14/month
-
-**Dengan $5 free credit**: Bayar ~$9/month
-
-### Tips Hemat:
-1. Optimize code untuk reduce CPU usage
-2. Use caching untuk reduce API calls
-3. Monitor usage di Railway dashboard
-
----
-
-## 🐛 Troubleshooting
-
-### Bot Tidak Start?
-
-#### Check 1: Logs
-```
-Railway Dashboard → Deployments → View Logs
-```
-
-Look for errors:
-- `ModuleNotFoundError` → Missing dependency
-- `KeyError` → Missing environment variable
-- `ConnectionError` → Network issue (rare on Railway)
-
-#### Check 2: Environment Variables
-```
-Railway Dashboard → Variables
-```
-
-Pastikan semua API keys ada dan benar.
-
-#### Check 3: Start Command
-```
-Railway Dashboard → Settings → Deploy → Start Command
-```
-
-Harus: `python main.py`
-
-### Bot Crash Terus?
-
-#### Enable Auto-Restart
-Railway sudah auto-restart by default, tapi bisa di-configure:
-
-```json
-// railway.json
-{
-  "deploy": {
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
-  }
-}
-```
-
-#### Check Memory Usage
-Jika bot crash karena memory:
-1. Optimize code
-2. Reduce cache size
-3. Upgrade Railway plan
-
-### Network Issue?
-
-Railway **TIDAK** memblokir crypto APIs, tapi jika ada issue:
+Check that the project was created:
 
 ```bash
-# Test dari Railway logs
-curl https://api.binance.com/api/v3/ping
-curl https://api.coingecko.com/api/v3/ping
+railway status
 ```
 
-Jika timeout, contact Railway support (rare).
+You should see your project name and details.
 
----
+## Step 4: Configure Environment Variables
 
-## 📊 Monitoring
+Set all required environment variables for the bot:
 
-### Railway Dashboard
-- **Deployments**: History & status
-- **Metrics**: CPU, Memory, Network usage
-- **Logs**: Real-time logs
-- **Variables**: Environment variables
+### 4.1 Set Telegram Bot Token
 
-### Custom Monitoring
-Add logging di bot:
-
-```python
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
-logger = logging.getLogger(__name__)
-
-# Log important events
-logger.info("Bot started")
-logger.info(f"User {user_id} used /ai command")
-logger.error(f"Error: {e}")
-```
-
-Logs akan muncul di Railway dashboard.
-
----
-
-## 🔐 Security Best Practices
-
-### 1. Never Commit `.env`
 ```bash
-# .gitignore
-.env
-.env.local
+railway variables set TELEGRAM_BOT_TOKEN=8025048597:AAEng-pPhDmTKsiRb1BtJ50P8CC-FamGCb4
 ```
 
-### 2. Use Railway Variables
-Jangan hardcode API keys di code!
+### 4.2 Set Automaton API URL
 
-### 3. Rotate API Keys
-Ganti API keys secara berkala:
-1. Generate new key
-2. Update di Railway Variables
-3. Redeploy
+```bash
+railway variables set AUTOMATON_API_URL=https://automaton-production-a899.up.railway.app
+```
 
-### 4. Monitor Logs
-Check logs untuk suspicious activity.
+### 4.3 Set Automaton API Key
+
+```bash
+railway variables set AUTOMATON_API_KEY=0d69e61760114de226da6292ed388ef8b9873c30438eb8ceab62e92e33029024
+```
+
+### 4.4 Set Node Environment
+
+```bash
+railway variables set NODE_ENV=production
+```
+
+### 4.5 Verify All Variables
+
+List all configured variables:
+
+```bash
+railway variables
+```
+
+You should see all 4 variables listed:
+- ✅ TELEGRAM_BOT_TOKEN
+- ✅ AUTOMATON_API_URL
+- ✅ AUTOMATON_API_KEY
+- ✅ NODE_ENV
+
+## Step 5: Deploy to Railway
+
+### 5.1 Deploy the Bot
+
+Run the deployment command:
+
+```bash
+railway up
+```
+
+This will:
+1. Upload your code to Railway
+2. Install dependencies (npm install)
+3. Start the bot using the start script in package.json
+4. Begin polling for Telegram messages
+
+### 5.2 Wait for Deployment
+
+The deployment process typically takes 1-3 minutes. You'll see output showing:
+- ✅ Code upload progress
+- ✅ Build logs
+- ✅ Deployment status
+
+### 5.3 Verify Deployment Success
+
+Once complete, you should see a success message indicating the deployment is live.
+
+## Step 6: Verify Bot is Running
+
+### 6.1 Check Logs
+
+View the bot's logs to confirm it started successfully:
+
+```bash
+railway logs
+```
+
+Look for the following key messages:
+- ✅ `"Bot is ready and listening for messages..."`
+- ✅ `"Scheduled notifications configured for 08:00, 14:00, 20:00 WIB"`
+- ✅ No error messages
+
+### 6.2 Test Bot Commands
+
+Open Telegram and test each command:
+
+#### Test /start Command
+1. Open your bot in Telegram
+2. Send: `/start`
+3. Expected response: Welcome message with credit balance
+4. ✅ Verify you receive a greeting with credits displayed
+
+#### Test /help Command
+1. Send: `/help`
+2. Expected response: List of all available commands with descriptions
+3. ✅ Verify all commands are listed (/start, /status, /help, /talk)
+
+#### Test /status Command
+1. Send: `/status`
+2. Expected response: Your current status including:
+   - Credit balance
+   - Conversation count
+   - Last activity time
+3. ✅ Verify status information is displayed correctly
+
+#### Test /talk Command
+1. Send: `/talk Hello, how are you?`
+2. Expected response: 
+   - Typing indicator appears
+   - AI-generated response from Automaton
+3. ✅ Verify you receive an AI response
+
+## Step 7: Monitor Deployment
+
+### 7.1 View Real-Time Logs
+
+Keep logs running to monitor bot activity:
+
+```bash
+railway logs --follow
+```
+
+This will show real-time logs as users interact with the bot.
+
+### 7.2 Check Railway Dashboard
+
+Visit the Railway dashboard to:
+1. Go to: https://railway.app/dashboard
+2. Select your `cryptomentor-telegram-bot` project
+3. View:
+   - Deployment status
+   - Resource usage (CPU, Memory)
+   - Environment variables
+   - Logs
+
+## Troubleshooting
+
+### Issue: Bot Not Responding
+
+**Symptoms**: Bot doesn't reply to commands
+
+**Solutions**:
+1. Check logs for errors: `railway logs`
+2. Verify environment variables: `railway variables`
+3. Ensure bot token is correct
+4. Check Automaton API is accessible
+
+### Issue: "Bot is ready" Message Not Appearing
+
+**Symptoms**: Logs don't show initialization message
+
+**Solutions**:
+1. Check for startup errors in logs
+2. Verify all dependencies installed correctly
+3. Restart deployment: `railway up --detach`
+
+### Issue: API Connection Errors
+
+**Symptoms**: Errors mentioning Automaton API in logs
+
+**Solutions**:
+1. Verify AUTOMATON_API_URL is correct
+2. Verify AUTOMATON_API_KEY is correct
+3. Check Automaton API is running: Visit the URL in browser
+4. Check network connectivity from Railway
+
+### Issue: Scheduled Notifications Not Sending
+
+**Symptoms**: No notifications at 08:00, 14:00, 20:00 WIB
+
+**Solutions**:
+1. Check logs at scheduled times
+2. Verify timezone is set to Asia/Jakarta in code
+3. Ensure bot has active users registered
+4. Check notification API endpoint is working
+
+## Scheduled Notifications
+
+The bot will automatically send notifications at:
+- 🌅 **08:00 WIB** (01:00 UTC) - Morning update
+- 🌤️ **14:00 WIB** (07:00 UTC) - Afternoon update
+- 🌙 **20:00 WIB** (13:00 UTC) - Evening update
+
+These notifications are sent to all active users who have started the bot.
+
+## Useful Railway Commands
+
+```bash
+# View project status
+railway status
+
+# View environment variables
+railway variables
+
+# Set a variable
+railway variables set KEY=value
+
+# Delete a variable
+railway variables delete KEY
+
+# View logs
+railway logs
+
+# Follow logs in real-time
+railway logs --follow
+
+# Redeploy
+railway up
+
+# Open project in dashboard
+railway open
+
+# Link to different project
+railway link
+
+# Unlink from project
+railway unlink
+```
+
+## Next Steps
+
+After successful deployment:
+
+1. ✅ **Share Bot**: Share your bot username with users
+2. ✅ **Monitor Usage**: Check logs regularly for errors
+3. ✅ **Test Notifications**: Wait for scheduled notification times to verify delivery
+4. ✅ **Monitor Credits**: Ensure Automaton API credit system is working
+5. ✅ **Scale if Needed**: Upgrade Railway plan if you exceed free tier limits
+
+## Support
+
+If you encounter issues:
+- Check Railway documentation: https://docs.railway.app
+- Review bot logs: `railway logs`
+- Check Automaton API status
+- Verify all environment variables are set correctly
+
+## Deployment Checklist
+
+Use this checklist to ensure everything is configured correctly:
+
+- [ ] Railway CLI installed and logged in
+- [ ] Railway project created: `cryptomentor-telegram-bot`
+- [ ] TELEGRAM_BOT_TOKEN environment variable set
+- [ ] AUTOMATON_API_URL environment variable set
+- [ ] AUTOMATON_API_KEY environment variable set
+- [ ] NODE_ENV environment variable set to `production`
+- [ ] Code deployed with `railway up`
+- [ ] Logs show "Bot is ready" message
+- [ ] /start command works
+- [ ] /help command works
+- [ ] /status command works
+- [ ] /talk command works and returns AI responses
+- [ ] No errors in Railway logs
+- [ ] Bot responds within 2 seconds
+
+## Success Criteria
+
+Your deployment is successful when:
+✅ Bot responds to all commands (/start, /help, /status, /talk)
+✅ Users can register and receive welcome messages with credits
+✅ AI conversations work through /talk command
+✅ No errors appear in Railway logs
+✅ Bot remains online and responsive
 
 ---
 
-## 🚀 Advanced: Custom Domain
-
-### Add Custom Domain (Optional)
-1. Railway Dashboard → Settings → Domains
-2. Klik "Add Domain"
-3. Enter domain: `bot.yourdomain.com`
-4. Add CNAME record di DNS provider:
-   ```
-   CNAME bot.yourdomain.com → your-app.railway.app
-   ```
-
-Bot akan accessible via custom domain!
-
----
-
-## 📝 Deployment Checklist
-
-### Pre-Deployment:
-- [ ] `requirements.txt` created
-- [ ] `Procfile` created
-- [ ] `.gitignore` configured
-- [ ] All API keys ready
-- [ ] Code tested locally
-
-### Deployment:
-- [ ] GitHub repo created
-- [ ] Code pushed to GitHub
-- [ ] Railway project created
-- [ ] GitHub repo connected
-- [ ] Environment variables added
-- [ ] Deployment successful
-
-### Post-Deployment:
-- [ ] Bot responds to `/start`
-- [ ] `/ai btc` works
-- [ ] `/price eth` works
-- [ ] Logs look good
-- [ ] No errors in Railway dashboard
-
----
-
-## 🎉 Summary
-
-**Railway adalah pilihan TERBAIK untuk deploy bot crypto!**
-
-### Keunggulan:
-- ✅ Network bagus (bisa akses semua crypto APIs)
-- ✅ Easy deployment (connect GitHub & done)
-- ✅ Free tier ($5/month credit)
-- ✅ Auto-deploy on push
-- ✅ Real-time logs & monitoring
-- ✅ Auto-restart on failure
-
-### Expected Results:
-- ⚡ Bot online 24/7
-- ✅ Semua fitur bekerja (AI, SnD, Price, dll)
-- 📊 Real-time monitoring
-- 🔄 Auto-deploy on updates
-
-**Total setup time: ~15 menit**
-**Monthly cost: ~$9 (setelah $5 free credit)**
-
----
-
-**Date**: 2026-02-15
-**Status**: ✅ READY TO DEPLOY
-**Recommended**: Railway.app 🏆
-
-**Happy Deploying! 🚀**
+**Deployment Date**: _To be filled after deployment_
+**Bot Username**: _Your bot's @username_
+**Railway Project URL**: _Your Railway dashboard URL_

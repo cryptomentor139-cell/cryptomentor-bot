@@ -1,339 +1,340 @@
-# Manual Deposit System - Deployment Checklist
+# 🚀 CryptoMentor Bot Deployment Checklist
 
-## Pre-Deployment Checklist ✅
+## Pre-Deployment
 
-### Code Changes
-- [x] Admin credit commands created (`app/handlers_admin_credits.py`)
-- [x] Admin commands registered in `bot.py`
-- [x] Deposit flow updated in `menu_handlers.py`
-- [x] "Kirim Bukti Transfer" button added
-- [x] Deposit guide updated with manual verification steps
-- [x] Auto-detection references removed
+- [ ] Railway CLI installed
+- [ ] Railway account created
+- [ ] Logged into Railway (`railway login`)
+- [ ] In `cryptomentor-bot` directory
+- [ ] Bot token ready: `8025048597:AAEng-pPhDmTKsiRb1BtJ50P8CC-FamGCb4`
 
-### Documentation
-- [x] `MANUAL_DEPOSIT_SYSTEM.md` - Technical reference
-- [x] `DEPLOY_MANUAL_DEPOSIT.md` - Deployment guide
-- [x] `ADMIN_CREDIT_GUIDE.md` - Admin usage guide
-- [x] `MANUAL_DEPOSIT_COMPLETE.md` - Implementation summary
-- [x] `test_manual_deposit.py` - Test suite
-- [x] `DEPLOYMENT_CHECKLIST.md` - This checklist
-
-### Testing
-- [x] Code compiles without errors
-- [x] Imports work correctly
-- [x] Deposit flow handlers exist
-- [x] Admin commands defined
-
-## Deployment Steps
-
-### 1. Commit Changes
-```bash
-cd Bismillah
-git add .
-git commit -m "feat: implement manual deposit verification system
-
-- Add admin credit management commands
-- Update deposit flow for manual verification  
-- Add 'Send Transfer Proof' button
-- Update deposit guide with manual steps
-- Remove auto-detection references
-
-Closes: Manual deposit verification requirement"
-
-git push origin main
-```
-
-### 2. Monitor Railway Deployment
-- [ ] Check Railway dashboard for deployment status
-- [ ] Wait for build to complete
-- [ ] Check deployment logs
-
-### 3. Verify Bot Startup
-Look for these messages in Railway logs:
-- [ ] `✅ Bot initialized`
-- [ ] `✅ Admin credits handlers registered`
-- [ ] `✅ Application handlers registered successfully`
-
-## Post-Deployment Testing
-
-### Test 1: Admin Commands Registration
-**Expected**: Commands should be available
+## Step 1: Initialize Railway Project
 
 ```bash
-# In Telegram as admin:
-/admin_add_credits
+railway init
 ```
 
-**Expected Response**: Format instructions
+- [ ] Command executed
+- [ ] Selected "Create new project"
+- [ ] Named project: `cryptomentor-telegram-bot`
+- [ ] Project created successfully
 
-**Status**: [ ] Pass [ ] Fail
+**Verify**: Run `railway status` - should show project name
 
 ---
 
-### Test 2: Check Credits Command
-**Expected**: Should show user info and credits
+## Step 2: Configure Environment Variables
 
+### Set TELEGRAM_BOT_TOKEN
 ```bash
-# In Telegram as admin:
-/admin_check_credits YOUR_USER_ID
+railway variables set TELEGRAM_BOT_TOKEN=8025048597:AAEng-pPhDmTKsiRb1BtJ50P8CC-FamGCb4
 ```
+- [ ] Command executed
+- [ ] Success message received
 
-**Expected Response**: User info with credit balance
+### Set AUTOMATON_API_URL
+```bash
+railway variables set AUTOMATON_API_URL=https://automaton-production-a899.up.railway.app
+```
+- [ ] Command executed
+- [ ] Success message received
 
-**Status**: [ ] Pass [ ] Fail
+### Set AUTOMATON_API_KEY
+```bash
+railway variables set AUTOMATON_API_KEY=0d69e61760114de226da6292ed388ef8b9873c30438eb8ceab62e92e33029024
+```
+- [ ] Command executed
+- [ ] Success message received
+
+### Set NODE_ENV
+```bash
+railway variables set NODE_ENV=production
+```
+- [ ] Command executed
+- [ ] Success message received
+
+### Verify All Variables
+```bash
+railway variables
+```
+- [ ] TELEGRAM_BOT_TOKEN listed
+- [ ] AUTOMATON_API_URL listed
+- [ ] AUTOMATON_API_KEY listed
+- [ ] NODE_ENV listed
+- [ ] All 4 variables present
 
 ---
 
-### Test 3: Add Credits Command
-**Expected**: Should add credits and notify user
+## Step 3: Deploy to Railway
 
 ```bash
-# In Telegram as admin:
-/admin_add_credits YOUR_USER_ID 3000 Test deposit
+railway up
 ```
 
-**Expected Response**: 
-- Admin sees success message
-- User receives notification
+- [ ] Command executed
+- [ ] Code uploaded
+- [ ] Build started
+- [ ] Dependencies installed
+- [ ] Deployment completed
+- [ ] Success message received
 
-**Status**: [ ] Pass [ ] Fail
+**Expected time**: 1-3 minutes
 
 ---
 
-### Test 4: User Deposit Flow
-**Expected**: User sees deposit instructions
+## Step 4: Verify Deployment
 
+### Check Logs
 ```bash
-# In Telegram as regular user:
-1. Go to main menu
-2. Click "🤖 AI Agent"
-3. Click "💰 Deposit Sekarang"
+railway logs
 ```
 
-**Expected**:
-- [ ] Wallet address shown
-- [ ] QR code link shown
-- [ ] "📤 Kirim Bukti Transfer" button visible
-- [ ] "❓ Cara Deposit" button visible
+Look for these messages:
+- [ ] "Bot is ready and listening for messages..."
+- [ ] "Scheduled notifications configured for 08:00, 14:00, 20:00 WIB"
+- [ ] No error messages
 
-**Status**: [ ] Pass [ ] Fail
+### Follow Logs (Optional)
+```bash
+railway logs --follow
+```
+- [ ] Real-time logs displaying
+- [ ] No errors appearing
 
 ---
 
-### Test 5: Send Proof Button
-**Expected**: Opens chat with admin
+## Step 5: Test Bot in Telegram
 
-```bash
-# In Telegram as regular user:
-1. In deposit screen
-2. Click "📤 Kirim Bukti Transfer ke Admin"
-```
+### Test /start Command
+1. Open Telegram
+2. Find your bot
+3. Send: `/start`
 
-**Expected**: Opens Telegram chat with admin
+- [ ] Bot responds
+- [ ] Welcome message received
+- [ ] Credits displayed (e.g., "1000 free credits")
+- [ ] Response time < 2 seconds
 
-**Status**: [ ] Pass [ ] Fail
+### Test /help Command
+Send: `/help`
 
----
+- [ ] Bot responds
+- [ ] All commands listed:
+  - [ ] /start
+  - [ ] /status
+  - [ ] /help
+  - [ ] /talk
+- [ ] Descriptions provided
+- [ ] Examples shown
 
-### Test 6: Deposit Guide
-**Expected**: Shows manual verification instructions
+### Test /status Command
+Send: `/status`
 
-```bash
-# In Telegram as regular user:
-1. In deposit screen
-2. Click "❓ Cara Deposit"
-```
+- [ ] Bot responds
+- [ ] Credit balance shown
+- [ ] Conversation count shown
+- [ ] Last activity time shown
+- [ ] Information formatted correctly
 
-**Expected**:
-- [ ] Shows manual verification steps
-- [ ] Mentions sending proof to admin
-- [ ] Shows User ID in instructions
-- [ ] Shows $30 minimum requirement
+### Test /talk Command
+Send: `/talk Hello, how are you?`
 
-**Status**: [ ] Pass [ ] Fail
-
----
-
-### Test 7: User Notification
-**Expected**: User receives notification when credits added
-
-```bash
-# As admin:
-/admin_add_credits USER_ID 3000 Test notification
-
-# As user:
-# Check for notification message
-```
-
-**Expected**: User receives message with:
-- [ ] Credits added amount
-- [ ] New balance
-- [ ] Note from admin
-- [ ] Instructions to spawn agent
-
-**Status**: [ ] Pass [ ] Fail
+- [ ] Typing indicator appears
+- [ ] Bot responds with AI message
+- [ ] Response is relevant
+- [ ] Response time reasonable (< 30 seconds)
 
 ---
 
-### Test 8: Credit Balance Check
-**Expected**: User can check their balance
+## Step 6: Verify Scheduled Notifications
 
-```bash
-# In Telegram as user:
-/balance
-```
+**Note**: This requires waiting for scheduled times
 
-**Expected**: Shows credit balance
+### Morning Notification (08:00 WIB / 01:00 UTC)
+- [ ] Notification received at correct time
+- [ ] Content is relevant
+- [ ] All registered users received it
 
-**Status**: [ ] Pass [ ] Fail
+### Afternoon Notification (14:00 WIB / 07:00 UTC)
+- [ ] Notification received at correct time
+- [ ] Content is relevant
+- [ ] All registered users received it
 
----
-
-### Test 9: Spawn Agent with Credits
-**Expected**: User can spawn agent after $30 deposit
-
-```bash
-# As admin, add $30 worth of credits:
-/admin_add_credits USER_ID 3000 Test spawn
-
-# As user:
-/spawn_agent TestBot
-```
-
-**Expected**: 
-- [ ] Agent spawns successfully
-- [ ] No "minimum deposit" error
-
-**Status**: [ ] Pass [ ] Fail
+### Evening Notification (20:00 WIB / 13:00 UTC)
+- [ ] Notification received at correct time
+- [ ] Content is relevant
+- [ ] All registered users received it
 
 ---
 
-### Test 10: Database Logging
-**Expected**: Transactions are logged
+## Step 7: Monitor and Maintain
 
+### Check Railway Dashboard
+Visit: https://railway.app/dashboard
+
+- [ ] Project visible
+- [ ] Status: Running
+- [ ] No errors
+- [ ] Resource usage normal (< 512MB RAM)
+
+### Monitor Logs Regularly
 ```bash
-# Check Supabase:
-1. Go to Supabase dashboard
-2. Open credit_transactions table
-3. Look for recent entries
+railway logs --tail 100
 ```
 
-**Expected**:
-- [ ] Transaction logged
-- [ ] Admin ID recorded
-- [ ] Amount correct
-- [ ] Description included
+- [ ] No recurring errors
+- [ ] User interactions logged
+- [ ] API calls successful
 
-**Status**: [ ] Pass [ ] Fail
+### Performance Checks
+- [ ] Bot responds within 2 seconds
+- [ ] No timeout errors
+- [ ] Memory usage stable
+- [ ] No crash/restart loops
 
 ---
 
-## Rollback Plan
+## Troubleshooting
 
-If critical issues found:
+### If Bot Doesn't Respond
 
-### Option 1: Quick Fix
+1. Check logs:
 ```bash
-# Fix the issue
-git add .
-git commit -m "fix: [description]"
-git push origin main
+railway logs
 ```
+- [ ] Logs checked
+- [ ] Error identified (if any)
 
-### Option 2: Revert
+2. Verify variables:
 ```bash
-# Revert to previous commit
-git revert HEAD
-git push origin main
+railway variables
 ```
+- [ ] All 4 variables present
+- [ ] Values correct
 
-### Option 3: Full Rollback
+3. Restart deployment:
 ```bash
-# Reset to previous working commit
-git reset --hard <previous-commit-hash>
-git push origin main --force
+railway up
 ```
+- [ ] Redeployed
+- [ ] Issue resolved
+
+### If API Errors Occur
+
+1. Test Automaton API:
+   - Visit: https://automaton-production-a899.up.railway.app
+   - [ ] API is accessible
+
+2. Check API key:
+   - [ ] AUTOMATON_API_KEY is correct
+   - [ ] No typos in environment variable
+
+3. Check logs for specific error:
+```bash
+railway logs | grep -i error
+```
+- [ ] Error identified
+- [ ] Solution applied
+
+---
 
 ## Success Criteria
 
-All tests must pass:
-- [ ] Admin commands work
-- [ ] User deposit flow works
-- [ ] "Send Proof" button works
-- [ ] Deposit guide shows correct info
-- [ ] User notifications work
-- [ ] Credits are tracked in database
-- [ ] Users can spawn agent after deposit
+Your deployment is successful when ALL of these are true:
 
-## Known Issues
+- ✅ Bot responds to /start command
+- ✅ Bot responds to /help command
+- ✅ Bot responds to /status command
+- ✅ Bot responds to /talk command with AI responses
+- ✅ Users can register and receive welcome messages
+- ✅ Credits are displayed correctly
+- ✅ No errors in Railway logs
+- ✅ Bot remains online continuously
+- ✅ Response time < 2 seconds for commands
+- ✅ Scheduled notifications send at correct times
 
-None currently. Document any issues found during testing:
-
-1. Issue: 
-   - Description:
-   - Severity: [ ] Critical [ ] High [ ] Medium [ ] Low
-   - Workaround:
-   - Fix:
-
-## Support Contacts
-
-- **Admin**: Check ADMIN_IDS in Railway environment
-- **Database**: Supabase dashboard
-- **Logs**: Railway deployment logs
-- **Code**: GitHub repository
+---
 
 ## Post-Deployment Tasks
 
-After successful deployment:
-
-- [ ] Update users about new deposit process
-- [ ] Monitor for deposit requests
-- [ ] Respond to deposit proofs within 1 hour
-- [ ] Keep transaction records
-- [ ] Monitor Railway logs for errors
-
-## Monitoring
-
-### Daily Checks:
-- [ ] Check Railway logs for errors
-- [ ] Check for pending deposit requests
-- [ ] Verify bot is responding
-- [ ] Check database connection
-
-### Weekly Checks:
-- [ ] Review credit transactions
-- [ ] Check for unusual patterns
-- [ ] Verify all deposits processed
-- [ ] Update documentation if needed
-
-## Documentation Links
-
-- Technical Reference: `MANUAL_DEPOSIT_SYSTEM.md`
-- Admin Guide: `ADMIN_CREDIT_GUIDE.md`
-- Deployment Guide: `DEPLOY_MANUAL_DEPOSIT.md`
-- Implementation Summary: `MANUAL_DEPOSIT_COMPLETE.md`
-
-## Notes
-
-Add any additional notes during deployment:
+- [ ] Share bot username with users
+- [ ] Document bot username: `@_______________`
+- [ ] Set up monitoring alerts (optional)
+- [ ] Create user documentation
+- [ ] Plan for scaling if needed
+- [ ] Schedule regular maintenance checks
 
 ---
 
-**Deployment Date**: _____________
-**Deployed By**: _____________
-**Railway Deployment ID**: _____________
-**Status**: [ ] Success [ ] Failed [ ] Rolled Back
+## Quick Reference
+
+### Essential Commands
+```bash
+# View status
+railway status
+
+# View logs
+railway logs
+
+# Follow logs
+railway logs --follow
+
+# List variables
+railway variables
+
+# Redeploy
+railway up
+
+# Open dashboard
+railway open
+```
+
+### Bot Commands (in Telegram)
+- `/start` - Register and get welcome
+- `/help` - View all commands
+- `/status` - Check credits and stats
+- `/talk <message>` - Chat with AI
 
 ---
 
-## Final Sign-Off
+## Support
 
-- [ ] All pre-deployment checks passed
-- [ ] Code deployed successfully
-- [ ] All post-deployment tests passed
-- [ ] Documentation updated
-- [ ] Team notified
-- [ ] Monitoring in place
+If you encounter issues:
 
-**Signed**: _____________
-**Date**: _____________
+1. **Check Documentation**:
+   - `RAILWAY_DEPLOYMENT_GUIDE.md` - Full guide
+   - `DEPLOYMENT_COMMANDS.md` - Quick commands
+   - `PHASE_7_DEPLOYMENT_COMPLETE.md` - Summary
+
+2. **Check Logs**:
+   ```bash
+   railway logs --tail 100
+   ```
+
+3. **Verify Configuration**:
+   ```bash
+   railway variables
+   railway status
+   ```
+
+4. **Railway Documentation**:
+   - https://docs.railway.app
+
+---
+
+## Completion
+
+**Deployment Date**: _______________
+**Bot Username**: @_______________
+**Railway Project URL**: _______________
+**Deployed By**: _______________
+
+**Status**: 
+- [ ] Deployment Complete
+- [ ] All Tests Passed
+- [ ] Bot Live and Operational
+- [ ] Users Can Access Bot
+
+---
+
+**🎉 Congratulations! Your CryptoMentor Telegram Bot is now live on Railway!**
