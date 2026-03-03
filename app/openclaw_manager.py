@@ -65,6 +65,32 @@ class OpenClawManager:
         else:
             raise ValueError("Neither OPENCLAW_API_KEY nor DEEPSEEK_API_KEY found in environment")
     
+    def _is_admin(self, user_id: int) -> bool:
+        """
+        Check if user is admin
+        
+        Args:
+            user_id: Telegram user ID
+            
+        Returns:
+            True if user is admin, False otherwise
+        """
+        # Get admin IDs from environment
+        admin_ids = set()
+        for key in ['ADMIN1', 'ADMIN2', 'ADMIN3', 'ADMIN_IDS']:
+            value = os.getenv(key)
+            if value:
+                try:
+                    if ',' in value:
+                        # Handle comma-separated list
+                        admin_ids.update(int(aid.strip()) for aid in value.split(',') if aid.strip())
+                    else:
+                        admin_ids.add(int(value))
+                except ValueError:
+                    continue
+        
+        return user_id in admin_ids
+    
     def create_assistant(
         self,
         user_id: int,
@@ -234,12 +260,28 @@ class OpenClawManager:
             # Calculate cost in credits
             credits_cost = self._calculate_credits_cost(input_tokens, output_tokens)
             
-            # Check user has sufficient credits
-            user_credits = self._get_user_credits(user_id)
-            if user_credits < credits_cost:
-                raise ValueError(
-                    f"Insufficient credits. Balance: {user_credits}, Required: {credits_cost}"
+            # Check if user is admin
+            is_admin = self._is_admin(user_id)
+            
+            if not is_admin:
+                # Regular user: check and deduct credits
+                user_credits = self._get_user_credits(user_id)
+                if user_credits < credits_cost:
+                    raise ValueError(
+                        f"Insufficient credits. Balance: {user_credits}, Required: {credits_cost}"
+                    )
+                
+                # Deduct credits for regular users
+                self._deduct_credits(
+                    user_id=user_id,
+                    credits=credits_cost,
+                    conversation_id=conversation_id,
+                    description=f"Chat with {assistant['name']}: {input_tokens}+{output_tokens} tokens"
                 )
+            else:
+                # Admin: no credit check/deduction
+                logger.info(f"Admin {user_id} using OpenClaw (no charge)")
+                credits_cost = 0  # Show 0 cost for admin
             
             # Save user message
             self._save_message(
@@ -259,14 +301,6 @@ class OpenClawManager:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 credits_cost=credits_cost
-            )
-            
-            # Deduct credits
-            self._deduct_credits(
-                user_id=user_id,
-                credits=credits_cost,
-                conversation_id=conversation_id,
-                description=f"Chat with {assistant['name']}: {input_tokens}+{output_tokens} tokens"
             )
             
             # Update conversation stats

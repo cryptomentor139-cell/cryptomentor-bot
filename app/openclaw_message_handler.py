@@ -59,7 +59,10 @@ class OpenClawMessageHandler:
             # Check user credits
             user_credits = self.manager.get_user_credits(user_id)
             
-            if user_credits < 1:
+            # Check if user is admin
+            is_admin = self.manager._is_admin(user_id)
+            
+            if not is_admin and user_credits < 1:
                 await update.message.reply_text(
                     "❌ **Insufficient Credits**\n\n"
                     "You need credits to chat with your AI Assistant.\n\n"
@@ -84,8 +87,14 @@ class OpenClawMessageHandler:
                 session['conversation_id'] = self._get_latest_conversation_id(user_id, assistant_id)
                 self._save_session(user_id, session, context)
             
+            # Check if user is admin
+            is_admin = self.manager._is_admin(user_id)
+            
             # Format response with token/credit info
-            footer = f"\n\n💬 {input_tokens + output_tokens} tokens • 💰 {credits_cost} credits • Balance: {user_credits - credits_cost}"
+            if is_admin:
+                footer = f"\n\n💬 {input_tokens + output_tokens} tokens • 👑 Admin (Free)"
+            else:
+                footer = f"\n\n💬 {input_tokens + output_tokens} tokens • 💰 {credits_cost} credits • Balance: {user_credits - credits_cost}"
             
             # Split long responses if needed
             if len(response) + len(footer) > 4000:
@@ -313,6 +322,9 @@ async def openclaw_create_command(update: Update, context: ContextTypes.DEFAULT_
     db = get_database()
     manager = get_openclaw_manager(db)
     
+    # Check if user is admin
+    is_admin = manager._is_admin(user_id)
+    
     try:
         assistant = manager.create_assistant(
             user_id=user_id,
@@ -320,15 +332,26 @@ async def openclaw_create_command(update: Update, context: ContextTypes.DEFAULT_
             personality=personality
         )
         
-        await update.message.reply_text(
-            f"✅ **AI Assistant Created!**\n\n"
-            f"🤖 Name: {assistant['name']}\n"
-            f"🎭 Personality: {assistant['personality']}\n"
-            f"🆔 ID: `{assistant['assistant_id']}`\n\n"
-            f"💬 Start chatting: /openclaw_start\n"
-            f"💰 Buy credits: /openclaw_buy",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        if is_admin:
+            await update.message.reply_text(
+                f"✅ **AI Assistant Created!**\n\n"
+                f"🤖 Name: {assistant['name']}\n"
+                f"🎭 Personality: {assistant['personality']}\n"
+                f"🆔 ID: `{assistant['assistant_id']}`\n"
+                f"👑 **Admin Mode: Unlimited Access**\n\n"
+                f"💬 Start chatting: /openclaw_start",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await update.message.reply_text(
+                f"✅ **AI Assistant Created!**\n\n"
+                f"🤖 Name: {assistant['name']}\n"
+                f"🎭 Personality: {assistant['personality']}\n"
+                f"🆔 ID: `{assistant['assistant_id']}`\n\n"
+                f"💬 Start chatting: /openclaw_start\n"
+                f"💰 Buy credits: /openclaw_buy",
+                parse_mode=ParseMode.MARKDOWN
+            )
     except Exception as e:
         await update.message.reply_text(
             f"❌ **Error**: {str(e)}",
