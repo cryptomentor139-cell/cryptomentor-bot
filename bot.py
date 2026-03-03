@@ -134,6 +134,23 @@ class TelegramBot:
         
         # Clear all pending user states on bot restart
         await self.clear_all_user_states()
+        
+        # Auto-migrate OpenClaw tables if needed
+        try:
+            from services import get_database
+            from app.openclaw_auto_migrate import auto_migrate_openclaw
+            
+            print("🔍 Checking OpenClaw database...")
+            db = get_database()
+            migrated = auto_migrate_openclaw(db)
+            
+            if migrated:
+                print("✅ OpenClaw tables created successfully!")
+            else:
+                print("✅ OpenClaw tables already exist")
+        except Exception as e:
+            print(f"⚠️ OpenClaw auto-migration skipped: {e}")
+            print("   OpenClaw features may not work until migration is run")
 
         # Register core command handlers
         self.application.add_handler(CommandHandler("start", self.start_command))
