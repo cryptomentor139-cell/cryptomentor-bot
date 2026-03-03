@@ -1,12 +1,13 @@
 """
-OpenClaw Message Handler - Seamless AI Assistant Chat
+OpenClaw Message Handler - Seamless AI Assistant Chat (DEFAULT MODE)
 
 User bisa langsung ngetik apa saja tanpa command khusus.
-Bot akan otomatis detect apakah user sedang dalam mode OpenClaw atau tidak.
+Bot akan otomatis create OpenClaw session untuk semua user.
 """
 
 import logging
 from typing import Optional
+from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode, ChatAction
@@ -32,7 +33,7 @@ class OpenClawMessageHandler:
         context: ContextTypes.DEFAULT_TYPE
     ) -> bool:
         """
-        Handle incoming message - check if user is in OpenClaw mode
+        Handle incoming message - AUTO-CREATE OpenClaw session if needed (DEFAULT MODE)
         
         Returns:
             True if message was handled by OpenClaw, False otherwise
@@ -45,8 +46,23 @@ class OpenClawMessageHandler:
         session = self._get_active_session(user_id, context)
         
         if not session:
-            # User not in OpenClaw mode
-            return False
+            # AUTO-CREATE OpenClaw session (DEFAULT MODE)
+            # Get or create default assistant for user
+            assistant_id = self.manager.get_or_create_assistant(user_id)
+            
+            if not assistant_id:
+                logger.error(f"Failed to create assistant for user {user_id}")
+                return False
+            
+            # Create new session
+            session = {
+                'assistant_id': assistant_id,
+                'conversation_id': None,
+                'created_at': datetime.now().isoformat()
+            }
+            self._save_session(user_id, session, context)
+            
+            logger.info(f"✅ Auto-created OpenClaw session for user {user_id}")
         
         # User is in OpenClaw mode - handle with AI Assistant
         try:

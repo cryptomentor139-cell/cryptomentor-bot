@@ -2937,7 +2937,7 @@ Choose action:
             )
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle text messages for menu interactions"""
+        """Handle text messages - DEFAULT: Route to OpenClaw AI Assistant"""
         # CRITICAL: Store user's chat_id for autosignal delivery (on any interaction)
         if update.effective_user and update.effective_chat:
             from app.chat_store import remember_chat
@@ -2958,7 +2958,7 @@ Choose action:
         except Exception as e:
             logger.debug(f"Admin handler skipped: {e}")
         
-        # PRIORITY 1: Check if user is in OpenClaw mode (seamless AI chat with autonomous agent)
+        # PRIORITY 1: DEFAULT MODE - Route ALL messages to OpenClaw AI Assistant
         try:
             from services import get_database
             from app.openclaw_manager import get_openclaw_manager
@@ -2977,14 +2977,20 @@ Choose action:
             openclaw_handler = get_openclaw_message_handler(openclaw_manager)
             openclaw_handler.agentic_loop = agentic_loop  # Inject agentic loop
             
-            # Try to handle with OpenClaw
+            # Handle with OpenClaw (will auto-create session if needed)
             handled = await openclaw_handler.handle_message(update, context)
             if handled:
                 # Message was handled by OpenClaw AI Assistant (with autonomous capabilities)
                 return
         except Exception as e:
-            # OpenClaw not available or error - continue with normal flow
-            logger.debug(f"OpenClaw handler skipped: {e}")
+            # OpenClaw error - show error to user
+            logger.error(f"OpenClaw handler error: {e}")
+            await update.message.reply_text(
+                "❌ OpenClaw AI Assistant temporarily unavailable.\n\n"
+                "Please try again or use /menu for other features.",
+                parse_mode=None
+            )
+            return
         
         user_data = context.user_data
         text = update.message.text
