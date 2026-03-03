@@ -1,0 +1,6 @@
+# Trigger Railway Deploy
+
+This file is created to trigger Railway auto-deploy after GitHub connection.
+
+Timestamp: 2026-03-03
+Purpose: Force Railway to pull latest code from GitHub
