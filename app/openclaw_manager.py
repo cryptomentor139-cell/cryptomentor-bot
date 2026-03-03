@@ -218,6 +218,15 @@ class OpenClawManager:
                 "content": message
             })
             
+            # Detect if user is asking about crypto and inject market data
+            crypto_data = self._get_crypto_context(message)
+            if crypto_data:
+                # Inject crypto data as system message
+                messages.append({
+                    "role": "system",
+                    "content": f"[REAL-TIME MARKET DATA]\n{crypto_data}"
+                })
+            
             # Call GPT-4.1 API via OpenRouter
             import requests
             
@@ -566,7 +575,7 @@ class OpenClawManager:
         user_name: str,
         personality: str
     ) -> str:
-        """Generate self-aware system prompt"""
+        """Generate self-aware system prompt with crypto trading capabilities"""
         
         personality_traits = {
             'friendly': 'warm, approachable, and supportive',
@@ -577,7 +586,7 @@ class OpenClawManager:
         
         trait = personality_traits.get(personality, 'helpful and balanced')
         
-        return f"""You are {assistant_name}, a personal AI assistant for {user_name}.
+        return f"""You are {assistant_name}, a personal AI assistant for {user_name} with expertise in cryptocurrency trading and market analysis.
 
 SELF-AWARENESS:
 - You remember all previous conversations with {user_name}
@@ -589,13 +598,46 @@ SELF-AWARENESS:
 PERSONALITY:
 You are {trait}. Maintain this personality consistently while being helpful.
 
-CAPABILITIES:
+CORE CAPABILITIES:
 - Answer questions on any topic with accuracy
 - Help with tasks, problem-solving, and decision-making
 - Provide recommendations and advice
 - Assist with research and analysis
 - Support creative and technical work
-- Execute safe commands and automations
+
+CRYPTO TRADING EXPERTISE:
+- Real-time cryptocurrency price analysis
+- Technical indicators and market momentum
+- Trading signals (BUY/SELL/HOLD recommendations)
+- Support and resistance level identification
+- Risk management and position sizing advice
+- Market sentiment and news analysis
+- Portfolio diversification strategies
+
+CRYPTO DATA ACCESS:
+When users ask about crypto prices, trading signals, or market analysis, you can:
+1. Get current prices for any cryptocurrency
+2. Analyze 30-day price history and trends
+3. Calculate technical indicators (momentum, RSI-like signals)
+4. Identify support/resistance levels
+5. Generate trading recommendations with risk management
+6. Provide latest crypto news and market sentiment
+
+TRADING SIGNAL FORMAT:
+When providing trading signals, always include:
+- Current price and 30-day change
+- Signal (BUY/SELL/HOLD) with confidence level
+- Support and resistance levels
+- Risk management advice (stop-loss, position size)
+- Market analysis and reasoning
+
+RISK DISCLAIMER:
+Always remind users that:
+- Crypto trading involves significant risk
+- Never invest more than you can afford to lose
+- Do your own research (DYOR)
+- Past performance doesn't guarantee future results
+- Consider your risk tolerance and financial situation
 
 GUIDELINES:
 - Be helpful, honest, and harmless
@@ -611,8 +653,9 @@ CONTEXT AWARENESS:
 - Use context to provide relevant, personalized responses
 - Reference past discussions when appropriate
 - Track user preferences and adapt accordingly
+- Remember user's trading style and risk tolerance
 
-Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely helpful and build a productive, long-term relationship."""
+Remember: You are {user_name}'s personal assistant with crypto trading expertise. Your goal is to help them make informed trading decisions while managing risk appropriately."""
     
     def _create_conversation(self, assistant_id: str, user_id: int) -> str:
         """Create new conversation"""
@@ -797,3 +840,100 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
 def get_openclaw_manager(db):
     """Factory function to get OpenClawManager instance"""
     return OpenClawManager(db)
+
+    
+    def _get_crypto_context(self, message: str) -> Optional[str]:
+        """
+        Detect crypto-related queries and fetch relevant market data
+        
+        Args:
+            message: User message
+            
+        Returns:
+            Formatted crypto data string or None
+        """
+        try:
+            from app.openclaw_crypto_tools import get_crypto_tools
+            
+            message_lower = message.lower()
+            
+            # Common crypto symbols
+            crypto_symbols = {
+                'btc': 'BTC', 'bitcoin': 'BTC',
+                'eth': 'ETH', 'ethereum': 'ETH',
+                'sol': 'SOL', 'solana': 'SOL',
+                'bnb': 'BNB', 'binance': 'BNB',
+                'xrp': 'XRP', 'ripple': 'XRP',
+                'ada': 'ADA', 'cardano': 'ADA',
+                'doge': 'DOGE', 'dogecoin': 'DOGE',
+                'matic': 'MATIC', 'polygon': 'MATIC',
+                'dot': 'DOT', 'polkadot': 'DOT',
+                'avax': 'AVAX', 'avalanche': 'AVAX'
+            }
+            
+            # Detect crypto keywords
+            crypto_keywords = [
+                'price', 'signal', 'trade', 'trading', 'buy', 'sell',
+                'market', 'analysis', 'chart', 'crypto', 'cryptocurrency',
+                'coin', 'token', 'bullish', 'bearish', 'pump', 'dump',
+                'support', 'resistance', 'indicator', 'rsi', 'macd'
+            ]
+            
+            # Check if message contains crypto keywords
+            has_crypto_keyword = any(keyword in message_lower for keyword in crypto_keywords)
+            
+            if not has_crypto_keyword:
+                return None
+            
+            # Find mentioned crypto symbols
+            mentioned_symbols = []
+            for key, symbol in crypto_symbols.items():
+                if key in message_lower:
+                    if symbol not in mentioned_symbols:
+                        mentioned_symbols.append(symbol)
+            
+            # If no specific symbol mentioned but crypto keywords present, default to BTC
+            if not mentioned_symbols and has_crypto_keyword:
+                mentioned_symbols = ['BTC']
+            
+            if not mentioned_symbols:
+                return None
+            
+            # Get crypto tools
+            tools = get_crypto_tools()
+            
+            # Fetch data for mentioned symbols
+            crypto_context = []
+            
+            for symbol in mentioned_symbols[:3]:  # Limit to 3 symbols to avoid token overflow
+                # Check if user wants detailed signal or just price
+                if any(word in message_lower for word in ['signal', 'trade', 'analysis', 'buy', 'sell']):
+                    # Get full trading signal
+                    data = tools.get_trading_signal(symbol)
+                    formatted = tools.format_for_llm(data)
+                    crypto_context.append(formatted)
+                else:
+                    # Just get current price
+                    price_data = tools.get_current_price(symbol)
+                    if 'error' not in price_data:
+                        crypto_context.append(
+                            f"{symbol}: ${price_data['price_usd']:.2f} (Source: {price_data['source']})"
+                        )
+            
+            # Add news if user asks about market sentiment or news
+            if any(word in message_lower for word in ['news', 'sentiment', 'market', 'what\'s happening']):
+                news_data = tools.get_crypto_news(limit=3)
+                if 'error' not in news_data:
+                    formatted_news = tools.format_for_llm(news_data)
+                    crypto_context.append(formatted_news)
+            
+            if crypto_context:
+                return "\n\n".join(crypto_context)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting crypto context: {e}")
+            return None
+
+

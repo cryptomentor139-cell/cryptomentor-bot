@@ -64,11 +64,11 @@ class OpenClawMessageHandler:
             
             if not is_admin and user_credits < 1:
                 await update.message.reply_text(
-                    "❌ **Insufficient Credits**\n\n"
+                    "❌ Insufficient Credits\n\n"
                     "You need credits to chat with your AI Assistant.\n\n"
                     "💰 Purchase credits: /openclaw_buy\n"
                     "🔙 Exit OpenClaw mode: /openclaw_exit",
-                    parse_mode=ParseMode.MARKDOWN
+                    parse_mode=None  # No Markdown to avoid parsing errors
                 )
                 return True
             
@@ -98,24 +98,24 @@ class OpenClawMessageHandler:
             
             # Split long responses if needed
             if len(response) + len(footer) > 4000:
-                # Send response in chunks
+                # Send response in chunks (NO MARKDOWN to avoid parsing errors)
                 chunks = self._split_message(response, 3900)
                 for i, chunk in enumerate(chunks):
                     if i == len(chunks) - 1:
                         # Add footer to last chunk
                         await update.message.reply_text(
                             chunk + footer,
-                            parse_mode=ParseMode.MARKDOWN
+                            parse_mode=None  # Disable Markdown parsing
                         )
                     else:
                         await update.message.reply_text(
                             chunk,
-                            parse_mode=ParseMode.MARKDOWN
+                            parse_mode=None  # Disable Markdown parsing
                         )
             else:
                 await update.message.reply_text(
                     response + footer,
-                    parse_mode=ParseMode.MARKDOWN
+                    parse_mode=None  # Disable Markdown parsing
                 )
             
             return True
@@ -123,9 +123,9 @@ class OpenClawMessageHandler:
         except Exception as e:
             logger.error(f"Error handling OpenClaw message: {e}")
             await update.message.reply_text(
-                f"❌ **Error**: {str(e)}\n\n"
+                f"❌ Error: {str(e)}\n\n"
                 "Please try again or contact support.",
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode=None  # No Markdown to avoid parsing errors
             )
             return True
     
@@ -206,6 +206,25 @@ class OpenClawMessageHandler:
             chunks.append(current_chunk.strip())
         
         return chunks
+    
+    def _escape_markdown_v2(self, text: str) -> str:
+        """
+        Escape special characters for Telegram MarkdownV2
+        
+        Args:
+            text: Text to escape
+            
+        Returns:
+            Escaped text safe for Telegram MarkdownV2
+        """
+        # Characters that need escaping in MarkdownV2
+        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        
+        escaped_text = text
+        for char in special_chars:
+            escaped_text = escaped_text.replace(char, f'\\{char}')
+        
+        return escaped_text
 
 
 # Command handlers for OpenClaw mode control
