@@ -104,9 +104,17 @@ class OpenClawMessageHandler:
                 session['conversation_id'] = self._get_latest_conversation_id(user_id, assistant_id)
                 self._save_session(user_id, session, context)
             
+            # Check if tools were used (for admin users)
+            tool_usage_info = ""
+            if hasattr(self, '_last_tool_calls') and self._last_tool_calls:
+                tool_names = [tc['tool'] for tc in self._last_tool_calls]
+                tool_usage_info = f"\n🔧 Tools used: {', '.join(tool_names)}"
+                # Clear after use
+                self._last_tool_calls = []
+            
             # Format response with token/credit info
             if is_admin:
-                footer = f"\n\n💬 {input_tokens + output_tokens} tokens • 👑 Admin (Free)"
+                footer = f"\n\n💬 {input_tokens + output_tokens} tokens • 👑 Admin (Free){tool_usage_info}"
             else:
                 new_balance = user_credits - credits_cost
                 footer = f"\n\n💰 Cost: {credits_cost} credits • 💳 Balance: {new_balance:,} credits"
@@ -161,6 +169,7 @@ class OpenClawMessageHandler:
     ):
         """
         Send message to AI Assistant (async wrapper)
+        Uses agentic loop if available (for admin with tool access)
         
         Returns:
             Tuple of (response, input_tokens, output_tokens, credits_cost)
@@ -169,7 +178,27 @@ class OpenClawMessageHandler:
         if has_photo and photo:
             message = f"[User sent an image]\n{message if message else 'Please analyze this image'}"
         
-        # OpenClawManager.chat is synchronous, but we can call it directly
+        # Check if agentic loop is available (injected from bot.py)
+        if hasattr(self, 'agentic_loop') and self.agentic_loop:
+            # Use agentic loop with tool calling capabilities
+            try:
+                response, input_tokens, output_tokens, credits_cost, tool_calls = self.agentic_loop.chat_with_tools(
+                    user_id=user_id,
+                    assistant_id=assistant_id,
+                    message=message,
+                    conversation_id=conversation_id
+                )
+                
+                # Store tool calls for display
+                self._last_tool_calls = tool_calls if tool_calls else []
+                
+                return response, input_tokens, output_tokens, credits_cost
+            except Exception as e:
+                logger.error(f"Agentic loop error, falling back to basic chat: {e}")
+                # Fallback to basic chat on error
+        
+        # Fallback: Use basic chat without tools
+        self._last_tool_calls = []  # No tools used in basic chat
         return self.manager.chat(
             user_id=user_id,
             assistant_id=assistant_id,

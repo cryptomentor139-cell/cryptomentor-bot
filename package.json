@@ -23,5 +23,17 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cryptomentor139-cell/cryptomentor-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cryptomentor139-cell/cryptomentor-bot/issues"
+  },
+  "homepage": "https://github.com/cryptomentor139-cell/cryptomentor-bot#readme"
 }

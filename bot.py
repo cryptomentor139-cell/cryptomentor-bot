@@ -339,6 +339,30 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ OpenClaw handlers failed to register: {e}")
         
+        # Register OpenClaw Simple CLI handlers (lightweight alternative)
+        try:
+            from app.handlers_openclaw_simple import register_openclaw_handlers
+            register_openclaw_handlers(self.application)
+            print("✅ OpenClaw CLI handlers registered (status, help, ask)")
+        except Exception as e:
+            print(f"⚠️ OpenClaw CLI handlers failed to register: {e}")
+        
+        # Register OpenClaw Deposit handlers (payment system)
+        try:
+            from app.handlers_openclaw_deposit import register_openclaw_deposit_handlers
+            register_openclaw_deposit_handlers(self.application)
+            print("✅ OpenClaw deposit handlers registered (payment & credits)")
+        except Exception as e:
+            print(f"⚠️ OpenClaw deposit handlers failed to register: {e}")
+        
+        # Register OpenClaw Admin handlers (credit management & monitoring)
+        try:
+            from app.handlers_openclaw_admin import register_openclaw_admin_handlers
+            register_openclaw_admin_handlers(self.application)
+            print("✅ OpenClaw admin handlers registered (monitoring & management)")
+        except Exception as e:
+            print(f"⚠️ OpenClaw admin handlers failed to register: {e}")
+        
         # Note: Automaton is for AUTONOMOUS TRADING only (Lifetime Premium)
         # Signal generation uses bot's own system (/analyze, /futures, /ai)
         # OpenClaw is for PERSONAL AI ASSISTANT (Claude Sonnet 4.5) with seamless chat
@@ -2934,20 +2958,29 @@ Choose action:
         except Exception as e:
             logger.debug(f"Admin handler skipped: {e}")
         
-        # PRIORITY 1: Check if user is in OpenClaw mode (seamless AI chat)
+        # PRIORITY 1: Check if user is in OpenClaw mode (seamless AI chat with autonomous agent)
         try:
             from services import get_database
             from app.openclaw_manager import get_openclaw_manager
             from app.openclaw_message_handler import get_openclaw_message_handler
+            from app.openclaw_agent_tools import get_openclaw_agent_tools
+            from app.openclaw_agent_loop import get_openclaw_agentic_loop
             
             db = get_database()
             openclaw_manager = get_openclaw_manager(db)
+            
+            # Initialize autonomous agent components
+            agent_tools = get_openclaw_agent_tools(db, self.application)
+            agentic_loop = get_openclaw_agentic_loop(openclaw_manager, agent_tools)
+            
+            # Create message handler with agentic loop
             openclaw_handler = get_openclaw_message_handler(openclaw_manager)
+            openclaw_handler.agentic_loop = agentic_loop  # Inject agentic loop
             
             # Try to handle with OpenClaw
             handled = await openclaw_handler.handle_message(update, context)
             if handled:
-                # Message was handled by OpenClaw AI Assistant
+                # Message was handled by OpenClaw AI Assistant (with autonomous capabilities)
                 return
         except Exception as e:
             # OpenClaw not available or error - continue with normal flow
