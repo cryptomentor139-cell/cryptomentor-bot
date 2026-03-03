@@ -189,6 +189,14 @@ async def deposit_callback_handler(update: Update, context: ContextTypes.DEFAULT
         context.user_data['awaiting_deposit_amount'] = True
         return
     
+    # Handle balance check from /subscribe
+    if data == "balance_check":
+        # Redirect to balance command
+        from app.handlers_openclaw_deposit import openclaw_balance_command
+        # Create fake update for command
+        await openclaw_balance_command(update, context)
+        return
+    
     # Handle preset amounts - SIMPLIFIED
     if data.startswith("deposit_"):
         amount_str = data.replace("deposit_", "")

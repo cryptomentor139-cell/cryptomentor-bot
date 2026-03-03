@@ -1430,91 +1430,122 @@ Zone {label} – {desc}
                 )
 
     async def subscribe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle subscribe command - show premium packages with user ID"""
+        """Handle subscribe command - NOW REDIRECTS TO OPENCLAW CREDITS"""
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         
         user_id = update.effective_user.id
         
-        subscription_text = f"""🚀 <b>CryptoMentor AI 3.0 – Paket Berlangganan</b>
+        # Check if user already has premium/lifetime (legacy users)
+        from services import get_database
+        db = get_database()
+        
+        try:
+            result = db.execute_query(
+                "SELECT subscription_end, is_premium FROM users WHERE telegram_id = %s",
+                (user_id,)
+            )
+            
+            if result and len(result) > 0:
+                subscription_end = result[0][0]
+                is_premium = result[0][1]
+                
+                # Check if legacy premium/lifetime user
+                if subscription_end and is_premium:
+                    from datetime import datetime
+                    if subscription_end > datetime.now():
+                        legacy_message = (
+                            "👑 <b>Legacy Premium User</b>\n\n"
+                            "You still have active premium subscription.\n"
+                            "Your premium features remain active.\n\n"
+                            "For new AI features, check out OpenClaw Credits below!"
+                        )
+                        await update.message.reply_text(legacy_message, parse_mode='HTML')
+        except:
+            pass
+        
+        subscription_text = f"""🤖 <b>CryptoMentor AI 3.0 – OpenClaw Credits</b>
 
-Trading lebih terarah dengan AI berbasis Supply & Demand (SnD), data real-time Binance, dan sistem signal profesional tanpa hambatan credits (Unlimited access).
+<b>🎯 NEW: OpenClaw AI Assistant</b>
+Powered by Claude Sonnet 4.5 - Your Personal AI Trading Assistant
 
-💎 <b>PILIH PAKET PREMIUM</b>
+<b>💡 What is OpenClaw?</b>
+• 🧠 Advanced AI conversations
+• 📊 Real-time crypto market analysis
+• 🔍 Smart trading insights
+• 💬 Natural language interface
+• 🚀 Autonomous agent capabilities
 
-🔹 <b>Monthly</b>
-💰 Rp368.000 / bulan
-✔ Futures & Spot SnD Signals
-✔ Analisis on-demand
-✔ Semua fitur premium
+<b>💰 PRICING (Pay-as-you-go)</b>
 
-🔹 <b>2 Bulan</b>
-💰 Rp690.000 / 2 bulan
-✔ Lebih hemat dari bulanan
-✔ Semua fitur premium
-✔ Cocok untuk swing trader
+Credits = OpenRouter API Balance (Real-time)
+Minimum Top-Up: <b>Rp 100.000</b> (~$7 USD)
 
-🔹 ⭐ <b>1 Tahun (Most Popular)</b>
-💰 Rp4.025.000 / tahun
-✔ Semua fitur premium
-✔ Lebih hemat & tanpa perpanjang bulanan
+<b>Recommended Amounts:</b>
+• Rp 100.000 → ~$7 credits
+• Rp 200.000 → ~$14 credits
+• Rp 500.000 → ~$35 credits
+• Rp 1.000.000 → ~$70 credits
 
-🔥 <b>LIFETIME (LIMITED SLOT)</b>
-💰 Rp7.475.000 – Sekali Bayar
+<b>💳 PAYMENT METHODS</b>
 
-🚀 Akses Seumur Hidup + Auto Signal + Automaton Access
-
-<b>Benefit LIFETIME:</b>
-✔ Semua fitur premium (selamanya)
-✔ Auto Futures & Spot Signal (SnD Based)
-✔ Priority Signal (zona terbaik lebih dulu)
-✔ <b>🤖 Automaton Access (GRATIS - senilai Rp2.300.000)</b>
-✔ Akses SETIAP pembaruan fitur CryptoMentor AI ke depan
-✔ Tidak ada biaya bulanan / tahunan lagi
-
-🤖 <b>AUTOMATON ACCESS (Add-On)</b>
-💰 Rp2.300.000 – Sekali Bayar
-
-<b>Untuk pengguna Premium (Monthly/2 Bulan/1 Tahun):</b>
-✔ Akses fitur Automaton (AI Trading Agent)
-✔ Spawn autonomous trading agents
-✔ Automated trading 24/7
-✔ <b>GRATIS untuk Lifetime users</b>
-
-💳 <b>METODE PEMBAYARAN</b>
-
-🏦 <b>Transfer Bank</b>
+🏦 <b>Transfer Bank (IDR)</b>
 Nama: NABIL FARREL AL FARI
 Bank: Mandiri
 No Rek: 1560018407074
 
-📱 <b>E-Money</b>
+📱 <b>E-Money (IDR)</b>
 ShopeePay / GoPay / DANA
 📞 0877-7927-4400
 
-⛓️ <b>On-Chain Crypto</b>
-Network: BEP20
+⛓️ <b>Crypto (USD)</b>
+Network: BEP20 (Binance Smart Chain)
 Address:
 <code>0xed7342ac9c22b1495af4d63f15a7c9768a028ea8</code>
 
-✅ <b>CARA AKTIVASI (WAJIB)</b>
+Supported: USDT, USDC, BNB (BEP20 only!)
 
-1️⃣ Lakukan pembayaran sesuai paket yang dipilih
-2️⃣ Kirim bukti pembayaran ke admin: 👉 @BillFarr
-3️⃣ Sertakan informasi berikut:
+<b>✅ HOW TO TOP-UP</b>
 
-✅ Paket yang dipilih (Monthly / 2 Bulan / 1 Tahun / Lifetime / Automaton Access)
-✅ UID Telegram kamu: <code>{user_id}</code>
+1️⃣ Choose amount (min. Rp 100.000)
+2️⃣ Send payment via Bank/E-Money/Crypto
+3️⃣ Send proof to admin: 👉 @BillFarr
+4️⃣ Include this info:
 
-4️⃣ Akun akan diaktifkan setelah dikonfirmasi admin
+✅ Amount: Rp XXX.XXX
+✅ Your UID: <code>{user_id}</code>
+✅ Purpose: OpenClaw Credits
 
-📌 <b>CATATAN</b>
-📊 Signal berbasis Supply & Demand, bukan tebak-tebakan
-🤖 Data 100% dari Binance
-🧠 Cocok untuk pemula hingga advanced
-❌ Tidak menjanjikan profit, fokus probability & risk management
-🤖 Automaton: Autonomous AI trading agents (requires premium + access fee)"""
+5️⃣ Credits added after verification!
+
+<b>📊 CHECK BALANCE</b>
+Use: /openclaw_balance
+
+<b>🚀 START USING</b>
+Just chat normally - OpenClaw is now default!
+No commands needed, just type your question.
+
+<b>📌 NOTES</b>
+• Credits shared across all users
+• Real-time sync with OpenRouter
+• Admin manually adds credits
+• No subscription needed
+• Pay only for what you use
+
+<b>🎁 LEGACY USERS</b>
+Existing Premium/Lifetime users:
+Your subscription remains active for old features.
+OpenClaw is separate pay-as-you-go system.
+
+---
+
+<b>💡 Quick Start:</b>
+1. Top-up credits (min. Rp 100k)
+2. Start chatting with AI
+3. Get trading insights instantly!"""
         
         keyboard = [
+            [InlineKeyboardButton("💰 Top-Up Credits", callback_data="deposit_start")],
+            [InlineKeyboardButton("💳 Check Balance", callback_data="balance_check")],
             [InlineKeyboardButton("📞 Contact Admin", url="https://t.me/BillFarr")],
         ]
         
