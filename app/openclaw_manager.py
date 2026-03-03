@@ -1108,11 +1108,6 @@ You are now operating in ADMIN MODE with full system access. Use these powers re
 
 
 
-def get_openclaw_manager(db):
-    """Factory function to get OpenClawManager instance"""
-    return OpenClawManager(db)
-
-    
     def _get_crypto_context(self, message: str) -> Optional[str]:
         """
         Detect crypto-related queries and fetch relevant market data
@@ -1206,8 +1201,6 @@ def get_openclaw_manager(db):
         except Exception as e:
             logger.error(f"Error getting crypto context: {e}")
             return None
-
-
 
     # ==================== SKILL MANAGEMENT METHODS ====================
     
@@ -1377,3 +1370,8 @@ def get_openclaw_manager(db):
         except Exception as e:
             logger.error(f"Error getting skill details: {e}")
             return None
+
+
+def get_openclaw_manager(db):
+    """Factory function to get OpenClawManager instance"""
+    return OpenClawManager(db)
