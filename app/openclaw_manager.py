@@ -14,7 +14,6 @@ import os
 import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
-import anthropic
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
