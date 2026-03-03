@@ -16,23 +16,24 @@ logger = logging.getLogger(__name__)
 
 async def openclaw_deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /openclaw_deposit - Start deposit process
+    /openclaw_deposit or /deposit - Add credits to OpenClaw
     """
     user_id = update.effective_user.id
     
     message = (
-        "💰 <b>OpenClaw Credits Deposit</b>\n\n"
+        "💰 <b>OpenClaw Credits Top-Up</b>\n\n"
         "Add credits to use OpenClaw AI Agent!\n\n"
         "<b>How it works:</b>\n"
-        "1. Choose deposit amount\n"
-        "2. Get unique wallet address\n"
-        "3. Send crypto (USDT/USDC/BTC/ETH)\n"
-        "4. Credits added automatically\n\n"
-        "<b>Pricing:</b>\n"
-        "• You receive: 80% in credits\n"
-        "• Platform fee: 20%\n\n"
-        "<b>Example:</b>\n"
-        "Deposit $10 → You get $8 credits\n\n"
+        "1. Choose deposit amount below\n"
+        "2. Get wallet address for payment\n"
+        "3. Send crypto (USDT/USDC/BNB on BEP20)\n"
+        "4. Send proof to admin @BillFarr\n"
+        "5. Credits added after verification\n\n"
+        "<b>💡 Important:</b>\n"
+        "• Your credits = Your OpenRouter API balance\n"
+        "• Real-time sync with OpenRouter\n"
+        "• No internal credit system\n"
+        "• Admin manually adds to your OpenRouter account\n\n"
         "Choose amount:"
     )
     
@@ -61,72 +62,99 @@ async def openclaw_deposit_command(update: Update, context: ContextTypes.DEFAULT
     )
 
 
+
 async def openclaw_balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /openclaw_balance - Check credit balance
+    /openclaw_balance - Check OpenRouter API credit balance (real-time)
     """
     user_id = update.effective_user.id
     
     try:
-        payment_system = get_payment_system()
-        db = get_openclaw_db_connection()
+        # Check if user is admin (gets free access)
+        from services import get_database
+        db = get_database()
         
-        balance = payment_system.get_user_balance(user_id, db)
+        # Check admin status
+        admin_ids_str = os.getenv('ADMIN_IDS', '')
+        admin_ids = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip().isdigit()]
+        is_admin = user_id in admin_ids
         
-        # Get transaction history
-        cursor = db.cursor()
-        cursor.execute("""
-            SELECT COUNT(*), SUM(user_credits)
-            FROM openclaw_transactions
-            WHERE user_id = %s AND status = 'completed'
-        """, (user_id,))
+        if is_admin:
+            message = (
+                "💳 <b>Your OpenClaw Balance</b>\n\n"
+                "👑 <b>Admin Account</b>\n"
+                "You have unlimited free access!\n\n"
+                "No credits needed for your account."
+            )
+            
+            await update.message.reply_text(
+                message,
+                parse_mode='HTML'
+            )
+            return
         
-        tx_result = cursor.fetchone()
-        tx_count = tx_result[0] if tx_result else 0
-        total_deposited = tx_result[1] if tx_result and tx_result[1] else 0
+        # Fetch real-time balance from OpenRouter API
+        import httpx
+        api_key = os.getenv('OPENCLAW_API_KEY')
         
-        # Get usage stats
-        cursor.execute("""
-            SELECT COUNT(*), SUM(amount)
-            FROM openclaw_usage_log
-            WHERE user_id = %s
-        """, (user_id,))
+        if not api_key:
+            await update.message.reply_text(
+                "❌ OpenRouter API key not configured.\n"
+                "Please contact admin: @BillFarr"
+            )
+            return
         
-        usage_result = cursor.fetchone()
-        usage_count = usage_result[0] if usage_result else 0
-        total_spent = usage_result[1] if usage_result and usage_result[1] else 0
-        
-        message = (
-            f"💳 <b>Your OpenClaw Balance</b>\n\n"
-            f"<b>Current Balance:</b> ${balance:.2f}\n\n"
-            f"<b>Statistics:</b>\n"
-            f"• Total Deposited: ${total_deposited:.2f}\n"
-            f"• Total Spent: ${total_spent:.2f}\n"
-            f"• Deposits: {tx_count}\n"
-            f"• Usage Count: {usage_count}\n\n"
-        )
-        
-        if balance < Decimal('1.00'):
-            message += "⚠️ Low balance! Consider depositing more credits."
-        
-        keyboard = [
-            [InlineKeyboardButton("💰 Deposit", callback_data="deposit_start")],
-            [InlineKeyboardButton("📊 History", callback_data="balance_history")]
-        ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            message,
-            parse_mode='HTML',
-            reply_markup=reply_markup
-        )
+        # Get OpenRouter balance
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://openrouter.ai/api/v1/auth/key",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                balance = data.get('data', {}).get('limit_remaining', 0)
+                limit = data.get('data', {}).get('limit', 0)
+                usage = data.get('data', {}).get('usage', 0)
+                
+                message = (
+                    f"💳 <b>Your OpenClaw Balance</b>\n\n"
+                    f"<b>Available Credits:</b> ${balance:.2f}\n"
+                    f"<b>Total Limit:</b> ${limit:.2f}\n"
+                    f"<b>Used:</b> ${usage:.2f}\n\n"
+                    f"💡 <b>Note:</b> This is your real-time OpenRouter API balance.\n"
+                    f"Credits are shared across all OpenClaw users.\n\n"
+                )
+                
+                if balance < 1.00:
+                    message += "⚠️ <b>Low balance!</b> Consider depositing more credits."
+                
+                keyboard = [
+                    [InlineKeyboardButton("💰 Top-Up Credits", callback_data="deposit_start")]
+                ]
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await update.message.reply_text(
+                    message,
+                    parse_mode='HTML',
+                    reply_markup=reply_markup
+                )
+            else:
+                await update.message.reply_text(
+                    "❌ Unable to fetch balance from OpenRouter.\n"
+                    "Please try again or contact admin: @BillFarr"
+                )
         
     except Exception as e:
         logger.error(f"Error checking balance: {e}")
+        import traceback
+        traceback.print_exc()
         await update.message.reply_text(
-            "❌ Error checking balance. Please try again."
+            "❌ Error checking balance. Please try again or contact admin: @BillFarr"
         )
+
 
 
 async def deposit_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -144,7 +172,7 @@ async def deposit_callback_handler(update: Update, context: ContextTypes.DEFAULT
     if data == "deposit_start":
         # Redirect to deposit command
         await query.edit_message_text(
-            "Use /openclaw_deposit to start deposit process"
+            "Use /deposit or /openclaw_deposit to start deposit process"
         )
         return
     
@@ -161,17 +189,65 @@ async def deposit_callback_handler(update: Update, context: ContextTypes.DEFAULT
         context.user_data['awaiting_deposit_amount'] = True
         return
     
-    # Handle preset amounts
+    # Handle preset amounts - SIMPLIFIED
     if data.startswith("deposit_"):
         amount_str = data.replace("deposit_", "")
         try:
             amount = Decimal(amount_str)
-            await process_deposit_request(query, user_id, amount)
+            
+            # Get wallet address (same as /subscribe)
+            admin_wallet = os.getenv('ADMIN_WALLET_ADDRESS', '0xed7342ac9c22b1495af4d63f15a7c9768a028ea8')
+            
+            # Simple payment instructions (like /subscribe)
+            message = (
+                f"💰 <b>OpenClaw Credits Top-Up</b>\n\n"
+                f"<b>Amount:</b> ${amount:.2f}\n\n"
+                f"<b>⛓️ Payment via Crypto (BEP20)</b>\n"
+                f"Network: <b>BEP20</b> (Binance Smart Chain)\n\n"
+                f"<b>Wallet Address:</b>\n"
+                f"<code>{admin_wallet}</code>\n\n"
+                f"<b>Supported Coins:</b>\n"
+                f"• USDT (BEP20)\n"
+                f"• USDC (BEP20)\n"
+                f"• BNB\n\n"
+                f"<b>⚠️ Important:</b>\n"
+                f"1. Send EXACTLY ${amount:.2f} worth of crypto\n"
+                f"2. Use BEP20 network ONLY!\n"
+                f"3. Send payment proof to admin\n\n"
+                f"<b>📱 Contact Admin:</b>\n"
+                f"👉 @BillFarr\n\n"
+                f"<b>Include in your message:</b>\n"
+                f"✅ Transaction hash/screenshot\n"
+                f"✅ Amount: ${amount:.2f}\n"
+                f"✅ Your User ID: <code>{user_id}</code>\n"
+                f"✅ Purpose: OpenClaw Credits\n\n"
+                f"💡 <b>Note:</b> Credits will be added to your account after admin verification.\n\n"
+                f"Your credits balance reflects your OpenRouter API balance in real-time!"
+            )
+            
+            keyboard = [
+                [InlineKeyboardButton("📞 Contact Admin", url="https://t.me/BillFarr")],
+                [InlineKeyboardButton("❌ Cancel", callback_data="deposit_cancel")]
+            ]
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                message,
+                parse_mode='HTML',
+                reply_markup=reply_markup
+            )
+            
         except Exception as e:
             logger.error(f"Error processing deposit: {e}")
+            import traceback
+            traceback.print_exc()
             await query.edit_message_text(
-                "❌ Error processing deposit. Please try again."
+                "❌ <b>Error Processing Request</b>\n\n"
+                "Please try again or contact admin: @BillFarr",
+                parse_mode='HTML'
             )
+
 
 
 async def process_deposit_request(query, user_id: int, amount: Decimal):
