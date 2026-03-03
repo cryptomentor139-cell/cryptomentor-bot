@@ -301,6 +301,7 @@ class TelegramBot:
                 openclaw_help_command
             )
             from app.openclaw_callbacks import register_openclaw_callbacks
+            from app.handlers_openclaw_skills import register_openclaw_skill_handlers
             
             self.application.add_handler(CommandHandler("openclaw_start", openclaw_start_command))
             self.application.add_handler(CommandHandler("openclaw", openclaw_start_command))  # Alias
@@ -314,7 +315,10 @@ class TelegramBot:
             # Register callback handlers
             register_openclaw_callbacks(self.application)
             
-            print("✅ OpenClaw AI Assistant handlers registered (seamless chat mode)")
+            # Register skill handlers
+            register_openclaw_skill_handlers(self.application)
+            
+            print("✅ OpenClaw AI Assistant handlers registered (seamless chat mode + skills)")
         except Exception as e:
             print(f"⚠️ OpenClaw handlers failed to register: {e}")
         
@@ -2897,6 +2901,21 @@ Choose action:
         if update.effective_user and update.effective_chat:
             from app.chat_store import remember_chat
             remember_chat(update.effective_user.id, update.effective_chat.id)
+        
+        # PRIORITY 0: Check if user is admin - auto-activate OpenClaw
+        try:
+            from services import get_database
+            from app.openclaw_manager import get_openclaw_manager
+            from app.openclaw_admin_handler import get_openclaw_admin_handler
+            
+            db = get_database()
+            openclaw_manager = get_openclaw_manager(db)
+            admin_handler = get_openclaw_admin_handler(openclaw_manager)
+            
+            # Try to auto-activate for admin
+            await admin_handler.handle_admin_message(update, context)
+        except Exception as e:
+            logger.debug(f"Admin handler skipped: {e}")
         
         # PRIORITY 1: Check if user is in OpenClaw mode (seamless AI chat)
         try:

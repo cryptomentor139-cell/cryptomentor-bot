@@ -38,7 +38,8 @@ class OpenClawMessageHandler:
             True if message was handled by OpenClaw, False otherwise
         """
         user_id = update.effective_user.id
-        message_text = update.message.text
+        message_text = update.message.text if update.message.text else ""
+        has_photo = bool(update.message.photo)
         
         # Check if user has active OpenClaw session
         session = self._get_active_session(user_id, context)
@@ -49,9 +50,6 @@ class OpenClawMessageHandler:
         
         # User is in OpenClaw mode - handle with AI Assistant
         try:
-            # Show typing indicator
-            await update.message.chat.send_action(ChatAction.TYPING)
-            
             # Get assistant and conversation info
             assistant_id = session['assistant_id']
             conversation_id = session.get('conversation_id')
@@ -68,64 +66,87 @@ class OpenClawMessageHandler:
                     "You need credits to chat with your AI Assistant.\n\n"
                     "💰 Purchase credits: /openclaw_buy\n"
                     "🔙 Exit OpenClaw mode: /openclaw_exit",
-                    parse_mode=None  # No Markdown to avoid parsing errors
+                    parse_mode=None
                 )
                 return True
+            
+            # Determine loading message based on request type
+            loading_emoji = self._get_loading_emoji(message_text, has_photo)
+            loading_text = self._get_loading_text(message_text, has_photo)
+            
+            # Send loading message
+            loading_msg = await update.message.reply_text(
+                f"{loading_emoji} {loading_text}",
+                parse_mode=None
+            )
+            
+            # Show typing indicator
+            await update.message.chat.send_action(ChatAction.TYPING)
             
             # Send message to AI Assistant
             response, input_tokens, output_tokens, credits_cost = await self._chat_with_assistant(
                 user_id=user_id,
                 assistant_id=assistant_id,
                 message=message_text,
-                conversation_id=conversation_id
+                conversation_id=conversation_id,
+                has_photo=has_photo,
+                photo=update.message.photo[-1] if has_photo else None
             )
+            
+            # Delete loading message
+            try:
+                await loading_msg.delete()
+            except:
+                pass  # Ignore if already deleted
             
             # Update conversation ID in session if new
             if not conversation_id:
-                # Get the conversation ID from the response
-                # (it was created in the chat method)
                 session['conversation_id'] = self._get_latest_conversation_id(user_id, assistant_id)
                 self._save_session(user_id, session, context)
-            
-            # Check if user is admin
-            is_admin = self.manager._is_admin(user_id)
             
             # Format response with token/credit info
             if is_admin:
                 footer = f"\n\n💬 {input_tokens + output_tokens} tokens • 👑 Admin (Free)"
             else:
-                footer = f"\n\n💬 {input_tokens + output_tokens} tokens • 💰 {credits_cost} credits • Balance: {user_credits - credits_cost}"
+                new_balance = user_credits - credits_cost
+                footer = f"\n\n💰 Cost: {credits_cost} credits • 💳 Balance: {new_balance:,} credits"
             
             # Split long responses if needed
             if len(response) + len(footer) > 4000:
-                # Send response in chunks (NO MARKDOWN to avoid parsing errors)
                 chunks = self._split_message(response, 3900)
                 for i, chunk in enumerate(chunks):
                     if i == len(chunks) - 1:
-                        # Add footer to last chunk
                         await update.message.reply_text(
                             chunk + footer,
-                            parse_mode=None  # Disable Markdown parsing
+                            parse_mode=None
                         )
                     else:
                         await update.message.reply_text(
                             chunk,
-                            parse_mode=None  # Disable Markdown parsing
+                            parse_mode=None
                         )
             else:
                 await update.message.reply_text(
                     response + footer,
-                    parse_mode=None  # Disable Markdown parsing
+                    parse_mode=None
                 )
             
             return True
             
         except Exception as e:
             logger.error(f"Error handling OpenClaw message: {e}")
+            
+            # Try to delete loading message if it exists
+            try:
+                if 'loading_msg' in locals():
+                    await loading_msg.delete()
+            except:
+                pass
+            
             await update.message.reply_text(
                 f"❌ Error: {str(e)}\n\n"
                 "Please try again or contact support.",
-                parse_mode=None  # No Markdown to avoid parsing errors
+                parse_mode=None
             )
             return True
     
@@ -134,7 +155,9 @@ class OpenClawMessageHandler:
         user_id: int,
         assistant_id: str,
         message: str,
-        conversation_id: Optional[str]
+        conversation_id: Optional[str],
+        has_photo: bool = False,
+        photo = None
     ):
         """
         Send message to AI Assistant (async wrapper)
@@ -142,8 +165,11 @@ class OpenClawMessageHandler:
         Returns:
             Tuple of (response, input_tokens, output_tokens, credits_cost)
         """
+        # If photo is provided, add context to message
+        if has_photo and photo:
+            message = f"[User sent an image]\n{message if message else 'Please analyze this image'}"
+        
         # OpenClawManager.chat is synchronous, but we can call it directly
-        # since it's fast enough (Claude API is async internally)
         return self.manager.chat(
             user_id=user_id,
             assistant_id=assistant_id,
@@ -207,6 +233,55 @@ class OpenClawMessageHandler:
         
         return chunks
     
+    def _get_loading_emoji(self, message: str, has_photo: bool) -> str:
+        """Get appropriate loading emoji based on request type"""
+        message_lower = message.lower()
+        
+        if has_photo:
+            return "🖼️"
+        elif any(word in message_lower for word in ['chart', 'graph', 'candle']):
+            return "📊"
+        elif any(word in message_lower for word in ['signal', 'trade', 'buy', 'sell']):
+            return "📈"
+        elif any(word in message_lower for word in ['analyze', 'analysis', 'study']):
+            return "🔍"
+        elif any(word in message_lower for word in ['price', 'market', 'trend']):
+            return "💹"
+        elif any(word in message_lower for word in ['news', 'update', 'latest']):
+            return "📰"
+        elif any(word in message_lower for word in ['portfolio', 'balance', 'holdings']):
+            return "💼"
+        elif any(word in message_lower for word in ['risk', 'safe', 'danger']):
+            return "⚠️"
+        else:
+            return "🤖"
+    
+    def _get_loading_text(self, message: str, has_photo: bool) -> str:
+        """Get appropriate loading text based on request type"""
+        message_lower = message.lower()
+        
+        if has_photo:
+            return "Processing your image..."
+        elif any(word in message_lower for word in ['chart', 'graph', 'candle']):
+            return "Analyzing chart..."
+        elif any(word in message_lower for word in ['signal', 'trade']):
+            return "Generating trading signal..."
+        elif any(word in message_lower for word in ['analyze', 'analysis']):
+            return "Performing deep analysis..."
+        elif any(word in message_lower for word in ['price', 'market']):
+            return "Checking market data..."
+        elif any(word in message_lower for word in ['news', 'update']):
+            return "Fetching latest news..."
+        elif any(word in message_lower for word in ['portfolio', 'balance']):
+            return "Calculating portfolio..."
+        elif any(word in message_lower for word in ['risk', 'safe']):
+            return "Assessing risk..."
+        elif len(message) > 200:
+            return "Processing your detailed request..."
+        else:
+            return "Thinking..."
+    
+
     def _escape_markdown_v2(self, text: str) -> str:
         """
         Escape special characters for Telegram MarkdownV2
@@ -418,12 +493,13 @@ async def openclaw_help_command(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text(
         "🤖 **OpenClaw AI Assistant - Help**\n\n"
         "**What is OpenClaw?**\n"
-        "Personal AI Assistant powered by Claude Sonnet 4.5 with self-awareness.\n\n"
+        "Personal AI Assistant powered by GPT-4.1 with crypto expertise.\n\n"
         "**Features:**\n"
         "• 💬 Natural conversation - just type freely\n"
         "• 🧠 Self-aware - remembers your preferences\n"
-        "• 📚 Context-aware - references past discussions\n"
-        "• 🎯 Task execution - helps with anything\n"
+        "• 📊 Crypto analysis - charts, signals, trends\n"
+        "• 🖼️ Image analysis - send chart screenshots\n"
+        "• 🎯 All capabilities included - no skill purchases needed\n"
         "• 🔒 Private - your data is isolated\n\n"
         "**Commands:**\n"
         "• `/openclaw_start` - Activate AI Assistant\n"
@@ -432,15 +508,24 @@ async def openclaw_help_command(update: Update, context: ContextTypes.DEFAULT_TY
         "• `/openclaw_buy` - Purchase credits\n"
         "• `/openclaw_balance` - Check credits\n"
         "• `/openclaw_history` - View conversations\n\n"
-        "**Pricing:**\n"
-        "• 20% platform fee on purchases\n"
-        "• 80% goes to your credits\n"
-        "• ~2-5 credits per conversation\n\n"
+        "**Pay-Per-Use Pricing:**\n"
+        "• No upfront costs - pay only for what you use\n"
+        "• Simple question: ~5-10 credits\n"
+        "• Chart analysis: ~15-25 credits\n"
+        "• Deep analysis: ~30-50 credits\n"
+        "• Image processing: ~20-40 credits\n"
+        "• Cost shown after each response\n\n"
         "**How to Use:**\n"
         "1. Create assistant: `/openclaw_create Alex`\n"
         "2. Buy credits: `/openclaw_buy`\n"
         "3. Activate: `/openclaw_start`\n"
-        "4. Chat freely - no commands needed!\n\n"
+        "4. Chat freely - send text or images!\n"
+        "5. See cost and balance after each response\n\n"
+        "**Example:**\n"
+        "You: \"Analyze BTC trend\"\n"
+        "Bot: 📊 Analyzing chart...\n"
+        "Bot: [Detailed analysis]\n"
+        "     💰 Cost: 15 credits • 💳 Balance: 9,985\n\n"
         "Questions? Contact admin.",
         parse_mode=ParseMode.MARKDOWN
     )
