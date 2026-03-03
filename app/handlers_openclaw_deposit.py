@@ -65,7 +65,7 @@ async def openclaw_deposit_command(update: Update, context: ContextTypes.DEFAULT
 
 async def openclaw_balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /openclaw_balance - Check OpenRouter API credit balance (real-time)
+    /openclaw_balance - Check your personal OpenClaw credit balance
     """
     user_id = update.effective_user.id
     
@@ -84,7 +84,8 @@ async def openclaw_balance_command(update: Update, context: ContextTypes.DEFAULT
                 "💳 <b>Your OpenClaw Balance</b>\n\n"
                 "👑 <b>Admin Account</b>\n"
                 "You have unlimited free access!\n\n"
-                "No credits needed for your account."
+                "No credits needed for your account.\n\n"
+                "📊 Check system status: /admin_system_status"
             )
             
             await update.message.reply_text(
@@ -93,59 +94,69 @@ async def openclaw_balance_command(update: Update, context: ContextTypes.DEFAULT
             )
             return
         
-        # Fetch real-time balance from OpenRouter API
-        import httpx
-        api_key = os.getenv('OPENCLAW_API_KEY')
+        # Get user's personal credit balance
+        from app.openclaw_user_credits import get_user_credits
+        from decimal import Decimal
         
-        if not api_key:
-            await update.message.reply_text(
-                "❌ OpenRouter API key not configured.\n"
-                "Please contact admin: @BillFarr"
-            )
-            return
+        user_credits = get_user_credits(db, user_id)
         
-        # Get OpenRouter balance
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                "https://openrouter.ai/api/v1/auth/key",
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=10.0
+        # Get usage stats
+        cursor = db.cursor()
+        cursor.execute("""
+            SELECT 
+                COALESCE(SUM(credits_used), 0) as total_used,
+                COUNT(*) as message_count
+            FROM openclaw_credit_usage
+            WHERE user_id = %s
+        """, (user_id,))
+        
+        result = cursor.fetchone()
+        total_used = Decimal(str(result[0])) if result else Decimal('0')
+        message_count = result[1] if result else 0
+        
+        cursor.close()
+        
+        # Calculate average cost per message
+        avg_cost = total_used / message_count if message_count > 0 else Decimal('0')
+        
+        message = (
+            f"💳 <b>Your OpenClaw Balance</b>\n\n"
+            f"👤 User ID: <code>{user_id}</code>\n"
+            f"💰 <b>Available Credits:</b> ${float(user_credits):.2f}\n\n"
+            f"<b>📊 Usage Stats:</b>\n"
+            f"• Total Used: ${float(total_used):.2f}\n"
+            f"• Messages Sent: {message_count}\n"
+            f"• Avg Cost/Message: ${float(avg_cost):.4f}\n\n"
+        )
+        
+        if user_credits < Decimal('1.00'):
+            message += (
+                "⚠️ <b>Low balance!</b>\n"
+                "Consider topping up to continue using OpenClaw.\n\n"
             )
-            
-            if response.status_code == 200:
-                data = response.json()
-                balance = data.get('data', {}).get('limit_remaining', 0)
-                limit = data.get('data', {}).get('limit', 0)
-                usage = data.get('data', {}).get('usage', 0)
-                
-                message = (
-                    f"💳 <b>Your OpenClaw Balance</b>\n\n"
-                    f"<b>Available Credits:</b> ${balance:.2f}\n"
-                    f"<b>Total Limit:</b> ${limit:.2f}\n"
-                    f"<b>Used:</b> ${usage:.2f}\n\n"
-                    f"💡 <b>Note:</b> This is your real-time OpenRouter API balance.\n"
-                    f"Credits are shared across all OpenClaw users.\n\n"
-                )
-                
-                if balance < 1.00:
-                    message += "⚠️ <b>Low balance!</b> Consider depositing more credits."
-                
-                keyboard = [
-                    [InlineKeyboardButton("💰 Top-Up Credits", callback_data="deposit_start")]
-                ]
-                
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await update.message.reply_text(
-                    message,
-                    parse_mode='HTML',
-                    reply_markup=reply_markup
-                )
-            else:
-                await update.message.reply_text(
-                    "❌ Unable to fetch balance from OpenRouter.\n"
-                    "Please try again or contact admin: @BillFarr"
-                )
+        elif user_credits < Decimal('5.00'):
+            message += "⚡ Balance getting low. Consider topping up soon.\n\n"
+        else:
+            message += "✅ Balance is healthy.\n\n"
+        
+        message += (
+            "<b>💰 Top-Up Credits:</b>\n"
+            "Use /subscribe to see payment options\n\n"
+            "<b>📞 Need Help?</b>\n"
+            "Contact admin: @BillFarr"
+        )
+        
+        keyboard = [
+            [InlineKeyboardButton("💰 Top-Up Credits", callback_data="deposit_start")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            message,
+            parse_mode='HTML',
+            reply_markup=reply_markup
+        )
         
     except Exception as e:
         logger.error(f"Error checking balance: {e}")

@@ -70,18 +70,24 @@ class OpenClawMessageHandler:
             assistant_id = session['assistant_id']
             conversation_id = session.get('conversation_id')
             
-            # Check user credits
-            user_credits = self.manager.get_user_credits(user_id)
+            # Check user credits from per-user balance
+            from app.openclaw_user_credits import get_user_credits
+            from services import get_database
+            from decimal import Decimal
+            
+            db = get_database()
+            user_credits = get_user_credits(db, user_id)
             
             # Check if user is admin
             is_admin = self.manager._is_admin(user_id)
             
-            if not is_admin and user_credits < 1:
+            if not is_admin and user_credits < Decimal('0.01'):  # Minimum 1 cent
                 await update.message.reply_text(
                     "❌ Insufficient Credits\n\n"
                     "You need credits to chat with your AI Assistant.\n\n"
-                    "💰 Purchase credits: /openclaw_buy\n"
-                    "🔙 Exit OpenClaw mode: /openclaw_exit",
+                    "💰 Purchase credits: /subscribe\n"
+                    "💳 Check balance: /openclaw_balance\n"
+                    "📞 Contact admin: @BillFarr",
                     parse_mode=None
                 )
                 return True
@@ -109,6 +115,32 @@ class OpenClawMessageHandler:
                 photo=update.message.photo[-1] if has_photo else None
             )
             
+            # Deduct credits from user's balance (skip for admin)
+            if not is_admin:
+                from app.openclaw_user_credits import deduct_credits
+                
+                success, new_balance, deduct_msg = deduct_credits(
+                    db=db,
+                    user_id=user_id,
+                    amount=Decimal(str(credits_cost)),
+                    assistant_id=assistant_id,
+                    conversation_id=conversation_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    model_used="openai/gpt-4.1"
+                )
+                
+                if not success:
+                    # Deduction failed - should not happen as we checked before
+                    await update.message.reply_text(
+                        f"❌ Credit deduction failed: {deduct_msg}\n\n"
+                        "Please contact admin: @BillFarr",
+                        parse_mode=None
+                    )
+                    return True
+                
+                user_credits = new_balance  # Update for display
+            
             # Delete loading message
             try:
                 await loading_msg.delete()
@@ -132,8 +164,7 @@ class OpenClawMessageHandler:
             if is_admin:
                 footer = f"\n\n💬 {input_tokens + output_tokens} tokens • 👑 Admin (Free){tool_usage_info}"
             else:
-                new_balance = user_credits - credits_cost
-                footer = f"\n\n💰 Cost: {credits_cost} credits • 💳 Balance: {new_balance:,} credits"
+                footer = f"\n\n💰 Cost: ${credits_cost:.4f} • 💳 Balance: ${float(user_credits):.2f}"
             
             # Split long responses if needed
             if len(response) + len(footer) > 4000:
