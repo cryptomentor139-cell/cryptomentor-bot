@@ -188,8 +188,23 @@ async def process_deposit_request(query, user_id: int, amount: Decimal):
         # Calculate split
         split = payment_system.calculate_split(amount)
         
-        # Get admin wallet
-        admin_wallet = os.getenv('ADMIN_WALLET_ADDRESS', '0xed7342ac9c22b1495af4d63f15a7c9768a028ea8')
+        # Get admin wallet with fallback
+        admin_wallet = os.getenv('ADMIN_WALLET_ADDRESS')
+        
+        if not admin_wallet:
+            # Fallback wallet address if env var not set
+            admin_wallet = '0xed7342ac9c22b1495af4d63f15a7c9768a028ea8'
+            logger.warning("ADMIN_WALLET_ADDRESS not set in environment, using fallback")
+        
+        # Validate wallet address format
+        if not admin_wallet or len(admin_wallet) < 20:
+            await query.edit_message_text(
+                "❌ <b>Configuration Error</b>\n\n"
+                "Deposit wallet address not configured.\n"
+                "Please contact admin: @BillFarr",
+                parse_mode='HTML'
+            )
+            return
         
         message = (
             f"💰 <b>OpenClaw Credits Deposit</b>\n\n"
@@ -233,19 +248,28 @@ async def process_deposit_request(query, user_id: int, amount: Decimal):
         )
         
         # Store pending deposit in database
-        db = get_openclaw_db_connection()
-        cursor = db.cursor()
-        cursor.execute("""
-            INSERT INTO openclaw_pending_deposits (
-                user_id, deposit_wallet, amount, expires_at
-            ) VALUES (%s, %s, %s, NOW() + INTERVAL '24 hours')
-        """, (user_id, admin_wallet, float(amount)))
-        db.commit()
+        try:
+            db = get_openclaw_db_connection()
+            cursor = db.cursor()
+            cursor.execute("""
+                INSERT INTO openclaw_pending_deposits (
+                    user_id, deposit_wallet, amount, expires_at
+                ) VALUES (%s, %s, %s, NOW() + INTERVAL '24 hours')
+            """, (user_id, admin_wallet, float(amount)))
+            db.commit()
+            cursor.close()
+        except Exception as db_error:
+            logger.error(f"Error storing pending deposit: {db_error}")
+            # Continue anyway - user can still contact admin
         
     except Exception as e:
         logger.error(f"Error processing deposit request: {e}")
+        import traceback
+        traceback.print_exc()
         await query.edit_message_text(
-            "❌ Error processing request. Please try again."
+            "❌ <b>Error Processing Request</b>\n\n"
+            "Please try again or contact admin: @BillFarr",
+            parse_mode='HTML'
         )
 
 
@@ -307,10 +331,12 @@ async def openclaw_history_command(update: Update, context: ContextTypes.DEFAULT
 def register_openclaw_deposit_handlers(application):
     """Register deposit handlers with the bot application"""
     application.add_handler(CommandHandler("openclaw_deposit", openclaw_deposit_command))
+    application.add_handler(CommandHandler("deposit", openclaw_deposit_command))  # Alias for easier access
     application.add_handler(CommandHandler("openclaw_balance", openclaw_balance_command))
     application.add_handler(CommandHandler("openclaw_history", openclaw_history_command))
     application.add_handler(CallbackQueryHandler(deposit_callback_handler, pattern=r'^deposit_'))
     application.add_handler(CallbackQueryHandler(deposit_callback_handler, pattern=r'^balance_'))
     application.add_handler(CallbackQueryHandler(deposit_callback_handler, pattern=r'^confirm_deposit_'))
     
-    logger.info("OpenClaw deposit handlers registered")
+    logger.info("OpenClaw deposit handlers registered (including /deposit alias)")
+
