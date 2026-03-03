@@ -37,6 +37,8 @@ def run_migration():
     # Initialize database
     print("🔌 Connecting to database...")
     db = Database()
+    conn = db.conn  # Get underlying connection
+    cursor = conn.cursor()
     print("✅ Database connected")
     
     # Split SQL into statements
@@ -84,7 +86,7 @@ def run_migration():
         stmt_preview = stmt.strip()[:60].replace('\n', ' ')
         
         try:
-            db.execute(stmt)
+            cursor.execute(stmt)
             success_count += 1
             print(f"✅ [{i}/{len(statements)}] {stmt_preview}...")
         except Exception as e:
@@ -101,7 +103,7 @@ def run_migration():
     
     # Commit changes
     try:
-        db.commit()
+        conn.commit()
         print("\n✅ Migration committed to database")
     except Exception as e:
         print(f"\n❌ Error committing migration: {e}")
