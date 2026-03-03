@@ -40,9 +40,11 @@ class OpenClawManager:
         Initialize OpenClaw Manager
         
         Args:
-            db: Database connection
+            db: Database instance
         """
         self.db = db
+        self.conn = db.conn  # Get underlying connection
+        self.cursor = db.cursor  # Get cursor
         
         # Check for OpenClaw-specific API key first, then fallback to DEEPSEEK_API_KEY
         openclaw_key = os.getenv('OPENCLAW_API_KEY')
@@ -84,13 +86,14 @@ class OpenClawManager:
         """
         try:
             # Check if user already has assistant with this name
-            existing = self.db.execute(
+            self.cursor.execute(
                 """
                 SELECT assistant_id FROM openclaw_assistants
                 WHERE user_id = ? AND name = ? AND status = 'active'
                 """,
                 (user_id, name)
-            ).fetchone()
+            )
+            existing = self.cursor.fetchone()
             
             if existing:
                 logger.warning(f"User {user_id} already has assistant named '{name}'")
@@ -100,12 +103,13 @@ class OpenClawManager:
             assistant_id = f"OCAI-{user_id}-{uuid4().hex[:8]}"
             
             # Get user info for personalization
-            user = self.db.execute(
-                "SELECT username, first_name FROM users WHERE id = ?",
+            self.cursor.execute(
+                "SELECT username, first_name FROM users WHERE telegram_id = ?",
                 (user_id,)
-            ).fetchone()
+            )
+            user = self.cursor.fetchone()
             
-            user_name = user['first_name'] if user else f"User{user_id}"
+            user_name = user[1] if user else f"User{user_id}"  # first_name is index 1
             
             # Generate system prompt
             system_prompt = custom_prompt or self._generate_system_prompt(
@@ -115,7 +119,7 @@ class OpenClawManager:
             )
             
             # Create assistant in database
-            self.db.execute(
+            self.cursor.execute(
                 """
                 INSERT INTO openclaw_assistants (
                     assistant_id, user_id, name, personality,
@@ -127,7 +131,7 @@ class OpenClawManager:
                     system_prompt, datetime.now(), datetime.now()
                 )
             )
-            self.db.commit()
+            self.conn.commit()
             
             logger.info(f"Created AI Assistant '{name}' ({assistant_id}) for user {user_id}")
             
@@ -135,7 +139,7 @@ class OpenClawManager:
             
         except Exception as e:
             logger.error(f"Error creating assistant: {e}")
-            self.db.rollback()
+            self.conn.rollback()
             raise
     
     def chat(
@@ -306,16 +310,57 @@ class OpenClawManager:
             Dict with purchase details
         """
         try:
-            # Call database function to add credits with platform fee
-            result = self.db.execute(
-                "SELECT * FROM add_openclaw_credits(?, ?)",
-                (user_id, amount_usdc)
-            ).fetchone()
+            # Calculate credits with platform fee
+            platform_fee = amount_usdc * self.PLATFORM_FEE_PERCENTAGE
+            net_amount = amount_usdc - platform_fee
+            net_credits = int(net_amount * self.USDC_TO_CREDITS)
             
-            self.db.commit()
+            # Generate transaction ID
+            transaction_id = f"OCT-{user_id}-{uuid4().hex[:8]}"
+            
+            # Add credits to user
+            self.cursor.execute(
+                """
+                INSERT INTO openclaw_credit_transactions (
+                    transaction_id, user_id, transaction_type, amount_usdc,
+                    credits, platform_fee, created_at
+                ) VALUES (?, ?, 'purchase', ?, ?, ?, ?)
+                """,
+                (transaction_id, user_id, amount_usdc, net_credits, platform_fee, datetime.now())
+            )
+            
+            # Update user credits
+            self.cursor.execute(
+                """
+                INSERT INTO openclaw_user_credits (user_id, credits, last_updated)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    credits = credits + ?,
+                    last_updated = ?
+                """,
+                (user_id, net_credits, datetime.now(), net_credits, datetime.now())
+            )
+            
+            # Record platform revenue
+            self.cursor.execute(
+                """
+                INSERT INTO platform_revenue (
+                    source, amount_usdc, user_id, transaction_id, created_at
+                ) VALUES ('openclaw', ?, ?, ?, ?)
+                """,
+                (platform_fee, user_id, transaction_id, datetime.now())
+            )
+            
+            self.conn.commit()
+            
+            result = {
+                'net_credits': net_credits,
+                'platform_fee': platform_fee,
+                'transaction_id': transaction_id
+            }
             
             net_credits = result['net_credits']
-            platform_fee = float(result['platform_fee'])
+            platform_fee = result['platform_fee']
             transaction_id = result['transaction_id']
             
             logger.info(
@@ -334,7 +379,7 @@ class OpenClawManager:
             
         except Exception as e:
             logger.error(f"Error purchasing credits: {e}")
-            self.db.rollback()
+            self.conn.rollback()
             raise
     
     def get_user_credits(self, user_id: int) -> int:
@@ -344,18 +389,33 @@ class OpenClawManager:
     def get_assistant_info(self, assistant_id: str) -> Optional[Dict]:
         """Get assistant information"""
         try:
-            assistant = self.db.execute(
+            self.cursor.execute(
                 """
-                SELECT * FROM openclaw_assistants
+                SELECT assistant_id, user_id, name, personality, system_prompt,
+                       status, total_tokens_used, total_credits_spent,
+                       created_at, last_active_at
+                FROM openclaw_assistants
                 WHERE assistant_id = ?
                 """,
                 (assistant_id,)
-            ).fetchone()
+            )
+            assistant = self.cursor.fetchone()
             
             if not assistant:
                 return None
             
-            return dict(assistant)
+            return {
+                'assistant_id': assistant[0],
+                'user_id': assistant[1],
+                'name': assistant[2],
+                'personality': assistant[3],
+                'system_prompt': assistant[4],
+                'status': assistant[5],
+                'total_tokens_used': assistant[6],
+                'total_credits_spent': assistant[7],
+                'created_at': assistant[8],
+                'last_active_at': assistant[9]
+            }
             
         except Exception as e:
             logger.error(f"Error getting assistant info: {e}")
@@ -364,16 +424,31 @@ class OpenClawManager:
     def get_user_assistants(self, user_id: int) -> List[Dict]:
         """Get all assistants for user"""
         try:
-            assistants = self.db.execute(
+            self.cursor.execute(
                 """
-                SELECT * FROM openclaw_assistants
+                SELECT assistant_id, user_id, name, personality, system_prompt,
+                       status, total_tokens_used, total_credits_spent,
+                       created_at, last_active_at
+                FROM openclaw_assistants
                 WHERE user_id = ? AND status = 'active'
                 ORDER BY last_active_at DESC
                 """,
                 (user_id,)
-            ).fetchall()
+            )
+            assistants = self.cursor.fetchall()
             
-            return [dict(a) for a in assistants]
+            return [{
+                'assistant_id': a[0],
+                'user_id': a[1],
+                'name': a[2],
+                'personality': a[3],
+                'system_prompt': a[4],
+                'status': a[5],
+                'total_tokens_used': a[6],
+                'total_credits_spent': a[7],
+                'created_at': a[8],
+                'last_active_at': a[9]
+            } for a in assistants]
             
         except Exception as e:
             logger.error(f"Error getting user assistants: {e}")
@@ -396,19 +471,34 @@ class OpenClawManager:
         """Get user's conversations"""
         try:
             if assistant_id:
-                conversations = self.db.execute(
+                self.cursor.execute(
                     """
-                    SELECT * FROM openclaw_conversations
+                    SELECT conversation_id, assistant_id, user_id, message_count,
+                           total_tokens, total_credits_spent, created_at, updated_at
+                    FROM openclaw_conversations
                     WHERE user_id = ? AND assistant_id = ?
                     ORDER BY updated_at DESC
                     LIMIT ?
                     """,
                     (user_id, assistant_id, limit)
-                ).fetchall()
+                )
+                conversations = self.cursor.fetchall()
+                return [{
+                    'conversation_id': c[0],
+                    'assistant_id': c[1],
+                    'user_id': c[2],
+                    'message_count': c[3],
+                    'total_tokens': c[4],
+                    'total_credits_spent': c[5],
+                    'created_at': c[6],
+                    'updated_at': c[7]
+                } for c in conversations]
             else:
-                conversations = self.db.execute(
+                self.cursor.execute(
                     """
-                    SELECT c.*, a.name as assistant_name
+                    SELECT c.conversation_id, c.assistant_id, c.user_id, c.message_count,
+                           c.total_tokens, c.total_credits_spent, c.created_at, c.updated_at,
+                           a.name as assistant_name
                     FROM openclaw_conversations c
                     JOIN openclaw_assistants a ON c.assistant_id = a.assistant_id
                     WHERE c.user_id = ?
@@ -416,9 +506,19 @@ class OpenClawManager:
                     LIMIT ?
                     """,
                     (user_id, limit)
-                ).fetchall()
-            
-            return [dict(c) for c in conversations]
+                )
+                conversations = self.cursor.fetchall()
+                return [{
+                    'conversation_id': c[0],
+                    'assistant_id': c[1],
+                    'user_id': c[2],
+                    'message_count': c[3],
+                    'total_tokens': c[4],
+                    'total_credits_spent': c[5],
+                    'created_at': c[6],
+                    'updated_at': c[7],
+                    'assistant_name': c[8]
+                } for c in conversations]
             
         except Exception as e:
             logger.error(f"Error getting user conversations: {e}")
@@ -484,7 +584,7 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
         """Create new conversation"""
         conversation_id = f"OCC-{user_id}-{uuid4().hex[:8]}"
         
-        self.db.execute(
+        self.cursor.execute(
             """
             INSERT INTO openclaw_conversations (
                 conversation_id, assistant_id, user_id,
@@ -493,7 +593,7 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
             """,
             (conversation_id, assistant_id, user_id, datetime.now(), datetime.now())
         )
-        self.db.commit()
+        self.conn.commit()
         
         return conversation_id
     
@@ -504,17 +604,29 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
     ) -> List[Dict]:
         """Get conversation message history"""
         try:
-            messages = self.db.execute(
+            self.cursor.execute(
                 """
-                SELECT * FROM openclaw_messages
+                SELECT message_id, conversation_id, role, content,
+                       input_tokens, output_tokens, credits_cost, created_at
+                FROM openclaw_messages
                 WHERE conversation_id = ?
                 ORDER BY created_at ASC
                 LIMIT ?
                 """,
                 (conversation_id, limit)
-            ).fetchall()
+            )
+            messages = self.cursor.fetchall()
             
-            return [dict(m) for m in messages]
+            return [{
+                'message_id': m[0],
+                'conversation_id': m[1],
+                'role': m[2],
+                'content': m[3],
+                'input_tokens': m[4],
+                'output_tokens': m[5],
+                'credits_cost': m[6],
+                'created_at': m[7]
+            } for m in messages]
             
         except Exception as e:
             logger.error(f"Error getting conversation history: {e}")
@@ -532,7 +644,7 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
         """Save message to database"""
         message_id = f"OCM-{uuid4().hex[:12]}"
         
-        self.db.execute(
+        self.cursor.execute(
             """
             INSERT INTO openclaw_messages (
                 message_id, conversation_id, role, content,
@@ -544,7 +656,7 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
                 input_tokens, output_tokens, credits_cost, datetime.now()
             )
         )
-        self.db.commit()
+        self.conn.commit()
     
     def _calculate_credits_cost(self, input_tokens: int, output_tokens: int) -> int:
         """Calculate cost in credits based on token usage"""
@@ -561,10 +673,11 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
     def _get_user_credits(self, user_id: int) -> int:
         """Get user's credit balance"""
         try:
-            result = self.db.execute(
-                "SELECT get_openclaw_credits(?)",
+            self.cursor.execute(
+                "SELECT credits FROM openclaw_user_credits WHERE user_id = ?",
                 (user_id,)
-            ).fetchone()
+            )
+            result = self.cursor.fetchone()
             
             return result[0] if result else 0
             
@@ -580,11 +693,30 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
         description: str
     ) -> None:
         """Deduct credits from user balance"""
-        self.db.execute(
-            "SELECT deduct_openclaw_credits(?, ?, ?, ?)",
-            (user_id, credits, conversation_id, description)
+        transaction_id = f"OCT-{user_id}-{uuid4().hex[:8]}"
+        
+        # Record transaction
+        self.cursor.execute(
+            """
+            INSERT INTO openclaw_credit_transactions (
+                transaction_id, user_id, transaction_type, credits,
+                conversation_id, description, created_at
+            ) VALUES (?, ?, 'usage', ?, ?, ?, ?)
+            """,
+            (transaction_id, user_id, -credits, conversation_id, description, datetime.now())
         )
-        self.db.commit()
+        
+        # Deduct from balance
+        self.cursor.execute(
+            """
+            UPDATE openclaw_user_credits
+            SET credits = credits - ?, last_updated = ?
+            WHERE user_id = ?
+            """,
+            (credits, datetime.now(), user_id)
+        )
+        
+        self.conn.commit()
     
     def _update_conversation_stats(
         self,
@@ -593,7 +725,7 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
         credits: int
     ) -> None:
         """Update conversation statistics"""
-        self.db.execute(
+        self.cursor.execute(
             """
             UPDATE openclaw_conversations
             SET 
@@ -605,7 +737,7 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
             """,
             (tokens, credits, datetime.now(), conversation_id)
         )
-        self.db.commit()
+        self.conn.commit()
     
     def _update_assistant_stats(
         self,
@@ -614,7 +746,7 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
         credits: int
     ) -> None:
         """Update assistant statistics"""
-        self.db.execute(
+        self.cursor.execute(
             """
             UPDATE openclaw_assistants
             SET 
@@ -625,7 +757,7 @@ Remember: You are {user_name}'s personal assistant. Your goal is to be genuinely
             """,
             (tokens, credits, datetime.now(), assistant_id)
         )
-        self.db.commit()
+        self.conn.commit()
 
 
 def get_openclaw_manager(db):
