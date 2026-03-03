@@ -15,4 +15,4 @@ if __name__ == "__main__":
     telegram_bot = bot.TelegramBot()
     
     # Run bot
-    asyncio.run(telegram_bot.run())
+    asyncio.run(telegram_bot.run_bot())
