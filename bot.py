@@ -11,6 +11,7 @@ import logging
 import asyncio
 from datetime import datetime
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -292,9 +293,34 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ Admin AUTOMATON credits handlers failed to register: {e}")
         
+        # Register OpenClaw AI Assistant handlers (seamless chat mode)
+        try:
+            from app.openclaw_message_handler import (
+                openclaw_start_command, openclaw_exit_command,
+                openclaw_create_command, openclaw_buy_command,
+                openclaw_help_command
+            )
+            from app.openclaw_callbacks import register_openclaw_callbacks
+            
+            self.application.add_handler(CommandHandler("openclaw_start", openclaw_start_command))
+            self.application.add_handler(CommandHandler("openclaw", openclaw_start_command))  # Alias
+            self.application.add_handler(CommandHandler("openclaw_exit", openclaw_exit_command))
+            self.application.add_handler(CommandHandler("openclaw_create", openclaw_create_command))
+            self.application.add_handler(CommandHandler("openclaw_buy", openclaw_buy_command))
+            self.application.add_handler(CommandHandler("openclaw_help", openclaw_help_command))
+            self.application.add_handler(CommandHandler("openclaw_balance", self.openclaw_balance_command))
+            self.application.add_handler(CommandHandler("openclaw_history", self.openclaw_history_command))
+            
+            # Register callback handlers
+            register_openclaw_callbacks(self.application)
+            
+            print("✅ OpenClaw AI Assistant handlers registered (seamless chat mode)")
+        except Exception as e:
+            print(f"⚠️ OpenClaw handlers failed to register: {e}")
+        
         # Note: Automaton is for AUTONOMOUS TRADING only (Lifetime Premium)
         # Signal generation uses bot's own system (/analyze, /futures, /ai)
-        # No separate Automaton AI handlers needed
+        # OpenClaw is for PERSONAL AI ASSISTANT (Claude Sonnet 4.5) with seamless chat
 
         # Message handler for menu interactions
         self.application.add_handler(
@@ -1443,6 +1469,97 @@ Address:
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='HTML'
         )
+
+    async def openclaw_balance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show OpenClaw credit balance"""
+        user_id = update.effective_user.id
+        
+        try:
+            from services import get_database
+            from app.openclaw_manager import get_openclaw_manager
+            
+            db = get_database()
+            manager = get_openclaw_manager(db)
+            
+            # Get credits
+            credits = manager.get_user_credits(user_id)
+            
+            # Get assistants
+            assistants = manager.get_user_assistants(user_id)
+            
+            # Get total usage stats
+            total_tokens = 0
+            total_spent = 0
+            for assistant in assistants:
+                total_tokens += assistant.get('total_tokens_used', 0)
+                total_spent += float(assistant.get('total_credits_spent', 0))
+            
+            await update.message.reply_text(
+                f"💰 **OpenClaw Credit Balance**\n\n"
+                f"👤 User: {update.effective_user.first_name}\n"
+                f"🆔 ID: `{user_id}`\n\n"
+                f"💳 **Credits:** {credits:,}\n"
+                f"🤖 **Assistants:** {len(assistants)}\n"
+                f"📊 **Total Tokens Used:** {total_tokens:,}\n"
+                f"💸 **Total Spent:** {total_spent:,.0f} credits\n\n"
+                f"💰 **Purchase:** /openclaw_buy\n"
+                f"📚 **Help:** /openclaw_help",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as e:
+            await update.message.reply_text(
+                f"❌ **Error:** {str(e)}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    async def openclaw_history_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show conversation history"""
+        user_id = update.effective_user.id
+        
+        try:
+            from services import get_database
+            from app.openclaw_manager import get_openclaw_manager
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            
+            db = get_database()
+            manager = get_openclaw_manager(db)
+            
+            # Get conversations
+            conversations = manager.get_user_conversations(user_id, limit=10)
+            
+            if not conversations:
+                await update.message.reply_text(
+                    "📚 **No Conversations Yet**\n\n"
+                    "Start chatting with your AI Assistant:\n"
+                    "/openclaw_start",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+            
+            # Build conversation list
+            text = "📚 **Recent Conversations**\n\n"
+            
+            for i, conv in enumerate(conversations, 1):
+                assistant_name = conv.get('assistant_name', 'Unknown')
+                message_count = conv.get('message_count', 0)
+                total_credits = float(conv.get('total_credits_spent', 0))
+                updated_at = str(conv.get('updated_at', ''))[:16]
+                
+                text += f"{i}. 🤖 {assistant_name}\n"
+                text += f"   💬 {message_count} messages • 💰 {total_credits:.0f} credits\n"
+                text += f"   🕐 {updated_at}\n\n"
+            
+            text += "\n💡 Start new chat: /openclaw_start"
+            
+            await update.message.reply_text(
+                text,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as e:
+            await update.message.reply_text(
+                f"❌ **Error:** {str(e)}",
+                parse_mode=ParseMode.MARKDOWN
+            )
 
     async def referral_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle referral command with enhanced tier system"""
@@ -2780,6 +2897,25 @@ Choose action:
         if update.effective_user and update.effective_chat:
             from app.chat_store import remember_chat
             remember_chat(update.effective_user.id, update.effective_chat.id)
+        
+        # PRIORITY 1: Check if user is in OpenClaw mode (seamless AI chat)
+        try:
+            from services import get_database
+            from app.openclaw_manager import get_openclaw_manager
+            from app.openclaw_message_handler import get_openclaw_message_handler
+            
+            db = get_database()
+            openclaw_manager = get_openclaw_manager(db)
+            openclaw_handler = get_openclaw_message_handler(openclaw_manager)
+            
+            # Try to handle with OpenClaw
+            handled = await openclaw_handler.handle_message(update, context)
+            if handled:
+                # Message was handled by OpenClaw AI Assistant
+                return
+        except Exception as e:
+            # OpenClaw not available or error - continue with normal flow
+            logger.debug(f"OpenClaw handler skipped: {e}")
         
         user_data = context.user_data
         text = update.message.text
