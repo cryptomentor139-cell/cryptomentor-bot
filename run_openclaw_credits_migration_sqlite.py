@@ -1,47 +1,27 @@
+#!/usr/bin/env python3
 """
-OpenClaw Auto-Migration
-Automatically creates tables if they don't exist (SQLite compatible)
+Run OpenClaw Per-User Credits Migration for SQLite
+Creates tables if they don't exist
 """
 
-import os
-import logging
 import sqlite3
+import os
+from datetime import datetime
 
-logger = logging.getLogger(__name__)
-
-
-def auto_migrate_openclaw(db):
-    """
-    Auto-create OpenClaw tables if they don't exist (SQLite)
+def run_migration():
+    """Run the migration"""
     
-    Args:
-        db: Database instance
-        
-    Returns:
-        True if migration was run, False if tables already exist
-    """
+    # Connect to database
+    db_path = os.getenv('DATABASE_PATH', 'cryptomentor.db')
+    print(f"📂 Connecting to database: {db_path}")
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
     try:
-        cursor = db.cursor
-        conn = db.conn
+        print("\n🔧 Creating OpenClaw per-user credits tables...")
         
-        logger.info("🔍 Checking OpenClaw tables...")
-        
-        # Check if openclaw_user_credits table exists (SQLite syntax)
-        cursor.execute("""
-            SELECT name FROM sqlite_master 
-            WHERE type='table' AND name='openclaw_user_credits'
-        """)
-        
-        tables_exist = cursor.fetchone() is not None
-        
-        if tables_exist:
-            logger.info("✅ OpenClaw tables already exist - skipping migration")
-            return False
-        
-        logger.info("🔄 OpenClaw tables not found - running auto-migration...")
-        
-        # Create per-user credits tables (SQLite syntax)
-        logger.info("📄 Creating openclaw_user_credits table...")
+        # 1. Per-user credit balances
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS openclaw_user_credits (
                 user_id INTEGER PRIMARY KEY,
@@ -52,8 +32,9 @@ def auto_migrate_openclaw(db):
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        print("✅ Created openclaw_user_credits table")
         
-        logger.info("📄 Creating openclaw_credit_allocations table...")
+        # 2. Credit allocation log
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS openclaw_credit_allocations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,8 +49,9 @@ def auto_migrate_openclaw(db):
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        print("✅ Created openclaw_credit_allocations table")
         
-        logger.info("📄 Creating openclaw_credit_usage table...")
+        # 3. Credit usage log
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS openclaw_credit_usage (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,8 +68,9 @@ def auto_migrate_openclaw(db):
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        print("✅ Created openclaw_credit_usage table")
         
-        logger.info("📄 Creating openclaw_balance_snapshots table...")
+        # 4. System balance tracking
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS openclaw_balance_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,9 +82,11 @@ def auto_migrate_openclaw(db):
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        print("✅ Created openclaw_balance_snapshots table")
         
         # Create indexes
-        logger.info("📄 Creating indexes...")
+        print("\n🔧 Creating indexes...")
+        
         indexes = [
             "CREATE INDEX IF NOT EXISTS idx_openclaw_user_credits_user ON openclaw_user_credits(user_id)",
             "CREATE INDEX IF NOT EXISTS idx_openclaw_allocations_user ON openclaw_credit_allocations(user_id)",
@@ -115,57 +100,60 @@ def auto_migrate_openclaw(db):
         for index_sql in indexes:
             cursor.execute(index_sql)
         
+        print("✅ Created all indexes")
+        
+        # Commit changes
         conn.commit()
         
-        logger.info("✅ OpenClaw migration completed successfully!")
+        print("\n✅ Migration completed successfully!")
+        print("\n📊 Verifying tables...")
         
-        # Verify tables created
+        # Verify tables exist
         cursor.execute("""
             SELECT name FROM sqlite_master 
             WHERE type='table' AND name LIKE 'openclaw_%'
+            ORDER BY name
         """)
-        tables = cursor.fetchall()
         
-        logger.info(f"✅ Verified: {len(tables)} OpenClaw tables created")
+        tables = cursor.fetchall()
+        print(f"\n✅ Found {len(tables)} OpenClaw tables:")
+        for table in tables:
+            cursor.execute(f"SELECT COUNT(*) FROM {table[0]}")
+            count = cursor.fetchone()[0]
+            print(f"   • {table[0]}: {count} rows")
         
         return True
         
     except Exception as e:
-        logger.error(f"❌ OpenClaw auto-migration failed: {e}")
-        logger.error("   Bot will continue but OpenClaw features may not work")
+        print(f"\n❌ Migration failed: {e}")
         import traceback
         traceback.print_exc()
-        try:
-            conn.rollback()
-        except:
-            pass
+        conn.rollback()
         return False
+        
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def check_openclaw_ready(db):
-    """
-    Check if OpenClaw is ready to use
+if __name__ == "__main__":
+    print("=" * 60)
+    print("OpenClaw Per-User Credits Migration (SQLite)")
+    print("=" * 60)
     
-    Args:
-        db: Database instance
-        
-    Returns:
-        True if OpenClaw tables exist and are ready
-    """
-    try:
-        cursor = db.cursor
-        
-        # Check if tables exist (SQLite syntax)
-        cursor.execute("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public'
-                AND table_name = 'openclaw_skills_catalog'
-            )
-        """)
-        
-        return cursor.fetchone()[0]
-        
-    except Exception as e:
-        logger.error(f"Error checking OpenClaw status: {e}")
-        return False
+    success = run_migration()
+    
+    if success:
+        print("\n" + "=" * 60)
+        print("✅ MIGRATION SUCCESSFUL!")
+        print("=" * 60)
+        print("\n🎯 Next steps:")
+        print("  1. Restart bot or Railway service")
+        print("  2. Test /admin_system_status")
+        print("  3. Test /admin_add_credits <user_id> <amount>")
+        print("  4. All OpenClaw commands should work now!")
+    else:
+        print("\n" + "=" * 60)
+        print("❌ MIGRATION FAILED!")
+        print("=" * 60)
+        print("\nCheck error messages above and fix issues.")
