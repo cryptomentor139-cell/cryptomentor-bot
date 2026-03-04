@@ -215,13 +215,13 @@ async def admin_add_credits_command(update: Update, context: ContextTypes.DEFAUL
         # Create user credit record if doesn't exist
         cursor.execute("""
             INSERT INTO openclaw_user_credits (user_id, credits, total_allocated, total_used)
-            VALUES (%s, 0, 0, 0)
+            VALUES (?, 0, 0, 0)
             ON CONFLICT (user_id) DO NOTHING
         """, (target_user_id,))
         
         # Get user's current balance
         cursor.execute("""
-            SELECT credits FROM openclaw_user_credits WHERE user_id = %s
+            SELECT credits FROM openclaw_user_credits WHERE user_id = ?
         """, (target_user_id,))
         result = cursor.fetchone()
         balance_before = float(result[0]) if result else 0
@@ -229,9 +229,9 @@ async def admin_add_credits_command(update: Update, context: ContextTypes.DEFAUL
         # Add credits to user
         cursor.execute("""
             UPDATE openclaw_user_credits
-            SET credits = credits + %s,
-                total_allocated = total_allocated + %s
-            WHERE user_id = %s
+            SET credits = credits + ?,
+                total_allocated = total_allocated + ?
+            WHERE user_id = ?
         """, (amount, amount, target_user_id))
         
         # Log allocation
@@ -240,7 +240,7 @@ async def admin_add_credits_command(update: Update, context: ContextTypes.DEFAUL
                 user_id, admin_id, amount, reason,
                 openrouter_balance_before, openrouter_balance_after,
                 total_allocated_before, total_allocated_after
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             target_user_id, user_id, amount, reason,
             openrouter_balance, openrouter_balance,  # Same before/after (admin tops up separately)
@@ -254,10 +254,10 @@ async def admin_add_credits_command(update: Update, context: ContextTypes.DEFAUL
                 available_to_allocate, user_count
             )
             SELECT 
-                %s,
+                ?,
                 COALESCE(SUM(total_allocated), 0),
                 COALESCE(SUM(total_used), 0),
-                %s - COALESCE(SUM(total_allocated), 0),
+                ? - COALESCE(SUM(total_allocated), 0),
                 COUNT(*)
             FROM openclaw_user_credits
         """, (openrouter_balance, openrouter_balance))

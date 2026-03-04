@@ -45,7 +45,7 @@ class OpenClawManager:
         """
         self.db = db
         self.conn = db.conn  # Get underlying connection
-        self.cursor = db.cursor  # Get cursor
+        self.cursor = db.cursor()  # Get cursor instance (FIXED: added ())
         
         # Check for OpenClaw-specific API key first, then fallback to DEEPSEEK_API_KEY
         openclaw_key = os.getenv('OPENCLAW_API_KEY')
@@ -865,7 +865,7 @@ Remember: You are {user_name}'s personal assistant with crypto trading expertise
             # Get user_id from assistant
             try:
                 self.cursor.execute(
-                    "SELECT user_id FROM openclaw_assistants WHERE assistant_id = %s",
+                    "SELECT user_id FROM openclaw_assistants WHERE assistant_id = ?",
                     (assistant_id,)
                 )
                 result = self.cursor.fetchone()
@@ -1153,7 +1153,7 @@ You are now operating in ADMIN MODE with full system access. Use these powers re
         """
         try:
             self.cursor.execute("""
-                SELECT * FROM get_available_skills(%s)
+                SELECT * FROM get_available_skills(?)
             """, (assistant_id,))
 
             skills = []
@@ -1184,7 +1184,7 @@ You are now operating in ADMIN MODE with full system access. Use these powers re
         """
         try:
             self.cursor.execute("""
-                SELECT * FROM get_assistant_skills(%s)
+                SELECT * FROM get_assistant_skills(?)
             """, (assistant_id,))
 
             skills = []
@@ -1219,7 +1219,7 @@ You are now operating in ADMIN MODE with full system access. Use these powers re
         """
         try:
             self.cursor.execute("""
-                SELECT * FROM install_openclaw_skill(%s, %s, %s)
+                SELECT * FROM install_openclaw_skill(?, ?, ?)
             """, (assistant_id, skill_id, user_id))
 
             result = self.cursor.fetchone()
@@ -1255,8 +1255,8 @@ You are now operating in ADMIN MODE with full system access. Use these powers re
         try:
             self.cursor.execute("""
                 UPDATE openclaw_assistant_skills
-                SET is_active = %s
-                WHERE assistant_id = %s AND skill_id = %s
+                SET is_active = ?
+                WHERE assistant_id = ? AND skill_id = ?
             """, (is_active, assistant_id, skill_id))
 
             self.conn.commit()
@@ -1286,7 +1286,7 @@ You are now operating in ADMIN MODE with full system access. Use these powers re
                     capabilities, system_prompt_addition,
                     price_credits, is_premium, version
                 FROM openclaw_skills_catalog
-                WHERE skill_id = %s
+                WHERE skill_id = ?
             """, (skill_id,))
 
             row = self.cursor.fetchone()
@@ -1402,175 +1402,6 @@ You are now operating in ADMIN MODE with full system access. Use these powers re
             
         except Exception as e:
             logger.error(f"Error getting crypto context: {e}")
-            return None
-
-    # ==================== SKILL MANAGEMENT METHODS ====================
-    
-    def get_available_skills(self, assistant_id: str) -> List[Dict]:
-        """
-        Get skills available for installation
-        
-        Args:
-            assistant_id: Assistant ID
-            
-        Returns:
-            List of available skills
-        """
-        try:
-            self.cursor.execute("""
-                SELECT * FROM get_available_skills(%s)
-            """, (assistant_id,))
-            
-            skills = []
-            for row in self.cursor.fetchall():
-                skills.append({
-                    'skill_id': row[0],
-                    'name': row[1],
-                    'description': row[2],
-                    'category': row[3],
-                    'price_credits': row[4],
-                    'is_premium': row[5]
-                })
-            
-            return skills
-        except Exception as e:
-            logger.error(f"Error getting available skills: {e}")
-            return []
-    
-    def get_installed_skills(self, assistant_id: str) -> List[Dict]:
-        """
-        Get skills installed on assistant
-        
-        Args:
-            assistant_id: Assistant ID
-            
-        Returns:
-            List of installed skills
-        """
-        try:
-            self.cursor.execute("""
-                SELECT * FROM get_assistant_skills(%s)
-            """, (assistant_id,))
-            
-            skills = []
-            for row in self.cursor.fetchall():
-                skills.append({
-                    'skill_id': row[0],
-                    'name': row[1],
-                    'description': row[2],
-                    'category': row[3],
-                    'capabilities': row[4],
-                    'is_active': row[5],
-                    'installed_at': row[6],
-                    'usage_count': row[7]
-                })
-            
-            return skills
-        except Exception as e:
-            logger.error(f"Error getting installed skills: {e}")
-            return []
-    
-    def install_skill(self, assistant_id: str, skill_id: str, user_id: int) -> Tuple[bool, str, int]:
-        """
-        Install a skill on assistant
-        
-        Args:
-            assistant_id: Assistant ID
-            skill_id: Skill ID to install
-            user_id: User ID (for credit deduction)
-            
-        Returns:
-            Tuple of (success, message, credits_spent)
-        """
-        try:
-            self.cursor.execute("""
-                SELECT * FROM install_openclaw_skill(%s, %s, %s)
-            """, (assistant_id, skill_id, user_id))
-            
-            result = self.cursor.fetchone()
-            self.conn.commit()
-            
-            success = result[0]
-            message = result[1]
-            credits_spent = result[2]
-            
-            if success:
-                logger.info(f"Skill {skill_id} installed on assistant {assistant_id} for user {user_id}")
-            else:
-                logger.warning(f"Failed to install skill {skill_id}: {message}")
-            
-            return success, message, credits_spent
-        except Exception as e:
-            self.conn.rollback()
-            logger.error(f"Error installing skill: {e}")
-            return False, f"Error: {str(e)}", 0
-    
-    def toggle_skill(self, assistant_id: str, skill_id: str, is_active: bool) -> bool:
-        """
-        Enable or disable a skill
-        
-        Args:
-            assistant_id: Assistant ID
-            skill_id: Skill ID
-            is_active: True to enable, False to disable
-            
-        Returns:
-            True if successful
-        """
-        try:
-            self.cursor.execute("""
-                UPDATE openclaw_assistant_skills
-                SET is_active = %s
-                WHERE assistant_id = %s AND skill_id = %s
-            """, (is_active, assistant_id, skill_id))
-            
-            self.conn.commit()
-            
-            action = "enabled" if is_active else "disabled"
-            logger.info(f"Skill {skill_id} {action} for assistant {assistant_id}")
-            return True
-        except Exception as e:
-            self.conn.rollback()
-            logger.error(f"Error toggling skill: {e}")
-            return False
-    
-    def get_skill_details(self, skill_id: str) -> Optional[Dict]:
-        """
-        Get detailed information about a skill
-        
-        Args:
-            skill_id: Skill ID
-            
-        Returns:
-            Skill details or None
-        """
-        try:
-            self.cursor.execute("""
-                SELECT 
-                    skill_id, name, description, category, 
-                    capabilities, system_prompt_addition,
-                    price_credits, is_premium, version
-                FROM openclaw_skills_catalog
-                WHERE skill_id = %s
-            """, (skill_id,))
-            
-            row = self.cursor.fetchone()
-            if not row:
-                return None
-            
-            return {
-                'skill_id': row[0],
-                'name': row[1],
-                'description': row[2],
-                'category': row[3],
-                'capabilities': row[4],
-                'system_prompt_addition': row[5],
-                'price_credits': row[6],
-                'is_premium': row[7],
-                'version': row[8]
-            }
-        except Exception as e:
-            logger.error(f"Error getting skill details: {e}")
             return None
 
 
