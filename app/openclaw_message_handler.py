@@ -221,9 +221,32 @@ class OpenClawMessageHandler:
         Returns:
             Tuple of (response, input_tokens, output_tokens, credits_cost)
         """
-        # If photo is provided, add context to message
-        if has_photo and photo:
-            message = f"[User sent an image]\n{message if message else 'Please analyze this image'}"
+        # Enhance message with real-time data and image analysis
+        try:
+            from app.openclaw_enhanced_handler import get_enhanced_handler
+            enhanced_handler = get_enhanced_handler(self.manager)
+            
+            # Get photo file if available
+            photo_file = None
+            if has_photo and photo:
+                photo_file = await photo.get_file()
+            
+            # Enhance message with crypto data and image analysis
+            enhanced_message, context_data = await enhanced_handler.enhance_message_with_data(
+                message=message,
+                photo=photo_file
+            )
+            
+            # Use enhanced message
+            message = enhanced_message
+            
+            logger.info(f"Enhanced message with context: {list(context_data.keys())}")
+            
+        except Exception as e:
+            logger.error(f"Error enhancing message: {e}")
+            # Fallback to original message
+            if has_photo and photo:
+                message = f"[User sent an image]\n{message if message else 'Please analyze this image'}"
         
         # Check if agentic loop is available (injected from bot.py)
         if hasattr(self, 'agentic_loop') and self.agentic_loop:
