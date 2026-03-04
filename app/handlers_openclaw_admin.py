@@ -122,13 +122,13 @@ async def openclaw_check_user_command(update: Update, context: ContextTypes.DEFA
         balance = payment_system.get_user_balance(target_user_id, db)
         
         # Get transaction stats
-        cursor = db.cursor()
+        cursor = db.cursor  # Property, not method
         cursor.execute("""
             SELECT 
                 COUNT(*) as tx_count,
                 COALESCE(SUM(user_credits), 0) as total_deposited
             FROM openclaw_transactions
-            WHERE user_id = %s AND status = 'completed'
+            WHERE user_id = ? AND status = 'completed'
         """, (target_user_id,))
         
         tx_result = cursor.fetchone()
@@ -141,7 +141,7 @@ async def openclaw_check_user_command(update: Update, context: ContextTypes.DEFA
                 COUNT(*) as usage_count,
                 COALESCE(SUM(amount), 0) as total_spent
             FROM openclaw_usage_log
-            WHERE user_id = %s
+            WHERE user_id = ?
         """, (target_user_id,))
         
         usage_result = cursor.fetchone()
@@ -152,7 +152,7 @@ async def openclaw_check_user_command(update: Update, context: ContextTypes.DEFA
         cursor.execute("""
             SELECT reason, amount, created_at
             FROM openclaw_usage_log
-            WHERE user_id = %s
+            WHERE user_id = ?
             ORDER BY created_at DESC
             LIMIT 5
         """, (target_user_id,))
@@ -200,7 +200,7 @@ async def openclaw_list_users_command(update: Update, context: ContextTypes.DEFA
     
     try:
         db = get_openclaw_db_connection()
-        cursor = db.cursor()
+        cursor = db.cursor  # Property, not method
         
         # Get all users with credits
         cursor.execute("""
@@ -255,7 +255,7 @@ async def openclaw_monitor_command(update: Update, context: ContextTypes.DEFAULT
     
     try:
         db = get_openclaw_db_connection()
-        cursor = db.cursor()
+        cursor = db.cursor  # Property, not method
         
         # Total users
         cursor.execute("SELECT COUNT(*) FROM openclaw_credits")

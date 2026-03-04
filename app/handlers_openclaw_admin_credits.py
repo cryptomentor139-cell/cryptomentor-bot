@@ -182,7 +182,7 @@ async def admin_add_credits_command(update: Update, context: ContextTypes.DEFAUL
         # Get database connection
         from services import get_database
         db = get_database()
-        cursor = db.cursor()
+        cursor = db.cursor  # cursor is a property, not a method
         
         # Calculate total currently allocated to all users
         cursor.execute("""
@@ -378,7 +378,7 @@ async def admin_system_status_command(update: Update, context: ContextTypes.DEFA
         # Get database stats
         from services import get_database
         db = get_database()
-        cursor = db.cursor()
+        cursor = db.cursor  # Property, not method
         
         # Total allocated to all users
         cursor.execute("""

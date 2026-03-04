@@ -43,13 +43,13 @@ class OpenClawChatMonitor:
         """
         try:
             db = get_openclaw_db_connection()
-            cursor = db.cursor()
+            cursor = db.cursor  # Property, not method
             
             cursor.execute("""
                 INSERT INTO openclaw_chat_monitor (
                     user_id, username, message, has_credits,
                     balance, success, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ) VALUES (?, ?, ?, ?, ?, ?, NOW())
             """, (
                 user_id,
                 username,
@@ -86,7 +86,7 @@ class OpenClawChatMonitor:
         """
         try:
             db = get_openclaw_db_connection()
-            cursor = db.cursor()
+            cursor = db.cursor  # Property, not method
             
             cursor.execute("""
                 SELECT 
@@ -94,7 +94,7 @@ class OpenClawChatMonitor:
                     balance, success, created_at
                 FROM openclaw_chat_monitor
                 ORDER BY created_at DESC
-                LIMIT %s
+                LIMIT ?
             """, (limit,))
             
             return cursor.fetchall()
@@ -116,7 +116,7 @@ class OpenClawChatMonitor:
         """
         try:
             db = get_openclaw_db_connection()
-            cursor = db.cursor()
+            cursor = db.cursor  # Property, not method
             
             cursor.execute("""
                 SELECT 
@@ -129,7 +129,7 @@ class OpenClawChatMonitor:
                 WHERE has_credits = FALSE
                 GROUP BY user_id, username
                 ORDER BY last_attempt DESC
-                LIMIT %s
+                LIMIT ?
             """, (limit,))
             
             return cursor.fetchall()

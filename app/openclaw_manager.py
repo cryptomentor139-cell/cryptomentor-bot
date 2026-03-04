@@ -45,7 +45,7 @@ class OpenClawManager:
         """
         self.db = db
         self.conn = db.conn  # Get underlying connection
-        self.cursor = db.cursor()  # Get cursor instance (FIXED: added ())
+        self.cursor = db.cursor  # Get cursor property (not a method call)
         
         # Check for OpenClaw-specific API key first, then fallback to DEEPSEEK_API_KEY
         openclaw_key = os.getenv('OPENCLAW_API_KEY')

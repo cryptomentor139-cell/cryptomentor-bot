@@ -22,19 +22,19 @@ def get_user_credits(db, user_id: int) -> Decimal:
         User's credit balance as Decimal
     """
     try:
-        cursor = db.cursor()
+        cursor = db.cursor  # cursor is a property, not a method
         
         # Ensure user exists in credits table
         cursor.execute("""
             INSERT INTO openclaw_user_credits (user_id, credits, total_allocated, total_used)
-            VALUES (%s, 0, 0, 0)
+            VALUES (?, 0, 0, 0)
             ON CONFLICT (user_id) DO NOTHING
         """, (user_id,))
         db.commit()
         
         # Get balance
         cursor.execute("""
-            SELECT credits FROM openclaw_user_credits WHERE user_id = %s
+            SELECT credits FROM openclaw_user_credits WHERE user_id = ?
         """, (user_id,))
         
         result = cursor.fetchone()
@@ -78,11 +78,11 @@ def deduct_credits(
         Tuple of (success, new_balance, message)
     """
     try:
-        cursor = db.cursor()
+        cursor = db.cursor  # Property, not method
         
         # Get current balance
         cursor.execute("""
-            SELECT credits FROM openclaw_user_credits WHERE user_id = %s
+            SELECT credits FROM openclaw_user_credits WHERE user_id = ?
         """, (user_id,))
         
         result = cursor.fetchone()
@@ -100,9 +100,9 @@ def deduct_credits(
         # Deduct credits
         cursor.execute("""
             UPDATE openclaw_user_credits
-            SET credits = credits - %s,
-                total_used = total_used + %s
-            WHERE user_id = %s
+            SET credits = credits - ?,
+                total_used = total_used + ?
+            WHERE user_id = ?
         """, (float(amount), float(amount), user_id))
         
         balance_after = balance_before - amount
@@ -113,7 +113,7 @@ def deduct_credits(
                 user_id, assistant_id, conversation_id, message_id,
                 credits_used, input_tokens, output_tokens, model_used,
                 balance_before, balance_after
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             user_id, assistant_id, conversation_id, message_id,
             float(amount), input_tokens, output_tokens, model_used,
@@ -154,18 +154,18 @@ def add_credits(
         Tuple of (success, new_balance, message)
     """
     try:
-        cursor = db.cursor()
+        cursor = db.cursor  # Property, not method
         
         # Ensure user exists
         cursor.execute("""
             INSERT INTO openclaw_user_credits (user_id, credits, total_allocated, total_used)
-            VALUES (%s, 0, 0, 0)
+            VALUES (?, 0, 0, 0)
             ON CONFLICT (user_id) DO NOTHING
         """, (user_id,))
         
         # Get current balance
         cursor.execute("""
-            SELECT credits FROM openclaw_user_credits WHERE user_id = %s
+            SELECT credits FROM openclaw_user_credits WHERE user_id = ?
         """, (user_id,))
         
         result = cursor.fetchone()
@@ -205,7 +205,7 @@ def get_total_allocated(db) -> Decimal:
         Total allocated credits as Decimal
     """
     try:
-        cursor = db.cursor()
+        cursor = db.cursor  # Property, not method
         
         cursor.execute("""
             SELECT COALESCE(SUM(credits), 0) as total

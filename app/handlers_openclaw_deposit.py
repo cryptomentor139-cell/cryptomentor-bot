@@ -98,13 +98,13 @@ async def openclaw_balance_command(update: Update, context: ContextTypes.DEFAULT
         user_credits = get_user_credits(db, user_id)
         
         # Get usage stats
-        cursor = db.cursor()
+        cursor = db.cursor  # Property, not method
         cursor.execute("""
             SELECT 
                 COALESCE(SUM(credits_used), 0) as total_used,
                 COUNT(*) as message_count
             FROM openclaw_credit_usage
-            WHERE user_id = %s
+            WHERE user_id = ?
         """, (user_id,))
         
         result = cursor.fetchone()
@@ -342,11 +342,11 @@ async def process_deposit_request(query, user_id: int, amount: Decimal):
         # Store pending deposit in database
         try:
             db = get_openclaw_db_connection()
-            cursor = db.cursor()
+            cursor = db.cursor  # Property, not method
             cursor.execute("""
                 INSERT INTO openclaw_pending_deposits (
                     user_id, deposit_wallet, amount, expires_at
-                ) VALUES (%s, %s, %s, NOW() + INTERVAL '24 hours')
+                ) VALUES (?, ?, ?, NOW() + INTERVAL '24 hours')
             """, (user_id, admin_wallet, float(amount)))
             db.commit()
             cursor.close()
@@ -373,13 +373,13 @@ async def openclaw_history_command(update: Update, context: ContextTypes.DEFAULT
     
     try:
         db = get_openclaw_db_connection()
-        cursor = db.cursor()
+        cursor = db.cursor  # Property, not method
         
         # Get recent transactions
         cursor.execute("""
             SELECT transaction_hash, amount, user_credits, platform_fee, created_at
             FROM openclaw_transactions
-            WHERE user_id = %s AND status = 'completed'
+            WHERE user_id = ? AND status = 'completed'
             ORDER BY created_at DESC
             LIMIT 10
         """, (user_id,))
