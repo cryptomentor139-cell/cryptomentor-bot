@@ -215,66 +215,65 @@ class OpenClawMessageHandler:
         photo = None
     ):
         """
-        Send message to AI Assistant (async wrapper)
-        Uses agentic loop if available (for admin with tool access)
+        Send message to AI Assistant with optional image support
         
         Returns:
             Tuple of (response, input_tokens, output_tokens, credits_cost)
         """
-        # Enhance message with real-time data and image analysis
-        try:
-            from app.openclaw_enhanced_handler import get_enhanced_handler
-            enhanced_handler = get_enhanced_handler(self.manager)
-            
-            # Get photo file if available
-            photo_file = None
-            if has_photo and photo:
-                photo_file = await photo.get_file()
-            
-            # Enhance message with crypto data and image analysis
-            enhanced_message, context_data = await enhanced_handler.enhance_message_with_data(
-                message=message,
-                photo=photo_file
-            )
-            
-            # Use enhanced message
-            message = enhanced_message
-            
-            logger.info(f"Enhanced message with context: {list(context_data.keys())}")
-            
-        except Exception as e:
-            logger.error(f"Error enhancing message: {e}")
-            # Fallback to original message
-            if has_photo and photo:
-                message = f"[User sent an image]\n{message if message else 'Please analyze this image'}"
-        
-        # Check if agentic loop is available (injected from bot.py)
-        if hasattr(self, 'agentic_loop') and self.agentic_loop:
-            # Use agentic loop with tool calling capabilities
+        # Get image data if photo provided
+        image_data = None
+        if has_photo and photo:
             try:
-                response, input_tokens, output_tokens, credits_cost, tool_calls = self.agentic_loop.chat_with_tools(
-                    user_id=user_id,
-                    assistant_id=assistant_id,
+                # Download photo
+                photo_file = await photo.get_file()
+                photo_bytes = await photo_file.download_as_bytearray()
+                image_data = bytes(photo_bytes)
+                
+                logger.info(f"Downloaded image: {len(image_data)} bytes")
+                
+            except Exception as e:
+                logger.error(f"Error downloading photo: {e}")
+                # Continue without image
+        
+        # Enhance message with crypto data (but not for images)
+        if not image_data:
+            try:
+                from app.openclaw_enhanced_handler import get_enhanced_handler
+                enhanced_handler = get_enhanced_handler(self.manager)
+                
+                # Enhance message with crypto data
+                enhanced_message, context_data = await enhanced_handler.enhance_message_with_data(
                     message=message,
-                    conversation_id=conversation_id
+                    photo=None  # Don't pass photo to enhanced handler
                 )
                 
-                # Store tool calls for display
-                self._last_tool_calls = tool_calls if tool_calls else []
+                # Use enhanced message
+                message = enhanced_message
                 
-                return response, input_tokens, output_tokens, credits_cost
+                logger.info(f"Enhanced message with context: {list(context_data.keys())}")
+                
             except Exception as e:
-                logger.error(f"Agentic loop error, falling back to basic chat: {e}")
-                # Fallback to basic chat on error
+                logger.error(f"Error enhancing message: {e}")
+                # Continue with original message
         
-        # Fallback: Use basic chat without tools
-        self._last_tool_calls = []  # No tools used in basic chat
-        return self.manager.chat(
-            user_id=user_id,
-            assistant_id=assistant_id,
-            message=message,
-            conversation_id=conversation_id
-        )
+        # Use vision-enabled chat if image provided
+        if image_data:
+            # Call vision chat
+            return await self.manager.chat_with_vision(
+                user_id=user_id,
+                assistant_id=assistant_id,
+                message=message,
+                conversation_id=conversation_id,
+                image_data=image_data
+            )
+        else:
+            # Regular chat
+            return self.manager.chat(
+                user_id=user_id,
+                assistant_id=assistant_id,
+                message=message,
+                conversation_id=conversation_id
+            )
     
     def _get_active_session(self, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> Optional[dict]:
         """

@@ -325,6 +325,220 @@ class OpenClawManager:
             logger.error(f"Error in chat: {e}")
             raise
     
+    async def chat_with_vision(
+        self,
+        user_id: int,
+        assistant_id: str,
+        message: str,
+        conversation_id: Optional[str] = None,
+        image_data: Optional[bytes] = None
+    ) -> Tuple[str, int, int, float]:
+        """
+        Chat with AI Assistant with optional image support
+        
+        Args:
+            user_id: Telegram user ID
+            assistant_id: Assistant ID
+            message: User message
+            conversation_id: Optional conversation ID
+            image_data: Optional image bytes for vision analysis
+            
+        Returns:
+            Tuple of (response, input_tokens, output_tokens, credits_cost)
+        """
+        try:
+            # If image provided, use vision model
+            if image_data:
+                return await self._chat_with_image(
+                    user_id, assistant_id, message, conversation_id, image_data
+                )
+            
+            # Otherwise use regular chat
+            return self.chat(user_id, assistant_id, message, conversation_id)
+            
+        except Exception as e:
+            logger.error(f"Error in chat_with_vision: {e}")
+            raise
+    
+    async def _chat_with_image(
+        self,
+        user_id: int,
+        assistant_id: str,
+        message: str,
+        conversation_id: Optional[str],
+        image_data: bytes
+    ) -> Tuple[str, int, int, float]:
+        """
+        Chat with image analysis using GPT-4 Vision
+        
+        Returns:
+            Tuple of (response, input_tokens, output_tokens, credits_cost)
+        """
+        try:
+            import base64
+            import httpx
+            
+            # Get assistant
+            assistant = self.get_assistant(user_id, assistant_id)
+            if not assistant:
+                raise ValueError(f"Assistant {assistant_id} not found")
+            
+            # Create conversation if needed
+            if not conversation_id:
+                conversation_id = self._create_conversation(user_id, assistant_id)
+            
+            # Encode image to base64
+            base64_image = base64.b64encode(image_data).decode('utf-8')
+            
+            # Get conversation history
+            history = self._get_conversation_history(conversation_id, limit=10)
+            
+            # Build messages
+            messages = []
+            for msg in history:
+                messages.append({
+                    "role": msg['role'],
+                    "content": msg['content']
+                })
+            
+            # Add current message with image
+            user_content = [
+                {
+                    "type": "text",
+                    "text": message if message else "Please analyze this trading chart image in detail."
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{base64_image}"
+                    }
+                }
+            ]
+            
+            messages.append({
+                "role": "user",
+                "content": user_content
+            })
+            
+            # Prepare system prompt for chart analysis
+            system_prompt = f"""{assistant['system_prompt']}
+
+You are analyzing a trading chart image. Provide detailed technical analysis including:
+1. Trend direction (bullish/bearish/sideways)
+2. Key support and resistance levels
+3. Chart patterns identified
+4. Technical indicators visible
+5. Trading recommendation
+6. Risk assessment
+
+Be specific and reference what you see in the chart."""
+            
+            # Call GPT-4 Vision via OpenRouter
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://cryptomentor.ai",
+                        "X-Title": "CryptoMentor OpenClaw Vision"
+                    },
+                    json={
+                        "model": "openai/gpt-4-vision-preview",  # GPT-4 Vision
+                        "messages": [
+                            {"role": "system", "content": system_prompt}
+                        ] + messages,
+                        "max_tokens": 2000,
+                        "temperature": 0.7
+                    },
+                    timeout=60.0
+                )
+                
+                if response.status_code != 200:
+                    error_text = response.text
+                    logger.error(f"Vision API error: {response.status_code} - {error_text}")
+                    raise Exception(f"Vision API error: {response.status_code}")
+                
+                data = response.json()
+            
+            # Extract response and token usage
+            assistant_response = data['choices'][0]['message']['content']
+            input_tokens = data['usage']['prompt_tokens']
+            output_tokens = data['usage']['completion_tokens']
+            
+            # Calculate cost (Vision is more expensive)
+            # GPT-4 Vision: ~$0.01-0.03 per image
+            vision_cost_multiplier = 3.0  # 3x regular cost
+            credits_cost = self._calculate_credits_cost(input_tokens, output_tokens) * vision_cost_multiplier
+            
+            # Check if user is admin
+            is_admin = self._is_admin(user_id)
+            
+            if not is_admin:
+                # Regular user: check and deduct credits
+                user_credits = self._get_user_credits(user_id)
+                if user_credits < credits_cost:
+                    raise ValueError(
+                        f"Insufficient credits. Balance: {user_credits}, Required: {credits_cost}"
+                    )
+                
+                # Deduct credits
+                self._deduct_credits(
+                    user_id=user_id,
+                    credits=credits_cost,
+                    conversation_id=conversation_id,
+                    description=f"Vision analysis: {input_tokens}+{output_tokens} tokens"
+                )
+            else:
+                # Admin: no charge
+                logger.info(f"Admin {user_id} using Vision (no charge)")
+                credits_cost = 0
+            
+            # Save messages
+            self._save_message(
+                conversation_id=conversation_id,
+                role='user',
+                content=f"[Image] {message}",
+                input_tokens=0,
+                output_tokens=0,
+                credits_cost=0
+            )
+            
+            self._save_message(
+                conversation_id=conversation_id,
+                role='assistant',
+                content=assistant_response,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                credits_cost=credits_cost
+            )
+            
+            # Update stats
+            self._update_conversation_stats(
+                conversation_id=conversation_id,
+                tokens=input_tokens + output_tokens,
+                credits=credits_cost
+            )
+            
+            self._update_assistant_stats(
+                assistant_id=assistant_id,
+                tokens=input_tokens + output_tokens,
+                credits=credits_cost
+            )
+            
+            logger.info(
+                f"Vision chat completed: {input_tokens}+{output_tokens} tokens, "
+                f"{credits_cost} credits"
+            )
+            
+            return assistant_response, input_tokens, output_tokens, credits_cost
+            
+        except Exception as e:
+            logger.error(f"Error in _chat_with_image: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
     def purchase_credits(
         self,
         user_id: int,
