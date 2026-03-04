@@ -8,6 +8,7 @@ import logging
 import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler
+from app.admin_auth import is_admin
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,7 @@ async def admin_openclaw_balance_command(update: Update, context: ContextTypes.D
     user_id = update.effective_user.id
     
     # Check if user is admin
-    admin_ids_str = os.getenv('ADMIN_IDS', '')
-    admin_ids = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip().isdigit()]
-    
-    if user_id not in admin_ids:
+    if not is_admin(user_id):
         await update.message.reply_text("❌ Admin only command.")
         return
     
@@ -126,10 +124,7 @@ async def admin_add_credits_command(update: Update, context: ContextTypes.DEFAUL
     user_id = update.effective_user.id
     
     # Check if user is admin
-    admin_ids_str = os.getenv('ADMIN_IDS', '')
-    admin_ids = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip().isdigit()]
-    
-    if user_id not in admin_ids:
+    if not is_admin(user_id):
         await update.message.reply_text("❌ Admin only command.")
         return
     
@@ -349,10 +344,7 @@ async def admin_system_status_command(update: Update, context: ContextTypes.DEFA
     user_id = update.effective_user.id
     
     # Check if user is admin
-    admin_ids_str = os.getenv('ADMIN_IDS', '')
-    admin_ids = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip().isdigit()]
-    
-    if user_id not in admin_ids:
+    if not is_admin(user_id):
         await update.message.reply_text("❌ Admin only command.")
         return
     
@@ -482,10 +474,7 @@ async def admin_openclaw_help_command(update: Update, context: ContextTypes.DEFA
     user_id = update.effective_user.id
     
     # Check if user is admin
-    admin_ids_str = os.getenv('ADMIN_IDS', '')
-    admin_ids = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip().isdigit()]
-    
-    if user_id not in admin_ids:
+    if not is_admin(user_id):
         await update.message.reply_text("❌ Admin only command.")
         return
     

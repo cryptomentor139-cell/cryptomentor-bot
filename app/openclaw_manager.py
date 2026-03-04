@@ -15,6 +15,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from uuid import uuid4
+from app.admin_auth import is_admin
 
 logger = logging.getLogger(__name__)
 
@@ -75,21 +76,8 @@ class OpenClawManager:
         Returns:
             True if user is admin, False otherwise
         """
-        # Get admin IDs from environment
-        admin_ids = set()
-        for key in ['ADMIN1', 'ADMIN2', 'ADMIN3', 'ADMIN_IDS']:
-            value = os.getenv(key)
-            if value:
-                try:
-                    if ',' in value:
-                        # Handle comma-separated list
-                        admin_ids.update(int(aid.strip()) for aid in value.split(',') if aid.strip())
-                    else:
-                        admin_ids.add(int(value))
-                except ValueError:
-                    continue
-        
-        return user_id in admin_ids
+        # Use centralized admin_auth module
+        return is_admin(user_id)
     
     def create_assistant(
         self,

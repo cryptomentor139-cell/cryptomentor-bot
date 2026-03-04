@@ -13,17 +13,13 @@ from app.openclaw_db_helper import get_openclaw_db_connection
 
 logger = logging.getLogger(__name__)
 
-# Admin IDs from environment
-ADMIN_IDS = set()
-for key in ['ADMIN1', 'ADMIN2', 'ADMIN3']:
-    admin_id = os.getenv(key)
-    if admin_id and admin_id.isdigit():
-        ADMIN_IDS.add(int(admin_id))
+# Admin IDs from environment - use centralized admin_auth
+from app.admin_auth import is_admin as check_is_admin
 
 
 def is_admin(user_id: int) -> bool:
     """Check if user is admin"""
-    return user_id in ADMIN_IDS
+    return check_is_admin(user_id)
 
 
 async def openclaw_add_credits_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

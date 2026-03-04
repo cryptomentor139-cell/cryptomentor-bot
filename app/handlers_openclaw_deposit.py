@@ -71,15 +71,12 @@ async def openclaw_balance_command(update: Update, context: ContextTypes.DEFAULT
     
     try:
         # Check if user is admin (gets free access)
+        from app.admin_auth import is_admin
         from services import get_database
         db = get_database()
         
         # Check admin status
-        admin_ids_str = os.getenv('ADMIN_IDS', '')
-        admin_ids = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip().isdigit()]
-        is_admin = user_id in admin_ids
-        
-        if is_admin:
+        if is_admin(user_id):
             message = (
                 "💳 <b>Your OpenClaw Balance</b>\n\n"
                 "👑 <b>Admin Account</b>\n"
