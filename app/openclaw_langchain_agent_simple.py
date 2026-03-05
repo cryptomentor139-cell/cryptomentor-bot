@@ -1,16 +1,18 @@
 """
-OpenClaw Simple LangChain Agent
-Simplified implementation without complex agent framework
+OpenClaw Simple LangChain Agent with Function Calling
+Real-time crypto data integration
 """
 
 import os
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from decimal import Decimal
 import httpx
+import json
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
+from langchain_core.tools import tool
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 
 from app.openclaw_langchain_db import get_openclaw_db
@@ -18,10 +20,207 @@ from app.openclaw_langchain_db import get_openclaw_db
 logger = logging.getLogger(__name__)
 
 
+# Define tools for LLM
+@tool
+def get_crypto_price(symbol: str) -> str:
+    """
+    Get current cryptocurrency price and market data.
+    
+    Args:
+        symbol: Cryptocurrency symbol (e.g., 'BTC', 'ETH', 'SOL', 'BNB')
+    
+    Returns:
+        Current price, 24h change, and market cap
+    """
+    try:
+        # Normalize symbol
+        symbol = symbol.upper().strip()
+        
+        # Map common symbols to CoinGecko IDs
+        symbol_map = {
+            'BTC': 'bitcoin',
+            'ETH': 'ethereum',
+            'BNB': 'binancecoin',
+            'SOL': 'solana',
+            'ADA': 'cardano',
+            'XRP': 'ripple',
+            'DOT': 'polkadot',
+            'DOGE': 'dogecoin',
+            'AVAX': 'avalanche-2',
+            'MATIC': 'matic-network',
+            'LINK': 'chainlink',
+            'UNI': 'uniswap',
+            'ATOM': 'cosmos',
+            'LTC': 'litecoin',
+            'BCH': 'bitcoin-cash',
+            'NEAR': 'near',
+            'APT': 'aptos',
+            'ARB': 'arbitrum',
+            'OP': 'optimism'
+        }
+        
+        coin_id = symbol_map.get(symbol, symbol.lower())
+        
+        # Fetch from CoinGecko
+        url = "https://api.coingecko.com/api/v3/simple/price"
+        params = {
+            'ids': coin_id,
+            'vs_currencies': 'usd',
+            'include_24hr_change': 'true',
+            'include_24hr_vol': 'true',
+            'include_market_cap': 'true'
+        }
+        
+        response = httpx.get(url, params=params, timeout=10.0)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if coin_id in data:
+                price_data = data[coin_id]
+                price = price_data.get('usd', 0)
+                change_24h = price_data.get('usd_24h_change', 0)
+                volume_24h = price_data.get('usd_24h_vol', 0)
+                market_cap = price_data.get('usd_market_cap', 0)
+                
+                result = f"💰 {symbol} Market Data:\n"
+                result += f"Price: ${price:,.2f}\n"
+                result += f"24h Change: {change_24h:+.2f}%\n"
+                result += f"24h Volume: ${volume_24h:,.0f}\n"
+                
+                if market_cap:
+                    result += f"Market Cap: ${market_cap:,.0f}"
+                
+                return result
+            else:
+                return f"❌ Cryptocurrency '{symbol}' not found"
+        else:
+            return f"❌ Error fetching price data (Status: {response.status_code})"
+    
+    except Exception as e:
+        logger.error(f"Error getting crypto price: {e}")
+        return f"❌ Error: {str(e)}"
+
+
+@tool
+def get_binance_price(symbol: str) -> str:
+    """
+    Get real-time price from Binance exchange.
+    
+    Args:
+        symbol: Trading pair symbol (e.g., 'BTCUSDT', 'ETHUSDT')
+    
+    Returns:
+        Current price and 24h statistics from Binance
+    """
+    try:
+        # Normalize symbol
+        symbol = symbol.upper().strip()
+        
+        # Add USDT if not present
+        if not symbol.endswith('USDT'):
+            symbol = f"{symbol}USDT"
+        
+        # Fetch from Binance
+        url = f"https://api.binance.com/api/v3/ticker/24hr"
+        params = {'symbol': symbol}
+        
+        response = httpx.get(url, params=params, timeout=10.0)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            price = float(data['lastPrice'])
+            change = float(data['priceChangePercent'])
+            high = float(data['highPrice'])
+            low = float(data['lowPrice'])
+            volume = float(data['volume'])
+            
+            result = f"📊 {symbol} Binance Data:\n"
+            result += f"Price: ${price:,.2f}\n"
+            result += f"24h Change: {change:+.2f}%\n"
+            result += f"24h High: ${high:,.2f}\n"
+            result += f"24h Low: ${low:,.2f}\n"
+            result += f"24h Volume: {volume:,.2f}"
+            
+            return result
+        else:
+            return f"❌ Symbol '{symbol}' not found on Binance"
+    
+    except Exception as e:
+        logger.error(f"Error getting Binance price: {e}")
+        return f"❌ Error: {str(e)}"
+
+
+@tool
+def get_multiple_crypto_prices(symbols: List[str]) -> str:
+    """
+    Get prices for multiple cryptocurrencies at once.
+    
+    Args:
+        symbols: List of crypto symbols (e.g., ['BTC', 'ETH', 'SOL'])
+    
+    Returns:
+        Prices for all requested cryptocurrencies
+    """
+    try:
+        # Map symbols to CoinGecko IDs
+        symbol_map = {
+            'BTC': 'bitcoin',
+            'ETH': 'ethereum',
+            'BNB': 'binancecoin',
+            'SOL': 'solana',
+            'ADA': 'cardano',
+            'XRP': 'ripple',
+            'DOT': 'polkadot',
+            'DOGE': 'dogecoin',
+            'AVAX': 'avalanche-2',
+            'MATIC': 'matic-network'
+        }
+        
+        # Convert symbols to coin IDs
+        coin_ids = []
+        for sym in symbols:
+            sym_upper = sym.upper().strip()
+            coin_id = symbol_map.get(sym_upper, sym.lower())
+            coin_ids.append(coin_id)
+        
+        # Fetch from CoinGecko
+        url = "https://api.coingecko.com/api/v3/simple/price"
+        params = {
+            'ids': ','.join(coin_ids),
+            'vs_currencies': 'usd',
+            'include_24hr_change': 'true'
+        }
+        
+        response = httpx.get(url, params=params, timeout=10.0)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            result = "💰 Crypto Market Overview:\n\n"
+            
+            for i, coin_id in enumerate(coin_ids):
+                if coin_id in data:
+                    price_data = data[coin_id]
+                    price = price_data.get('usd', 0)
+                    change = price_data.get('usd_24h_change', 0)
+                    
+                    symbol = symbols[i].upper()
+                    result += f"{symbol}: ${price:,.2f} ({change:+.2f}%)\n"
+            
+            return result
+        else:
+            return f"❌ Error fetching prices"
+    
+    except Exception as e:
+        logger.error(f"Error getting multiple prices: {e}")
+        return f"❌ Error: {str(e)}"
+
+
 class OpenClawSimpleAgent:
     """
-    Simplified OpenClaw AI Agent
-    Direct LLM calls with manual tool handling
+    Simplified OpenClaw AI Agent with function calling
     """
     
     def __init__(self):
@@ -30,10 +229,17 @@ class OpenClawSimpleAgent:
         # Get database instance
         self.db = get_openclaw_db()
         
-        # Initialize LLM (via OpenRouter)
+        # Initialize LLM (via OpenRouter) with function calling
         api_key = os.getenv('OPENCLAW_API_KEY')
         if not api_key:
             raise ValueError("OPENCLAW_API_KEY not found in environment")
+        
+        # Define tools
+        self.tools = [
+            get_crypto_price,
+            get_binance_price,
+            get_multiple_crypto_prices
+        ]
         
         self.llm = ChatOpenAI(
             model="openai/gpt-4.1",
@@ -47,17 +253,26 @@ class OpenClawSimpleAgent:
             }
         )
         
-        logger.info("OpenClaw Simple Agent initialized successfully")
+        # Bind tools to LLM
+        self.llm_with_tools = self.llm.bind_tools(self.tools)
+        
+        logger.info("OpenClaw Simple Agent initialized with function calling")
     
     def get_system_prompt(self) -> str:
         """Get system prompt"""
         return """You are OpenClaw, an advanced AI crypto analyst and assistant.
 
 Your capabilities:
-- Analyze cryptocurrency markets and provide insights
+- Analyze cryptocurrency markets with REAL-TIME data
 - Check user credit balances
 - Provide trading signals and market analysis
 - Answer questions about crypto, blockchain, and trading
+
+IMPORTANT: When users ask about crypto prices or market data:
+1. ALWAYS use the get_crypto_price() function to get real-time data
+2. Use get_binance_price() for exchange-specific data
+3. Use get_multiple_crypto_prices() when comparing multiple coins
+4. NEVER make up or guess prices - always fetch real data
 
 Guidelines:
 - Be professional, helpful, and accurate
@@ -66,67 +281,10 @@ Guidelines:
 - Warn about risks when discussing trading
 - Be concise but informative
 
-When users ask about prices, provide current market data.
-When users ask for analysis, give detailed insights.
-Always provide value and actionable information."""
-    
-    def get_crypto_price(self, symbol: str) -> str:
-        """Get crypto price from CoinGecko"""
-        try:
-            # Normalize symbol
-            symbol = symbol.lower().strip()
-            
-            # Map common symbols
-            symbol_map = {
-                'btc': 'bitcoin',
-                'eth': 'ethereum',
-                'bnb': 'binancecoin',
-                'sol': 'solana',
-                'ada': 'cardano',
-                'xrp': 'ripple',
-                'dot': 'polkadot',
-                'doge': 'dogecoin',
-                'avax': 'avalanche-2',
-                'matic': 'matic-network'
-            }
-            
-            coin_id = symbol_map.get(symbol, symbol)
-            
-            # Fetch price from CoinGecko
-            url = f"https://api.coingecko.com/api/v3/simple/price"
-            params = {
-                'ids': coin_id,
-                'vs_currencies': 'usd',
-                'include_24hr_change': 'true',
-                'include_market_cap': 'true'
-            }
-            
-            response = httpx.get(url, params=params, timeout=10.0)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                if coin_id in data:
-                    price_data = data[coin_id]
-                    price = price_data.get('usd', 0)
-                    change_24h = price_data.get('usd_24h_change', 0)
-                    market_cap = price_data.get('usd_market_cap', 0)
-                    
-                    result = f"{symbol.upper()} Price: ${price:,.2f}\n"
-                    result += f"24h Change: {change_24h:+.2f}%\n"
-                    
-                    if market_cap:
-                        result += f"Market Cap: ${market_cap:,.0f}"
-                    
-                    return result
-                else:
-                    return f"Cryptocurrency '{symbol}' not found"
-            else:
-                return f"Error fetching price data"
-        
-        except Exception as e:
-            logger.error(f"Error getting crypto price: {e}")
-            return f"Error getting price: {str(e)}"
+Example responses:
+- "Let me check the current BTC price..." → call get_crypto_price("BTC")
+- "I'll get the latest market data..." → call appropriate function
+- Always show the data you fetched in your response"""
     
     def get_user_history(self, user_id: int) -> SQLChatMessageHistory:
         """Get conversation history for user"""
@@ -139,7 +297,7 @@ Always provide value and actionable information."""
         deduct_credits: bool = True
     ) -> Dict[str, Any]:
         """
-        Process user message
+        Process user message with function calling
         
         Args:
             user_id: Telegram user ID
@@ -163,20 +321,6 @@ Always provide value and actionable information."""
             # Get conversation history
             history = self.get_user_history(user_id)
             
-            # Check if message is about crypto price
-            message_lower = message.lower()
-            price_keywords = ['price', 'cost', 'value', 'worth', 'how much']
-            crypto_keywords = ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'coin']
-            
-            # If asking about price, get real-time data
-            price_context = ""
-            if any(kw in message_lower for kw in price_keywords):
-                for crypto in ['bitcoin', 'ethereum', 'btc', 'eth']:
-                    if crypto in message_lower:
-                        price_data = self.get_crypto_price(crypto)
-                        price_context = f"\n\nCurrent Market Data:\n{price_data}\n"
-                        break
-            
             # Build messages
             messages = [
                 SystemMessage(content=self.get_system_prompt())
@@ -186,16 +330,40 @@ Always provide value and actionable information."""
             for msg in history.messages[-10:]:
                 messages.append(msg)
             
-            # Add current message with price context if available
-            user_message = message
-            if price_context:
-                user_message += price_context
+            # Add current message
+            messages.append(HumanMessage(content=message))
             
-            messages.append(HumanMessage(content=user_message))
+            # Get response from LLM with tools
+            response = await self.llm_with_tools.ainvoke(messages)
             
-            # Get response from LLM
-            response = await self.llm.ainvoke(messages)
-            response_text = response.content
+            # Check if LLM wants to call tools
+            if response.tool_calls:
+                # Execute tool calls
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call['name']
+                    tool_args = tool_call['args']
+                    
+                    logger.info(f"Calling tool: {tool_name} with args: {tool_args}")
+                    
+                    # Find and execute the tool
+                    tool_result = None
+                    for tool in self.tools:
+                        if tool.name == tool_name:
+                            tool_result = tool.invoke(tool_args)
+                            break
+                    
+                    # Add tool response to messages
+                    messages.append(response)
+                    messages.append(ToolMessage(
+                        content=str(tool_result),
+                        tool_call_id=tool_call['id']
+                    ))
+                
+                # Get final response after tool execution
+                final_response = await self.llm.ainvoke(messages)
+                response_text = final_response.content
+            else:
+                response_text = response.content
             
             # Save to history
             history.add_user_message(message)
