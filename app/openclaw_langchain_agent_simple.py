@@ -340,31 +340,55 @@ class OpenClawSimpleAgent:
 - Admin has access to all system commands and features
 """
         
-        return f"""You are OpenClaw, an advanced AI crypto analyst and assistant.
+        return f"""You are OpenClaw, an advanced AI crypto analyst and assistant with REAL-TIME data access.
 
-Your capabilities:
-- Analyze cryptocurrency markets with REAL-TIME data
-- Check user credit balances
-- Provide trading signals and market analysis
-- Answer questions about crypto, blockchain, and trading
+CRITICAL RULES - YOU MUST FOLLOW THESE:
+1. 🚨 NEVER provide crypto prices from memory or training data
+2. 🚨 ALWAYS call the appropriate function to get REAL-TIME data
+3. 🚨 When user asks about ANY crypto price, you MUST call a function FIRST
+4. 🚨 Do NOT respond with price information until you've called the function
 
-IMPORTANT: When users ask about crypto prices or market data:
-1. ALWAYS use the get_crypto_price() function to get real-time data
-2. Use get_binance_price() for exchange-specific data
-3. Use get_multiple_crypto_prices() when comparing multiple coins
-4. NEVER make up or guess prices - always fetch real data
+AVAILABLE FUNCTIONS (YOU MUST USE THESE):
+- get_crypto_price(symbol) - Get current price for ONE cryptocurrency
+  Example: get_crypto_price("BTC") or get_crypto_price("ETH")
+  
+- get_binance_price(symbol) - Get real-time price from Binance exchange
+  Example: get_binance_price("BTCUSDT") or get_binance_price("ETHUSDT")
+  
+- get_multiple_crypto_prices(symbols) - Get prices for MULTIPLE cryptocurrencies
+  Example: get_multiple_crypto_prices(["BTC", "ETH", "SOL"])
+
+MANDATORY WORKFLOW:
+Step 1: User asks about crypto price
+Step 2: YOU MUST call the appropriate function (get_crypto_price, get_binance_price, or get_multiple_crypto_prices)
+Step 3: Wait for function result
+Step 4: Present the REAL-TIME data to user
+Step 5: Add your analysis based on the REAL data
+
+EXAMPLES OF CORRECT BEHAVIOR:
+❌ WRONG: "Bitcoin is currently around $95,000..." (guessing from memory)
+✅ CORRECT: Call get_crypto_price("BTC") → Get result → "Bitcoin is currently $95,234.50 (from real-time data)"
+
+❌ WRONG: "Let me tell you about Bitcoin price..." (then provide old data)
+✅ CORRECT: "Let me fetch the current Bitcoin price..." → Call get_crypto_price("BTC") → Show result
+
+USER ASKS: "What's the Bitcoin price?"
+YOUR RESPONSE: Call get_crypto_price("BTC") IMMEDIATELY, then show the result
+
+USER ASKS: "Compare BTC and ETH"
+YOUR RESPONSE: Call get_multiple_crypto_prices(["BTC", "ETH"]) IMMEDIATELY, then show results
+
+USER ASKS: "Analyze SOL"
+YOUR RESPONSE: Call get_crypto_price("SOL") FIRST, then provide analysis based on real data
 
 Guidelines:
 - Be professional, helpful, and accurate
-- Provide real-time data when possible
-- Explain your analysis clearly
+- ALWAYS use functions for real-time data
+- Explain your analysis clearly based on REAL data
 - Warn about risks when discussing trading
 - Be concise but informative{admin_context}
 
-Example responses:
-- "Let me check the current BTC price..." → call get_crypto_price("BTC")
-- "I'll get the latest market data..." → call appropriate function
-- Always show the data you fetched in your response"""
+Remember: Your credibility depends on providing REAL-TIME, ACCURATE data. Always call functions first!"""
     
     def get_user_history(self, user_id: int) -> SQLChatMessageHistory:
         """Get conversation history for user"""
@@ -418,17 +442,23 @@ Example responses:
             # Get LLM with appropriate tools based on admin status
             llm_with_tools = self.get_llm_with_tools(is_admin=is_admin)
             
+            logger.info(f"Processing message for user {user_id} (admin={is_admin}): {message[:50]}...")
+            
             # Get response from LLM with tools
             response = await llm_with_tools.ainvoke(messages)
             
+            logger.info(f"LLM response received. Has tool calls: {bool(response.tool_calls)}")
+            
             # Check if LLM wants to call tools
             if response.tool_calls:
+                logger.info(f"LLM requested {len(response.tool_calls)} tool call(s)")
+                
                 # Execute tool calls
                 for tool_call in response.tool_calls:
                     tool_name = tool_call['name']
                     tool_args = tool_call['args']
                     
-                    logger.info(f"Calling tool: {tool_name} with args: {tool_args}")
+                    logger.info(f"🔧 Calling tool: {tool_name} with args: {tool_args}")
                     
                     # Find and execute the tool
                     tool_result = None
@@ -437,10 +467,13 @@ Example responses:
                     for tool in available_tools:
                         if tool.name == tool_name:
                             tool_result = tool.invoke(tool_args)
+                            logger.info(f"✅ Tool {tool_name} executed successfully")
+                            logger.info(f"📊 Tool result: {tool_result[:100]}...")
                             break
                     
                     if tool_result is None:
                         tool_result = f"❌ Tool '{tool_name}' not available or not authorized"
+                        logger.warning(f"Tool {tool_name} not found or not authorized")
                     
                     # Add tool response to messages
                     messages.append(response)
@@ -450,10 +483,29 @@ Example responses:
                     ))
                 
                 # Get final response after tool execution
+                logger.info("Getting final response after tool execution...")
                 final_response = await self.llm.ainvoke(messages)
                 response_text = final_response.content
+                logger.info(f"Final response generated: {response_text[:100]}...")
             else:
                 response_text = response.content
+                logger.warning(f"⚠️ LLM did not call any tools for message: {message[:50]}")
+                logger.warning("This might indicate the LLM is not using real-time data!")
+                
+                # Check if user is asking about crypto prices
+                price_keywords = ['price', 'harga', 'berapa', 'what', 'how much', 'current', 'now']
+                crypto_keywords = ['btc', 'bitcoin', 'eth', 'ethereum', 'sol', 'solana', 'crypto', 'coin']
+                
+                message_lower = message.lower()
+                is_price_query = any(keyword in message_lower for keyword in price_keywords)
+                is_crypto_query = any(keyword in message_lower for keyword in crypto_keywords)
+                
+                if is_price_query and is_crypto_query:
+                    logger.warning("🚨 User asked about crypto price but LLM didn't call tools!")
+                    logger.warning("Adding reminder to use real-time data...")
+                    
+                    # Add a reminder to the response
+                    response_text += "\n\n⚠️ Note: For the most accurate and up-to-date prices, please ask me to check the current price using my real-time data tools."
             
             # Save to history
             history.add_user_message(message)
