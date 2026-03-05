@@ -371,6 +371,14 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ OpenClaw admin credit handlers failed to register: {e}")
         
+        # Register OpenClaw LangChain handlers (NEW - Production-grade architecture)
+        try:
+            from app.handlers_openclaw_langchain import register_openclaw_langchain_handlers
+            register_openclaw_langchain_handlers(self.application)
+            print("✅ OpenClaw LangChain handlers registered (production-grade)")
+        except Exception as e:
+            print(f"⚠️ OpenClaw LangChain handlers failed to register: {e}")
+        
         # Note: Automaton is for AUTONOMOUS TRADING only (Lifetime Premium)
         # Signal generation uses bot's own system (/analyze, /futures, /ai)
         # OpenClaw is for PERSONAL AI ASSISTANT (Claude Sonnet 4.5) with seamless chat
