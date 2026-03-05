@@ -14,7 +14,8 @@ sqlalchemy==2.0.36
 langchain==0.3.13
 langchain-anthropic==0.3.3
 langchain-community==0.3.13
-anthropic==0.40.0
+# anthropic version must be <0.41.0 for langchain-anthropic compatibility
+anthropic>=0.34.0,<0.41.0
 httpx==0.28.1
 
 # Blockchain
