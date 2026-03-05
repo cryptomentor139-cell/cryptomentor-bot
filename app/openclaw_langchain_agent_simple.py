@@ -218,6 +218,59 @@ def get_multiple_crypto_prices(symbols: List[str]) -> str:
         return f"❌ Error: {str(e)}"
 
 
+@tool
+def check_user_balance(user_id: int) -> str:
+    """
+    Check a user's credit balance (admin tool).
+    
+    Args:
+        user_id: Telegram user ID to check
+    
+    Returns:
+        User's current credit balance
+    """
+    try:
+        from app.openclaw_langchain_db import get_openclaw_db
+        db = get_openclaw_db()
+        credits = db.get_user_credits(user_id)
+        
+        return f"User {user_id} balance: ${credits:.2f} USD credits"
+    
+    except Exception as e:
+        logger.error(f"Error checking user balance: {e}")
+        return f"❌ Error: {str(e)}"
+
+
+@tool
+def get_system_statistics() -> str:
+    """
+    Get OpenClaw system statistics (admin only).
+    
+    Returns:
+        System-wide statistics including total users, credits, and usage
+    """
+    try:
+        from app.openclaw_langchain_db import get_openclaw_db
+        db = get_openclaw_db()
+        stats = db.get_system_stats()
+        
+        result = "📊 OpenClaw System Statistics:\n\n"
+        result += f"Total Users: {stats['user_count']}\n"
+        result += f"Total Credits: ${stats['total_credits']:.2f}\n"
+        result += f"Total Allocated: ${stats['total_allocated']:.2f}\n"
+        result += f"Total Used: ${stats['total_used']:.2f}\n"
+        
+        if stats['user_count'] > 0:
+            avg = stats['total_credits'] / stats['user_count']
+            result += f"Average per User: ${avg:.2f}"
+        
+        return result
+    
+    except Exception as e:
+        logger.error(f"Error getting system stats: {e}")
+        return f"❌ Error: {str(e)}"
+
+
 class OpenClawSimpleAgent:
     """
     Simplified OpenClaw AI Agent with function calling
@@ -234,12 +287,21 @@ class OpenClawSimpleAgent:
         if not api_key:
             raise ValueError("OPENCLAW_API_KEY not found in environment")
         
-        # Define tools
-        self.tools = [
+        # Define base tools (available to all users)
+        self.base_tools = [
             get_crypto_price,
             get_binance_price,
             get_multiple_crypto_prices
         ]
+        
+        # Define admin tools (only for admins)
+        self.admin_tools = [
+            check_user_balance,
+            get_system_statistics
+        ]
+        
+        # All tools combined
+        self.all_tools = self.base_tools + self.admin_tools
         
         self.llm = ChatOpenAI(
             model="openai/gpt-4.1",
@@ -253,14 +315,32 @@ class OpenClawSimpleAgent:
             }
         )
         
-        # Bind tools to LLM
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
-        
         logger.info("OpenClaw Simple Agent initialized with function calling")
     
-    def get_system_prompt(self) -> str:
+    def get_llm_with_tools(self, is_admin: bool = False):
+        """Get LLM with appropriate tools based on user role"""
+        if is_admin:
+            # Admin gets all tools
+            return self.llm.bind_tools(self.all_tools)
+        else:
+            # Regular users get base tools only
+            return self.llm.bind_tools(self.base_tools)
+    
+    def get_system_prompt(self, is_admin: bool = False) -> str:
         """Get system prompt"""
-        return """You are OpenClaw, an advanced AI crypto analyst and assistant.
+        admin_context = ""
+        if is_admin:
+            admin_context = """
+
+🔑 ADMIN MODE ACTIVE:
+- You are interacting with a SYSTEM ADMINISTRATOR
+- This user has UNLIMITED CREDITS and FULL ACCESS to all features
+- No credit checks or limitations apply to this user
+- You can provide extended analysis and unlimited responses
+- Admin has access to all system commands and features
+"""
+        
+        return f"""You are OpenClaw, an advanced AI crypto analyst and assistant.
 
 Your capabilities:
 - Analyze cryptocurrency markets with REAL-TIME data
@@ -279,7 +359,7 @@ Guidelines:
 - Provide real-time data when possible
 - Explain your analysis clearly
 - Warn about risks when discussing trading
-- Be concise but informative
+- Be concise but informative{admin_context}
 
 Example responses:
 - "Let me check the current BTC price..." → call get_crypto_price("BTC")
@@ -294,7 +374,8 @@ Example responses:
         self,
         user_id: int,
         message: str,
-        deduct_credits: bool = True
+        deduct_credits: bool = True,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         """
         Process user message with function calling
@@ -303,13 +384,14 @@ Example responses:
             user_id: Telegram user ID
             message: User message
             deduct_credits: Whether to deduct credits
+            is_admin: Whether user is admin (unlimited credits)
             
         Returns:
             Dict with response and metadata
         """
         try:
-            # Check credits if needed
-            if deduct_credits:
+            # Admin bypass: no credit check for admins
+            if not is_admin and deduct_credits:
                 credits = self.db.get_user_credits(user_id)
                 if credits <= 0:
                     return {
@@ -321,9 +403,9 @@ Example responses:
             # Get conversation history
             history = self.get_user_history(user_id)
             
-            # Build messages
+            # Build messages with admin-aware system prompt
             messages = [
-                SystemMessage(content=self.get_system_prompt())
+                SystemMessage(content=self.get_system_prompt(is_admin=is_admin))
             ]
             
             # Add history (last 10 messages)
@@ -333,8 +415,11 @@ Example responses:
             # Add current message
             messages.append(HumanMessage(content=message))
             
+            # Get LLM with appropriate tools based on admin status
+            llm_with_tools = self.get_llm_with_tools(is_admin=is_admin)
+            
             # Get response from LLM with tools
-            response = await self.llm_with_tools.ainvoke(messages)
+            response = await llm_with_tools.ainvoke(messages)
             
             # Check if LLM wants to call tools
             if response.tool_calls:
@@ -347,10 +432,15 @@ Example responses:
                     
                     # Find and execute the tool
                     tool_result = None
-                    for tool in self.tools:
+                    available_tools = self.all_tools if is_admin else self.base_tools
+                    
+                    for tool in available_tools:
                         if tool.name == tool_name:
                             tool_result = tool.invoke(tool_args)
                             break
+                    
+                    if tool_result is None:
+                        tool_result = f"❌ Tool '{tool_name}' not available or not authorized"
                     
                     # Add tool response to messages
                     messages.append(response)
@@ -370,9 +460,10 @@ Example responses:
             history.add_ai_message(response_text)
             
             # Deduct credits (estimate $0.02 per message)
+            # Admin bypass: no credit deduction for admins
             credits_used = Decimal('0.02')
             
-            if deduct_credits:
+            if not is_admin and deduct_credits:
                 deduct_result = self.db.deduct_credits(
                     user_id=user_id,
                     amount=credits_used,
@@ -381,6 +472,9 @@ Example responses:
                 
                 if not deduct_result['success']:
                     logger.warning(f"Failed to deduct credits for user {user_id}: {deduct_result.get('error')}")
+            elif is_admin:
+                logger.info(f"Admin {user_id} chat processed. No credits deducted (admin privilege)")
+                credits_used = Decimal('0')  # No cost for admin
             
             logger.info(f"User {user_id} chat processed. Credits used: ${credits_used:.4f}")
             

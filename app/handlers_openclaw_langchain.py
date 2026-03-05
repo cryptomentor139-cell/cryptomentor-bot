@@ -28,39 +28,47 @@ async def openclaw_chat_handler(update: Update, context: ContextTypes.DEFAULT_TY
         agent = get_openclaw_agent()
         db = get_openclaw_db()
         
-        # Check credits
-        credits = db.get_user_credits(user_id)
+        # Check if user is admin
+        user_is_admin = is_admin(user_id)
         
-        if credits <= 0:
-            await update.message.reply_text(
-                "❌ <b>Insufficient Credits</b>\n\n"
-                "You don't have enough credits to use OpenClaw.\n\n"
-                "Please contact admin to add credits:\n"
-                "/admin_add_credits\n\n"
-                "Pricing: Rp 100,000 = $7 USD credits",
-                parse_mode='HTML'
-            )
-            return
+        # Admin bypass: skip credit check for admins
+        if not user_is_admin:
+            # Check credits for regular users
+            credits = db.get_user_credits(user_id)
+            
+            if credits <= 0:
+                await update.message.reply_text(
+                    "❌ <b>Insufficient Credits</b>\n\n"
+                    "You don't have enough credits to use OpenClaw.\n\n"
+                    "Please contact admin to add credits:\n"
+                    "/admin_add_credits\n\n"
+                    "Pricing: Rp 100,000 = $7 USD credits",
+                    parse_mode='HTML'
+                )
+                return
         
         # Show typing indicator
         await update.message.chat.send_action("typing")
         
-        # Process with agent
+        # Process with agent (pass admin status)
         result = await agent.chat(
             user_id=user_id,
             message=message,
-            deduct_credits=True
+            deduct_credits=not user_is_admin,  # Don't deduct for admins
+            is_admin=user_is_admin
         )
         
         if result['success']:
             response = result['response']
             credits_used = result['credits_used']
             
-            # Get new balance
-            new_balance = db.get_user_credits(user_id)
-            
-            # Add balance footer
-            footer = f"\n\n💰 Credits used: ${credits_used:.4f} | Balance: ${new_balance:.2f}"
+            # Add footer based on user type
+            if user_is_admin:
+                footer = "\n\n🔑 <b>ADMIN MODE</b> - Unlimited Credits"
+            else:
+                # Get new balance for regular users
+                new_balance = db.get_user_credits(user_id)
+                footer = f"\n\n💰 Credits used: ${credits_used:.4f} | Balance: ${new_balance:.2f}"
             
             await update.message.reply_text(
                 response + footer,
@@ -89,29 +97,52 @@ async def openclaw_balance_command(update: Update, context: ContextTypes.DEFAULT
     
     try:
         db = get_openclaw_db()
-        credits = db.get_user_credits(user_id)
         
-        message = (
-            "💰 <b>Your OpenClaw Credits</b>\n\n"
-            f"<b>Current Balance:</b> ${credits:.2f}\n\n"
-        )
+        # Check if user is admin
+        user_is_admin = is_admin(user_id)
         
-        if credits > 0:
-            message += (
-                "✅ You have credits!\n"
-                "Just chat normally to use OpenClaw AI.\n\n"
-                "Example questions:\n"
-                "• What's the Bitcoin price?\n"
-                "• Analyze Ethereum market\n"
-                "• Give me crypto trading signals"
+        if user_is_admin:
+            # Admin has unlimited credits
+            message = (
+                "🔑 <b>ADMIN MODE - OpenClaw Credits</b>\n\n"
+                "✅ <b>Status:</b> UNLIMITED CREDITS\n"
+                "🎯 <b>Access Level:</b> Full System Administrator\n\n"
+                "As an admin, you have:\n"
+                "• Unlimited OpenClaw AI usage\n"
+                "• No credit deductions\n"
+                "• Full access to all features\n"
+                "• Ability to manage user credits\n\n"
+                "<b>Admin Commands:</b>\n"
+                "• /admin_add_credits - Allocate credits to users\n"
+                "• /admin_system_stats - View system statistics\n"
+                "• /openclaw_help - View help\n\n"
+                "Just chat normally to use OpenClaw AI!"
             )
         else:
-            message += (
-                "❌ No credits available.\n\n"
-                "Contact admin to add credits:\n"
-                "/admin_add_credits\n\n"
-                "Pricing: Rp 100,000 = $7 USD credits"
+            # Regular user - show balance
+            credits = db.get_user_credits(user_id)
+            
+            message = (
+                "💰 <b>Your OpenClaw Credits</b>\n\n"
+                f"<b>Current Balance:</b> ${credits:.2f}\n\n"
             )
+            
+            if credits > 0:
+                message += (
+                    "✅ You have credits!\n"
+                    "Just chat normally to use OpenClaw AI.\n\n"
+                    "Example questions:\n"
+                    "• What's the Bitcoin price?\n"
+                    "• Analyze Ethereum market\n"
+                    "• Give me crypto trading signals"
+                )
+            else:
+                message += (
+                    "❌ No credits available.\n\n"
+                    "Contact admin to add credits:\n"
+                    "/admin_add_credits\n\n"
+                    "Pricing: Rp 100,000 = $7 USD credits"
+                )
         
         await update.message.reply_text(message, parse_mode='HTML')
     
