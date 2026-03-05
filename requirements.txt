@@ -13,6 +13,7 @@ sqlalchemy==2.0.36
 # LangChain & AI
 langchain==0.3.13
 langchain-anthropic==0.3.3
+langchain-openai==0.3.0
 langchain-community==0.3.13
 # anthropic version must be >=0.41.0 for langchain-anthropic 0.3.3
 anthropic>=0.41.0,<1.0.0

@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from decimal import Decimal
 import httpx
 
-from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 
@@ -35,12 +35,16 @@ class OpenClawSimpleAgent:
         if not api_key:
             raise ValueError("OPENCLAW_API_KEY not found in environment")
         
-        self.llm = ChatAnthropic(
+        self.llm = ChatOpenAI(
             model="openai/gpt-4.1",
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
             temperature=0.7,
-            max_tokens=2000
+            max_tokens=2000,
+            default_headers={
+                "HTTP-Referer": "https://github.com/cryptomentor-bot",
+                "X-Title": "CryptoMentor OpenClaw"
+            }
         )
         
         logger.info("OpenClaw Simple Agent initialized successfully")
