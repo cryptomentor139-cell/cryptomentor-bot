@@ -410,9 +410,23 @@ class TelegramBot:
             print("Full error traceback:")
             traceback.print_exc()
         
+        # Register Free Signal handlers (NO AI/LLM - for Premium/Lifetime users)
+        try:
+            print("🎯 Initializing Free Signal system...")
+            from app.handlers_free_signal import register_free_signal_handlers
+            register_free_signal_handlers(self.application)
+            print("✅ Free Signal handlers registered successfully!")
+            print("   Commands available:")
+            print("   • /free_signal - Generate instant signal (NO AI cost)")
+            print("   • /free_signal_help - Show help")
+            print("   Available for: Premium, Lifetime, Admin users")
+        except Exception as e:
+            print(f"⚠️ Free Signal handlers failed to register: {e}")
+        
         # Note: Automaton is for AUTONOMOUS TRADING only (Lifetime Premium)
         # Signal generation uses bot's own system (/analyze, /futures, /ai)
         # OpenClaw is for PERSONAL AI ASSISTANT (Claude Sonnet 4.5) with seamless chat
+        # Free Signal is for INSTANT SIGNALS without AI cost (Premium/Lifetime)
 
 
         # Message handler for menu interactions
