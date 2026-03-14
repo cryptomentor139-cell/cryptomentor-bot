@@ -289,11 +289,30 @@ async def receive_api_secret(update: Update, context: ContextTypes.DEFAULT_TYPE)
             ])
         )
     else:
+        err = result.get('error', '')
+        if '403' in str(err):
+            import asyncio as _asyncio
+            server_ip = await _asyncio.to_thread(_get_server_ip)
+            msg = (
+                f"⚠️ <b>API Key tersimpan, tapi akses ditolak (403)</b>\n\n"
+                f"Kamu perlu whitelist IP server bot di Bitunix:\n\n"
+                f"<code>{server_ip}</code>\n\n"
+                f"<b>Cara fix:</b>\n"
+                f"1. Login Bitunix → API Management\n"
+                f"2. Hapus API Key lama, buat baru\n"
+                f"3. Di kolom <b>IP Whitelist</b> masukkan IP di atas\n"
+                f"4. Setup ulang di bot ini"
+            )
+        else:
+            msg = (
+                f"⚠️ <b>Tersimpan, tapi verifikasi gagal:</b>\n{err}\n\n"
+                "Cek API Key/Secret atau coba lagi nanti."
+            )
         await loading.edit_text(
-            f"⚠️ <b>Tersimpan, tapi verifikasi gagal:</b>\n{result.get('error')}\n\n"
-            "Cek API Key/Secret atau coba lagi nanti.",
+            msg,
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❓ Tutorial", callback_data="at_howto")],
                 [InlineKeyboardButton("🔄 Coba Lagi", callback_data="at_setup_key")],
                 [InlineKeyboardButton("✅ Simpan Tetap", callback_data="at_dashboard")],
             ])
@@ -506,7 +525,28 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
         return ConversationHandler.END
 
     if not acc.get('success'):
-        await loading.edit_text(f"❌ Gagal cek balance: {acc.get('error')}")
+        err = acc.get('error', '')
+        if '403' in str(err):
+            import asyncio
+            server_ip = await asyncio.to_thread(_get_server_ip)
+            await loading.edit_text(
+                f"❌ <b>Akses ditolak Bitunix (403)</b>\n\n"
+                f"API Key kamu belum di-whitelist untuk IP server bot.\n\n"
+                f"<b>Cara fix:</b>\n"
+                f"1. Login ke Bitunix → API Management\n"
+                f"2. Hapus API Key lama\n"
+                f"3. Buat API Key baru\n"
+                f"4. Di kolom <b>IP Whitelist</b>, masukkan:\n"
+                f"<code>{server_ip}</code>\n\n"
+                f"Setelah itu setup ulang API Key di bot ini.",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("❓ Tutorial Lengkap", callback_data="at_howto")],
+                    [InlineKeyboardButton("🔑 Setup Ulang API Key", callback_data="at_change_key")],
+                ])
+            )
+        else:
+            await loading.edit_text(f"❌ Gagal cek balance: {err}", parse_mode='HTML')
         return ConversationHandler.END
 
     available = acc.get('available', 0)
@@ -578,20 +618,49 @@ async def callback_stop_engine(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 
+def _get_server_ip() -> str:
+    """Ambil IP publik server ini (Railway/VPS)."""
+    try:
+        import requests as _req
+        r = _req.get("https://api.ipify.org?format=json", timeout=5)
+        return r.json().get("ip", "tidak diketahui")
+    except Exception:
+        return "tidak diketahui"
+
+
 async def callback_howto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    # Ambil IP server secara async agar tidak block
+    import asyncio
+    server_ip = await asyncio.to_thread(_get_server_ip)
+
     await query.edit_message_text(
-        "📖 <b>Cara Mendapatkan API Key Bitunix</b>\n\n"
+        "📖 <b>Cara Setup API Key Bitunix</b>\n\n"
+        "<b>Langkah 1 — Buat API Key:</b>\n"
         "1. Login ke <a href='https://www.bitunix.com'>bitunix.com</a>\n"
-        "2. Profil → <b>API Management</b>\n"
-        "3. <b>Create API Key</b>\n"
-        "4. Permission: ✅ Trade, ✅ Read\n"
-        "5. Copy API Key & Secret Key\n\n"
-        "⚠️ Secret Key hanya tampil sekali — simpan baik-baik!",
+        "2. Klik foto profil → <b>API Management</b>\n"
+        "3. Klik <b>Create API Key</b>\n"
+        "4. Centang permission: ✅ <b>Trade</b>, ✅ <b>Read</b>\n"
+        "5. Copy <b>API Key</b> dan <b>Secret Key</b>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "⚠️ <b>WAJIB — Whitelist IP Server:</b>\n\n"
+        "Saat membuat API Key, Bitunix akan meminta <b>IP Whitelist</b>.\n"
+        "Masukkan IP berikut agar bot bisa terhubung ke akunmu:\n\n"
+        f"<code>{server_ip}</code>\n\n"
+        "📋 Cara whitelist IP:\n"
+        "• Di form Create API Key, cari kolom <b>\"IP Whitelist\"</b>\n"
+        "• Masukkan IP di atas\n"
+        "• Klik <b>Confirm / Save</b>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "⚠️ Secret Key hanya tampil <b>sekali</b> — simpan baik-baik!\n"
+        "Jika sudah punya API Key lama tanpa whitelist, hapus dan buat baru.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")]
+            [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")],
+            [InlineKeyboardButton("🌐 Buka Bitunix API Management",
+                                  url="https://www.bitunix.com/user/api-management")],
         ]),
         disable_web_page_preview=True
     )
