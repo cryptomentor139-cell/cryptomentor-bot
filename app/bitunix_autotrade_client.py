@@ -1,368 +1,320 @@
 """
 Bitunix Auto Trade Client
 Real trading client for Bitunix exchange integration
+Signature: double SHA256 (not HMAC)
 """
 
 import hashlib
-import hmac
 import time
+import uuid
 import requests
-import json
-from typing import Dict, Optional, List
 import os
+from typing import Dict, Optional, List
 from datetime import datetime
+
 
 class BitunixAutoTradeClient:
     def __init__(self, api_key: str = None, api_secret: str = None):
-        # Per-user keys take priority over env vars
         self.api_key = api_key or os.getenv('BITUNIX_API_KEY')
         self.api_secret = api_secret or os.getenv('BITUNIX_API_SECRET')
         self.base_url = os.getenv('BITUNIX_BASE_URL', 'https://fapi.bitunix.com')
 
         if not self.api_key or not self.api_secret:
             print("⚠️ Bitunix API credentials not configured")
-    
-    def _generate_signature(self, query_string: str) -> str:
-        """Generate HMAC SHA256 signature for Bitunix API"""
-        return hmac.new(
-            self.api_secret.encode('utf-8'),
-            query_string.encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
-    
-    def _make_request(self, method: str, endpoint: str, params: Dict = None, signed: bool = False) -> Dict:
-        """Make HTTP request to Bitunix API"""
-        if not self.api_key or not self.api_secret:
-            return {
-                'success': False,
-                'error': 'API credentials not configured'
-            }
-        
-        url = f"{self.base_url}{endpoint}"
-        headers = {
-            'X-BX-APIKEY': self.api_key,
-            'Content-Type': 'application/json'
+
+    # ------------------------------------------------------------------ #
+    #  Signature helpers                                                   #
+    # ------------------------------------------------------------------ #
+
+    def _sha256(self, s: str) -> str:
+        return hashlib.sha256(s.encode('utf-8')).hexdigest()
+
+    def _make_sign(self, nonce: str, timestamp: str,
+                   query_params: str = "", body: str = "") -> str:
+        """
+        Bitunix double-SHA256:
+          digest = SHA256(nonce + timestamp + api_key + queryParams + body)
+          sign   = SHA256(digest + secretKey)
+        queryParams: all GET params sorted ascending by key, concatenated as key+value (no & or =)
+        """
+        digest = self._sha256(nonce + timestamp + self.api_key + query_params + body)
+        return self._sha256(digest + self.api_secret)
+
+    def _build_query_string(self, params: Dict) -> str:
+        """Sort params by key ascending, concat as key+value (Bitunix format)."""
+        return "".join(f"{k}{v}" for k, v in sorted(params.items()))
+
+    def _auth_headers(self, query_params: str = "", body: str = "") -> Dict:
+        nonce = uuid.uuid4().hex  # 32-char random
+        timestamp = str(int(time.time() * 1000))
+        sign = self._make_sign(nonce, timestamp, query_params, body)
+        return {
+            "api-key": self.api_key,
+            "nonce": nonce,
+            "timestamp": timestamp,
+            "sign": sign,
+            "Content-Type": "application/json",
         }
-        
-        if params is None:
-            params = {}
-        
+
+    # ------------------------------------------------------------------ #
+    #  Core request                                                        #
+    # ------------------------------------------------------------------ #
+
+    def _request(self, method: str, endpoint: str,
+                 params: Dict = None, body: Dict = None,
+                 signed: bool = False) -> Dict:
+        if signed and (not self.api_key or not self.api_secret):
+            return {'success': False, 'error': 'API credentials not configured'}
+
+        url = f"{self.base_url}{endpoint}"
+        params = params or {}
+        body_str = ""
+
         if signed:
-            timestamp = int(time.time() * 1000)
-            params['timestamp'] = timestamp
-            
-            # Create query string
-            query_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
-            signature = self._generate_signature(query_string)
-            params['signature'] = signature
-        
+            query_str = self._build_query_string(params)
+            if body:
+                import json
+                body_str = json.dumps(body, separators=(',', ':'))
+            headers = self._auth_headers(query_str, body_str)
+        else:
+            headers = {"Content-Type": "application/json"}
+
         try:
             if method.upper() == 'GET':
-                response = requests.get(url, params=params, headers=headers, timeout=10)
-            elif method.upper() == 'POST':
-                response = requests.post(url, json=params, headers=headers, timeout=10)
+                r = requests.get(url, params=params, headers=headers, timeout=10)
             else:
-                return {'success': False, 'error': f'Unsupported method: {method}'}
-            
-            if response.status_code == 200:
-                data = response.json()
-                return {'success': True, 'data': data}
+                r = requests.post(url, data=body_str, headers=headers, timeout=10)
+
+            if r.status_code == 200:
+                data = r.json()
+                if data.get('code') == 0:
+                    return {'success': True, 'data': data.get('data')}
+                else:
+                    return {'success': False, 'error': f"API error {data.get('code')}: {data.get('msg')}"}
             else:
-                return {
-                    'success': False,
-                    'error': f'HTTP {response.status_code}: {response.text}'
-                }
-                
+                return {'success': False, 'error': f'HTTP {r.status_code}: {r.text}'}
+
         except requests.exceptions.RequestException as e:
-            return {
-                'success': False,
-                'error': f'Request failed: {str(e)}'
-            }
-    
+            return {'success': False, 'error': f'Request failed: {str(e)}'}
+
+    # ------------------------------------------------------------------ #
+    #  Public endpoints                                                    #
+    # ------------------------------------------------------------------ #
+
     def check_connection(self) -> Dict:
-        """Test API connection and get server time"""
-        result = self._make_request('GET', '/fapi/v1/time')
+        """Test connectivity via public ticker endpoint."""
+        result = self._request('GET', '/api/v1/futures/market/tickers',
+                               params={'symbols': 'BTCUSDT'})
         if result['success']:
-            return {
-                'online': True,
-                'server_time': result['data'].get('serverTime'),
-                'message': 'Connected to Bitunix successfully'
-            }
-        else:
-            return {
-                'online': False,
-                'error': result['error']
-            }
-    
+            return {'online': True, 'message': 'Connected to Bitunix successfully',
+                    'data': result['data']}
+        return {'online': False, 'error': result['error']}
+
+    def get_symbol_price(self, symbol: str) -> Dict:
+        result = self._request('GET', '/api/v1/futures/market/tickers',
+                               params={'symbols': symbol})
+        if result['success']:
+            tickers = result['data']
+            if tickers:
+                return {'success': True, 'symbol': symbol,
+                        'price': float(tickers[0].get('lastPrice', 0))}
+        return result
+
+    # ------------------------------------------------------------------ #
+    #  Private endpoints                                                   #
+    # ------------------------------------------------------------------ #
+
     def get_account_info(self) -> Dict:
-        """Get account information and balance"""
-        result = self._make_request('GET', '/fapi/v2/account', signed=True)
+        """Get USDT futures account balance."""
+        result = self._request('GET', '/api/v1/futures/account',
+                               params={'marginCoin': 'USDT'}, signed=True)
         if result['success']:
-            data = result['data']
-            # Extract USDT balance
-            usdt_balance = 0
-            for asset in data.get('assets', []):
-                if asset.get('asset') == 'USDT':
-                    usdt_balance = float(asset.get('walletBalance', 0))
-                    break
-            
+            d = result['data']
             return {
                 'success': True,
-                'balance': usdt_balance,
-                'total_wallet_balance': float(data.get('totalWalletBalance', 0)),
-                'total_unrealized_pnl': float(data.get('totalUnrealizedProfit', 0)),
-                'can_trade': data.get('canTrade', False),
-                'can_withdraw': data.get('canWithdraw', False)
+                'available': float(d.get('available', 0)),
+                'frozen': float(d.get('frozen', 0)),
+                'margin': float(d.get('margin', 0)),
+                'bonus': float(d.get('bonus', 0)),
+                'cross_unrealized_pnl': float(d.get('crossUnrealizedPNL', 0)),
+                'isolation_unrealized_pnl': float(d.get('isolationUnrealizedPNL', 0)),
+                'position_mode': d.get('positionMode'),
+                # legacy compat
+                'balance': float(d.get('available', 0)),
+                'total_unrealized_pnl': float(d.get('crossUnrealizedPNL', 0)) +
+                                        float(d.get('isolationUnrealizedPNL', 0)),
             }
-        else:
-            return result
-    
+        return result
+
     def get_positions(self) -> Dict:
-        """Get current open positions"""
-        result = self._make_request('GET', '/fapi/v2/positionRisk', signed=True)
+        """Get current open positions."""
+        result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+                               signed=True)
         if result['success']:
+            raw = result['data'] or []
             positions = []
-            for pos in result['data']:
-                if float(pos.get('positionAmt', 0)) != 0:  # Only open positions
-                    positions.append({
-                        'symbol': pos.get('symbol'),
-                        'side': 'LONG' if float(pos.get('positionAmt', 0)) > 0 else 'SHORT',
-                        'size': abs(float(pos.get('positionAmt', 0))),
-                        'entry_price': float(pos.get('entryPrice', 0)),
-                        'mark_price': float(pos.get('markPrice', 0)),
-                        'pnl': float(pos.get('unRealizedProfit', 0)),
-                        'pnl_percentage': float(pos.get('percentage', 0))
-                    })
-            
-            return {
-                'success': True,
-                'positions': positions,
-                'total_positions': len(positions)
-            }
-        else:
-            return result
-    
+            for pos in raw:
+                qty = float(pos.get('qty', 0))
+                if qty == 0:
+                    continue
+                positions.append({
+                    'symbol': pos.get('symbol'),
+                    'side': pos.get('side', '').upper(),
+                    'size': qty,
+                    'entry_price': float(pos.get('openPrice', 0)),
+                    'mark_price': float(pos.get('markPrice', 0)),
+                    'pnl': float(pos.get('unrealizedPNL', 0)),
+                    'leverage': pos.get('leverage'),
+                    'margin_mode': pos.get('marginMode'),
+                })
+            return {'success': True, 'positions': positions,
+                    'total_positions': len(positions)}
+        return result
+
+    def place_order(self, symbol: str, side: str, qty: float,
+                    order_type: str = 'market', price: float = None,
+                    reduce_only: bool = False) -> Dict:
+        """
+        Place a futures order.
+        side: BUY / SELL
+        order_type: market / limit
+        """
+        body = {
+            'symbol': symbol,
+            'qty': str(qty),
+            'side': side.upper(),
+            'tradeSide': 'OPEN' if not reduce_only else 'CLOSE',
+            'orderType': order_type.upper(),
+        }
+        if order_type.lower() == 'limit' and price:
+            body['price'] = str(price)
+
+        result = self._request('POST', '/api/v1/futures/trade/place_order',
+                               body=body, signed=True)
+        if result['success']:
+            return {'success': True, 'order_id': result['data'].get('orderId'),
+                    'message': f'{side.upper()} {order_type} order placed'}
+        return result
+
+    # ------------------------------------------------------------------ #
+    #  High-level helpers (used by handlers)                              #
+    # ------------------------------------------------------------------ #
+
     def get_24h_stats(self) -> Dict:
-        """Get 24h trading statistics"""
-        # This is a mock implementation since we don't have real trading history
-        # In a real implementation, you would track trades in a database
         return {
             'success': True,
             'stats': {
-                'total_trades': 0,
-                'winning_trades': 0,
-                'losing_trades': 0,
-                'win_rate': 0,
-                'total_pnl': 0,
-                'best_trade': 0,
-                'worst_trade': 0,
-                'volume_24h': 0
+                'total_trades': 0, 'winning_trades': 0, 'losing_trades': 0,
+                'win_rate': 0, 'total_pnl': 0, 'best_trade': 0,
+                'worst_trade': 0, 'volume_24h': 0,
             }
         }
-    
-    def place_market_order(self, symbol: str, side: str, quantity: float) -> Dict:
-        """Place a market order"""
-        params = {
-            'symbol': symbol,
-            'side': side.upper(),
-            'type': 'MARKET',
-            'quantity': quantity
-        }
-        
-        result = self._make_request('POST', '/fapi/v1/order', params, signed=True)
-        if result['success']:
-            order_data = result['data']
-            return {
-                'success': True,
-                'order_id': order_data.get('orderId'),
-                'symbol': order_data.get('symbol'),
-                'side': order_data.get('side'),
-                'quantity': order_data.get('origQty'),
-                'status': order_data.get('status'),
-                'message': f"Market {side} order placed successfully"
-            }
-        else:
-            return result
-    
-    def get_symbol_price(self, symbol: str) -> Dict:
-        """Get current price for a symbol"""
-        result = self._make_request('GET', f'/fapi/v1/ticker/price?symbol={symbol}')
-        if result['success']:
-            data = result['data']
-            return {
-                'success': True,
-                'symbol': data.get('symbol'),
-                'price': float(data.get('price', 0))
-            }
-        else:
-            return result
-    
+
     def start_autotrade(self, user_id: int, amount: float, wallet_address: str) -> Dict:
-        """
-        Start auto trading simulation
-        Note: This is a demo implementation. Real auto trading would require
-        sophisticated algorithms and risk management.
-        """
-        # Check account first
-        account_info = self.get_account_info()
-        if not account_info['success']:
-            return {
-                'success': False,
-                'error': f"Cannot access Bitunix account: {account_info['error']}"
-            }
-        
-        if account_info['balance'] < amount:
-            return {
-                'success': False,
-                'error': f"Insufficient balance. Available: {account_info['balance']} USDT, Required: {amount} USDT"
-            }
-        
-        # In a real implementation, you would:
-        # 1. Set up trading algorithms
-        # 2. Configure risk management
-        # 3. Start monitoring markets
-        # 4. Execute trades based on signals
-        
+        account = self.get_account_info()
+        if not account['success']:
+            return {'success': False, 'error': f"Cannot access account: {account['error']}"}
+        if account['balance'] < amount:
+            return {'success': False,
+                    'error': f"Insufficient balance. Available: {account['balance']} USDT, Required: {amount} USDT"}
         return {
             'success': True,
-            'response': f"""🤖 Auto Trading Started!
-
-💰 Allocated Amount: {amount} USDT
-📊 Available Balance: {account_info['balance']} USDT
-🎯 Strategy: Conservative Scalping
-⚠️ Risk Level: Medium
-
-🔄 Trading Rules:
-• Max 2% risk per trade
-• Stop Loss: -1.5%
-• Take Profit: +2-3%
-• Focus on: BTC/USDT, ETH/USDT
-• Trading Hours: 24/7
-
-⚡ Status: ACTIVE - Monitoring markets...
-
-Note: This is a demo mode. Real trading requires manual approval for each trade."""
+            'response': (
+                f"🤖 Auto Trading Started!\n\n"
+                f"💰 Allocated: {amount} USDT\n"
+                f"📊 Available: {account['balance']} USDT\n"
+                f"🎯 Strategy: Conservative Scalping\n"
+                f"⚠️ Risk: Max 2% per trade\n"
+                f"⚡ Status: ACTIVE"
+            )
         }
-    
+
     def get_autotrade_status(self, user_id: int) -> Dict:
-        """Get auto trade status"""
-        # Get current account info
-        account_info = self.get_account_info()
+        account = self.get_account_info()
         positions = self.get_positions()
         stats = self.get_24h_stats()
-        
-        if not account_info['success']:
-            return account_info
-        
-        status_text = f"""📊 Auto Trade Portfolio Status
 
-💰 Current Balance: {account_info['balance']:.2f} USDT
-📈 Unrealized PnL: {account_info['total_unrealized_pnl']:.2f} USDT
-🔄 Open Positions: {positions.get('total_positions', 0)}
+        if not account['success']:
+            return account
 
-📊 24h Statistics:
-• Total Trades: {stats['stats']['total_trades']}
-• Win Rate: {stats['stats']['win_rate']:.1f}%
-• Total PnL: {stats['stats']['total_pnl']:.2f} USDT
-• Best Trade: +{stats['stats']['best_trade']:.2f} USDT
-• Worst Trade: {stats['stats']['worst_trade']:.2f} USDT
-
-🎯 Strategy Status: ACTIVE
-⚡ Last Update: {datetime.now().strftime('%H:%M:%S')}
-
-🔄 Current Positions:"""
+        lines = [
+            "📊 Auto Trade Portfolio Status\n",
+            f"💰 Available: {account['balance']:.2f} USDT",
+            f"📈 Unrealized PnL: {account['total_unrealized_pnl']:.2f} USDT",
+            f"🔄 Open Positions: {positions.get('total_positions', 0)}",
+            f"\n📊 24h Stats:",
+            f"• Trades: {stats['stats']['total_trades']}",
+            f"• Win Rate: {stats['stats']['win_rate']:.1f}%",
+            f"• PnL: {stats['stats']['total_pnl']:.2f} USDT",
+            f"\n⚡ Last Update: {datetime.now().strftime('%H:%M:%S')}",
+            "\n🔄 Positions:",
+        ]
 
         if positions['success'] and positions['positions']:
-            for pos in positions['positions']:
-                pnl_emoji = "📈" if pos['pnl'] >= 0 else "📉"
-                status_text += f"""
-{pnl_emoji} {pos['symbol']} {pos['side']}
-   Size: {pos['size']:.4f}
-   Entry: ${pos['entry_price']:.4f}
-   Mark: ${pos['mark_price']:.4f}
-   PnL: {pos['pnl']:.2f} USDT ({pos['pnl_percentage']:.2f}%)"""
+            for p in positions['positions']:
+                emoji = "📈" if p['pnl'] >= 0 else "📉"
+                lines.append(
+                    f"{emoji} {p['symbol']} {p['side']} | "
+                    f"Size: {p['size']} | Entry: ${p['entry_price']:.4f} | "
+                    f"PnL: {p['pnl']:.2f} USDT"
+                )
         else:
-            status_text += "\n   No open positions"
-        
-        return {
-            'success': True,
-            'response': status_text
-        }
-    
+            lines.append("   No open positions")
+
+        return {'success': True, 'response': "\n".join(lines)}
+
     def withdraw_autotrade(self, user_id: int) -> Dict:
-        """Process withdrawal (close all positions)"""
-        positions = self.get_positions()
-        account_info = self.get_account_info()
-        
-        if not positions['success'] or not account_info['success']:
-            return {
-                'success': False,
-                'error': 'Cannot access account information'
-            }
-        
-        # In a real implementation, you would close all positions here
-        # For demo, we'll just show what would happen
-        
-        total_pnl = account_info['total_unrealized_pnl']
-        final_balance = account_info['balance']
-        
-        # Calculate fee (25% of profit only)
-        profit = max(0, total_pnl)
+        account = self.get_account_info()
+        if not account['success']:
+            return {'success': False, 'error': 'Cannot access account'}
+
+        balance = account['balance']
+        pnl = account['total_unrealized_pnl']
+        profit = max(0, pnl)
         fee = profit * 0.25
-        net_amount = final_balance - fee
-        
+        net = balance - fee
+
         return {
             'success': True,
-            'response': f"""✅ Withdrawal Processed
-
-💰 Final Balance: {final_balance:.2f} USDT
-📈 Total PnL: {total_pnl:.2f} USDT
-💸 Platform Fee (25% of profit): {fee:.2f} USDT
-💵 Net Amount: {net_amount:.2f} USDT
-
-🔄 All positions closed
-📤 Withdrawal initiated to your wallet
-
-Thank you for using Auto Trade!"""
+            'response': (
+                f"✅ Withdrawal Processed\n\n"
+                f"💰 Balance: {balance:.2f} USDT\n"
+                f"📈 PnL: {pnl:.2f} USDT\n"
+                f"💸 Fee (25% profit): {fee:.2f} USDT\n"
+                f"💵 Net: {net:.2f} USDT"
+            )
         }
-    
+
     def get_trade_history(self, user_id: int, limit: int = 10) -> Dict:
-        """Get trade history"""
-        # In a real implementation, you would fetch actual trade history
-        # For demo, we'll show sample data
-        
-        return {
-            'success': True,
-            'response': f"""📈 Trade History (Last {limit} trades)
+        result = self._request('GET', '/api/v1/futures/trade/get_history_orders',
+                               params={'pageSize': limit}, signed=True)
+        if result['success']:
+            orders = result['data'] or []
+            if not orders:
+                return {'success': True, 'response': "📈 No trade history yet."}
+            lines = [f"📈 Trade History (last {limit})\n"]
+            for o in orders[:limit]:
+                side_emoji = "🟢" if o.get('side') == 'BUY' else "🔴"
+                lines.append(
+                    f"{side_emoji} {o.get('symbol')} {o.get('side')} "
+                    f"qty={o.get('qty')} @ {o.get('price', 'market')} "
+                    f"| {o.get('ctime', '')}"
+                )
+            return {'success': True, 'response': "\n".join(lines)}
+        return {'success': False, 'response': f"Failed to fetch history: {result['error']}"}
 
-🔄 Demo Mode - No actual trades yet
 
-Sample trades would appear here:
-• 2024-01-15 14:30 - BTC/USDT LONG +2.3%
-• 2024-01-15 12:15 - ETH/USDT SHORT +1.8%
-• 2024-01-15 09:45 - BTC/USDT LONG -1.2%
-
-Start trading to see real history!"""
-        }
-
-
-# Test the client
+# ------------------------------------------------------------------ #
+#  Quick test                                                          #
+# ------------------------------------------------------------------ #
 if __name__ == "__main__":
     client = BitunixAutoTradeClient()
-    
-    print("Testing Bitunix connection...")
-    connection = client.check_connection()
-    print(f"Connection: {connection}")
-    
-    if connection.get('online'):
-        print("\n✅ Bitunix API connected!")
-        
-        # Test account info
-        account = client.get_account_info()
-        print(f"Account: {account}")
-        
-        # Test positions
-        positions = client.get_positions()
-        print(f"Positions: {positions}")
-    else:
-        print("\n❌ Bitunix API connection failed!")
+
+    print("1. Connection test...")
+    print(client.check_connection())
+
+    print("\n2. Account info...")
+    print(client.get_account_info())
+
+    print("\n3. Positions...")
+    print(client.get_positions())
