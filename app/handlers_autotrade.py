@@ -291,22 +291,23 @@ async def receive_api_secret(update: Update, context: ContextTypes.DEFAULT_TYPE)
     else:
         err = result.get('error', '')
         if '403' in str(err) or 'TOKEN_INVALID' in str(err):
-            import asyncio as _asyncio
-            server_ip = await _asyncio.to_thread(_get_server_ip)
             msg = (
-                f"⚠️ <b>API Key tersimpan, tapi akses ditolak (403)</b>\n\n"
-                f"Kamu perlu whitelist IP server bot di Bitunix:\n\n"
-                f"<code>{server_ip}</code>\n\n"
-                f"<b>Cara fix:</b>\n"
-                f"1. Login Bitunix → API Management\n"
-                f"2. Hapus API Key lama, buat baru\n"
-                f"3. Di kolom <b>IP Whitelist</b> masukkan IP di atas\n"
-                f"4. Setup ulang di bot ini"
+                "⚠️ <b>API Key tersimpan, tapi akses ditolak</b>\n\n"
+                "API Key kamu punya <b>IP Restriction</b> yang memblokir server bot.\n\n"
+                "<b>Cara fix (wajib):</b>\n"
+                "1. Login Bitunix → API Management\n"
+                "2. Hapus API Key yang ada\n"
+                "3. Buat API Key baru\n"
+                "4. Di bagian <b>Bind IP Address</b> → <b>KOSONGKAN</b> (jangan isi apapun)\n"
+                "5. Centang permission: ✅ Trade\n"
+                "6. Setup ulang di bot ini\n\n"
+                "⚠️ <b>Kenapa harus kosong?</b>\n"
+                "Server bot menggunakan IP dinamis. Jika diisi IP tertentu, Bitunix akan blokir semua request dari IP lain."
             )
         else:
             msg = (
                 f"⚠️ <b>Tersimpan, tapi verifikasi gagal:</b>\n{err}\n\n"
-                "Cek API Key/Secret atau coba lagi nanti."
+                "Pastikan API Key dan Secret sudah benar, lalu coba lagi."
             )
         await loading.edit_text(
             msg,
@@ -527,18 +528,16 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
     if not acc.get('success'):
         err = acc.get('error', '')
         if '403' in str(err) or 'TOKEN_INVALID' in str(err):
-            import asyncio
-            server_ip = await asyncio.to_thread(_get_server_ip)
             await loading.edit_text(
-                f"❌ <b>Akses ditolak Bitunix (403)</b>\n\n"
-                f"API Key kamu belum di-whitelist untuk IP server bot.\n\n"
-                f"<b>Cara fix:</b>\n"
-                f"1. Login ke Bitunix → API Management\n"
-                f"2. Hapus API Key lama\n"
-                f"3. Buat API Key baru\n"
-                f"4. Di kolom <b>IP Whitelist</b>, masukkan:\n"
-                f"<code>{server_ip}</code>\n\n"
-                f"Setelah itu setup ulang API Key di bot ini.",
+                "❌ <b>Akses ditolak Bitunix</b>\n\n"
+                "API Key kamu punya <b>IP Restriction</b> yang memblokir server bot.\n\n"
+                "<b>Cara fix:</b>\n"
+                "1. Login Bitunix → API Management\n"
+                "2. Hapus API Key yang ada\n"
+                "3. Buat API Key baru\n"
+                "4. Di bagian <b>Bind IP Address</b> → <b>KOSONGKAN</b>\n"
+                "5. Centang permission: ✅ Trade\n"
+                "6. Setup ulang di bot: /autotrade → Ganti API Key",
                 parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("❓ Tutorial Lengkap", callback_data="at_howto")],
@@ -640,19 +639,19 @@ async def callback_howto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "3. Klik <b>Create API Key</b>\n"
         "4. Isi <b>Note</b>: bebas (contoh: AutoTrade)\n"
         "5. <b>Purpose</b>: pilih <b>Trading API</b>\n"
-        "6. <b>Bind IP address</b>: ⚠️ <b>KOSONGKAN</b> (jangan isi apapun)\n"
+        "6. <b>Bind IP address</b>: ⚠️ <b>WAJIB KOSONG</b> — jangan isi apapun\n"
         "7. <b>Permission</b>: centang ✅ <b>Trade</b>\n"
         "8. Klik <b>Confirm</b> → verifikasi email\n"
         "9. Copy <b>API Key</b> dan <b>Secret Key</b>\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "❓ <b>Kenapa IP harus dikosongkan?</b>\n\n"
-        "Server bot menggunakan banyak IP yang bisa berubah. "
-        "Jika diisi IP tertentu, Bitunix akan blokir request dari IP lain.\n\n"
-        "✅ <b>Aman?</b> Ya — API key ini hanya punya permission <b>Trade</b>, "
-        "tidak bisa withdraw dana.\n\n"
+        "🚫 <b>JANGAN isi Bind IP Address</b>\n\n"
+        "Server bot menggunakan IP dinamis yang bisa berubah sewaktu-waktu. "
+        "Jika IP diisi, Bitunix akan blokir semua request dari IP lain dan autotrade tidak bisa jalan.\n\n"
+        "✅ <b>Aman tanpa IP restriction?</b>\n"
+        "Ya — API key ini hanya punya permission <b>Trade</b>, "
+        "tidak bisa withdraw dana. Dana kamu tetap aman.\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "⚠️ Secret Key hanya tampil <b>sekali</b> — simpan baik-baik!\n"
-        "Jika sudah punya API Key lama, hapus dan buat baru.",
+        "⚠️ Secret Key hanya tampil <b>sekali</b> — simpan baik-baik sebelum klik Got it!",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")],
