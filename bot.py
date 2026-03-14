@@ -423,10 +423,24 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ Free Signal handlers failed to register: {e}")
         
+        # Register AutoTrade handlers (Bitunix Integration)
+        try:
+            print("🤖 Initializing AutoTrade system...")
+            from app.handlers_autotrade import register_autotrade_handlers
+            register_autotrade_handlers(self.application)
+            print("✅ AutoTrade handlers registered successfully!")
+            print("   Commands available:")
+            print("   • /autotrade - Start/manage automated trading")
+            print("   • Bitunix API integration ready")
+            print("   • 24/7 AI-powered trading")
+        except Exception as e:
+            print(f"⚠️ AutoTrade handlers failed to register: {e}")
+        
         # Note: Automaton is for AUTONOMOUS TRADING only (Lifetime Premium)
         # Signal generation uses bot's own system (/analyze, /futures, /ai)
         # OpenClaw is for PERSONAL AI ASSISTANT (Claude Sonnet 4.5) with seamless chat
         # Free Signal is for INSTANT SIGNALS without AI cost (Premium/Lifetime)
+        # AutoTrade is for BITUNIX INTEGRATION with AI trading bot
 
 
         # Message handler for menu interactions
