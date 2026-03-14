@@ -200,6 +200,47 @@ class BitunixAutoTradeClient:
     #  High-level helpers (used by handlers)                              #
     # ------------------------------------------------------------------ #
 
+    def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> Dict:
+        """Set leverage for a symbol. margin_mode: cross / isolated"""
+        body = {
+            "symbol": symbol,
+            "leverage": str(leverage),
+            "marginMode": margin_mode.upper(),
+        }
+        result = self._request('POST', '/api/v1/futures/account/change_leverage',
+                               body=body, signed=True)
+        if result['success']:
+            return {'success': True, 'leverage': leverage, 'margin_mode': margin_mode}
+        return result
+
+    def place_order_with_tpsl(self, symbol: str, side: str, qty: float,
+                               tp_price: float, sl_price: float) -> Dict:
+        """Place market order with TP and SL attached."""
+        body = {
+            "symbol": symbol,
+            "qty": str(qty),
+            "side": side.upper(),          # BUY / SELL
+            "tradeSide": "OPEN",
+            "orderType": "MARKET",
+            "tpPrice": str(round(tp_price, 6)),
+            "slPrice": str(round(sl_price, 6)),
+            "tpStopType": "MARK_PRICE",
+            "slStopType": "MARK_PRICE",
+        }
+        result = self._request('POST', '/api/v1/futures/trade/place_order',
+                               body=body, signed=True)
+        if result['success']:
+            return {
+                'success': True,
+                'order_id': result['data'].get('orderId'),
+                'symbol': symbol,
+                'side': side,
+                'qty': qty,
+                'tp': tp_price,
+                'sl': sl_price,
+            }
+        return result
+
     def get_24h_stats(self) -> Dict:
         return {
             'success': True,

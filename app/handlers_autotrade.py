@@ -18,9 +18,10 @@ from app.lib.crypto import encrypt, decrypt
 from app.supabase_repo import _client
 
 # Conversation states
-WAITING_API_KEY    = 1
-WAITING_API_SECRET = 2
+WAITING_API_KEY      = 1
+WAITING_API_SECRET   = 2
 WAITING_TRADE_AMOUNT = 3
+WAITING_LEVERAGE     = 4
 
 
 # ------------------------------------------------------------------ #
@@ -81,7 +82,7 @@ def get_autotrade_session(telegram_id: int) -> Optional[Dict]:
     return res.data[0] if res.data else None
 
 
-def save_autotrade_session(telegram_id: int, amount: float):
+def save_autotrade_session(telegram_id: int, amount: float, leverage: int = 10):
     s = _client()
     row = {
         "telegram_id": int(telegram_id),
@@ -115,10 +116,13 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_active = session and session.get("status") == "active"
 
     if keys and is_active:
+        from app.autotrade_engine import is_running as engine_running
+        engine_status = "🟢 Engine berjalan" if engine_running(user_id) else "🟡 Engine tidak aktif (restart bot?)"
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📊 Status Portfolio", callback_data="at_status")],
             [InlineKeyboardButton("📈 Trade History",    callback_data="at_history")],
             [InlineKeyboardButton("💸 Withdraw",         callback_data="at_withdraw")],
+            [InlineKeyboardButton("🛑 Stop AutoTrade",   callback_data="at_stop_engine")],
             [InlineKeyboardButton("🔑 Ganti API Key",    callback_data="at_change_key")],
         ])
         await update.message.reply_text(
@@ -128,7 +132,8 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📊 Balance: {session['current_balance']} USDT\n"
             f"📈 Profit: {session['total_profit']:.2f} USDT\n\n"
             f"🔑 API Key: <code>...{keys['key_hint']}</code>\n"
-            f"🏦 Exchange: {keys['exchange'].upper()}",
+            f"🏦 Exchange: {keys['exchange'].upper()}\n"
+            f"⚙️ {engine_status}",
             parse_mode='HTML', reply_markup=keyboard
         )
         return ConversationHandler.END
@@ -309,8 +314,23 @@ async def callback_start_trade(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("❌ API Key tidak ditemukan. Gunakan /autotrade untuk setup.")
         return ConversationHandler.END
 
+    # Cek balance real dari Bitunix
+    keys = get_user_api_keys(user_id)
+    try:
+        import asyncio
+        from app.bitunix_autotrade_client import BitunixAutoTradeClient
+        acc = await asyncio.wait_for(
+            asyncio.to_thread(BitunixAutoTradeClient(
+                api_key=keys['api_key'], api_secret=keys['api_secret']
+            ).get_account_info),
+            timeout=10.0
+        )
+        balance_line = f"\n💳 Balance tersedia: <b>{acc.get('available', 0):.2f} USDT</b>" if acc.get('success') else ""
+    except Exception:
+        balance_line = ""
+
     await query.edit_message_text(
-        "💰 <b>Mulai Auto Trade</b>\n\n"
+        f"💰 <b>Mulai Auto Trade</b>{balance_line}\n\n"
         "Masukkan jumlah USDT yang ingin ditradingkan:\n\n"
         "📌 Min: 10 USDT | Max: 1000 USDT\n"
         "Contoh: ketik <code>50</code>",
@@ -341,35 +361,222 @@ async def receive_trade_amount(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ API Key tidak ditemukan. Gunakan /autotrade.")
         return ConversationHandler.END
 
-    loading = await update.message.reply_text("🤖 <b>Memulai Auto Trade...</b>", parse_mode='HTML')
+    context.user_data['trade_amount'] = amount
 
-    try:
-        from app.bitunix_autotrade_client import BitunixAutoTradeClient
-        result = BitunixAutoTradeClient(
-            api_key=keys['api_key'], api_secret=keys['api_secret']
-        ).start_autotrade(user_id=user_id, amount=amount, wallet_address=f"user_{user_id}")
-    except Exception as e:
-        result = {'success': False, 'error': str(e)}
-
-    if result.get('success'):
-        save_autotrade_session(user_id, amount)
-        await loading.edit_text(
-            f"✅ <b>Auto Trade Aktif!</b>\n\n"
-            f"💰 Deposit: {amount} USDT | 🏦 BITUNIX\n\n"
-            "Gunakan /autotrade untuk cek status.",
-            parse_mode='HTML'
-        )
-    else:
-        await loading.edit_text(
-            f"❌ <b>Gagal:</b> {result.get('error', 'Unknown')}\n\nCek API Key atau hubungi admin.",
-            parse_mode='HTML'
-        )
-    return ConversationHandler.END
+    # Tanya leverage
+    await update.message.reply_text(
+        f"⚙️ <b>Pilih Leverage</b>\n\n"
+        f"Modal: <b>{amount} USDT</b>\n\n"
+        "Pilih leverage atau ketik angka (1-125):",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("5x",  callback_data="at_lev_5"),
+                InlineKeyboardButton("10x", callback_data="at_lev_10"),
+                InlineKeyboardButton("20x", callback_data="at_lev_20"),
+            ],
+            [
+                InlineKeyboardButton("50x",  callback_data="at_lev_50"),
+                InlineKeyboardButton("75x",  callback_data="at_lev_75"),
+                InlineKeyboardButton("100x", callback_data="at_lev_100"),
+            ],
+            [InlineKeyboardButton("❌ Batal", callback_data="at_cancel")],
+        ])
+    )
+    return WAITING_LEVERAGE
 
 
 # ------------------------------------------------------------------ #
 #  Misc callbacks                                                     #
 # ------------------------------------------------------------------ #
+
+async def _show_leverage_preview(update_or_query, context, leverage: int, from_callback: bool):
+    """Tampilkan risk/reward preview berdasarkan amount + leverage, minta konfirmasi."""
+    amount = context.user_data.get('trade_amount', 0)
+
+    # Contoh kalkulasi dengan asumsi trade 2% move
+    notional = amount * leverage
+    potential_profit_2pct = notional * 0.02   # TP ~2%
+    potential_loss_2pct   = notional * 0.02   # SL ~2%
+    liquidation_pct       = round(100 / leverage, 1)
+
+    # Risk level label
+    if leverage <= 10:
+        risk_label = "🟢 RENDAH"
+        risk_note  = "Cocok untuk pemula. Risiko likuidasi kecil."
+    elif leverage <= 25:
+        risk_label = "🟡 SEDANG"
+        risk_note  = "Perlu manajemen risiko yang baik."
+    elif leverage <= 50:
+        risk_label = "🟠 TINGGI"
+        risk_note  = "Hanya untuk trader berpengalaman."
+    else:
+        risk_label = "🔴 SANGAT TINGGI"
+        risk_note  = "Risiko likuidasi sangat besar. Hati-hati!"
+
+    text = (
+        f"📊 <b>Preview Risk/Reward — {leverage}x Leverage</b>\n\n"
+        f"💵 Modal: <b>{amount} USDT</b>\n"
+        f"📈 Notional value: <b>{notional:.0f} USDT</b>\n\n"
+        f"✅ Potensi profit (TP ~2%): <b>+{potential_profit_2pct:.2f} USDT</b>\n"
+        f"❌ Potensi loss (SL ~2%): <b>-{potential_loss_2pct:.2f} USDT</b>\n"
+        f"💥 Likuidasi jika harga turun: <b>{liquidation_pct}%</b>\n\n"
+        f"⚠️ Risk Level: {risk_label}\n"
+        f"📝 {risk_note}\n\n"
+        f"Bot akan otomatis:\n"
+        f"• Scan signal SMC + Order Block setiap menit\n"
+        f"• Eksekusi order dengan TP & SL otomatis\n"
+        f"• Notifikasi setiap trade masuk\n\n"
+        f"Lanjutkan dengan <b>{leverage}x</b>?"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"✅ Mulai dengan {leverage}x", callback_data=f"at_confirm_trade")],
+        [InlineKeyboardButton("🔄 Ganti Leverage", callback_data="at_start_trade")],
+        [InlineKeyboardButton("❌ Batal", callback_data="at_cancel")],
+    ])
+
+    context.user_data['trade_leverage'] = leverage
+
+    if from_callback:
+        await update_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
+    else:
+        await update_or_query.reply_text(text, parse_mode='HTML', reply_markup=keyboard)
+
+
+async def callback_leverage_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle tombol leverage 5x/10x/20x/50x/75x/100x."""
+    query = update.callback_query
+    await query.answer()
+    leverage = int(query.data.split("_")[-1])
+    await _show_leverage_preview(query, context, leverage, from_callback=True)
+    return ConversationHandler.END
+
+
+async def receive_leverage_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle input leverage manual (angka)."""
+    try:
+        leverage = int(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("❌ Masukkan angka leverage. Contoh: <code>20</code>", parse_mode='HTML')
+        return WAITING_LEVERAGE
+
+    if leverage < 1 or leverage > 125:
+        await update.message.reply_text("❌ Leverage harus antara 1–125.")
+        return WAITING_LEVERAGE
+
+    await _show_leverage_preview(update.message, context, leverage, from_callback=False)
+    return ConversationHandler.END
+
+
+async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User konfirmasi — start engine."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    amount   = context.user_data.get('trade_amount')
+    leverage = context.user_data.get('trade_leverage', 10)
+
+    if not amount:
+        await query.edit_message_text("❌ Session expired. Mulai ulang dengan /autotrade.")
+        return ConversationHandler.END
+
+    keys = get_user_api_keys(user_id)
+    if not keys:
+        await query.edit_message_text("❌ API Key tidak ditemukan.")
+        return ConversationHandler.END
+
+    # Cek balance sebelum mulai
+    loading = await query.edit_message_text("⏳ <b>Memverifikasi balance...</b>", parse_mode='HTML')
+
+    try:
+        import asyncio
+        from app.bitunix_autotrade_client import BitunixAutoTradeClient
+        acc = await asyncio.wait_for(
+            asyncio.to_thread(BitunixAutoTradeClient(
+                api_key=keys['api_key'], api_secret=keys['api_secret']
+            ).get_account_info),
+            timeout=15.0
+        )
+    except asyncio.TimeoutError:
+        await loading.edit_text("❌ Timeout saat cek balance. Coba lagi.")
+        return ConversationHandler.END
+    except Exception as e:
+        await loading.edit_text(f"❌ Error: {e}")
+        return ConversationHandler.END
+
+    if not acc.get('success'):
+        await loading.edit_text(f"❌ Gagal cek balance: {acc.get('error')}")
+        return ConversationHandler.END
+
+    available = acc.get('available', 0)
+    if available < amount:
+        await loading.edit_text(
+            f"❌ <b>Balance tidak cukup</b>\n\n"
+            f"Tersedia: {available:.2f} USDT\n"
+            f"Dibutuhkan: {amount} USDT",
+            parse_mode='HTML'
+        )
+        return ConversationHandler.END
+
+    # Simpan session dan start engine
+    save_autotrade_session(user_id, amount, leverage)
+
+    from app.autotrade_engine import start_engine
+    start_engine(
+        bot=query.get_bot(),
+        user_id=user_id,
+        api_key=keys['api_key'],
+        api_secret=keys['api_secret'],
+        amount=amount,
+        leverage=leverage,
+        notify_chat_id=user_id,
+    )
+
+    await loading.edit_text(
+        f"✅ <b>AutoTrade Aktif!</b>\n\n"
+        f"💵 Modal: {amount} USDT\n"
+        f"⚙️ Leverage: {leverage}x\n"
+        f"🏦 Exchange: BITUNIX\n\n"
+        f"Bot sedang memantau pasar. Kamu akan dapat notifikasi setiap kali ada trade masuk.\n\n"
+        f"Gunakan /autotrade untuk cek status atau stop.",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🛑 Stop AutoTrade", callback_data="at_stop_engine")],
+            [InlineKeyboardButton("📊 Dashboard", callback_data="at_dashboard")],
+        ])
+    )
+    return ConversationHandler.END
+
+
+async def callback_stop_engine(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stop autotrade engine untuk user ini."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    from app.autotrade_engine import stop_engine, is_running
+    if is_running(user_id):
+        stop_engine(user_id)
+        # Update status di Supabase
+        try:
+            _client().table("autotrade_sessions").update({
+                "status": "stopped",
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("telegram_id", user_id).execute()
+        except Exception:
+            pass
+        await query.edit_message_text(
+            "🛑 <b>AutoTrade dihentikan.</b>\n\nGunakan /autotrade untuk mulai lagi.",
+            parse_mode='HTML'
+        )
+    else:
+        await query.edit_message_text(
+            "ℹ️ AutoTrade tidak sedang berjalan.\n\nGunakan /autotrade untuk mulai.",
+            parse_mode='HTML'
+        )
+    return ConversationHandler.END
+
 
 async def callback_howto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -489,6 +696,11 @@ def register_autotrade_handlers(application):
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_trade_amount),
                 CallbackQueryHandler(callback_cancel, pattern="^at_cancel$"),
             ],
+            WAITING_LEVERAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_leverage_text),
+                CallbackQueryHandler(callback_leverage_select, pattern="^at_lev_\\d+$"),
+                CallbackQueryHandler(callback_cancel, pattern="^at_cancel$"),
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cmd_cancel),
@@ -502,5 +714,7 @@ def register_autotrade_handlers(application):
     application.add_handler(CallbackQueryHandler(callback_delete_key,     pattern="^at_delete_key$"))
     application.add_handler(CallbackQueryHandler(callback_confirm_delete, pattern="^at_confirm_delete$"))
     application.add_handler(CallbackQueryHandler(callback_dashboard,      pattern="^at_dashboard$"))
+    application.add_handler(CallbackQueryHandler(callback_confirm_trade,  pattern="^at_confirm_trade$"))
+    application.add_handler(CallbackQueryHandler(callback_stop_engine,    pattern="^at_stop_engine$"))
 
-    print("✅ AutoTrade handlers registered (Supabase + AES-256-GCM)")
+    print("✅ AutoTrade handlers registered (Supabase + AES-256-GCM + Engine)")
