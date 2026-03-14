@@ -116,6 +116,23 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             if not order_result.get('success'):
                 err = order_result.get('error', 'Unknown error')
                 logger.error(f"User {user_id} order failed: {err}")
+                if 'TOKEN_INVALID' in str(err) or '403' in str(err):
+                    await bot.send_message(
+                        chat_id=notify_chat_id,
+                        text=(
+                            "❌ <b>AutoTrade dihentikan — API Key bermasalah</b>\n\n"
+                            "Bitunix menolak request. Kemungkinan penyebab:\n"
+                            "• API Key sudah expired atau dihapus\n"
+                            "• IP server tidak diizinkan di API Key kamu\n\n"
+                            "<b>Cara fix:</b>\n"
+                            "1. Login Bitunix → API Management\n"
+                            "2. Hapus API Key lama, buat baru\n"
+                            "3. <b>Jangan isi IP Whitelist</b> (kosongkan)\n"
+                            "4. Setup ulang di bot: /autotrade → Ganti API Key"
+                        ),
+                        parse_mode='HTML'
+                    )
+                    return  # stop engine
                 await bot.send_message(
                     chat_id=notify_chat_id,
                     text=f"⚠️ <b>Order gagal:</b> {err}\n\nBot tetap berjalan dan akan coba signal berikutnya.",

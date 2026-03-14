@@ -290,7 +290,7 @@ async def receive_api_secret(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
     else:
         err = result.get('error', '')
-        if '403' in str(err):
+        if '403' in str(err) or 'TOKEN_INVALID' in str(err):
             import asyncio as _asyncio
             server_ip = await _asyncio.to_thread(_get_server_ip)
             msg = (
@@ -526,7 +526,7 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
 
     if not acc.get('success'):
         err = acc.get('error', '')
-        if '403' in str(err):
+        if '403' in str(err) or 'TOKEN_INVALID' in str(err):
             import asyncio
             server_ip = await asyncio.to_thread(_get_server_ip)
             await loading.edit_text(

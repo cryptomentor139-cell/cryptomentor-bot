@@ -103,12 +103,20 @@ class BitunixAutoTradeClient:
                 r = requests.post(url, data=body_str, **kwargs)
 
         try:
+            if r.status_code == 403:
+                return {'success': False, 'error': 'HTTP 403: IP tidak diizinkan. Buat API Key baru tanpa IP restriction di Bitunix.'}
             if r.status_code == 200:
                 data = r.json()
-                if data.get('code') == 0:
+                code = data.get('code')
+                if code == 0:
                     return {'success': True, 'data': data.get('data')}
+                elif code == 10003:
+                    # Token invalid — bisa karena IP restriction atau key salah
+                    return {'success': False, 'error': 'TOKEN_INVALID: API Key/Secret salah atau IP server tidak diizinkan di Bitunix.'}
+                elif code == 10007:
+                    return {'success': False, 'error': 'SIGNATURE_ERROR: Signature tidak valid.'}
                 else:
-                    return {'success': False, 'error': f"API error {data.get('code')}: {data.get('msg')}"}
+                    return {'success': False, 'error': f"API error {code}: {data.get('msg')}"}
             else:
                 return {'success': False, 'error': f'HTTP {r.status_code}: {r.text[:200]}'}
         except Exception as e:
