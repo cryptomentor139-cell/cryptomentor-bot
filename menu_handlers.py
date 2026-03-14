@@ -881,25 +881,22 @@ Just type the symbol in your next message!"""
             # Run analysis in background task
             async def run_futures_analysis():
                 try:
-                    import sys, os
-                    _bot_dir = os.path.dirname(os.path.abspath(__file__))
-                    if _bot_dir not in sys.path:
-                        sys.path.insert(0, _bot_dir)
-                    from snd_zone_detector import detect_snd_zones
+                    from smc_analyzer import SMCAnalyzer
 
-                    # Get SnD zones (run in thread to avoid blocking)
-                    snd_result = await asyncio.to_thread(detect_snd_zones, symbol, timeframe, 100)
-                    
-                    if 'error' in snd_result:
+                    analyzer = SMCAnalyzer()
+                    result = await asyncio.to_thread(analyzer.analyze, symbol, timeframe, 200)
+
+                    if 'error' in result:
                         await context.bot.edit_message_text(
                             chat_id=chat_id, message_id=message_id,
-                            text=f"Error: {snd_result['error']}", parse_mode=None
+                            text=f"❌ Error: {result['error']}", parse_mode=None
                         )
                         return
 
-                    current_price = snd_result.get('current_price', 0)
-                    demand_zones = snd_result.get('demand_zones', [])
-                    supply_zones = snd_result.get('supply_zones', [])
+                    current_price = result.get('current_price', 0)
+                    order_blocks = result.get('order_blocks', [])
+                    structure = result.get('structure')
+                    ema_21 = result.get('ema_21', 0)
 
                     def fmt_price(p):
                         if p >= 1000: return f"${p:,.2f}"
@@ -907,64 +904,110 @@ Just type the symbol in your next message!"""
                         elif p >= 0.0001: return f"${p:.6f}"
                         else: return f"${p:.8f}"
 
-                    avg_demand = sum(z.midpoint for z in demand_zones) / len(demand_zones) if demand_zones else 0
-                    avg_supply = sum(z.midpoint for z in supply_zones) / len(supply_zones) if supply_zones else 0
-                    
-                    if avg_demand and avg_supply:
-                        mid_range = (avg_demand + avg_supply) / 2
-                        if current_price > mid_range * 1.02:
+                    # Determine sentiment from SMC structure + OBs
+                    trend = structure.trend if structure else 'ranging'
+                    bullish_obs = [ob for ob in order_blocks if ob.type == 'bullish']
+                    bearish_obs = [ob for ob in order_blocks if ob.type == 'bearish']
+
+                    if trend == 'uptrend' or (bullish_obs and not bearish_obs):
+                        sentiment = "BULLISH"
+                        sentiment_emoji = "🟢"
+                    elif trend == 'downtrend' or (bearish_obs and not bullish_obs):
+                        sentiment = "BEARISH"
+                        sentiment_emoji = "🔴"
+                    elif bullish_obs and bearish_obs:
+                        # Whichever OB is stronger
+                        best_bull = max(bullish_obs, key=lambda x: x.strength)
+                        best_bear = max(bearish_obs, key=lambda x: x.strength)
+                        if best_bull.strength > best_bear.strength:
                             sentiment, sentiment_emoji = "BULLISH", "🟢"
-                        elif current_price < mid_range * 0.98:
-                            sentiment, sentiment_emoji = "BEARISH", ""
                         else:
-                            sentiment, sentiment_emoji = "SIDEWAYS", "🟡"
+                            sentiment, sentiment_emoji = "BEARISH", "🔴"
                     else:
-                        sentiment, sentiment_emoji = "NEUTRAL", ""
+                        sentiment, sentiment_emoji = "SIDEWAYS", "🟡"
+
+                    # Confidence based on OB strength
+                    best_ob = order_blocks[0] if order_blocks else None
+                    confidence = int(best_ob.strength) if best_ob else 55
 
                     display_symbol = symbol.replace('USDT', '')
-                    response = f" FUTURES ANALYSIS: {display_symbol} ({timeframe.upper()})\n\n Current Price: {fmt_price(current_price)}\n{sentiment_emoji} Market Sentiment: {sentiment}\n\n"
 
                     if sentiment == "BULLISH":
-                        response += " RECOMMENDED: LIMIT LONG at Demand Zone\n\n"
-                        if demand_zones:
-                            best_zone = demand_zones[0]
-                            zone_width = best_zone.high - best_zone.low
-                            sl = best_zone.low - (zone_width * 0.75)
-                            tp1 = current_price + (current_price - best_zone.midpoint) * 1.5
-                            tp2 = current_price + (current_price - best_zone.midpoint) * 2.5
-                            response += f"🟢 ENTRY ZONE (LONG):\n Demand Zone: {fmt_price(best_zone.low)} - {fmt_price(best_zone.high)}\n Strength: {best_zone.strength:.0f}%\n Stop Loss: {fmt_price(sl)}\n TP1: {fmt_price(tp1)}\n TP2: {fmt_price(tp2)}\n\n"
-                        else:
-                            response += " No demand zones found for LONG entry\n\n"
+                        rec = "LIMIT LONG"
+                        rec_emoji = "✅"
                     elif sentiment == "BEARISH":
-                        response += " RECOMMENDED: LIMIT SHORT at Supply Zone\n\n"
-                        if supply_zones:
-                            best_zone = supply_zones[0]
-                            zone_width = best_zone.high - best_zone.low
-                            sl = best_zone.high + (zone_width * 0.75)
-                            tp1 = current_price - (best_zone.midpoint - current_price) * 1.5
-                            tp2 = current_price - (best_zone.midpoint - current_price) * 2.5
-                            response += f" ENTRY ZONE (SHORT):\n Supply Zone: {fmt_price(best_zone.low)} - {fmt_price(best_zone.high)}\n Strength: {best_zone.strength:.0f}%\n Stop Loss: {fmt_price(sl)}\n TP1: {fmt_price(tp1)}\n TP2: {fmt_price(tp2)}\n\n"
-                        else:
-                            response += " No supply zones found for SHORT entry\n\n"
+                        rec = "LIMIT SHORT"
+                        rec_emoji = "✅"
                     else:
-                        response += " RECOMMENDED: Wait for Breakout\n\n Market is ranging - wait for clear direction\n\n"
-                        if demand_zones:
-                            best_demand = demand_zones[0]
-                            response += f"🟢 If Bullish Breakout → LONG at:\n Demand: {fmt_price(best_demand.low)} - {fmt_price(best_demand.high)}\n\n"
-                        if supply_zones:
-                            best_supply = supply_zones[0]
-                            response += f" If Bearish Breakout → SHORT at:\n Supply: {fmt_price(best_supply.low)} - {fmt_price(best_supply.high)}\n\n"
+                        rec = "Wait for Breakout"
+                        rec_emoji = "⚠️"
 
-                    response += " RISK MANAGEMENT:\n Use LIMIT orders at zone levels\n Do NOT use market orders\n Risk max 1-2% per trade\n Always set Stop Loss\n\n Wait for price to enter zone before placing order"
+                    response = (
+                        f"📊 <b>FUTURES ANALYSIS: {display_symbol} ({timeframe.upper()})</b>\n\n"
+                        f"💰 Current Price: {fmt_price(current_price)}\n"
+                        f"{sentiment_emoji} Market Sentiment: <b>{sentiment}</b>\n"
+                        f"✅ Confidence: {confidence}%\n"
+                        f"{rec_emoji} RECOMMENDED: <b>{rec}</b>\n\n"
+                    )
 
-                    await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response, parse_mode=None)
+                    if sentiment == "BULLISH" and bullish_obs:
+                        ob = max(bullish_obs, key=lambda x: x.strength)
+                        entry = ob.high
+                        sl = ob.low - (ob.high - ob.low) * 0.5
+                        tp1 = entry + (entry - sl) * 1.5
+                        tp2 = entry + (entry - sl) * 3.0
+                        response += (
+                            f"🟢 <b>ENTRY ZONE (LONG):</b>\n"
+                            f"📍 Entry: {fmt_price(entry)}\n"
+                            f"🎯 TP1: {fmt_price(tp1)}\n"
+                            f"🎯 TP2: {fmt_price(tp2)}\n"
+                            f"🛑 Stop Loss: {fmt_price(sl)}\n"
+                            f"💪 Confidence: {int(ob.strength)}%\n\n"
+                            f"📋 <b>Reasons:</b>\n"
+                            f"• Bullish Order Block (strength: {int(ob.strength)})\n"
+                        )
+                    elif sentiment == "BEARISH" and bearish_obs:
+                        ob = max(bearish_obs, key=lambda x: x.strength)
+                        entry = ob.low
+                        sl = ob.high + (ob.high - ob.low) * 0.5
+                        tp1 = entry - (sl - entry) * 1.5
+                        tp2 = entry - (sl - entry) * 3.0
+                        response += (
+                            f"🔴 <b>ENTRY ZONE (SHORT):</b>\n"
+                            f"📍 Entry: {fmt_price(entry)}\n"
+                            f"🎯 TP1: {fmt_price(tp1)}\n"
+                            f"🎯 TP2: {fmt_price(tp2)}\n"
+                            f"🛑 Stop Loss: {fmt_price(sl)}\n"
+                            f"💪 Confidence: {int(ob.strength)}%\n\n"
+                            f"📋 <b>Reasons:</b>\n"
+                            f"• Bearish Order Block (strength: {int(ob.strength)})\n"
+                        )
+                    else:
+                        response += "⏳ No clear Order Block entry — wait for breakout\n\n"
+
+                    if ema_21:
+                        ema_signal = "above EMA 21 (bullish bias)" if current_price > ema_21 else "below EMA 21 (bearish bias)"
+                        response += f"• Price {ema_signal}\n\n"
+
+                    response += (
+                        f"⚠️ <b>RISK MANAGEMENT:</b>\n"
+                        f"• Use LIMIT orders at zone levels\n"
+                        f"• Risk max 1-2% per trade\n"
+                        f"• Always set Stop Loss"
+                    )
+
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id, message_id=message_id,
+                        text=response, parse_mode='HTML'
+                    )
 
                 except Exception as e:
-                    print(f" Futures analysis error: {e}", flush=True)
+                    print(f"❌ Futures analysis error: {e}", flush=True)
+                    import traceback; traceback.print_exc()
                     try:
                         await context.bot.edit_message_text(
                             chat_id=chat_id, message_id=message_id,
-                            text=f"Error: {str(e)[:100]}\n\nPlease try again", parse_mode=None
+                            text=f"❌ Error: {str(e)[:100]}\n\nPlease try again", parse_mode=None
                         )
                     except:
                         pass
@@ -1053,143 +1096,123 @@ Just type the number in your next message!"""
         # Run analysis in background task
         async def run_spot_analysis():
             try:
-                import sys, os
-                _bot_dir = os.path.dirname(os.path.abspath(__file__))
-                if _bot_dir not in sys.path:
-                    sys.path.insert(0, _bot_dir)
-                from snd_zone_detector import detect_snd_zones
-                
-                # Get SnD analysis (run in thread to avoid blocking)
-                snd_result = await asyncio.to_thread(detect_snd_zones, symbol, timeframe, 100)
-                
-                if 'error' in snd_result:
+                from smc_analyzer import SMCAnalyzer
+
+                analyzer = SMCAnalyzer()
+                result = await asyncio.to_thread(analyzer.analyze, symbol, timeframe, 200)
+
+                if 'error' in result:
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=message_id,
-                        text=f" <b>Error:</b> {snd_result['error']}\n\n Try a different symbol like BTC, ETH, etc.",
+                        text=f"❌ <b>Error:</b> {result['error']}\n\nTry a different symbol like BTC, ETH, etc.",
                         parse_mode='HTML'
                     )
                     return
-                
-                current_price = snd_result.get('current_price', 0)
-                demand_zones = snd_result.get('demand_zones', [])
-                supply_zones = snd_result.get('supply_zones', [])
-                
+
+                current_price = result.get('current_price', 0)
+                order_blocks = result.get('order_blocks', [])
+                structure = result.get('structure')
+                ema_21 = result.get('ema_21', 0)
+                fvgs = result.get('fvgs', [])
+
                 def fmt_price(p):
                     if p >= 1000: return f"${p:,.2f}"
                     elif p >= 1: return f"${p:,.4f}"
                     elif p >= 0.0001: return f"${p:.6f}"
                     else: return f"${p:.8f}"
-                
-                avg_demand = sum(z.midpoint for z in demand_zones) / len(demand_zones) if demand_zones else 0
-                avg_supply = sum(z.midpoint for z in supply_zones) / len(supply_zones) if supply_zones else 0
-                
-                if avg_demand and avg_supply:
-                    mid_range = (avg_demand + avg_supply) / 2
-                    if current_price > mid_range * 1.02: trend = "Bullish"
-                    elif current_price < mid_range * 0.98: trend = "Bearish"
-                    else: trend = "Sideways"
+
+                trend = structure.trend if structure else 'ranging'
+                bullish_obs = [ob for ob in order_blocks if ob.type == 'bullish']
+                bearish_obs = [ob for ob in order_blocks if ob.type == 'bearish']
+
+                if trend == 'uptrend' or (bullish_obs and not bearish_obs):
+                    sentiment, sentiment_emoji = "BULLISH", "🟢"
+                elif trend == 'downtrend' or (bearish_obs and not bullish_obs):
+                    sentiment, sentiment_emoji = "BEARISH", "🔴"
+                elif bullish_obs and bearish_obs:
+                    best_bull = max(bullish_obs, key=lambda x: x.strength)
+                    best_bear = max(bearish_obs, key=lambda x: x.strength)
+                    if best_bull.strength > best_bear.strength:
+                        sentiment, sentiment_emoji = "BULLISH", "🟢"
+                    else:
+                        sentiment, sentiment_emoji = "BEARISH", "🔴"
                 else:
-                    trend = "Neutral"
-                
-                avg_strength = sum(z.strength for z in demand_zones) / len(demand_zones) if demand_zones else 0
-                if avg_strength >= 60: volume_status = "Accumulation"
-                elif avg_strength >= 40: volume_status = "Neutral"
-                else: volume_status = "Distribution"
-                
-                zone_count = len(demand_zones) + len(supply_zones)
-                base_confidence = min(85, 50 + (zone_count * 5))
-                if demand_zones: base_confidence += min(15, demand_zones[0].strength / 5)
-                confidence = min(95, base_confidence)
-                
+                    sentiment, sentiment_emoji = "SIDEWAYS", "🟡"
+
+                best_ob = order_blocks[0] if order_blocks else None
+                confidence = int(best_ob.strength) if best_ob else 55
+
                 display_symbol = symbol.replace('USDT', '')
-                response = f" <b>Spot Signal – {display_symbol} ({timeframe.upper()})</b>\n\n <b>Price:</b> {fmt_price(current_price)}\n\n🟢 <b>BUY ZONES</b>\n"
-                
-                zone_labels = [("A", "Strong", "40%"), ("B", "Discount", "35%"), ("C", "Deep", "25%")]
-                sorted_demands = sorted(demand_zones, key=lambda z: abs(current_price - z.midpoint))
-                
-                if sorted_demands:
-                    for i, (label, desc, alloc) in enumerate(zone_labels):
-                        if i < len(sorted_demands):
-                            zone = sorted_demands[i]
-                            zone_width = zone.high - zone.low
-                            tp1 = zone.high + (zone_width * 1.5)
-                            tp2 = zone.high + (zone_width * 3.0)
-                            strength = zone.strength if hasattr(zone, 'strength') else 50
-                            response += f"\n<b>Zone {label}</b> – {desc}\nEntry: {fmt_price(zone.low)} – {fmt_price(zone.high)}\nAllocation: {alloc}\nTP1: {fmt_price(tp1)}\nTP2: {fmt_price(tp2)}\nStrength: {strength:.0f}%\n"
+
+                response = (
+                    f"📊 <b>SPOT ANALYSIS: {display_symbol} ({timeframe.upper()})</b>\n\n"
+                    f"💰 Current Price: {fmt_price(current_price)}\n"
+                    f"{sentiment_emoji} Market Sentiment: <b>{sentiment}</b>\n"
+                    f"✅ Confidence: {confidence}%\n\n"
+                )
+
+                if sentiment == "BULLISH" and bullish_obs:
+                    response += "🟢 <b>BUY ZONES (SMC Order Blocks):</b>\n"
+                    for i, ob in enumerate(bullish_obs[:3], 1):
+                        zone_width = ob.high - ob.low
+                        tp1 = ob.high + zone_width * 1.5
+                        tp2 = ob.high + zone_width * 3.0
+                        sl = ob.low - zone_width * 0.5
+                        response += (
+                            f"\n<b>Zone {i}</b>\n"
+                            f"📍 Entry: {fmt_price(ob.low)} – {fmt_price(ob.high)}\n"
+                            f"🎯 TP1: {fmt_price(tp1)}\n"
+                            f"🎯 TP2: {fmt_price(tp2)}\n"
+                            f"🛑 SL: {fmt_price(sl)}\n"
+                            f"💪 Strength: {int(ob.strength)}%\n"
+                        )
+                elif sentiment == "BEARISH" and bearish_obs:
+                    response += "🔴 <b>SHORT ZONES (SMC Order Blocks):</b>\n"
+                    for i, ob in enumerate(bearish_obs[:3], 1):
+                        zone_width = ob.high - ob.low
+                        tp1 = ob.low - zone_width * 1.5
+                        tp2 = ob.low - zone_width * 3.0
+                        sl = ob.high + zone_width * 0.5
+                        response += (
+                            f"\n<b>Zone {i}</b>\n"
+                            f"📍 Entry: {fmt_price(ob.low)} – {fmt_price(ob.high)}\n"
+                            f"🎯 TP1: {fmt_price(tp1)}\n"
+                            f"🎯 TP2: {fmt_price(tp2)}\n"
+                            f"🛑 SL: {fmt_price(sl)}\n"
+                            f"💪 Strength: {int(ob.strength)}%\n"
+                        )
                 else:
-                    response += "\n⏳ No active demand zones detected\n"
-                
-                response += "\n <b>SELL ZONE</b>\n"
-                if supply_zones:
-                    best_supply = supply_zones[0]
-                    response += f"{fmt_price(best_supply.low)} – {fmt_price(best_supply.high)} (Take Profit)\n"
-                else:
-                    response += "No active supply zone\n"
-                
-                response += f"\n <b>Context:</b>\n Trend: {trend}\n Volume: {volume_status}\n\n <b>Confidence:</b> {confidence:.0f}%\n <b>Strategy:</b> DCA on demand zones\n\n<i> Spot only  Entry range, not market buy</i>"
-                
-                # Add AI reasoning for premium users
-                try:
-                    from deepseek_ai import DeepSeekAI
-                    ai = DeepSeekAI()
-                    
-                    # Prepare signal data for AI
-                    buy_zones_data = []
-                    for i, (label, desc, alloc) in enumerate(zone_labels):
-                        if i < len(sorted_demands):
-                            zone = sorted_demands[i]
-                            zone_width = zone.high - zone.low
-                            tp1 = zone.high + (zone_width * 1.5)
-                            tp2 = zone.high + (zone_width * 3.0)
-                            strength = zone.strength if hasattr(zone, 'strength') else 50
-                            
-                            buy_zones_data.append({
-                                'label': label,
-                                'low': zone.low,
-                                'high': zone.high,
-                                'allocation': alloc,
-                                'strength': strength,
-                                'tp1': tp1,
-                                'tp2': tp2
-                            })
-                    
-                    sell_zone_data = None
-                    if supply_zones:
-                        best_supply = supply_zones[0]
-                        sell_zone_data = {
-                            'low': best_supply.low,
-                            'high': best_supply.high
-                        }
-                    
-                    signal_data = {
-                        'current_price': current_price,
-                        'trend': trend,
-                        'volume_status': volume_status,
-                        'confidence': confidence,
-                        'buy_zones': buy_zones_data,
-                        'sell_zone': sell_zone_data
-                    }
-                    
-                    # Generate AI reasoning
-                    ai_reasoning = await ai.generate_spot_signal_reasoning(symbol, signal_data)
-                    response += ai_reasoning
-                    
-                except Exception as e:
-                    print(f"Error adding AI reasoning to spot signal: {e}")
-                
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response, parse_mode='HTML')
-            
+                    response += "⏳ No clear Order Block — wait for breakout\n"
+
+                if ema_21:
+                    ema_signal = "above EMA 21 (bullish bias)" if current_price > ema_21 else "below EMA 21 (bearish bias)"
+                    response += f"\n📋 <b>Context:</b>\n• Price {ema_signal}\n• EMA 21: {fmt_price(ema_21)}\n"
+
+                response += (
+                    f"\n⚠️ <b>RISK MANAGEMENT:</b>\n"
+                    f"• Use LIMIT orders at zone levels\n"
+                    f"• Risk max 1-2% per trade\n"
+                    f"• Always set Stop Loss\n"
+                    f"<i>📌 Spot only — entry range, not market buy</i>"
+                )
+
+                await context.bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id,
+                    text=response, parse_mode='HTML'
+                )
+
             except Exception as e:
-                print(f" Spot analysis error: {e}", flush=True)
+                print(f"❌ Spot analysis error: {e}", flush=True)
+                import traceback; traceback.print_exc()
                 try:
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=message_id,
-                        text=f" <b>Error</b>: {str(e)[:100]}\n\n Please try again or check symbol format",
+                        text=f"❌ <b>Error</b>: {str(e)[:100]}\n\nPlease try again or check symbol format",
                         parse_mode='HTML'
                     )
                 except:
                     pass
-        
+
         # Create background task - returns immediately
         asyncio.create_task(run_spot_analysis())
 
