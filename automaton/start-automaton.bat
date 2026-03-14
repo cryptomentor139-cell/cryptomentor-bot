@@ -1,3 +1,0 @@
-@echo off
-echo Starting Automaton in LOCAL SANDBOX MODE...
-node dist/index.js --run

@@ -15,6 +15,7 @@ from menu_system import (
     PREMIUM_EARNINGS, ASK_AI, CHANGE_LANGUAGE, TIME_SETTINGS, TIMEZONES, POPULAR_SYMBOLS,
     AUTOMATON_SPAWN, AUTOMATON_STATUS, AUTOMATON_DEPOSIT, AUTOMATON_LOGS
 )
+
 import asyncio
 
 class MenuCallbackHandler:
@@ -260,224 +261,14 @@ class MenuCallbackHandler:
         )
 
     async def show_ai_agent_menu(self, query, context):
-        """Show AI Agent submenu - requires lifetime premium"""
+        """Show AI Agent submenu"""
+        await query.edit_message_text(
+            "🤖 *AI Agent*\n\nFitur AI Agent tidak tersedia.\nGunakan /autotrade untuk AutoTrade Bitunix.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=MAIN_MENU)]]),
+            parse_mode='MARKDOWN'
+        )
+        return
         user_id = query.from_user.id
-        from database import Database
-        from app.admin_status import is_admin
-        from app.database import get_user_data
-        db = Database()
-        user_lang = db.get_user_language(user_id)
-        
-        # Check if user is admin or lifetime premium
-        is_admin_user = is_admin(user_id)
-        is_lifetime = False
-        
-        try:
-            if db.supabase_enabled:
-                from supabase_client import supabase
-                if supabase:
-                    user_result = supabase.table('users')\
-                        .select('premium_tier')\
-                        .eq('user_id', user_id)\
-                        .execute()
-                    
-                    if user_result.data:
-                        premium_tier = user_result.data[0].get('premium_tier', '')
-                        is_lifetime = (premium_tier == 'lifetime')
-        except Exception as e:
-            print(f"⚠️ Error checking premium tier: {e}")
-        
-        # ✅ BETA TEST: AI Agent terbuka untuk SEMUA user
-        # Tidak ada pembatasan lifetime premium
-        # User hanya perlu deposit untuk spawn agent
-        
-        # User can access AI Agent menu, check deposit status
-        # Check if user has made deposit (minimum $10 = 1000 credits)
-        MINIMUM_DEPOSIT_CREDITS = 1000  # $10 USDC = 1000 credits
-        has_deposit = False
-        user_credits = 0
-        
-        try:
-            if db.supabase_enabled:
-                # Import supabase client directly
-                from supabase_client import supabase
-                
-                if supabase:
-                    # Check user_credits_balance table for any credits
-                    credits_result = supabase.table('user_credits_balance')\
-                        .select('available_credits, total_conway_credits')\
-                        .eq('user_id', user_id)\
-                        .execute()
-                    
-                    if credits_result.data:
-                        balance = credits_result.data[0]
-                        available_credits = float(balance.get('available_credits', 0))
-                        total_credits = float(balance.get('total_conway_credits', 0))
-                        user_credits = max(available_credits, total_credits)
-                        
-                        # User has sufficient deposit if >= $30 (3000 credits)
-                        has_deposit = (user_credits >= MINIMUM_DEPOSIT_CREDITS)
-                        print(f"✅ User {user_id} credits check: available={available_credits}, total={total_credits}, has_deposit={has_deposit}")
-        except Exception as e:
-            print(f"⚠️ Error checking deposit status in user_credits_balance: {e}")
-            # Fallback: check old custodial_wallets table for backward compatibility
-            try:
-                from supabase_client import supabase
-                if supabase:
-                    wallet_result = supabase.table('custodial_wallets')\
-                        .select('balance_usdc, conway_credits')\
-                        .eq('user_id', user_id)\
-                        .execute()
-                    
-                    if wallet_result.data:
-                        wallet = wallet_result.data[0]
-                        balance_usdc = float(wallet.get('balance_usdc', 0))
-                        conway_credits = float(wallet.get('conway_credits', 0))
-                        user_credits = max(balance_usdc * 100, conway_credits)  # 1 USDC = 100 credits
-                        has_deposit = (user_credits >= MINIMUM_DEPOSIT_CREDITS)
-                        print(f"✅ User {user_id} fallback check: usdc={balance_usdc}, credits={conway_credits}, has_deposit={has_deposit}")
-            except Exception as fallback_error:
-                print(f"⚠️ Fallback check also failed: {fallback_error}")
-        
-        # If no sufficient deposit, show deposit-required menu
-        if not has_deposit:
-            if user_lang == 'id':
-                welcome_text = f"""🤖 **Selamat Datang di AI Agent!**
-
-✅ **Status:** Lifetime Premium Active
-
-💰 **Apa itu AI Agent?**
-AI Agent adalah autonomous trading agent yang menggunakan Conway credits sebagai bahan bakar untuk beroperasi.
-
-💵 **Minimum Deposit: $10 USDC**
-⚠️ **CATATAN PENTING:**
-$10 USDC ini BUKAN pure dana trading, melainkan *bensin operasional AI Agent* Anda.
-
-🔋 **Penggunaan $10 USDC untuk:**
-• 💻 *Compute Resources:* Server processing untuk AI analysis
-• 🧠 *AI Model Inference:* Biaya running AI decision-making
-• 📊 *Real-time Data:* Akses market data & price feeds
-• 🔄 *API Calls:* Komunikasi dengan exchange & blockchain
-• 📡 *Network Fees:* Gas fees untuk on-chain operations
-• 💾 *Storage:* Menyimpan trading history & analytics
-
-📊 **Status Deposit Anda:**
-💵 Credits saat ini: {user_credits:,.0f}
-🎯 Minimum untuk mulai: 1,000 credits ($10)
-
-💡 **Rekomendasi Deposit:**
-• $10 USDC: Testing/trial (1,000 credits) - Minimum
-• $20 USDC: Learning phase (2,000 credits)
-• $50 USDC: Trading serius (5,000 credits) ⭐ RECOMMENDED
-• $100+ USDC: Trading optimal (10,000+ credits)
-
-⚠️ **Mengapa $50+ Disarankan?**
-• AI butuh resources untuk analisis mendalam
-• API calls untuk data real-time
-• Komputasi untuk decision making
-• Buffer untuk operasional 24/7
-
-📝 **Cara Deposit:**
-1. Klik tombol "💰 Deposit Sekarang" di bawah
-2. Deposit USDC (Base Network) ke address yang diberikan
-3. Screenshot bukti transfer
-4. Kirim ke admin untuk verifikasi
-5. Credits akan ditambahkan manual (< 1 jam)
-
-💱 **Conversion Rate:**
-💵 1 USDC = 100 Conway Credits
-💰 $10 USDC = 1,000 Credits (minimum)
-💰 $50 USDC = 5,000 Credits (recommended)
-
-🌐 **Network:**
-⛓️ Base Network (WAJIB)
-
-📌 **Catatan:**
-• Platform fee: 2% dari deposit
-• Operational costs: ~100-500 credits/day
-• Semakin besar modal, semakin optimal AI bekerja"""
-            else:
-                welcome_text = f"""🤖 **Welcome to AI Agent!**
-
-✅ **Status:** Lifetime Premium Active
-
-💰 **What is AI Agent?**
-AI Agent is an autonomous trading agent that uses Conway credits as fuel to operate.
-
-💵 **Minimum Deposit: $10 USDC**
-⚠️ **IMPORTANT NOTE:**
-$10 USDC is NOT pure trading capital, but *operational fuel* for your AI Agent.
-
-🔋 **$10 USDC Usage:**
-• 💻 *Compute Resources:* Server processing for AI analysis
-• 🧠 *AI Model Inference:* Cost of running AI decision-making
-• 📊 *Real-time Data:* Access to market data & price feeds
-• 🔄 *API Calls:* Communication with exchanges & blockchain
-• 📡 *Network Fees:* Gas fees for on-chain operations
-• 💾 *Storage:* Storing trading history & analytics
-
-📊 **Your Deposit Status:**
-💵 Current credits: {user_credits:,.0f}
-🎯 Minimum to start: 1,000 credits ($10)
-
-💡 **Recommended Deposits:**
-• $10 USDC: Testing/trial (1,000 credits) - Minimum
-• $20 USDC: Learning phase (2,000 credits)
-• $50 USDC: Serious trading (5,000 credits) ⭐ RECOMMENDED
-• $100+ USDC: Optimal trading (10,000+ credits)
-
-⚠️ **Why $50+ Recommended?**
-• AI needs resources for deep analysis
-• API calls for real-time data
-• Computation for decision making
-• Buffer for 24/7 operations
-
-📝 **How to Deposit:**
-1. Click "💰 Deposit Now" button below
-2. Deposit USDC (Base Network) to given address
-3. Screenshot transfer proof
-4. Send to admin for verification
-5. Credits will be added manually (< 1 hour)
-
-💱 **Conversion Rate:**
-💵 1 USDC = 100 Conway Credits
-💰 $10 USDC = 1,000 Credits (minimum)
-💰 $50 USDC = 5,000 Credits (recommended)
-
-🌐 **Network:**
-⛓️ Base Network (REQUIRED)
-
-📌 **Notes:**
-• Platform fee: 2% of deposit
-• Operational costs: ~100-500 credits/day
-• Larger capital = more optimal AI performance"""
-            
-            # Build deposit-first menu with education button
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            keyboard = [
-                [InlineKeyboardButton("🎓 Pelajari AI Agent" if user_lang == 'id' else "🎓 Learn About AI Agent", 
-                                     callback_data="ai_agent_education")],
-                [InlineKeyboardButton("💰 Deposit Sekarang" if user_lang == 'id' else "💰 Deposit Now", 
-                                     callback_data="automaton_first_deposit")],
-                [InlineKeyboardButton("📚 Cara Deposit" if user_lang == 'id' else "📚 How to Deposit", 
-                                     callback_data="deposit_guide")],
-                [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
-                                     callback_data=MAIN_MENU)]
-            ]
-            
-            await query.edit_message_text(
-                welcome_text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='MARKDOWN'
-            )
-        else:
-            # User has deposit, show full menu
-            await query.edit_message_text(
-                get_menu_text(AI_AGENT_MENU, user_lang),
-                reply_markup=MenuBuilder.build_ai_agent_menu(),
-                parse_mode='MARKDOWN'
-            )
-
     async def show_settings_menu(self, query, context):
         """Show settings submenu"""
         await query.edit_message_text(
@@ -910,384 +701,39 @@ Type your question about cryptocurrency, trading, or blockchain technology.
         )
 
     async def handle_automaton_spawn(self, query, context):
-        """Handle Spawn Agent button - direct command execution"""
-        try:
-            from app.handlers_automaton import spawn_agent_command
-            from datetime import datetime
-            
-            # Answer callback first
-            await query.answer()
-            
-            # Send new message instead of editing (cleaner UX)
-            await query.message.reply_text(
-                "⏳ Preparing to spawn agent...\n\n"
-                "Please type the agent name you want to create.",
-                parse_mode='MARKDOWN'
-            )
-            
-            # Set context for next message with timestamp
-            context.user_data['awaiting_agent_name'] = True
-            context.user_data['action'] = 'spawn_agent'
-            context.user_data['state_timestamp'] = datetime.utcnow().isoformat()
-            
-        except Exception as e:
-            print(f" Error in handle_automaton_spawn: {e}")
-            import traceback
-            traceback.print_exc()
-            await query.message.reply_text(
-                f" Error: {str(e)[:100]}\n\n"
-                f"Please use /spawn_agent command directly.",
-                parse_mode='MARKDOWN'
-            )
+        await query.answer()
+        await query.edit_message_text(
+            "🤖 Fitur AI Agent tidak tersedia.\nGunakan /autotrade untuk AutoTrade.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=MAIN_MENU)]])
+        )
 
     async def handle_automaton_status(self, query, context):
-        """Handle Agent Status button - show agent status"""
-        try:
-            from app.handlers_automaton import agent_status_command
-            from telegram import Update
-            
-            # Answer callback
-            await query.answer()
-            
-            # Create Update-like object that handlers can use
-            # We'll pass query but handlers need to check for callback_query
-            class UpdateWrapper:
-                def __init__(self, callback_query):
-                    self.callback_query = callback_query
-                    self.effective_user = callback_query.from_user
-                    self.effective_chat = callback_query.message.chat
-                    self.message = callback_query.message
-            
-            wrapped_update = UpdateWrapper(query)
-            await agent_status_command(wrapped_update, context)
-            
-        except Exception as e:
-            print(f"⚠️ Error in handle_automaton_status: {e}")
-            import traceback
-            traceback.print_exc()
-            
-            user_id = query.from_user.id
-            from database import Database
-            db = Database()
-            user_lang = db.get_user_language(user_id)
-            
-            error_msg = "❌ Terjadi kesalahan. Silakan gunakan command /agent_status" if user_lang == 'id' else "❌ Error occurred. Please use /agent_status command"
-            
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
-            
-            await query.edit_message_text(
-                error_msg,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='MARKDOWN'
-            )
+        """Handle Agent Status button - stub (feature removed)"""
+        await query.edit_message_text(
+            "🤖 Fitur AI Agent tidak tersedia.\nGunakan /autotrade untuk AutoTrade Bitunix.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=MAIN_MENU)]])
+        )
 
     async def handle_automaton_deposit(self, query, context):
-        """Handle Fund Agent button - show deposit info for existing agents OR first deposit"""
-        user_id = query.from_user.id
-        
-        try:
-            await query.answer()
-            
-            from database import Database
-            from app.automaton_manager import get_automaton_manager
-            import os
-            
-            db = Database()
-            user_lang = db.get_user_language(user_id)
-            
-            # Get automaton manager instance
-            automaton_manager = get_automaton_manager(db)
-            
-            # Get user's agents
-            agents = automaton_manager.get_user_agents(user_id)
-            
-            if not agents:
-                # User doesn't have agent yet - show CENTRALIZED WALLET for first deposit
-                print(f"🔍 User {user_id} has no agents, showing centralized wallet for first deposit")
-                
-                # Get centralized wallet address from environment
-                centralized_wallet = os.getenv('CENTRALIZED_WALLET_ADDRESS', '0x63116672bef9f26fd906cd2a57550f7a13925822')
-                
-                # Generate QR code URL
-                qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={centralized_wallet}"
-                
-                # Show centralized wallet deposit instructions
-                if user_lang == 'id':
-                    message = (
-                        f"💰 *Deposit USDC (Base Network)*\n\n"
-                        f"📍 *Deposit Address (Centralized):*\n"
-                        f"`{centralized_wallet}`\n\n"
-                        f"📱 *QR Code:*\n"
-                        f"[Klik untuk melihat QR Code]({qr_url})\n\n"
-                        f"⚠️ *PENTING - Anda Belum Punya Agent*\n"
-                        f"• Deposit ke address ini untuk mendapatkan credits\n"
-                        f"• Setelah deposit, admin akan verifikasi dan tambahkan credits\n"
-                        f"• Dengan credits, Anda bisa spawn AI Agent\n\n"
-                        f"🌐 *Network:*\n"
-                        f"• Base Network (WAJIB)\n"
-                        f"• Biaya gas rendah (~$0.01)\n\n"
-                        f"💱 *Conversion Rate:*\n"
-                        f"• 1 USDC = 100 Conway Credits\n"
-                        f"• $30 USDC = 3.000 Credits\n"
-                        f"• $100 USDC = 10.000 Credits\n\n"
-                        f"💵 *Minimum Deposit: $30 USDC*\n"
-                        f"⚠️ *CATATAN PENTING:*\n"
-                        f"• $30 BUKAN pure dana trading\n"
-                        f"• Termasuk biaya operasional AI Agent\n"
-                        f"• Termasuk biaya API untuk trading\n"
-                        f"• Termasuk biaya komputasi AI\n\n"
-                        f"💡 *Rekomendasi:*\n"
-                        f"• Untuk trading serius: Minimal $100\n"
-                        f"• $30 hanya untuk testing/trial\n"
-                        f"• Semakin besar modal, semakin optimal AI bekerja\n\n"
-                        f"📝 *Cara Deposit:*\n"
-                        f"1. Copy address di atas atau scan QR code\n"
-                        f"2. Buka wallet Anda (MetaMask, Trust Wallet, dll)\n"
-                        f"3. Pastikan network: Base\n"
-                        f"4. Kirim minimal $30 USDC ke address di atas\n"
-                        f"5. Screenshot bukti transfer\n"
-                        f"6. Kirim ke admin untuk verifikasi\n"
-                        f"7. Credits akan ditambahkan manual (< 1 jam)"
-                    )
-                else:
-                    message = (
-                        f"💰 *Deposit USDC (Base Network)*\n\n"
-                        f"📍 *Deposit Address (Centralized):*\n"
-                        f"`{centralized_wallet}`\n\n"
-                        f"📱 *QR Code:*\n"
-                        f"[Click to view QR Code]({qr_url})\n\n"
-                        f"⚠️ *IMPORTANT - You Don't Have an Agent Yet*\n"
-                        f"• Deposit to this address to get credits\n"
-                        f"• After deposit, admin will verify and add credits\n"
-                        f"• With credits, you can spawn an AI Agent\n\n"
-                        f"🌐 *Network:*\n"
-                        f"• Base Network (REQUIRED)\n"
-                        f"• Low gas fees (~$0.01)\n\n"
-                        f"💱 *Conversion Rate:*\n"
-                        f"• 1 USDC = 100 Conway Credits\n"
-                        f"• $30 USDC = 3,000 Credits\n"
-                        f"• $100 USDC = 10,000 Credits\n\n"
-                        f"💵 *Minimum Deposit: $30 USDC*\n"
-                        f"⚠️ *IMPORTANT NOTE:*\n"
-                        f"• $30 is NOT pure trading capital\n"
-                        f"• Includes AI Agent operational costs\n"
-                        f"• Includes API fees for trading\n"
-                        f"• Includes AI computation costs\n\n"
-                        f"💡 *Recommendation:*\n"
-                        f"• For serious trading: Minimum $100\n"
-                        f"• $30 only for testing/trial\n"
-                        f"• Larger capital = more optimal AI performance\n\n"
-                        f"📝 *How to Deposit:*\n"
-                        f"1. Copy address above or scan QR code\n"
-                        f"2. Open your wallet (MetaMask, Trust Wallet, etc)\n"
-                        f"3. Make sure network: Base\n"
-                        f"4. Send minimum $30 USDC to the address above\n"
-                        f"5. Screenshot transfer proof\n"
-                        f"6. Send to admin for verification\n"
-                        f"7. Credits will be added manually (< 1 hour)"
-                    )
-                
-                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                
-                keyboard = [
-                    [InlineKeyboardButton("📤 Kirim Bukti ke Admin" if user_lang == 'id' else "📤 Send Proof to Admin", 
-                                         url="https://t.me/BillFarr")],
-                    [InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", 
-                                         callback_data=AI_AGENT_MENU)]
-                ]
-                
-                await query.edit_message_text(
-                    message,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='MARKDOWN'
-                )
-                return
-            
-            # User HAS agent - show agent-specific deposit address
-            agent = agents[0]
-            deposit_address = agent.get('deposit_address', '')
-            
-            if not deposit_address:
-                error_msg = "❌ Agent deposit address tidak ditemukan." if user_lang == 'id' else "❌ Agent deposit address not found."
-                
-                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
-                
-                await query.edit_message_text(
-                    error_msg,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='MARKDOWN'
-                )
-                return
-            
-            # Generate QR code URL
-            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={deposit_address}"
-            
-            # Deposit instructions for agent
-            if user_lang == 'id':
-                message = (
-                    f"💰 *Deposit USDC (Base Network)*\n\n"
-                    f"📍 *Deposit Address (Agent):*\n"
-                    f"`{deposit_address}`\n\n"
-                    f"📱 *QR Code:*\n"
-                    f"[Klik untuk melihat QR Code]({qr_url})\n\n"
-                    f"🌐 *Network:*\n"
-                    f"• Base Network (WAJIB)\n"
-                    f"• Biaya gas rendah (~$0.01)\n\n"
-                    f"💱 *Conversion Rate:*\n"
-                    f"• 1 USDC = 100 Conway Credits\n"
-                    f"• $30 USDC = 3.000 Credits\n\n"
-                    f"⚠️ *Penting:*\n"
-                    f"• HANYA gunakan Base Network\n"
-                    f"• HANYA kirim USDC (bukan USDT atau token lain)\n"
-                    f"• Credits akan ditambahkan otomatis setelah 12 konfirmasi\n\n"
-                    f"💡 *Cara Deposit:*\n"
-                    f"1. Buka wallet Anda (MetaMask, Trust Wallet, dll)\n"
-                    f"2. Pastikan network: Base\n"
-                    f"3. Kirim USDC ke address di atas\n"
-                    f"4. Tunggu 12 konfirmasi (~5-10 menit)\n"
-                    f"5. Credits akan otomatis masuk"
-                )
-            else:
-                message = (
-                    f"💰 *Deposit USDC (Base Network)*\n\n"
-                    f"📍 *Deposit Address (Agent):*\n"
-                    f"`{deposit_address}`\n\n"
-                    f"📱 *QR Code:*\n"
-                    f"[Click to view QR Code]({qr_url})\n\n"
-                    f"🌐 *Network:*\n"
-                    f"• Base Network (REQUIRED)\n"
-                    f"• Low gas fees (~$0.01)\n\n"
-                    f"💱 *Conversion Rate:*\n"
-                    f"• 1 USDC = 100 Conway Credits\n"
-                    f"• $30 USDC = 3,000 Credits\n\n"
-                    f"⚠️ *Important:*\n"
-                    f"• ONLY use Base Network\n"
-                    f"• ONLY send USDC (not USDT or other tokens)\n"
-                    f"• Credits will be added automatically after 12 confirmations\n\n"
-                    f"💡 *How to Deposit:*\n"
-                    f"1. Open your wallet (MetaMask, Trust Wallet, etc)\n"
-                    f"2. Make sure network: Base\n"
-                    f"3. Send USDC to the address above\n"
-                    f"4. Wait for 12 confirmations (~5-10 minutes)\n"
-                    f"5. Credits will be added automatically"
-                )
-            
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
-            
-            await query.edit_message_text(
-                message,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='MARKDOWN'
-            )
-            
-        except Exception as e:
-            print(f"⚠️ Error in handle_automaton_deposit: {e}")
-            import traceback
-            traceback.print_exc()
-            
-            from database import Database
-            db = Database()
-            user_lang = db.get_user_language(user_id)
-            
-            error_msg = "❌ Terjadi kesalahan saat mengambil deposit address. Silakan coba lagi." if user_lang == 'id' else "❌ Error occurred while getting deposit address. Please try again."
-            
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
-            
-            await query.edit_message_text(
-                error_msg,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='MARKDOWN'
-            )
+        """Handle Fund Agent button - stub (feature removed)"""
+        await query.edit_message_text(
+            "🤖 Fitur AI Agent tidak tersedia.\nGunakan /autotrade untuk AutoTrade Bitunix.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=MAIN_MENU)]])
+        )
 
     async def handle_automaton_logs(self, query, context):
-        """Handle Agent Logs button - show agent logs"""
-        try:
-            from app.handlers_automaton import agent_logs_command
-            
-            # Answer callback
-            await query.answer()
-            
-            # Create Update-like object
-            class UpdateWrapper:
-                def __init__(self, callback_query):
-                    self.callback_query = callback_query
-                    self.effective_user = callback_query.from_user
-                    self.effective_chat = callback_query.message.chat
-                    self.message = callback_query.message
-            
-            wrapped_update = UpdateWrapper(query)
-            await agent_logs_command(wrapped_update, context)
-            
-        except Exception as e:
-            print(f"⚠️ Error in handle_automaton_logs: {e}")
-            import traceback
-            traceback.print_exc()
-            
-            user_id = query.from_user.id
-            from database import Database
-            db = Database()
-            user_lang = db.get_user_language(user_id)
-            
-            error_msg = "❌ Terjadi kesalahan. Silakan gunakan command /agent_logs" if user_lang == 'id' else "❌ Error occurred. Please use /agent_logs command"
-            
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
-            
-            await query.edit_message_text(
-                error_msg,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='MARKDOWN'
-            )
+        """Handle Agent Logs button - stub (feature removed)"""
+        await query.edit_message_text(
+            "🤖 Fitur AI Agent tidak tersedia.\nGunakan /autotrade untuk AutoTrade Bitunix.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=MAIN_MENU)]])
+        )
 
     async def handle_agent_lineage(self, query, context):
-        """Handle Agent Lineage button - show agent lineage"""
-        try:
-            from app.handlers_automaton import agent_lineage_command
-            
-            # Answer callback
-            await query.answer()
-            
-            # Create Update-like object
-            class UpdateWrapper:
-                def __init__(self, callback_query):
-                    self.callback_query = callback_query
-                    self.effective_user = callback_query.from_user
-                    self.effective_chat = callback_query.message.chat
-                    self.message = callback_query.message
-            
-            wrapped_update = UpdateWrapper(query)
-            await agent_lineage_command(wrapped_update, context)
-            
-        except Exception as e:
-            print(f"⚠️ Error in handle_agent_lineage: {e}")
-            import traceback
-            traceback.print_exc()
-            
-            user_id = query.from_user.id
-            from database import Database
-            db = Database()
-            user_lang = db.get_user_language(user_id)
-            
-            error_msg = "❌ Terjadi kesalahan. Silakan gunakan command /agent_lineage" if user_lang == 'id' else "❌ Error occurred. Please use /agent_lineage command"
-            
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            keyboard = [[InlineKeyboardButton("🔙 Kembali" if user_lang == 'id' else "🔙 Back", callback_data=AI_AGENT_MENU)]]
-            
-            await query.edit_message_text(
-                error_msg,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='MARKDOWN'
-            )
-            traceback.print_exc()
-            await query.message.reply_text(
-                f" Error: {str(e)[:100]}\n\n"
-                f"Please use /agent_lineage command directly.",
-                parse_mode='MARKDOWN'
-            )
+        """Handle Agent Lineage button - stub (feature removed)"""
+        await query.edit_message_text(
+            "🤖 Fitur AI Agent tidak tersedia.\nGunakan /autotrade untuk AutoTrade Bitunix.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=MAIN_MENU)]])
+        )
 
     async def handle_change_language(self, query, context):
         """Handle language change with interactive buttons"""
@@ -2179,7 +1625,9 @@ Anda akan menerima notifikasi setelah pembayaran dikirim."""
             local_status = f"Local DB error: {str(e)[:30]}"
         
         try:
-            from supabase_client import supabase
+            from app.supabase_repo import set_premium_normalized
+            from app.supabase_repo import get_supabase_client
+            supabase = get_supabase_client()
             if supabase:
                 supabase.table('users').update({
                     'premium_earnings': 0
@@ -2731,36 +2179,26 @@ Anda dapat mengajukan withdrawal lagi."""
         print(f"🔍 DEBUG: User language: {user_lang}")
         
         try:
-            # Check if Supabase is enabled
-            if not db.supabase_enabled:
-                error_msg = " Database tidak tersedia. Silakan coba lagi nanti." if user_lang == 'id' else " Database unavailable. Please try again later."
-                await query.edit_message_text(error_msg, parse_mode='MARKDOWN')
-                return
-            
             # Get centralized wallet address from environment
             import os
             centralized_wallet = os.getenv('CENTRALIZED_WALLET_ADDRESS', '0x63116672bef9f26fd906cd2a57550f7a13925822')
             
-            # Record that user clicked deposit button (pending deposit)
+            # Record pending deposit attempt (best-effort, non-critical)
             try:
-                # Check if user already has pending deposit
-                existing = db.supabase_service.table('pending_deposits')\
-                    .select('*')\
-                    .eq('user_id', user_id)\
-                    .execute()
-                
-                if not existing.data:
-                    # Create new pending deposit record
-                    db.supabase_service.table('pending_deposits').insert({
-                        'user_id': user_id,
-                        'telegram_username': query.from_user.username,
-                        'telegram_first_name': query.from_user.first_name,
-                        'status': 'waiting'
-                    }).execute()
-                    print(f" Created pending deposit record for user {user_id}")
+                from app.supabase_repo import get_supabase_client
+                supabase = get_supabase_client()
+                if supabase:
+                    existing = supabase.table('pending_deposits').select('*').eq('user_id', user_id).execute()
+                    if not existing.data:
+                        supabase.table('pending_deposits').insert({
+                            'user_id': user_id,
+                            'telegram_username': query.from_user.username,
+                            'telegram_first_name': query.from_user.first_name,
+                            'status': 'waiting'
+                        }).execute()
+                        print(f"✅ Created pending deposit record for user {user_id}")
             except Exception as e:
-                print(f"  Warning: Could not create pending deposit record: {e}")
-                # Continue anyway, this is not critical
+                print(f"⚠️ Warning: Could not create pending deposit record: {e}")
             
             # Generate QR code URL
             qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={centralized_wallet}"
@@ -3140,25 +2578,25 @@ A: Click " Send Transfer Proof" button in deposit menu, then send screenshot to 
             )
 
     async def handle_ai_agent_education(self, query, context):
-        """
-        Handle AI Agent education callback - show comprehensive education
-        """
-        from app.handlers_ai_agent_education import _show_education_content
-        await _show_education_content(query, context)
+        """Handle AI Agent education callback - stub (feature removed)"""
+        await query.edit_message_text(
+            "🤖 Fitur AI Agent tidak tersedia.\nGunakan /autotrade untuk AutoTrade Bitunix.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=MAIN_MENU)]])
+        )
 
     async def handle_ai_agent_faq(self, query, context):
-        """
-        Handle AI Agent FAQ callback
-        """
-        from app.handlers_ai_agent_education import show_ai_agent_faq
-        await show_ai_agent_faq(query, context)
+        """Handle AI Agent FAQ callback - stub (feature removed)"""
+        await query.edit_message_text(
+            "🤖 Fitur AI Agent tidak tersedia.\nGunakan /autotrade untuk AutoTrade Bitunix.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=MAIN_MENU)]])
+        )
 
     async def handle_ai_agent_docs(self, query, context):
-        """
-        Handle AI Agent documentation callback
-        """
-        from app.handlers_ai_agent_education import show_ai_agent_docs
-        await show_ai_agent_docs(query, context)
+        """Handle AI Agent docs callback - stub (feature removed)"""
+        await query.edit_message_text(
+            "🤖 Fitur AI Agent tidak tersedia.\nGunakan /autotrade untuk AutoTrade Bitunix.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=MAIN_MENU)]])
+        )
 
 
 def register_menu_handlers(application, bot_instance):
