@@ -91,6 +91,7 @@ class BitunixAutoTradeClient:
                 r = session.post(url, data=body_str, headers=headers, timeout=15)
         except ImportError:
             # Fallback ke requests biasa jika curl_cffi belum terinstall
+            print("⚠️ curl_cffi not available, falling back to requests")
             if method.upper() == 'GET':
                 r = requests.get(url, params=params, headers=headers, timeout=15)
             else:
