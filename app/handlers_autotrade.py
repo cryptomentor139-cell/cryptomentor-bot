@@ -632,30 +632,27 @@ async def callback_howto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # Ambil IP server secara async agar tidak block
-    import asyncio
-    server_ip = await asyncio.to_thread(_get_server_ip)
-
     await query.edit_message_text(
         "📖 <b>Cara Setup API Key Bitunix</b>\n\n"
-        "<b>Langkah 1 — Buat API Key:</b>\n"
+        "<b>Langkah-langkah:</b>\n"
         "1. Login ke <a href='https://www.bitunix.com'>bitunix.com</a>\n"
         "2. Klik foto profil → <b>API Management</b>\n"
         "3. Klik <b>Create API Key</b>\n"
-        "4. Centang permission: ✅ <b>Trade</b>, ✅ <b>Read</b>\n"
-        "5. Copy <b>API Key</b> dan <b>Secret Key</b>\n\n"
+        "4. Isi <b>Note</b>: bebas (contoh: AutoTrade)\n"
+        "5. <b>Purpose</b>: pilih <b>Trading API</b>\n"
+        "6. <b>Bind IP address</b>: ⚠️ <b>KOSONGKAN</b> (jangan isi apapun)\n"
+        "7. <b>Permission</b>: centang ✅ <b>Trade</b>\n"
+        "8. Klik <b>Confirm</b> → verifikasi email\n"
+        "9. Copy <b>API Key</b> dan <b>Secret Key</b>\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "⚠️ <b>WAJIB — Whitelist IP Server:</b>\n\n"
-        "Saat membuat API Key, Bitunix akan meminta <b>IP Whitelist</b>.\n"
-        "Masukkan IP berikut agar bot bisa terhubung ke akunmu:\n\n"
-        f"<code>{server_ip}</code>\n\n"
-        "📋 Cara whitelist IP:\n"
-        "• Di form Create API Key, cari kolom <b>\"IP Whitelist\"</b>\n"
-        "• Masukkan IP di atas\n"
-        "• Klik <b>Confirm / Save</b>\n\n"
+        "❓ <b>Kenapa IP harus dikosongkan?</b>\n\n"
+        "Server bot menggunakan banyak IP yang bisa berubah. "
+        "Jika diisi IP tertentu, Bitunix akan blokir request dari IP lain.\n\n"
+        "✅ <b>Aman?</b> Ya — API key ini hanya punya permission <b>Trade</b>, "
+        "tidak bisa withdraw dana.\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "⚠️ Secret Key hanya tampil <b>sekali</b> — simpan baik-baik!\n"
-        "Jika sudah punya API Key lama tanpa whitelist, hapus dan buat baru.",
+        "Jika sudah punya API Key lama, hapus dan buat baru.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")],
@@ -665,6 +662,7 @@ async def callback_howto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         disable_web_page_preview=True
     )
     return ConversationHandler.END
+
 
 
 async def callback_delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
