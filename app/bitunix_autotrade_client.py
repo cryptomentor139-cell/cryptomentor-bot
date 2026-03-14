@@ -84,11 +84,12 @@ class BitunixAutoTradeClient:
             # Gunakan curl_cffi untuk impersonate Chrome TLS fingerprint
             # agar tidak diblokir Cloudflare WAF Bitunix
             from curl_cffi import requests as cffi_requests
-            session = cffi_requests.Session(impersonate="chrome120")
             if method.upper() == 'GET':
-                r = session.get(url, params=params, headers=headers, timeout=15)
+                r = cffi_requests.get(url, params=params, headers=headers,
+                                      timeout=15, impersonate="chrome120")
             else:
-                r = session.post(url, data=body_str, headers=headers, timeout=15)
+                r = cffi_requests.post(url, data=body_str, headers=headers,
+                                       timeout=15, impersonate="chrome120")
         except ImportError:
             # Fallback ke requests biasa jika curl_cffi belum terinstall
             print("⚠️ curl_cffi not available, falling back to requests")
