@@ -54,6 +54,7 @@ class BitunixAutoTradeClient:
             "timestamp": timestamp,
             "sign": sign,
             "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         }
 
     # ------------------------------------------------------------------ #
@@ -77,7 +78,10 @@ class BitunixAutoTradeClient:
                 body_str = json.dumps(body, separators=(',', ':'))
             headers = self._auth_headers(query_str, body_str)
         else:
-            headers = {"Content-Type": "application/json"}
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            }
 
         try:
             if method.upper() == 'GET':
