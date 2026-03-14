@@ -16,9 +16,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from app.bitunix_autotrade_client import BitunixAutoTradeClient
-    print("✅ BitunixAutoTradeClient imported successfully")
+    print("[OK] BitunixAutoTradeClient imported successfully")
 except ImportError:
-    print("⚠️ BitunixAutoTradeClient not found, creating mock client")
+    print("[WARN] BitunixAutoTradeClient not found, creating mock client")
     class BitunixAutoTradeClient:
         def check_connection(self):
             return {'online': False, 'error': 'Bitunix client not available'}

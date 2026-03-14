@@ -1412,16 +1412,10 @@ Just type the symbol in your next message!"""
                     reply_markup=keyboard
                 )
                 return
-            print(f" Credit deducted for user {user_id}: 20 credits (futures analysis), remaining: {remain}", flush=True)
+            print(f"[OK] Credit check passed for user {user_id}: 20 credits (futures analysis), remaining: {remain}", flush=True)
         except Exception as e:
-            print(f" Credit check error for user {user_id}: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
-            await query.edit_message_text(
-                text=" Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(" Back", callback_data=TRADING_ANALYSIS)]])
-            )
-            return
+            # If credits system fails, allow access (don't block user)
+            print(f"[WARN] Credit check error for user {user_id}: {e} - allowing access", flush=True)
         
         # Parse callback data: futures_SYMBOL_TIMEFRAME
         parts = query.data.split('_')
@@ -1590,16 +1584,10 @@ Just type the number in your next message!"""
                     reply_markup=keyboard
                 )
                 return
-            print(f" Credit deducted for user {user_id}: 20 credits (spot analysis), remaining: {remain}", flush=True)
+            print(f"[OK] Credit check passed for user {user_id}: 20 credits (spot analysis), remaining: {remain}", flush=True)
         except Exception as e:
-            print(f" Credit check error for user {user_id}: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
-            await query.edit_message_text(
-                text=" Sistem kredit sedang bermasalah. Silakan coba lagi nanti.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(" Back", callback_data=TRADING_ANALYSIS)]])
-            )
-            return
+            # If credits system fails, allow access (don't block user)
+            print(f"[WARN] Credit check error for user {user_id}: {e} - allowing access", flush=True)
         
         # Ensure symbol has USDT
         if not any(symbol.endswith(pair) for pair in ['USDT', 'BUSD', 'USDC']):
