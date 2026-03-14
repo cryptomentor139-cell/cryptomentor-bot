@@ -2631,7 +2631,7 @@ def register_menu_handlers(application, bot_instance):
     application.add_handler(
         CallbackQueryHandler(
             menu_handler.handle_callback_query,
-            pattern=r'^(?!admin_|signal_tf_|spawn_).*'  # Exclude admin_, signal_tf_, and spawn_ patterns
+            pattern=r'^(?!admin_|signal_tf_|spawn_|at_).*'  # Exclude admin_, signal_tf_, spawn_, and at_ patterns
         )
     )
 

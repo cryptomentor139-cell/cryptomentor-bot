@@ -119,6 +119,14 @@ class TelegramBot:
         self.application.add_handler(CallbackQueryHandler(self.admin_button_handler, pattern=r'^admin_'))
         self.application.add_handler(CallbackQueryHandler(self.signal_callback_handler, pattern=r'^signal_tf_'))
 
+        # AutoTrade — harus didaftarkan SEBELUM menu handlers agar ConversationHandler tidak tertimpa
+        try:
+            from app.handlers_autotrade import register_autotrade_handlers
+            register_autotrade_handlers(self.application)
+            print("✅ AutoTrade handlers registered")
+        except Exception as e:
+            print(f"⚠️ AutoTrade handlers failed: {e}")
+
         # Menu system
         register_menu_handlers = _lazy_load_menu()
         register_menu_handlers(self.application, self)
@@ -151,14 +159,6 @@ class TelegramBot:
             print("✅ Free signal handlers registered")
         except Exception as e:
             print(f"⚠️ Free signal handlers failed: {e}")
-
-        # AutoTrade
-        try:
-            from app.handlers_autotrade import register_autotrade_handlers
-            register_autotrade_handlers(self.application)
-            print("✅ AutoTrade handlers registered")
-        except Exception as e:
-            print(f"⚠️ AutoTrade handlers failed: {e}")
 
         # Message handler
         self.application.add_handler(

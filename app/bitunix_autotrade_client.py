@@ -13,13 +13,14 @@ import os
 from datetime import datetime
 
 class BitunixAutoTradeClient:
-    def __init__(self):
-        self.api_key = os.getenv('BITUNIX_API_KEY')
-        self.api_secret = os.getenv('BITUNIX_API_SECRET')
+    def __init__(self, api_key: str = None, api_secret: str = None):
+        # Per-user keys take priority over env vars
+        self.api_key = api_key or os.getenv('BITUNIX_API_KEY')
+        self.api_secret = api_secret or os.getenv('BITUNIX_API_SECRET')
         self.base_url = os.getenv('BITUNIX_BASE_URL', 'https://fapi.bitunix.com')
-        
+
         if not self.api_key or not self.api_secret:
-            print("⚠️ Bitunix API credentials not found in environment")
+            print("⚠️ Bitunix API credentials not configured")
     
     def _generate_signature(self, query_string: str) -> str:
         """Generate HMAC SHA256 signature for Bitunix API"""
