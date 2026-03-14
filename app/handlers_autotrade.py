@@ -169,6 +169,25 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def callback_setup_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    user_id = query.from_user.id
+
+    # Kalau sudah punya key, jangan minta input lagi — langsung ke dashboard
+    existing = get_user_api_keys(user_id)
+    if existing:
+        await query.edit_message_text(
+            f"✅ <b>API Key sudah tersimpan</b>\n\n"
+            f"🔑 Key: <code>...{existing['key_hint']}</code>\n"
+            f"🏦 Exchange: {existing['exchange'].upper()}\n\n"
+            "Gunakan <b>Ganti API Key</b> jika ingin menggantinya.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🚀 Mulai Trading", callback_data="at_start_trade")],
+                [InlineKeyboardButton("🔑 Ganti API Key", callback_data="at_change_key")],
+                [InlineKeyboardButton("❌ Hapus API Key", callback_data="at_delete_key")],
+            ])
+        )
+        return ConversationHandler.END
+
     await query.edit_message_text(
         "🔑 <b>Setup API Key — Langkah 1/2</b>\n\n"
         "Masukkan <b>API Key</b> Bitunix kamu:\n\n"
@@ -240,8 +259,15 @@ async def receive_api_secret(update: Update, context: ContextTypes.DEFAULT_TYPE)
     loading = await update.message.reply_text("⏳ <b>Memverifikasi koneksi...</b>", parse_mode='HTML')
 
     try:
+        import asyncio
         from app.bitunix_autotrade_client import BitunixAutoTradeClient
-        result = BitunixAutoTradeClient(api_key=api_key, api_secret=api_secret).check_connection()
+        client = BitunixAutoTradeClient(api_key=api_key, api_secret=api_secret)
+        result = await asyncio.wait_for(
+            asyncio.to_thread(client.check_connection),
+            timeout=15.0
+        )
+    except asyncio.TimeoutError:
+        result = {'online': False, 'error': 'Timeout: server tidak merespons dalam 15 detik'}
     except Exception as e:
         result = {'online': False, 'error': str(e)}
 
