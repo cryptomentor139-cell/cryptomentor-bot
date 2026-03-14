@@ -50,10 +50,8 @@ class SMCAnalyzer:
             Dict with OB, FVG, structure, week high/low, EMA 21
         """
         try:
-            # Get klines data
-            from app.providers.binance_provider import fetch_klines
-            
-            klines = fetch_klines(symbol, timeframe, limit=limit)
+            # Get klines data — try Binance first, fallback to alternative
+            klines = self._fetch_klines_with_fallback(symbol, timeframe, limit)
             if not klines or len(klines) < 50:
                 return {'error': 'Insufficient data'}
             
@@ -105,6 +103,30 @@ class SMCAnalyzer:
         except Exception as e:
             return {'error': str(e)}
     
+    def _fetch_klines_with_fallback(self, symbol: str, timeframe: str, limit: int) -> list:
+        """Fetch klines from Binance, fallback to CryptoCompare/CoinGecko on 451/error"""
+        # Try Binance first
+        try:
+            from app.providers.binance_provider import fetch_klines
+            klines = fetch_klines(symbol, timeframe, limit=limit)
+            if klines and len(klines) >= 50:
+                print(f"✅ Binance klines OK for {symbol}", flush=True)
+                return klines
+        except Exception as e:
+            print(f"⚠️ Binance klines failed for {symbol}: {e} — trying fallback", flush=True)
+
+        # Fallback to alternative provider (CryptoCompare / CoinGecko)
+        try:
+            from app.providers.alternative_klines_provider import alternative_klines_provider
+            klines = alternative_klines_provider.get_klines(symbol, timeframe, limit)
+            if klines and len(klines) >= 50:
+                print(f"✅ Alternative klines OK for {symbol}", flush=True)
+                return klines
+        except Exception as e:
+            print(f"❌ Alternative klines also failed for {symbol}: {e}", flush=True)
+
+        return []
+
     def _detect_order_blocks(self, df: pd.DataFrame) -> List[OrderBlock]:
         """Detect bullish and bearish order blocks"""
         order_blocks = []
