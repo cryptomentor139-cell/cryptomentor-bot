@@ -80,23 +80,27 @@ class BitunixAutoTradeClient:
         else:
             headers = {"Content-Type": "application/json"}
 
+        # Cek apakah ada proxy configured (untuk bypass Railway IP block)
+        proxy_url = os.getenv('PROXY_URL')  # format: http://user:pass@host:port
+
         try:
-            # Gunakan curl_cffi untuk impersonate Chrome TLS fingerprint
-            # agar tidak diblokir Cloudflare WAF Bitunix
             from curl_cffi import requests as cffi_requests
+            kwargs = dict(params=params, headers=headers, timeout=15, impersonate="chrome120")
+            if proxy_url:
+                kwargs['proxies'] = {'http': proxy_url, 'https': proxy_url}
             if method.upper() == 'GET':
-                r = cffi_requests.get(url, params=params, headers=headers,
-                                      timeout=15, impersonate="chrome120")
+                r = cffi_requests.get(url, **kwargs)
             else:
-                r = cffi_requests.post(url, data=body_str, headers=headers,
-                                       timeout=15, impersonate="chrome120")
+                r = cffi_requests.post(url, data=body_str, **kwargs)
         except ImportError:
-            # Fallback ke requests biasa jika curl_cffi belum terinstall
             print("⚠️ curl_cffi not available, falling back to requests")
+            kwargs = dict(params=params, headers=headers, timeout=15)
+            if proxy_url:
+                kwargs['proxies'] = {'http': proxy_url, 'https': proxy_url}
             if method.upper() == 'GET':
-                r = requests.get(url, params=params, headers=headers, timeout=15)
+                r = requests.get(url, **kwargs)
             else:
-                r = requests.post(url, data=body_str, headers=headers, timeout=15)
+                r = requests.post(url, data=body_str, **kwargs)
 
         try:
             if r.status_code == 200:
