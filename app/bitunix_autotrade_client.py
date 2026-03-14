@@ -78,17 +78,25 @@ class BitunixAutoTradeClient:
                 body_str = json.dumps(body, separators=(',', ':'))
             headers = self._auth_headers(query_str, body_str)
         else:
-            headers = {
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            }
+            headers = {"Content-Type": "application/json"}
 
         try:
+            # Gunakan curl_cffi untuk impersonate Chrome TLS fingerprint
+            # agar tidak diblokir Cloudflare WAF Bitunix
+            from curl_cffi import requests as cffi_requests
+            session = cffi_requests.Session(impersonate="chrome120")
             if method.upper() == 'GET':
-                r = requests.get(url, params=params, headers=headers, timeout=10)
+                r = session.get(url, params=params, headers=headers, timeout=15)
             else:
-                r = requests.post(url, data=body_str, headers=headers, timeout=10)
+                r = session.post(url, data=body_str, headers=headers, timeout=15)
+        except ImportError:
+            # Fallback ke requests biasa jika curl_cffi belum terinstall
+            if method.upper() == 'GET':
+                r = requests.get(url, params=params, headers=headers, timeout=15)
+            else:
+                r = requests.post(url, data=body_str, headers=headers, timeout=15)
 
+        try:
             if r.status_code == 200:
                 data = r.json()
                 if data.get('code') == 0:
@@ -96,9 +104,8 @@ class BitunixAutoTradeClient:
                 else:
                     return {'success': False, 'error': f"API error {data.get('code')}: {data.get('msg')}"}
             else:
-                return {'success': False, 'error': f'HTTP {r.status_code}: {r.text}'}
-
-        except requests.exceptions.RequestException as e:
+                return {'success': False, 'error': f'HTTP {r.status_code}: {r.text[:200]}'}
+        except Exception as e:
             return {'success': False, 'error': f'Request failed: {str(e)}'}
 
     # ------------------------------------------------------------------ #
