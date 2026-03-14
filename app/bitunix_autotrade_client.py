@@ -104,20 +104,22 @@ class BitunixAutoTradeClient:
 
         try:
             if r.status_code == 403:
+                print(f"[Bitunix] 403 Forbidden: {r.text[:200]}")
                 return {'success': False, 'error': 'HTTP 403: IP tidak diizinkan. Buat API Key baru tanpa IP restriction di Bitunix.'}
             if r.status_code == 200:
                 data = r.json()
                 code = data.get('code')
+                print(f"[Bitunix] {method} {endpoint} => code={code} msg={data.get('msg')}")
                 if code == 0:
                     return {'success': True, 'data': data.get('data')}
                 elif code == 10003:
-                    # Token invalid — bisa karena IP restriction atau key salah
                     return {'success': False, 'error': 'TOKEN_INVALID: API Key/Secret salah atau IP server tidak diizinkan di Bitunix.'}
                 elif code == 10007:
                     return {'success': False, 'error': 'SIGNATURE_ERROR: Signature tidak valid.'}
                 else:
                     return {'success': False, 'error': f"API error {code}: {data.get('msg')}"}
             else:
+                print(f"[Bitunix] HTTP {r.status_code}: {r.text[:200]}")
                 return {'success': False, 'error': f'HTTP {r.status_code}: {r.text[:200]}'}
         except Exception as e:
             return {'success': False, 'error': f'Request failed: {str(e)}'}
@@ -127,13 +129,22 @@ class BitunixAutoTradeClient:
     # ------------------------------------------------------------------ #
 
     def check_connection(self) -> Dict:
-        """Test connectivity via public ticker endpoint."""
-        result = self._request('GET', '/api/v1/futures/market/tickers',
-                               params={'symbols': 'BTCUSDT'})
-        if result['success']:
-            return {'online': True, 'message': 'Connected to Bitunix successfully',
-                    'data': result['data']}
-        return {'online': False, 'error': result['error']}
+        """Test connectivity — public ticker + private account."""
+        # Test public
+        pub = self._request('GET', '/api/v1/futures/market/tickers',
+                            params={'symbols': 'BTCUSDT'})
+        if not pub['success']:
+            return {'online': False, 'error': f"Public endpoint gagal: {pub['error']}"}
+
+        # Test private (butuh valid API key)
+        if self.api_key and self.api_secret:
+            priv = self._request('GET', '/api/v1/futures/account',
+                                 params={'marginCoin': 'USDT'}, signed=True)
+            if not priv['success']:
+                return {'online': False, 'error': priv['error']}
+
+        return {'online': True, 'message': 'Connected to Bitunix successfully',
+                'data': pub['data']}
 
     def get_symbol_price(self, symbol: str) -> Dict:
         result = self._request('GET', '/api/v1/futures/market/tickers',
