@@ -1435,6 +1435,10 @@ Just type the symbol in your next message!"""
             # Run analysis in background task
             async def run_futures_analysis():
                 try:
+                    import sys, os
+                    _bot_dir = os.path.dirname(os.path.abspath(__file__))
+                    if _bot_dir not in sys.path:
+                        sys.path.insert(0, _bot_dir)
                     from snd_zone_detector import detect_snd_zones
 
                     # Get SnD zones (run in thread to avoid blocking)
@@ -1603,6 +1607,10 @@ Just type the number in your next message!"""
         # Run analysis in background task
         async def run_spot_analysis():
             try:
+                import sys, os
+                _bot_dir = os.path.dirname(os.path.abspath(__file__))
+                if _bot_dir not in sys.path:
+                    sys.path.insert(0, _bot_dir)
                 from snd_zone_detector import detect_snd_zones
                 
                 # Get SnD analysis (run in thread to avoid blocking)

@@ -15,7 +15,10 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from app.bitunix_autotrade_client import BitunixAutoTradeClient
+    try:
+        from app.bitunix_autotrade_client import BitunixAutoTradeClient
+    except ImportError:
+        from bitunix_autotrade_client import BitunixAutoTradeClient
     print("[OK] BitunixAutoTradeClient imported successfully")
 except ImportError:
     print("[WARN] BitunixAutoTradeClient not found, creating mock client")
@@ -169,34 +172,34 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if has_active:
         await update.message.reply_text(
-            "🤖 **Auto Trade Dashboard**\n\n"
-            "✅ Status: **AKTIF**\n"
+            "🤖 <b>Auto Trade Dashboard</b>\n\n"
+            "✅ Status: <b>AKTIF</b>\n"
             f"💰 Deposit: {user_data[3]} USDT\n"
             f"📊 Balance: {user_data[4]} USDT\n"
             f"📈 Profit: {user_data[5]:.2f} USDT\n\n"
-            "**Commands:**\n"
+            "<b>Commands:</b>\n"
             "/autotrade_status - Cek portfolio detail\n"
             "/autotrade_history - Lihat trade history\n"
             "/autotrade_withdraw - Withdraw profit\n\n"
             "🤖 AI sedang trading untuk Anda 24/7!",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
     else:
         await update.message.reply_text(
-            "🤖 **Auto Trade - AI Trading Bot**\n\n"
-            "🎯 **Features:**\n"
+            "🤖 <b>Auto Trade - AI Trading Bot</b>\n\n"
+            "🎯 <b>Features:</b>\n"
             "• AI trading 24/7 dengan Bitunix\n"
             "• Target: 5-10% profit per bulan\n"
             "• Risk management otomatis\n"
             "• Fee: 25% dari profit saja\n\n"
-            "💰 **Minimum:** 10 USDT\n"
-            "🔒 **Premium Only**\n\n"
-            "**Commands:**\n"
+            "💰 <b>Minimum:</b> 10 USDT\n"
+            "🔒 <b>Premium Only</b>\n\n"
+            "<b>Commands:</b>\n"
             "/autotrade_start <amount> - Mulai auto trade\n"
             "/autotrade_status - Cek status\n"
             "/autotrade_history - Trade history\n\n"
             "Contoh: `/autotrade_start 50`",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
 
 async def cmd_autotrade_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -206,10 +209,10 @@ async def cmd_autotrade_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Check premium status
     if not is_premium_user(user_id):
         await update.message.reply_text(
-            "⚠️ **Auto Trade hanya untuk Premium Members!**\n\n"
+            "⚠️ <b>Auto Trade hanya untuk Premium Members!</b>\n\n"
             "Upgrade ke Premium untuk akses fitur ini.\n"
             "Gunakan /subscribe untuk upgrade.",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         return
     
@@ -217,37 +220,37 @@ async def cmd_autotrade_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     existing = get_autotrade_user(user_id)
     if existing and existing[6] == 'active':  # status column
         await update.message.reply_text(
-            "⚠️ **Anda sudah memiliki Auto Trade aktif!**\n\n"
+            "⚠️ <b>Anda sudah memiliki Auto Trade aktif!</b>\n\n"
             "Gunakan /autotrade_status untuk cek status\n"
             "atau /autotrade_withdraw untuk withdraw.",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         return
     
     # Get amount
     if not context.args:
         await update.message.reply_text(
-            "📊 **Auto Trade - AI Trading Bot**\n\n"
-            "**Usage:** `/autotrade_start <amount_usdt>`\n"
-            "**Contoh:** `/autotrade_start 50`\n\n"
-            "💰 **Minimum:** 10 USDT\n"
-            "🎯 **Target:** 5-10% per bulan\n"
-            "💸 **Fee:** 25% dari profit\n"
-            "⚠️ **Risk:** Medium",
-            parse_mode='Markdown'
+            "📊 <b>Auto Trade - AI Trading Bot</b>\n\n"
+            "<b>Usage:</b> `/autotrade_start <amount_usdt>`\n"
+            "<b>Contoh:</b> `/autotrade_start 50`\n\n"
+            "💰 <b>Minimum:</b> 10 USDT\n"
+            "🎯 <b>Target:</b> 5-10% per bulan\n"
+            "💸 <b>Fee:</b> 25% dari profit\n"
+            "⚠️ <b>Risk:</b> Medium",
+            parse_mode='HTML'
         )
         return
     
     try:
         amount = float(context.args[0])
         if amount < 10:
-            await update.message.reply_text("❌ **Minimum deposit: 10 USDT**", parse_mode='Markdown')
+            await update.message.reply_text("❌ <b>Minimum deposit: 10 USDT</b>", parse_mode='HTML')
             return
         if amount > 1000:
-            await update.message.reply_text("❌ **Maximum deposit: 1000 USDT untuk safety**", parse_mode='Markdown')
+            await update.message.reply_text("❌ <b>Maximum deposit: 1000 USDT untuk safety</b>", parse_mode='HTML')
             return
     except ValueError:
-        await update.message.reply_text("❌ **Amount harus berupa angka**", parse_mode='Markdown')
+        await update.message.reply_text("❌ <b>Amount harus berupa angka</b>", parse_mode='HTML')
         return
     
     # Get user wallet
@@ -255,7 +258,7 @@ async def cmd_autotrade_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # Send loading message
     loading_msg = await update.message.reply_text(
-        "🤖 **Memulai Auto Trade...**\n"
+        "🤖 <b>Memulai Auto Trade...</b>\n"
         "AI sedang menganalisis market dan menyiapkan strategy...\n\n"
         "⏳ Mohon tunggu 30-60 detik..."
     )
@@ -264,7 +267,7 @@ async def cmd_autotrade_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     connection = bitunix.check_connection()
     if not connection.get('online'):
         await loading_msg.edit_text(
-            "❌ **AutoTrade system temporarily unavailable. Please try again later.**\n\n"
+            "❌ <b>AutoTrade system temporarily unavailable. Please try again later.</b>\n\n"
             "If this issue persists, please contact support.\n\n"
             f"Error: {connection.get('error', 'Bitunix API offline')}"
         )
@@ -282,20 +285,20 @@ async def cmd_autotrade_start(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_autotrade_user(user_id, amount, wallet)
         
         await loading_msg.edit_text(
-            f"✅ **Auto Trade Aktif!**\n\n"
-            f"💰 **Deposit:** {amount} USDT\n"
-            f"🤖 **Exchange:** Bitunix\n"
-            f"📊 **Target:** 5-10% per bulan\n"
-            f"⚠️ **Risk:** Medium\n"
-            f"💼 **Wallet:** `{wallet[:10]}...{wallet[-8:]}`\n\n"
-            f"🎯 **Strategy:**\n{result['response'][:300]}...\n\n"
+            f"✅ <b>Auto Trade Aktif!</b>\n\n"
+            f"💰 <b>Deposit:</b> {amount} USDT\n"
+            f"🤖 <b>Exchange:</b> Bitunix\n"
+            f"📊 <b>Target:</b> 5-10% per bulan\n"
+            f"⚠️ <b>Risk:</b> Medium\n"
+            f"💼 <b>Wallet:</b> `{wallet[:10]}...{wallet[-8:]}`\n\n"
+            f"🎯 <b>Strategy:</b>\n{result['response'][:300]}...\n\n"
             f"Bitunix akan mulai trading dalam beberapa menit.\n"
             f"Gunakan /autotrade_status untuk cek progress.",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
     else:
         await loading_msg.edit_text(
-            f"❌ **Error memulai Auto Trade:**\n{result['error']}\n\n"
+            f"❌ <b>Error memulai Auto Trade:</b>\n{result['error']}\n\n"
             f"Silakan coba lagi atau hubungi admin."
         )
 
@@ -307,14 +310,14 @@ async def cmd_autotrade_status(update: Update, context: ContextTypes.DEFAULT_TYP
     user_data = get_autotrade_user(user_id)
     if not user_data:
         await update.message.reply_text(
-            "⚠️ **Anda belum memiliki Auto Trade aktif.**\n\n"
+            "⚠️ <b>Anda belum memiliki Auto Trade aktif.</b>\n\n"
             "Gunakan /autotrade_start untuk memulai.",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         return
     
     loading_msg = await update.message.reply_text(
-        "📊 **Mengambil data portfolio...**\n"
+        "📊 <b>Mengambil data portfolio...</b>\n"
         "⏳ Mohon tunggu..."
     )
     
@@ -324,15 +327,15 @@ async def cmd_autotrade_status(update: Update, context: ContextTypes.DEFAULT_TYP
     if result['success']:
         # Parse response and format nicely
         await loading_msg.edit_text(
-            f"📊 **Auto Trade Status**\n\n"
+            f"📊 <b>Auto Trade Status</b>\n\n"
             f"{result['response']}\n\n"
             f"💸 Gunakan /autotrade_withdraw untuk withdraw profit\n"
             f"📈 Gunakan /autotrade_history untuk lihat trade history",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
     else:
         await loading_msg.edit_text(
-            f"❌ **Error mengambil status:**\n{result['error']}\n\n"
+            f"❌ <b>Error mengambil status:</b>\n{result['error']}\n\n"
             f"Silakan coba lagi nanti."
         )
 
@@ -344,14 +347,14 @@ async def cmd_autotrade_withdraw(update: Update, context: ContextTypes.DEFAULT_T
     user_data = get_autotrade_user(user_id)
     if not user_data or user_data[6] != 'active':  # status column
         await update.message.reply_text(
-            "⚠️ **Anda tidak memiliki Auto Trade aktif.**\n\n"
+            "⚠️ <b>Anda tidak memiliki Auto Trade aktif.</b>\n\n"
             "Gunakan /autotrade_start untuk memulai.",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         return
     
     loading_msg = await update.message.reply_text(
-        "💸 **Memproses withdrawal...**\n"
+        "💸 <b>Memproses withdrawal...</b>\n"
         "Closing positions dan calculating profit...\n\n"
         "⏳ Mohon tunggu 30-60 detik..."
     )
@@ -364,15 +367,15 @@ async def cmd_autotrade_withdraw(update: Update, context: ContextTypes.DEFAULT_T
         update_autotrade_status(user_id, 'closed')
         
         await loading_msg.edit_text(
-            f"✅ **Withdrawal Berhasil!**\n\n"
+            f"✅ <b>Withdrawal Berhasil!</b>\n\n"
             f"{result['response']}\n\n"
             f"Terima kasih telah menggunakan Auto Trade!\n"
             f"Gunakan /autotrade_start untuk memulai lagi.",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
     else:
         await loading_msg.edit_text(
-            f"❌ **Error processing withdrawal:**\n{result['error']}\n\n"
+            f"❌ <b>Error processing withdrawal:</b>\n{result['error']}\n\n"
             f"Silakan coba lagi atau hubungi admin."
         )
 
@@ -384,14 +387,14 @@ async def cmd_autotrade_history(update: Update, context: ContextTypes.DEFAULT_TY
     user_data = get_autotrade_user(user_id)
     if not user_data:
         await update.message.reply_text(
-            "⚠️ **Anda belum memiliki Auto Trade aktif.**\n\n"
+            "⚠️ <b>Anda belum memiliki Auto Trade aktif.</b>\n\n"
             "Gunakan /autotrade_start untuk memulai.",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         return
     
     loading_msg = await update.message.reply_text(
-        "📈 **Mengambil trade history...**\n"
+        "📈 <b>Mengambil trade history...</b>\n"
         "⏳ Mohon tunggu..."
     )
     
@@ -400,14 +403,14 @@ async def cmd_autotrade_history(update: Update, context: ContextTypes.DEFAULT_TY
     
     if result['success']:
         await loading_msg.edit_text(
-            f"📈 **Trade History (Last 10)**\n\n"
+            f"📈 <b>Trade History (Last 10)</b>\n\n"
             f"{result['response']}\n\n"
             f"💡 Gunakan /autotrade_status untuk portfolio summary",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
     else:
         await loading_msg.edit_text(
-            f"❌ **Error mengambil history:**\n{result['error']}\n\n"
+            f"❌ <b>Error mengambil history:</b>\n{result['error']}\n\n"
             f"Silakan coba lagi nanti."
         )
 
@@ -428,3 +431,4 @@ def register_autotrade_handlers(application):
     print("   • /autotrade_status - Check portfolio status")
     print("   • /autotrade_withdraw - Withdraw profits")
     print("   • /autotrade_history - View trade history")
+
