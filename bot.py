@@ -160,6 +160,9 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ Free signal handlers failed: {e}")
 
+        # Server IP command (admin only)
+        self.application.add_handler(CommandHandler("serverip", self.serverip_command))
+
         # Message handler
         self.application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
@@ -246,6 +249,27 @@ class TelegramBot:
             f"📛 Name: {user.first_name}",
             parse_mode='MARKDOWN'
         )
+
+    async def serverip_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Admin command: tampilkan IP server Railway untuk whitelist Bitunix."""
+        user_id = update.effective_user.id
+        if user_id not in self.admin_ids:
+            await update.message.reply_text("❌ Admin only.")
+            return
+        msg = await update.message.reply_text("⏳ Mengambil IP server...")
+        try:
+            import asyncio, requests as _req
+            ip = await asyncio.to_thread(
+                lambda: _req.get("https://api.ipify.org?format=json", timeout=5).json()["ip"]
+            )
+            await msg.edit_text(
+                f"🌐 <b>IP Server Railway:</b>\n\n"
+                f"<code>{ip}</code>\n\n"
+                f"Masukkan IP ini ke kolom <b>Bind IP address</b> saat buat/edit API Key di Bitunix.",
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            await msg.edit_text(f"❌ Gagal ambil IP: {e}")
 
     async def price_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         symbol = context.args[0].upper() if context.args else 'BTC'
