@@ -17,7 +17,9 @@ class BitunixAutoTradeClient:
     def __init__(self, api_key: str = None, api_secret: str = None):
         self.api_key = api_key or os.getenv('BITUNIX_API_KEY')
         self.api_secret = api_secret or os.getenv('BITUNIX_API_SECRET')
-        self.base_url = os.getenv('BITUNIX_BASE_URL', 'https://fapi.bitunix.com')
+        # Kalau ada Cloudflare Worker gateway, pakai itu. Kalau tidak, langsung ke Bitunix.
+        gateway = os.getenv('BITUNIX_GATEWAY_URL', '').rstrip('/')
+        self.base_url = gateway if gateway else os.getenv('BITUNIX_BASE_URL', 'https://fapi.bitunix.com')
 
         if not self.api_key or not self.api_secret:
             print("⚠️ Bitunix API credentials not configured")
@@ -80,9 +82,17 @@ class BitunixAutoTradeClient:
         else:
             headers = {"Content-Type": "application/json"}
 
+        # Tambah gateway secret header kalau ada
+        gateway_secret = os.getenv('BITUNIX_GATEWAY_SECRET', '')
+        if gateway_secret:
+            headers['x-gateway-secret'] = gateway_secret
+
         # Cek apakah ada proxy configured (untuk bypass Railway IP block)
         proxy_url = os.getenv('PROXY_URL')  # format: http://user:pass@host:port
-        if proxy_url:
+        gateway = os.getenv('BITUNIX_GATEWAY_URL', '')
+        if gateway:
+            print(f"[Bitunix] Using Cloudflare Worker gateway: {gateway[:40]}")
+        elif proxy_url:
             print(f"[Bitunix] Using proxy: {proxy_url[:30]}...")
         else:
             print(f"[Bitunix] No proxy configured (PROXY_URL not set)")
