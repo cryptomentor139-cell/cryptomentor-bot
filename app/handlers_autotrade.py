@@ -18,12 +18,13 @@ from app.lib.crypto import encrypt, decrypt
 from app.supabase_repo import _client
 
 # Conversation states
-WAITING_API_KEY      = 1
-WAITING_API_SECRET   = 2
-WAITING_TRADE_AMOUNT = 3
-WAITING_LEVERAGE     = 4
-WAITING_NEW_LEVERAGE = 5
-WAITING_BITUNIX_UID  = 6
+WAITING_API_KEY        = 1
+WAITING_API_SECRET     = 2
+WAITING_TRADE_AMOUNT   = 3
+WAITING_LEVERAGE       = 4
+WAITING_NEW_LEVERAGE   = 5
+WAITING_BITUNIX_UID    = 6
+WAITING_NEW_AMOUNT     = 7
 
 BITUNIX_REFERRAL_URL  = "https://www.bitunix.com/register?vipCode=sq45"
 BITUNIX_REFERRAL_CODE = "sq45"
@@ -158,12 +159,18 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("⚙️ Settings",         callback_data="at_settings")],
             [InlineKeyboardButton("🔑 Ganti API Key",    callback_data="at_change_key")],
         ])
+        current_leverage = int(session.get("leverage", 10))
+        current_margin   = session.get("margin_mode", "cross")
+        margin_label     = "Cross ♾️" if current_margin == "cross" else "Isolated 🔒"
+
         await update.message.reply_text(
             "🤖 <b>Auto Trade Dashboard</b>\n\n"
-            "✅ Status: <b>AKTIF</b>\n"
-            f"💰 Deposit: {session['initial_deposit']} USDT\n"
+            "✅ Status: <b>AKTIF</b>\n\n"
+            f"💵 <b>Modal Trading:</b> {session['initial_deposit']} USDT\n"
+            f"   <i>(jumlah USDT yang dipakai bot untuk trade)</i>\n"
             f"{balance_line}"
             f"📈 Profit: {session['total_profit']:.2f} USDT\n\n"
+            f"⚙️ Leverage: <b>{current_leverage}x</b> | Margin: <b>{margin_label}</b>\n"
             f"🔑 API Key: <code>...{keys['key_hint']}</code>\n"
             f"🏦 Exchange: {keys['exchange'].upper()}\n"
             f"⚙️ {engine_status}",
@@ -1328,22 +1335,209 @@ async def callback_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     session = get_autotrade_session(user_id)
     current_leverage = int(session.get("leverage", 10)) if session else 10
+    current_amount   = float(session.get("initial_deposit", 0)) if session else 0
     current_margin   = session.get("margin_mode", "cross") if session else "cross"
     margin_label     = "Cross ♾️" if current_margin == "cross" else "Isolated 🔒"
 
+    # Kalkulasi notional & liquidation untuk preview
+    notional       = current_amount * current_leverage
+    liquidation_pct = round(100 / current_leverage, 1) if current_leverage > 0 else 100
+    if current_leverage <= 10:
+        risk_label = "🟢 Rendah"
+    elif current_leverage <= 25:
+        risk_label = "🟡 Sedang"
+    elif current_leverage <= 50:
+        risk_label = "🟠 Tinggi"
+    else:
+        risk_label = "🔴 Sangat Tinggi"
+
     await query.edit_message_text(
         f"⚙️ <b>Settings AutoTrade</b>\n\n"
-        f"📊 Leverage saat ini: <b>{current_leverage}x</b>\n"
+        f"💵 Modal trading: <b>{current_amount:.0f} USDT</b>\n"
+        f"   <i>(dari total balance Bitunix kamu)</i>\n"
+        f"📊 Leverage: <b>{current_leverage}x</b>\n"
+        f"📈 Notional value: <b>{notional:.0f} USDT</b>\n"
+        f"💥 Likuidasi jika harga bergerak: <b>{liquidation_pct}%</b>\n"
+        f"⚠️ Risk level: {risk_label}\n"
         f"💼 Margin mode: <b>{margin_label}</b>\n\n"
         "Pilih yang ingin diubah:",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("📊 Ganti Leverage",    callback_data="at_set_leverage")],
-            [InlineKeyboardButton("💼 Ganti Margin Mode", callback_data="at_set_margin")],
-            [InlineKeyboardButton("🔙 Kembali",           callback_data="at_dashboard")],
+            [InlineKeyboardButton("💰 Ubah Modal Trading", callback_data="at_set_amount")],
+            [InlineKeyboardButton("📊 Ganti Leverage",     callback_data="at_set_leverage")],
+            [InlineKeyboardButton("💼 Ganti Margin Mode",  callback_data="at_set_margin")],
+            [InlineKeyboardButton("🔙 Kembali",            callback_data="at_dashboard")],
         ])
     )
     return ConversationHandler.END
+
+
+async def callback_set_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tampilkan form ubah modal trading."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    session = get_autotrade_session(user_id)
+    current_amount   = float(session.get("initial_deposit", 0)) if session else 0
+    current_leverage = int(session.get("leverage", 10)) if session else 10
+
+    # Cek balance real dari Bitunix
+    keys = get_user_api_keys(user_id)
+    balance_line = ""
+    try:
+        import asyncio
+        from app.bitunix_autotrade_client import BitunixAutoTradeClient
+        acc = await asyncio.wait_for(
+            asyncio.to_thread(BitunixAutoTradeClient(
+                api_key=keys['api_key'], api_secret=keys['api_secret']
+            ).get_account_info),
+            timeout=8.0
+        )
+        if acc.get('success'):
+            avail = acc.get('available', 0)
+            balance_line = f"💳 Balance Bitunix tersedia: <b>{avail:.2f} USDT</b>\n\n"
+    except Exception:
+        pass
+
+    await query.edit_message_text(
+        f"💰 <b>Ubah Modal Trading</b>\n\n"
+        f"{balance_line}"
+        f"Modal saat ini: <b>{current_amount:.0f} USDT</b>\n"
+        f"Leverage: <b>{current_leverage}x</b>\n\n"
+        f"ℹ️ <b>Modal trading</b> = jumlah USDT dari balance Bitunix kamu yang dipakai bot untuk buka posisi.\n"
+        f"Semakin besar modal, semakin besar potensi profit <i>dan</i> loss.\n\n"
+        f"Masukkan jumlah modal baru (USDT):\n"
+        f"📌 Min: 10 USDT | Max: 10.000 USDT",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("10",  callback_data="at_newamt_10"),
+                InlineKeyboardButton("25",  callback_data="at_newamt_25"),
+                InlineKeyboardButton("50",  callback_data="at_newamt_50"),
+            ],
+            [
+                InlineKeyboardButton("100", callback_data="at_newamt_100"),
+                InlineKeyboardButton("250", callback_data="at_newamt_250"),
+                InlineKeyboardButton("500", callback_data="at_newamt_500"),
+            ],
+            [InlineKeyboardButton("🔙 Kembali", callback_data="at_settings")],
+        ])
+    )
+    return WAITING_NEW_AMOUNT
+
+
+async def receive_new_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle input modal baru dari teks."""
+    try:
+        amount = float(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("❌ Masukkan angka. Contoh: <code>100</code>", parse_mode='HTML')
+        return WAITING_NEW_AMOUNT
+
+    if amount < 10:
+        await update.message.reply_text("❌ Minimum 10 USDT.")
+        return WAITING_NEW_AMOUNT
+    if amount > 10000:
+        await update.message.reply_text("❌ Maximum 10.000 USDT.")
+        return WAITING_NEW_AMOUNT
+
+    await _apply_new_amount(update.message, update.effective_user.id, amount, context, from_callback=False)
+    return ConversationHandler.END
+
+
+async def callback_new_amount_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle tombol preset modal (at_newamt_XX)."""
+    query = update.callback_query
+    await query.answer()
+    amount = float(query.data.split("_")[-1])
+    await _apply_new_amount(query, query.from_user.id, amount, context, from_callback=True)
+    return ConversationHandler.END
+
+
+async def _apply_new_amount(msg_or_query, user_id: int, amount: float,
+                             context, from_callback: bool):
+    """Simpan modal baru ke Supabase + restart engine jika aktif."""
+    keys    = get_user_api_keys(user_id)
+    session = get_autotrade_session(user_id)
+    leverage = int(session.get("leverage", 10)) if session else 10
+
+    # Cek balance cukup
+    balance_ok = True
+    if keys:
+        try:
+            import asyncio
+            from app.bitunix_autotrade_client import BitunixAutoTradeClient
+            acc = await asyncio.wait_for(
+                asyncio.to_thread(BitunixAutoTradeClient(
+                    api_key=keys['api_key'], api_secret=keys['api_secret']
+                ).get_account_info),
+                timeout=8.0
+            )
+            if acc.get('success') and acc.get('available', 0) < amount:
+                avail = acc.get('available', 0)
+                text = (
+                    f"❌ <b>Balance tidak cukup</b>\n\n"
+                    f"Balance tersedia: <b>{avail:.2f} USDT</b>\n"
+                    f"Modal yang diminta: <b>{amount:.0f} USDT</b>\n\n"
+                    "Kurangi jumlah modal atau top up balance Bitunix kamu."
+                )
+                kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="at_set_amount")]])
+                if from_callback:
+                    await msg_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+                else:
+                    await msg_or_query.reply_text(text, parse_mode='HTML', reply_markup=kb)
+                return
+        except Exception:
+            pass
+
+    # Simpan ke Supabase
+    try:
+        _client().table("autotrade_sessions").update({
+            "initial_deposit": amount,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("telegram_id", user_id).execute()
+    except Exception:
+        pass
+
+    # Restart engine jika sedang berjalan
+    from app.autotrade_engine import is_running, start_engine, stop_engine
+    engine_restarted = ""
+    if is_running(user_id) and keys and session:
+        stop_engine(user_id)
+        import asyncio
+        await asyncio.sleep(0.5)
+        bot = msg_or_query.get_bot() if from_callback else context.bot
+        start_engine(
+            bot=bot,
+            user_id=user_id,
+            api_key=keys['api_key'],
+            api_secret=keys['api_secret'],
+            amount=amount,
+            leverage=leverage,
+            notify_chat_id=user_id,
+        )
+        engine_restarted = "\n🔄 Engine direstart dengan modal baru."
+
+    notional = amount * leverage
+    liquidation_pct = round(100 / leverage, 1)
+
+    text = (
+        f"✅ <b>Modal trading diubah ke {amount:.0f} USDT</b>\n\n"
+        f"📊 Leverage: {leverage}x\n"
+        f"📈 Notional value: <b>{notional:.0f} USDT</b>\n"
+        f"💥 Likuidasi jika harga bergerak: <b>{liquidation_pct}%</b>"
+        f"{engine_restarted}"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⚙️ Settings",  callback_data="at_settings")],
+        [InlineKeyboardButton("🏠 Dashboard", callback_data="at_dashboard")],
+    ])
+
+    if from_callback:
+        await msg_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
+    else:
+        await msg_or_query.reply_text(text, parse_mode='HTML', reply_markup=keyboard)
 
 
 async def callback_set_leverage(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1558,6 +1752,7 @@ def register_autotrade_handlers(application):
             CallbackQueryHandler(callback_change_key,       pattern="^at_change_key$"),
             CallbackQueryHandler(callback_start_trade,      pattern="^at_start_trade$"),
             CallbackQueryHandler(callback_set_leverage,     pattern="^at_set_leverage$"),
+            CallbackQueryHandler(callback_set_amount,       pattern="^at_set_amount$"),
             CallbackQueryHandler(callback_confirm_referral, pattern="^at_confirm_referral$"),
         ],
         states={
@@ -1587,6 +1782,11 @@ def register_autotrade_handlers(application):
                 CallbackQueryHandler(callback_new_leverage_select, pattern="^at_newlev_\\d+$"),
                 CallbackQueryHandler(callback_cancel, pattern="^at_cancel$"),
             ],
+            WAITING_NEW_AMOUNT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_amount),
+                CallbackQueryHandler(callback_new_amount_select, pattern="^at_newamt_\\d+$"),
+                CallbackQueryHandler(callback_cancel, pattern="^at_cancel$"),
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cmd_cancel),
@@ -1606,6 +1806,8 @@ def register_autotrade_handlers(application):
     application.add_handler(CallbackQueryHandler(callback_settings,           pattern="^at_settings$"))
     application.add_handler(CallbackQueryHandler(callback_set_margin,         pattern="^at_set_margin$"))
     application.add_handler(CallbackQueryHandler(callback_margin_select,      pattern="^at_margin_(cross|isolated)$"))
+    application.add_handler(CallbackQueryHandler(callback_new_leverage_select,pattern="^at_newlev_\\d+$"))
+    application.add_handler(CallbackQueryHandler(callback_new_amount_select,  pattern="^at_newamt_\\d+$"))
     application.add_handler(CallbackQueryHandler(callback_why_referral,       pattern="^at_why_referral$"))
     application.add_handler(CallbackQueryHandler(callback_uid_acc,            pattern="^uid_acc_\\d+$"))
     application.add_handler(CallbackQueryHandler(callback_uid_reject,         pattern="^uid_reject_\\d+$"))
