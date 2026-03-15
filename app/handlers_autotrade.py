@@ -23,6 +23,10 @@ WAITING_API_SECRET   = 2
 WAITING_TRADE_AMOUNT = 3
 WAITING_LEVERAGE     = 4
 WAITING_NEW_LEVERAGE = 5
+WAITING_BITUNIX_UID  = 6
+
+BITUNIX_REFERRAL_URL  = "https://www.bitunix.com/register?vipCode=sq45"
+BITUNIX_REFERRAL_CODE = "sq45"
 
 
 # ------------------------------------------------------------------ #
@@ -183,17 +187,161 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔑 Setup API Key",      callback_data="at_setup_key")],
-            [InlineKeyboardButton("❓ Cara Dapat API Key", callback_data="at_howto")],
+            [InlineKeyboardButton("🔗 Daftar Bitunix via Referral", url=BITUNIX_REFERRAL_URL)],
+            [InlineKeyboardButton("✅ Sudah Daftar, Lanjut Setup",  callback_data="at_confirm_referral")],
+            [InlineKeyboardButton("❓ Kenapa Harus via Referral?",  callback_data="at_why_referral")],
         ])
         await update.message.reply_text(
             "🤖 <b>Auto Trade - Bitunix</b>\n\n"
-            "Hubungkan akun Bitunix kamu untuk mulai auto trading.\n\n"
-            "🔒 API Secret disimpan terenkripsi (AES-256-GCM) di server kami.\n"
-            "Tidak ada yang bisa membacanya selain sistem trading.",
-            parse_mode='HTML', reply_markup=keyboard
+            "Untuk menggunakan fitur Auto Trade, kamu perlu akun Bitunix yang didaftarkan "
+            "melalui referral kami.\n\n"
+            f"🔗 <b>Link Daftar:</b>\n<code>{BITUNIX_REFERRAL_URL}</code>\n\n"
+            f"🎟 <b>Referral Code:</b> <code>{BITUNIX_REFERRAL_CODE}</code>\n\n"
+            "Klik tombol di bawah untuk daftar, lalu kembali ke sini setelah selesai.",
+            parse_mode='HTML',
+            reply_markup=keyboard,
+            disable_web_page_preview=True
         )
         return ConversationHandler.END
+
+
+# ------------------------------------------------------------------ #
+#  Referral gate & UID verification                                   #
+# ------------------------------------------------------------------ #
+
+async def callback_why_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "❓ <b>Kenapa Harus Daftar via Referral?</b>\n\n"
+        "Referral memungkinkan kami terus mengembangkan bot ini secara gratis untuk kamu.\n\n"
+        "✅ Kamu tetap punya full control atas akun Bitunix sendiri\n"
+        "✅ Dana kamu aman — API Key hanya punya permission Trade, tidak bisa withdraw\n"
+        "✅ Tidak ada biaya tambahan dari kami\n\n"
+        f"🔗 Daftar sekarang: {BITUNIX_REFERRAL_URL}",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔗 Daftar Sekarang", url=BITUNIX_REFERRAL_URL)],
+            [InlineKeyboardButton("✅ Sudah Daftar",    callback_data="at_confirm_referral")],
+            [InlineKeyboardButton("🔙 Kembali",         callback_data="at_cancel")],
+        ]),
+        disable_web_page_preview=True
+    )
+    return ConversationHandler.END
+
+
+async def callback_confirm_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User konfirmasi sudah daftar via referral — minta UID Bitunix."""
+    query = update.callback_query
+    await query.answer()
+
+    # Kalau sudah punya UID tersimpan, skip langsung ke setup key
+    user_id = query.from_user.id
+    existing_keys = get_user_api_keys(user_id)
+    if existing_keys:
+        # Sudah pernah setup sebelumnya
+        await query.edit_message_text(
+            f"✅ <b>Akun sudah terdaftar</b>\n\n"
+            f"🔑 API Key: <code>...{existing_keys['key_hint']}</code>\n\n"
+            "Lanjutkan ke setup trading:",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🚀 Mulai Trading", callback_data="at_start_trade")],
+                [InlineKeyboardButton("🔑 Ganti API Key", callback_data="at_change_key")],
+            ])
+        )
+        return ConversationHandler.END
+
+    # Cek apakah UID sudah tersimpan di session
+    uid_saved = _get_saved_uid(user_id)
+    if uid_saved:
+        # UID sudah ada, langsung ke setup API key
+        await query.edit_message_text(
+            f"✅ <b>UID Bitunix terverifikasi:</b> <code>{uid_saved}</code>\n\n"
+            "Sekarang masukkan API Key kamu:",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")],
+            ])
+        )
+        return ConversationHandler.END
+
+    await query.edit_message_text(
+        "✅ <b>Langkah 1/3 — Verifikasi UID</b>\n\n"
+        "Masukkan <b>UID Bitunix</b> kamu.\n\n"
+        "📍 Cara cek UID:\n"
+        "Login Bitunix → klik foto profil → UID tertera di bawah nama kamu\n\n"
+        "Contoh: <code>123456789</code>",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("❌ Batal", callback_data="at_cancel")]
+        ])
+    )
+    return WAITING_BITUNIX_UID
+
+
+async def receive_bitunix_uid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Terima UID Bitunix dari user, simpan, lanjut ke setup API key."""
+    uid = update.message.text.strip()
+    user_id = update.effective_user.id
+
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # Validasi: UID Bitunix biasanya angka 6–12 digit
+    if not uid.isdigit() or len(uid) < 5:
+        await update.message.reply_text(
+            "❌ UID tidak valid. UID Bitunix berupa angka (contoh: <code>123456789</code>).\n\nCoba lagi:",
+            parse_mode='HTML'
+        )
+        return WAITING_BITUNIX_UID
+
+    # Simpan UID ke Supabase
+    _save_uid(user_id, uid)
+
+    await update.message.reply_text(
+        f"✅ <b>UID tersimpan: <code>{uid}</code></b>\n\n"
+        "Sekarang kita setup API Key Bitunix kamu.\n\n"
+        "🔑 <b>Langkah 2/3 — Setup API Key</b>\n\n"
+        "Masukkan <b>API Key</b> Bitunix kamu:\n\n"
+        "💡 Settings → API Management → Create API Key\n"
+        "Permission yang dibutuhkan: ✅ Trade, ✅ Read",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Batal", callback_data="at_cancel")]])
+    )
+    return WAITING_API_KEY
+
+
+def _save_uid(telegram_id: int, uid: str):
+    """Simpan Bitunix UID ke Supabase autotrade_sessions."""
+    try:
+        _client().table("autotrade_sessions").upsert({
+            "telegram_id": int(telegram_id),
+            "bitunix_uid": uid,
+            "status": "pending",
+            "initial_deposit": 0,
+            "current_balance": 0,
+            "total_profit": 0,
+            "updated_at": datetime.utcnow().isoformat(),
+        }, on_conflict="telegram_id").execute()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"_save_uid error: {e}")
+
+
+def _get_saved_uid(telegram_id: int) -> Optional[str]:
+    """Ambil UID yang sudah tersimpan."""
+    try:
+        res = _client().table("autotrade_sessions").select("bitunix_uid").eq(
+            "telegram_id", int(telegram_id)
+        ).limit(1).execute()
+        if res.data:
+            return res.data[0].get("bitunix_uid")
+    except Exception:
+        pass
+    return None
 
 
 # ------------------------------------------------------------------ #
@@ -1051,12 +1199,17 @@ def register_autotrade_handlers(application):
     conv = ConversationHandler(
         entry_points=[
             CommandHandler("autotrade", cmd_autotrade),
-            CallbackQueryHandler(callback_setup_key,      pattern="^at_setup_key$"),
-            CallbackQueryHandler(callback_change_key,     pattern="^at_change_key$"),
-            CallbackQueryHandler(callback_start_trade,    pattern="^at_start_trade$"),
-            CallbackQueryHandler(callback_set_leverage,   pattern="^at_set_leverage$"),
+            CallbackQueryHandler(callback_setup_key,        pattern="^at_setup_key$"),
+            CallbackQueryHandler(callback_change_key,       pattern="^at_change_key$"),
+            CallbackQueryHandler(callback_start_trade,      pattern="^at_start_trade$"),
+            CallbackQueryHandler(callback_set_leverage,     pattern="^at_set_leverage$"),
+            CallbackQueryHandler(callback_confirm_referral, pattern="^at_confirm_referral$"),
         ],
         states={
+            WAITING_BITUNIX_UID: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_bitunix_uid),
+                CallbackQueryHandler(callback_cancel, pattern="^at_cancel$"),
+            ],
             WAITING_API_KEY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_api_key),
                 CallbackQueryHandler(callback_cancel, pattern="^at_cancel$"),
@@ -1098,5 +1251,6 @@ def register_autotrade_handlers(application):
     application.add_handler(CallbackQueryHandler(callback_settings,           pattern="^at_settings$"))
     application.add_handler(CallbackQueryHandler(callback_set_margin,         pattern="^at_set_margin$"))
     application.add_handler(CallbackQueryHandler(callback_margin_select,      pattern="^at_margin_(cross|isolated)$"))
+    application.add_handler(CallbackQueryHandler(callback_why_referral,       pattern="^at_why_referral$"))
 
     print("✅ AutoTrade handlers registered (Supabase + AES-256-GCM + Engine)")
