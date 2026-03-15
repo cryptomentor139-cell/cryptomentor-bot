@@ -102,7 +102,15 @@ def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
             reasons.append(f"Breakdown low + momentum {change_24h:.1f}%")
 
         if side is None:
-            return None
+            # FALLBACK: always generate a signal based on EMA trend direction
+            if ema9 >= ema21:
+                side = "LONG"
+                confidence = 55
+                reasons.append(f"EMA trend LONG (fallback)")
+            else:
+                side = "SHORT"
+                confidence = 55
+                reasons.append(f"EMA trend SHORT (fallback)")
 
         # RSI confirmation bonus
         if side == "LONG" and rsi < 50:
@@ -185,7 +193,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
     SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
     SCAN_INTERVAL = 60
-    MIN_CONFIDENCE = 65
+    MIN_CONFIDENCE = 0  # TEST MODE: accept any signal
 
     # Qty precision per symbol (Bitunix minimum & decimal places)
     QTY_PRECISION = {
