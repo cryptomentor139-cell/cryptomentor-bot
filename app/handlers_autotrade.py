@@ -186,18 +186,24 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     else:
+        GROUP_URL = "https://t.me/+pKKCinyKUQlhMjk1"
         keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("👥 Join Group CryptoMentor x Bitunix", url=GROUP_URL)],
             [InlineKeyboardButton("🔗 Daftar Bitunix via Referral", url=BITUNIX_REFERRAL_URL)],
-            [InlineKeyboardButton("✅ Sudah Daftar, Lanjut Setup",  callback_data="at_confirm_referral")],
-            [InlineKeyboardButton("❓ Kenapa Harus via Referral?",  callback_data="at_why_referral")],
+            [InlineKeyboardButton("✅ Sudah Join & Daftar, Lanjut Setup", callback_data="at_confirm_referral")],
+            [InlineKeyboardButton("❓ Kenapa Harus via Referral?",        callback_data="at_why_referral")],
         ])
         await update.message.reply_text(
             "🤖 <b>Auto Trade - Bitunix</b>\n\n"
-            "Untuk menggunakan fitur Auto Trade, kamu perlu akun Bitunix yang didaftarkan "
-            "melalui referral kami.\n\n"
-            f"🔗 <b>Link Daftar:</b>\n<code>{BITUNIX_REFERRAL_URL}</code>\n\n"
-            f"🎟 <b>Referral Code:</b> <code>{BITUNIX_REFERRAL_CODE}</code>\n\n"
-            "Klik tombol di bawah untuk daftar, lalu kembali ke sini setelah selesai.",
+            "Sebelum mulai, ada 2 langkah penting:\n\n"
+            "👥 <b>Step 1 — Join Group Eksklusif:</b>\n"
+            f"<a href=\"{GROUP_URL}\">CryptoMentor AI x Bitunix</a>\n"
+            "Akan ada banyak <b>event cuan dari Bitunix</b> khusus untuk para user CryptoMentor AI "
+            "yang sudah mengaktifkan AutoTrade. Jangan sampai ketinggalan! 🎁\n\n"
+            "🔗 <b>Step 2 — Daftar Bitunix via Referral:</b>\n"
+            f"<code>{BITUNIX_REFERRAL_URL}</code>\n"
+            f"🎟 Referral Code: <code>{BITUNIX_REFERRAL_CODE}</code>\n\n"
+            "Klik tombol di bawah, lalu kembali ke sini setelah selesai.",
             parse_mode='HTML',
             reply_markup=keyboard,
             disable_web_page_preview=True
