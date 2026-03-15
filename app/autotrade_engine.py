@@ -50,7 +50,6 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                       amount: float, leverage: int, notify_chat_id: int):
     """Main trading loop — runs until cancelled."""
     import sys, os
-    # Pastikan root Bismillah ada dalam path supaya import crypto_api, smc_analyzer etc berjaya
     bismillah_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if bismillah_root not in sys.path:
         sys.path.insert(0, bismillah_root)
@@ -61,10 +60,26 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
     client = BitunixAutoTradeClient(api_key=api_key, api_secret=api_secret)
 
-    # Symbols to scan (top liquid futures)
     SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
-    SCAN_INTERVAL = 60   # seconds between scans
-    MIN_CONFIDENCE = 65  # lowered from 75 to get more signals
+    SCAN_INTERVAL = 60
+    MIN_CONFIDENCE = 65
+
+    # Qty precision per symbol (Bitunix minimum & decimal places)
+    QTY_PRECISION = {
+        "BTCUSDT": 3,   # min 0.001
+        "ETHUSDT": 2,   # min 0.01
+        "SOLUSDT": 1,   # min 0.1
+        "BNBUSDT": 2,
+        "XRPUSDT": 0,   # min 1
+    }
+
+    def calc_qty(symbol: str, notional: float, price: float) -> float:
+        raw = notional / price
+        precision = QTY_PRECISION.get(symbol, 3)
+        qty = round(raw, precision)
+        # Ensure minimum qty
+        min_qty = 10 ** (-precision) if precision > 0 else 1
+        return qty if qty >= min_qty else 0.0
 
     await bot.send_message(
         chat_id=notify_chat_id,
@@ -74,54 +89,61 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
     while True:
         try:
-            # 1. Cek apakah ada posisi terbuka — skip scan kalau masih ada
+            # 1. Cek posisi terbuka
             pos_result = await asyncio.to_thread(client.get_positions)
             open_positions = pos_result.get('positions', []) if pos_result.get('success') else []
 
             if open_positions:
-                pos_text = "\n".join([
-                    f"• {p['symbol']} {p['side']} | PnL: {p['pnl']:+.2f} USDT"
-                    for p in open_positions
-                ])
-                logger.info(f"User {user_id} has {len(open_positions)} open positions, skipping scan")
+                logger.info(f"[Engine:{user_id}] {len(open_positions)} open positions, skip scan")
                 await asyncio.sleep(SCAN_INTERVAL)
                 continue
 
             # 2. Scan symbols untuk signal
             best_signal: Optional[Dict] = None
+            scan_results = []
             for sym in SYMBOLS:
                 try:
                     sig = await asyncio.to_thread(compute_signal_fast, sym)
-                    if sig and sig.get('confidence', 0) >= MIN_CONFIDENCE:
-                        if best_signal is None or sig['confidence'] > best_signal['confidence']:
-                            best_signal = sig
+                    if sig:
+                        scan_results.append(f"{sym}:{sig.get('confidence',0)}%")
+                        if sig.get('confidence', 0) >= MIN_CONFIDENCE:
+                            if best_signal is None or sig['confidence'] > best_signal['confidence']:
+                                best_signal = sig
+                    else:
+                        scan_results.append(f"{sym}:no_signal")
                 except Exception as e:
-                    logger.warning(f"Signal scan error for {sym}: {e}")
+                    scan_results.append(f"{sym}:err")
+                    logger.warning(f"[Engine:{user_id}] Signal scan error {sym}: {e}")
+
+            logger.info(f"[Engine:{user_id}] Scan: {', '.join(scan_results)}")
 
             if not best_signal:
-                logger.info(f"User {user_id}: no signal found, waiting {SCAN_INTERVAL}s")
+                logger.info(f"[Engine:{user_id}] No signal >= {MIN_CONFIDENCE}%, waiting {SCAN_INTERVAL}s")
                 await asyncio.sleep(SCAN_INTERVAL)
                 continue
 
             sig = best_signal
-            symbol = sig['symbol']       # e.g. BTCUSDT
-            side = sig['side']           # LONG / SHORT
+            symbol = sig['symbol']
+            side = sig['side']
             entry = sig['entry_price']
             tp1 = sig['tp1']
             sl = sig['sl']
             confidence = sig['confidence']
 
-            # 3. Hitung qty berdasarkan amount + leverage
-            # qty = (amount * leverage) / entry_price
+            # 3. Hitung qty dengan precision yang betul
             notional = amount * leverage
-            qty = round(notional / entry, 4)
+            qty = calc_qty(symbol, notional, entry)
             if qty <= 0:
+                logger.warning(f"[Engine:{user_id}] qty=0 for {symbol}, skip")
                 await asyncio.sleep(SCAN_INTERVAL)
                 continue
 
+            logger.info(f"[Engine:{user_id}] Signal: {symbol} {side} conf={confidence}% entry={entry} tp={tp1} sl={sl} qty={qty}")
+
             # 4. Set leverage
             order_side = "BUY" if side == "LONG" else "SELL"
-            await asyncio.to_thread(client.set_leverage, symbol, leverage)
+            lev_result = await asyncio.to_thread(client.set_leverage, symbol, leverage)
+            logger.info(f"[Engine:{user_id}] Set leverage {leverage}x: {lev_result}")
 
             # 5. Place order dengan TP/SL
             order_result = await asyncio.to_thread(
@@ -129,29 +151,31 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 symbol, order_side, qty, tp1, sl
             )
 
+            logger.info(f"[Engine:{user_id}] Order result: {order_result}")
+
             if not order_result.get('success'):
                 err = order_result.get('error', 'Unknown error')
-                logger.error(f"User {user_id} order failed: {err}")
+                logger.error(f"[Engine:{user_id}] Order FAILED: {err}")
+
                 if 'TOKEN_INVALID' in str(err) or '403' in str(err):
                     await bot.send_message(
                         chat_id=notify_chat_id,
                         text=(
                             "❌ <b>AutoTrade dihentikan — API Key bermasalah</b>\n\n"
-                            "Bitunix menolak request. Kemungkinan penyebab:\n"
-                            "• API Key sudah expired atau dihapus\n"
-                            "• IP server tidak diizinkan di API Key kamu\n\n"
+                            "Bitunix menolak request.\n\n"
                             "<b>Cara fix:</b>\n"
                             "1. Login Bitunix → API Management\n"
                             "2. Hapus API Key lama, buat baru\n"
                             "3. <b>Jangan isi IP Whitelist</b> (kosongkan)\n"
-                            "4. Setup ulang di bot: /autotrade → Ganti API Key"
+                            "4. Setup ulang: /autotrade → Ganti API Key"
                         ),
                         parse_mode='HTML'
                     )
-                    return  # stop engine
+                    return
+
                 await bot.send_message(
                     chat_id=notify_chat_id,
-                    text=f"⚠️ <b>Order gagal:</b> {err}\n\nBot tetap berjalan dan akan coba signal berikutnya.",
+                    text=f"⚠️ <b>Order gagal:</b> {err}\n\nBot tetap berjalan.",
                     parse_mode='HTML'
                 )
                 await asyncio.sleep(SCAN_INTERVAL)
@@ -182,7 +206,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 parse_mode='HTML'
             )
 
-            # 7. Update session di Supabase
+            # 7. Update session
             try:
                 _client().table("autotrade_sessions").update({
                     "updated_at": datetime.utcnow().isoformat()
@@ -190,21 +214,16 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             except Exception:
                 pass
 
-            # 8. Tunggu sebelum scan berikutnya
             await asyncio.sleep(SCAN_INTERVAL * 2)
 
         except asyncio.CancelledError:
-            logger.info(f"AutoTrade loop cancelled for user {user_id}")
+            logger.info(f"[Engine:{user_id}] Cancelled")
             try:
-                await bot.send_message(
-                    chat_id=notify_chat_id,
-                    text="🛑 <b>AutoTrade dihentikan.</b>",
-                    parse_mode='HTML'
-                )
+                await bot.send_message(chat_id=notify_chat_id, text="🛑 <b>AutoTrade dihentikan.</b>", parse_mode='HTML')
             except Exception:
                 pass
             return
 
         except Exception as e:
-            logger.error(f"AutoTrade loop error for user {user_id}: {e}", exc_info=True)
-            await asyncio.sleep(30)  # brief pause before retry
+            logger.error(f"[Engine:{user_id}] Loop error: {e}", exc_info=True)
+            await asyncio.sleep(30)
