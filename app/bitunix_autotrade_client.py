@@ -91,27 +91,50 @@ class BitunixAutoTradeClient:
         else:
             print(f"[Bitunix] Direct connection to Bitunix")
 
-        try:
-            # Gunakan requests biasa dengan proxy — lebih reliable daripada curl_cffi untuk proxy HTTPS
-            if proxy_url:
+        r = None
+        last_error = None
+
+        # Strategy 1: pakai proxy jika ada
+        if proxy_url:
+            try:
                 kwargs = dict(params=params, headers=headers, timeout=15,
                               proxies={'http': proxy_url, 'https': proxy_url})
-            else:
+                if method.upper() == 'GET':
+                    r = requests.get(url, **kwargs)
+                else:
+                    r = requests.post(url, data=body_str, **kwargs)
+                # Kalau proxy return HTML (mati/error), anggap gagal
+                if r.status_code != 200 and '<html' in r.text[:50].lower():
+                    print(f"[Bitunix] Proxy returned HTML error, falling back to direct")
+                    r = None
+            except Exception as e:
+                last_error = e
+                print(f"[Bitunix] Proxy failed: {e}, trying direct...")
+                r = None
+
+        # Strategy 2: langsung tanpa proxy (fallback)
+        if r is None:
+            try:
                 kwargs = dict(params=params, headers=headers, timeout=15)
+                if method.upper() == 'GET':
+                    r = requests.get(url, **kwargs)
+                else:
+                    r = requests.post(url, data=body_str, **kwargs)
+            except Exception as e:
+                last_error = e
+                r = None
 
-            if method.upper() == 'GET':
-                r = requests.get(url, **kwargs)
-            else:
-                r = requests.post(url, data=body_str, **kwargs)
-
-        except Exception as e:
-            return {'success': False, 'error': f'Request failed: {str(e)}'}
+        if r is None:
+            return {'success': False, 'error': f'Request failed: {last_error}'}
 
         try:
             if r.status_code == 403:
-                body_text = r.text[:500]
-                print(f"[Bitunix] 403 Forbidden: {body_text[:200]}")
-                return {'success': False, 'error': 'HTTP 403: IP tidak diizinkan. Buat API Key baru tanpa IP restriction di Bitunix.'}
+                body_text = r.text[:200]
+                print(f"[Bitunix] 403 Forbidden: {body_text[:100]}")
+                # 403 dengan HTML = IP diblokir Bitunix, bukan auth error
+                if '<html' in body_text.lower() or '<!doctype' in body_text.lower():
+                    return {'success': False, 'error': 'IP_BLOCKED: IP server diblokir Bitunix. Pastikan PROXY_URL di-set di Railway Variables.'}
+                return {'success': False, 'error': 'HTTP 403: Akses ditolak Bitunix.'}
             if r.status_code in (500, 502, 503, 504) and _retry < 2:
                 # Server error — retry sekali lagi dengan delay
                 import time as _time

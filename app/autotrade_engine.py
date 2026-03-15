@@ -516,12 +516,12 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
                 # Cek apakah ini benar-benar API key invalid (bukan transient error)
                 is_auth_error = 'TOKEN_INVALID' in str(err) or 'SIGNATURE_ERROR' in str(err)
-                is_ip_blocked = 'HTTP 403' in str(err) or ('403' in str(err) and 'IP' in str(err))
+                is_ip_blocked = 'HTTP 403' in str(err) or 'IP_BLOCKED' in str(err) or ('403' in str(err) and 'IP' in str(err))
 
                 if is_auth_error or is_ip_blocked:
-                    # Retry sekali dulu sebelum menyerah — bisa jadi timestamp drift
-                    logger.warning(f"[Engine:{user_id}] Auth error, retrying once in 10s: {err}")
-                    await asyncio.sleep(10)
+                    # Retry sekali dulu sebelum menyerah — bisa jadi timestamp drift atau proxy glitch
+                    logger.warning(f"[Engine:{user_id}] Auth/IP error, retrying once in 15s: {err}")
+                    await asyncio.sleep(15)
                     retry_result = await asyncio.to_thread(
                         client.place_order_with_tpsl, symbol,
                         "BUY" if side == "LONG" else "SELL",
@@ -532,8 +532,8 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                         # Lanjut ke bawah dengan order sukses
                     else:
                         retry_err = retry_result.get('error', '')
-                        # Hanya stop jika retry juga gagal dengan auth error
-                        if 'TOKEN_INVALID' in str(retry_err) or 'HTTP 403' in str(retry_err):
+                        # Hanya stop jika TOKEN_INVALID — IP_BLOCKED jangan stop, bisa recover
+                        if 'TOKEN_INVALID' in str(retry_err):
                             await bot.send_message(
                                 chat_id=notify_chat_id,
                                 text=(
@@ -547,8 +547,20 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                                 parse_mode='HTML'
                             )
                             return
+                        elif 'IP_BLOCKED' in str(retry_err):
+                            # IP masih diblokir — tunggu lebih lama, jangan stop engine
+                            await bot.send_message(
+                                chat_id=notify_chat_id,
+                                text=(
+                                    "⚠️ <b>IP server diblokir Bitunix</b>\n\n"
+                                    "Bot akan coba lagi dalam 5 menit.\n"
+                                    "Pastikan <b>PROXY_URL</b> sudah di-set di Railway Variables."
+                                ),
+                                parse_mode='HTML'
+                            )
+                            await asyncio.sleep(300)
+                            continue
                         else:
-                            # Error lain setelah retry — lanjut saja
                             await bot.send_message(
                                 chat_id=notify_chat_id,
                                 text=f"⚠️ <b>Order gagal (2x):</b> {retry_err}\n\nBot tetap berjalan.",
