@@ -684,7 +684,11 @@ class TelegramBot:
                                     parse_mode='HTML'
                                 )
                                 sent += 1
-                            except Exception:
+                            except Exception as send_err:
+                                err_str = str(send_err)
+                                # Skip common expected errors silently
+                                if not any(x in err_str for x in ('blocked', 'deactivated', 'not found', 'chat not found')):
+                                    print(f"Broadcast error tid={tid}: {err_str[:80]}")
                                 failed += 1
                             # Small delay to avoid flood
                             if sent % 30 == 0:
