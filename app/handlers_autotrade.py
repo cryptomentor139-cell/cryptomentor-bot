@@ -255,16 +255,42 @@ async def callback_confirm_referral(update: Update, context: ContextTypes.DEFAUL
     # Cek apakah UID sudah tersimpan di session
     uid_saved = _get_saved_uid(user_id)
     if uid_saved:
-        # UID sudah ada, langsung ke setup API key
-        await query.edit_message_text(
-            f"✅ <b>UID Bitunix terverifikasi:</b> <code>{uid_saved}</code>\n\n"
-            "Sekarang masukkan API Key kamu:",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")],
-            ])
-        )
-        return ConversationHandler.END
+        session = get_autotrade_session(user_id)
+        uid_status = session.get("status", "") if session else ""
+
+        if uid_status == "uid_verified":
+            # UID sudah diverifikasi, langsung ke setup API key
+            await query.edit_message_text(
+                f"✅ <b>UID Bitunix terverifikasi:</b> <code>{uid_saved}</code>\n\n"
+                "Sekarang masukkan API Key kamu:",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")],
+                ])
+            )
+            return ConversationHandler.END
+        elif uid_status == "pending_verification":
+            await query.edit_message_text(
+                f"⏳ <b>UID kamu sedang diverifikasi admin</b>\n\n"
+                f"🔢 UID: <code>{uid_saved}</code>\n\n"
+                "Mohon tunggu, kamu akan dapat notifikasi setelah diverifikasi.",
+                parse_mode='HTML'
+            )
+            return ConversationHandler.END
+        elif uid_status == "uid_rejected":
+            await query.edit_message_text(
+                f"❌ <b>UID sebelumnya ditolak</b>\n\n"
+                f"UID <code>{uid_saved}</code> tidak terverifikasi.\n\n"
+                "Masukkan UID baru jika kamu sudah daftar ulang via referral:",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔗 Daftar via Referral", url=BITUNIX_REFERRAL_URL)],
+                    [InlineKeyboardButton("🔄 Masukkan UID Baru",   callback_data="at_confirm_referral")],
+                ])
+            )
+            # Reset UID agar bisa input ulang
+            _save_uid(user_id, "", status="pending")
+            return ConversationHandler.END
 
     await query.edit_message_text(
         "✅ <b>Langkah 1/3 — Verifikasi UID</b>\n\n"
@@ -281,9 +307,10 @@ async def callback_confirm_referral(update: Update, context: ContextTypes.DEFAUL
 
 
 async def receive_bitunix_uid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Terima UID Bitunix dari user, simpan, lanjut ke setup API key."""
+    """Terima UID Bitunix dari user, kirim ke admin untuk verifikasi."""
     uid = update.message.text.strip()
     user_id = update.effective_user.id
+    user = update.effective_user
 
     try:
         await update.message.delete()
@@ -298,29 +325,62 @@ async def receive_bitunix_uid(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return WAITING_BITUNIX_UID
 
-    # Simpan UID ke Supabase
-    _save_uid(user_id, uid)
+    # Simpan UID ke Supabase dengan status pending_verification
+    _save_uid(user_id, uid, status="pending_verification")
 
-    await update.message.reply_text(
-        f"✅ <b>UID tersimpan: <code>{uid}</code></b>\n\n"
-        "Sekarang kita setup API Key Bitunix kamu.\n\n"
-        "🔑 <b>Langkah 2/3 — Setup API Key</b>\n\n"
-        "Masukkan <b>API Key</b> Bitunix kamu:\n\n"
-        "💡 Settings → API Management → Create API Key\n"
-        "Permission yang dibutuhkan: ✅ Trade, ✅ Read",
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Batal", callback_data="at_cancel")]])
+    # Kirim notifikasi ke semua admin
+    admin_ids = _get_admin_ids()
+    username_display = f"@{user.username}" if user.username else f"#{user_id}"
+    full_name = user.full_name or "Unknown"
+
+    admin_keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ ACC",   callback_data=f"uid_acc_{user_id}"),
+            InlineKeyboardButton("❌ TOLAK", callback_data=f"uid_reject_{user_id}"),
+        ]
+    ])
+
+    admin_text = (
+        f"🔔 <b>Verifikasi UID AutoTrade</b>\n\n"
+        f"👤 User: <b>{full_name}</b> ({username_display})\n"
+        f"🆔 Telegram ID: <code>{user_id}</code>\n"
+        f"🔢 Bitunix UID: <code>{uid}</code>\n\n"
+        f"Pastikan UID ini terdaftar under referral <b>sq45</b> di Bitunix.\n\n"
+        f"Acc atau tolak pendaftaran user ini:"
     )
-    return WAITING_API_KEY
+
+    notified = 0
+    for admin_id in admin_ids:
+        try:
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=admin_text,
+                parse_mode='HTML',
+                reply_markup=admin_keyboard
+            )
+            notified += 1
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Gagal kirim notif ke admin {admin_id}: {e}")
+
+    # Konfirmasi ke user bahwa UID sedang diverifikasi
+    await update.message.reply_text(
+        f"⏳ <b>UID kamu sedang diverifikasi</b>\n\n"
+        f"🔢 UID: <code>{uid}</code>\n\n"
+        "Admin kami akan memverifikasi bahwa akun Bitunix kamu terdaftar under referral kami.\n\n"
+        "Kamu akan mendapat notifikasi setelah verifikasi selesai (biasanya dalam beberapa menit).",
+        parse_mode='HTML'
+    )
+    return ConversationHandler.END
 
 
-def _save_uid(telegram_id: int, uid: str):
+def _save_uid(telegram_id: int, uid: str, status: str = "pending_verification"):
     """Simpan Bitunix UID ke Supabase autotrade_sessions."""
     try:
         _client().table("autotrade_sessions").upsert({
             "telegram_id": int(telegram_id),
             "bitunix_uid": uid,
-            "status": "pending",
+            "status": status,
             "initial_deposit": 0,
             "current_balance": 0,
             "total_profit": 0,
@@ -329,6 +389,21 @@ def _save_uid(telegram_id: int, uid: str):
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"_save_uid error: {e}")
+
+
+def _get_admin_ids() -> list:
+    """Ambil semua admin ID dari env vars."""
+    import os
+    admin_ids = []
+    for key in ['ADMIN1', 'ADMIN2', 'ADMIN3', 'ADMIN_IDS']:
+        val = os.getenv(key, '')
+        if not val:
+            continue
+        for part in val.split(','):
+            part = part.strip()
+            if part.isdigit():
+                admin_ids.append(int(part))
+    return list(set(admin_ids))
 
 
 def _get_saved_uid(telegram_id: int) -> Optional[str]:
@@ -962,6 +1037,98 @@ async def callback_restart_engine(update: Update, context: ContextTypes.DEFAULT_
 
 
 # ------------------------------------------------------------------ #
+#  Admin: verifikasi UID user                                         #
+# ------------------------------------------------------------------ #
+
+async def callback_uid_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin acc UID user — update status dan notifikasi user."""
+    query = update.callback_query
+    await query.answer("✅ User di-ACC")
+    admin_id = query.from_user.id
+
+    # Parse target user_id dari callback data: uid_acc_{user_id}
+    target_user_id = int(query.data.split("_")[-1])
+
+    # Update status di Supabase
+    try:
+        _client().table("autotrade_sessions").update({
+            "status": "uid_verified",
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("telegram_id", target_user_id).execute()
+    except Exception:
+        pass
+
+    # Edit pesan admin
+    await query.edit_message_text(
+        query.message.text + f"\n\n✅ <b>Di-ACC oleh admin</b>",
+        parse_mode='HTML'
+    )
+
+    # Notifikasi ke user
+    try:
+        await context.bot.send_message(
+            chat_id=target_user_id,
+            text=(
+                "✅ <b>UID Kamu Telah Diverifikasi!</b>\n\n"
+                "Akun Bitunix kamu sudah terkonfirmasi under referral kami.\n\n"
+                "Sekarang setup API Key untuk mulai Auto Trade:"
+            ),
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")]
+            ])
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Gagal notif user {target_user_id}: {e}")
+
+
+async def callback_uid_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin tolak UID user — update status dan notifikasi user."""
+    query = update.callback_query
+    await query.answer("❌ User ditolak")
+
+    target_user_id = int(query.data.split("_")[-1])
+
+    # Update status di Supabase
+    try:
+        _client().table("autotrade_sessions").update({
+            "status": "uid_rejected",
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("telegram_id", target_user_id).execute()
+    except Exception:
+        pass
+
+    # Edit pesan admin
+    await query.edit_message_text(
+        query.message.text + f"\n\n❌ <b>Ditolak oleh admin</b>",
+        parse_mode='HTML'
+    )
+
+    # Notifikasi ke user
+    try:
+        await context.bot.send_message(
+            chat_id=target_user_id,
+            text=(
+                "❌ <b>Verifikasi UID Ditolak</b>\n\n"
+                "UID Bitunix kamu tidak terdeteksi terdaftar under referral kami.\n\n"
+                "Pastikan kamu mendaftar Bitunix menggunakan link berikut:\n"
+                f"🔗 <code>{BITUNIX_REFERRAL_URL}</code>\n\n"
+                "Setelah daftar ulang dengan referral yang benar, kirim UID baru kamu dengan /autotrade."
+            ),
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔗 Daftar Ulang via Referral", url=BITUNIX_REFERRAL_URL)],
+                [InlineKeyboardButton("🔄 Coba Lagi", callback_data="at_confirm_referral")],
+            ]),
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Gagal notif user {target_user_id}: {e}")
+
+
+# ------------------------------------------------------------------ #
 #  Settings: leverage & margin mode                                   #
 # ------------------------------------------------------------------ #
 
@@ -1252,5 +1419,7 @@ def register_autotrade_handlers(application):
     application.add_handler(CallbackQueryHandler(callback_set_margin,         pattern="^at_set_margin$"))
     application.add_handler(CallbackQueryHandler(callback_margin_select,      pattern="^at_margin_(cross|isolated)$"))
     application.add_handler(CallbackQueryHandler(callback_why_referral,       pattern="^at_why_referral$"))
+    application.add_handler(CallbackQueryHandler(callback_uid_acc,            pattern="^uid_acc_\\d+$"))
+    application.add_handler(CallbackQueryHandler(callback_uid_reject,         pattern="^uid_reject_\\d+$"))
 
     print("✅ AutoTrade handlers registered (Supabase + AES-256-GCM + Engine)")
