@@ -15,9 +15,9 @@ _running_tasks: Dict[int, asyncio.Task] = {}
 
 def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
     """
-    Signal using EMA crossover + RSI dari CryptoCompare (reliable alternative).
+    Signal using EMA crossover + RSI + SMC analysis (Order Blocks, FVG, Market Structure).
     """
-    import os
+    import os, sys
 
     symbol = base_symbol.upper() + "USDT"
     logger.info(f"[Signal] Computing for {symbol}...")
@@ -25,17 +25,16 @@ def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
     try:
         from app.providers.alternative_klines_provider import alternative_klines_provider
 
-        # Guna CryptoCompare/CoinGecko — reliable dari Railway
         klines = alternative_klines_provider.get_klines(base_symbol.upper(), interval='15m', limit=50)
 
         if not klines or len(klines) < 20:
             logger.warning(f"[Signal] {symbol} klines empty from alternative provider")
             return None
 
-        # Binance format: [timestamp, open, high, low, close, volume, ...]
         closes = [float(k[4]) for k in klines]
         highs  = [float(k[2]) for k in klines]
         lows   = [float(k[3]) for k in klines]
+        opens  = [float(k[1]) for k in klines]
         price  = closes[-1]
         logger.info(f"[Signal] {symbol} price={price:.4f} candles={len(klines)}")
 
@@ -69,6 +68,95 @@ def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
         recent_low  = min(lows[-20:])
         range_pct   = (recent_high - recent_low) / recent_low * 100
 
+        # ── SMC Analysis ──────────────────────────────────────────────
+        smc_reasons = []
+        smc_confidence_bonus = 0
+
+        # 1. Market Structure (HH/HL = uptrend, LH/LL = downtrend)
+        swing_highs, swing_lows = [], []
+        window = 3
+        for i in range(window, len(closes) - window):
+            if highs[i] == max(highs[i-window:i+window+1]):
+                swing_highs.append(highs[i])
+            if lows[i] == min(lows[i-window:i+window+1]):
+                swing_lows.append(lows[i])
+
+        market_structure = "ranging"
+        if len(swing_highs) >= 2 and len(swing_lows) >= 2:
+            if swing_highs[-1] > swing_highs[-2] and swing_lows[-1] > swing_lows[-2]:
+                market_structure = "uptrend"
+                smc_reasons.append("📈 BOS: Higher High + Higher Low (Uptrend)")
+                smc_confidence_bonus += 8
+            elif swing_highs[-1] < swing_highs[-2] and swing_lows[-1] < swing_lows[-2]:
+                market_structure = "downtrend"
+                smc_reasons.append("📉 BOS: Lower High + Lower Low (Downtrend)")
+                smc_confidence_bonus += 8
+
+        # 2. Order Block detection (last 15 candles)
+        ob_bullish_zone = None
+        ob_bearish_zone = None
+        for i in range(max(0, len(closes)-15), len(closes)-2):
+            body_pct = abs(closes[i] - opens[i]) / opens[i] * 100
+            if body_pct > 1.0:
+                # Bullish OB: strong green candle, price came back to zone
+                if closes[i] > opens[i]:
+                    zone_high = highs[i]
+                    zone_low  = lows[i]
+                    if zone_low <= price <= zone_high * 1.005:
+                        ob_bullish_zone = (zone_low, zone_high)
+                        smc_reasons.append(f"🟩 Bullish OB: {zone_low:.4f}–{zone_high:.4f}")
+                        smc_confidence_bonus += 10
+                # Bearish OB: strong red candle, price came back to zone
+                elif closes[i] < opens[i]:
+                    zone_high = highs[i]
+                    zone_low  = lows[i]
+                    if zone_low * 0.995 <= price <= zone_high:
+                        ob_bearish_zone = (zone_low, zone_high)
+                        smc_reasons.append(f"🟥 Bearish OB: {zone_low:.4f}–{zone_high:.4f}")
+                        smc_confidence_bonus += 10
+
+        # 3. Fair Value Gap (FVG) detection
+        for i in range(1, min(10, len(closes)-1)):
+            idx = len(closes) - 1 - i
+            if idx < 2:
+                break
+            # Bullish FVG: gap between candle[idx-1].high and candle[idx+1].low
+            if lows[idx+1] > highs[idx-1]:
+                fvg_low  = highs[idx-1]
+                fvg_high = lows[idx+1]
+                if fvg_low <= price <= fvg_high:
+                    smc_reasons.append(f"⬆️ Bullish FVG: {fvg_low:.4f}–{fvg_high:.4f}")
+                    smc_confidence_bonus += 7
+                    break
+            # Bearish FVG: gap between candle[idx-1].low and candle[idx+1].high
+            elif highs[idx+1] < lows[idx-1]:
+                fvg_high = lows[idx-1]
+                fvg_low  = highs[idx+1]
+                if fvg_low <= price <= fvg_high:
+                    smc_reasons.append(f"⬇️ Bearish FVG: {fvg_low:.4f}–{fvg_high:.4f}")
+                    smc_confidence_bonus += 7
+                    break
+
+        # 4. Liquidity sweep (stop hunt)
+        prev_high_20 = max(highs[-21:-1])
+        prev_low_20  = min(lows[-21:-1])
+        if price > prev_high_20 * 0.998 and closes[-1] < opens[-1]:
+            smc_reasons.append(f"🎯 Liquidity Sweep High: {prev_high_20:.4f} (bearish rejection)")
+            smc_confidence_bonus += 6
+        elif price < prev_low_20 * 1.002 and closes[-1] > opens[-1]:
+            smc_reasons.append(f"🎯 Liquidity Sweep Low: {prev_low_20:.4f} (bullish reversal)")
+            smc_confidence_bonus += 6
+
+        # 5. Premium/Discount zone (50% equilibrium)
+        eq_mid = (recent_high + recent_low) / 2
+        if price < eq_mid:
+            smc_reasons.append(f"💎 Discount Zone ({((eq_mid-price)/eq_mid*100):.1f}% below EQ)")
+            smc_confidence_bonus += 4
+        else:
+            smc_reasons.append(f"⚡ Premium Zone ({((price-eq_mid)/eq_mid*100):.1f}% above EQ)")
+            smc_confidence_bonus += 2
+        # ── End SMC ───────────────────────────────────────────────────
+
         side = None
         confidence = 50
         reasons = []
@@ -77,13 +165,11 @@ def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
         if ema9 > ema21 and ema9_prev <= ema21_prev:
             side = "LONG"
             confidence = 72
-            reasons.append("EMA9 cross above EMA21")
-        # EMA crossover bearish
+            reasons.append(f"EMA9 cross above EMA21 (RSI {rsi:.0f})")
         elif ema9 < ema21 and ema9_prev >= ema21_prev:
             side = "SHORT"
             confidence = 72
-            reasons.append("EMA9 cross below EMA21")
-        # EMA trend + RSI
+            reasons.append(f"EMA9 cross below EMA21 (RSI {rsi:.0f})")
         elif ema9 > ema21 and rsi < 45:
             side = "LONG"
             confidence = 68
@@ -92,7 +178,6 @@ def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
             side = "SHORT"
             confidence = 68
             reasons.append(f"Downtrend + RSI overbought ({rsi:.0f})")
-        # Breakout
         elif price > recent_high * 0.999 and change_24h > 1.5:
             side = "LONG"
             confidence = 70
@@ -103,26 +188,33 @@ def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
             reasons.append(f"Breakdown low + momentum {change_24h:.1f}%")
 
         if side is None:
-            # FALLBACK: always generate a signal based on EMA trend direction
             if ema9 >= ema21:
                 side = "LONG"
                 confidence = 55
-                reasons.append(f"EMA trend LONG (fallback)")
+                reasons.append(f"EMA trend LONG (RSI {rsi:.0f})")
             else:
                 side = "SHORT"
                 confidence = 55
-                reasons.append(f"EMA trend SHORT (fallback)")
+                reasons.append(f"EMA trend SHORT (RSI {rsi:.0f})")
 
-        # RSI confirmation bonus
-        if side == "LONG" and rsi < 50:
-            confidence += 5
-            reasons.append(f"RSI {rsi:.0f}")
-        elif side == "SHORT" and rsi > 50:
-            confidence += 5
-            reasons.append(f"RSI {rsi:.0f}")
+        # Align SMC with signal direction, add bonus
+        if side == "LONG":
+            if market_structure == "uptrend":
+                confidence += smc_confidence_bonus
+            elif market_structure == "downtrend":
+                confidence -= 5  # counter-trend penalty
+            if ob_bullish_zone:
+                confidence += 5
+        elif side == "SHORT":
+            if market_structure == "downtrend":
+                confidence += smc_confidence_bonus
+            elif market_structure == "uptrend":
+                confidence -= 5
+            if ob_bearish_zone:
+                confidence += 5
 
         # TP/SL based on recent range
-        atr = range_pct / 100 * price * 0.3  # simplified ATR
+        atr = range_pct / 100 * price * 0.3
         if side == "LONG":
             tp1 = price + atr * 2
             sl  = price - atr
@@ -130,15 +222,20 @@ def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
             tp1 = price - atr * 2
             sl  = price + atr
 
+        # Combine all reasons: EMA/RSI first, then SMC
+        all_reasons = reasons + smc_reasons
+
         return {
             "symbol": symbol,
             "side": side,
-            "confidence": int(min(confidence, 90)),
+            "confidence": int(min(max(confidence, 50), 95)),
             "entry_price": price,
             "tp1": round(tp1, 6),
             "tp2": round(tp1 * (1.01 if side == "LONG" else 0.99), 6),
             "sl": round(sl, 6),
-            "reasons": reasons,
+            "reasons": all_reasons,
+            "market_structure": market_structure,
+            "rsi": round(rsi, 1),
         }
 
     except Exception as e:
@@ -191,6 +288,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     from app.supabase_repo import _client
 
     client = BitunixAutoTradeClient(api_key=api_key, api_secret=api_secret)
+    from app.bitunix_ws_pnl import start_pnl_tracker, stop_pnl_tracker
 
     SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
     SCAN_INTERVAL = 60
@@ -230,6 +328,12 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 logger.info(f"[Engine:{user_id}] {len(open_positions)} open positions, skip scan")
                 await asyncio.sleep(SCAN_INTERVAL)
                 continue
+            else:
+                # Posisi sudah tutup (TP/SL hit) — stop PnL tracker
+                from app.bitunix_ws_pnl import stop_pnl_tracker, is_tracking
+                if is_tracking(user_id):
+                    stop_pnl_tracker(user_id)
+                    logger.info(f"[Engine:{user_id}] Position closed, PnL tracker stopped")
 
             # 2. Scan symbols untuk signal
             best_signal: Optional[Dict] = None
@@ -322,6 +426,30 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             potential_profit = amount * (reward_pct / 100)
             potential_loss = amount * (risk_pct / 100)
 
+            # Format SMC reasons
+            all_reasons = sig.get('reasons', [])
+            market_structure = sig.get('market_structure', 'ranging')
+            rsi_val = sig.get('rsi', 50)
+
+            # Separate technical vs SMC reasons
+            tech_reasons = [r for r in all_reasons if not any(
+                x in r for x in ['OB:', 'FVG:', 'BOS:', 'Liquidity', 'Zone', 'Higher', 'Lower']
+            )]
+            smc_reasons = [r for r in all_reasons if any(
+                x in r for x in ['OB:', 'FVG:', 'BOS:', 'Liquidity', 'Zone', 'Higher', 'Lower']
+            )]
+
+            struct_emoji = {"uptrend": "📈", "downtrend": "📉", "ranging": "↔️"}.get(market_structure, "↔️")
+            struct_label = {"uptrend": "Uptrend (HH/HL)", "downtrend": "Downtrend (LH/LL)", "ranging": "Ranging"}.get(market_structure, market_structure)
+
+            smc_block = ""
+            if smc_reasons:
+                smc_block = "\n🔬 <b>SMC Analysis:</b>\n" + "\n".join(f"  • {r}" for r in smc_reasons[:4])
+
+            tech_block = ""
+            if tech_reasons:
+                tech_block = "\n📐 <b>Technical:</b>\n" + "\n".join(f"  • {r}" for r in tech_reasons[:3])
+
             await bot.send_message(
                 chat_id=notify_chat_id,
                 text=(
@@ -331,6 +459,9 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     f"🎯 TP: <code>{tp1:.4f}</code>\n"
                     f"🛑 SL: <code>{sl:.4f}</code>\n"
                     f"📦 Qty: {qty}\n\n"
+                    f"{struct_emoji} <b>Market Structure:</b> {struct_label}\n"
+                    f"{smc_block}"
+                    f"{tech_block}\n\n"
                     f"💰 Potensi profit: +{potential_profit:.2f} USDT ({reward_pct:.1f}%)\n"
                     f"⚠️ Potensi loss: -{potential_loss:.2f} USDT ({risk_pct:.1f}%)\n"
                     f"🧠 Confidence: {confidence}%\n"
@@ -339,7 +470,16 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 parse_mode='HTML'
             )
 
-            # 7. Update session
+            # 7. Start live PnL tracker via WebSocket
+            start_pnl_tracker(
+                user_id=user_id,
+                api_key=api_key,
+                api_secret=api_secret,
+                bot=bot,
+                chat_id=notify_chat_id,
+            )
+
+            # 8. Update session
             try:
                 _client().table("autotrade_sessions").update({
                     "updated_at": datetime.utcnow().isoformat()
@@ -351,6 +491,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
         except asyncio.CancelledError:
             logger.info(f"[Engine:{user_id}] Cancelled")
+            stop_pnl_tracker(user_id)
             try:
                 await bot.send_message(chat_id=notify_chat_id, text="🛑 <b>AutoTrade dihentikan.</b>", parse_mode='HTML')
             except Exception:
