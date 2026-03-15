@@ -13,6 +13,130 @@ logger = logging.getLogger(__name__)
 _running_tasks: Dict[int, asyncio.Task] = {}
 
 
+def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
+    """
+    Simple but reliable signal using EMA crossover + RSI + momentum.
+    Fallback ke compute_signal_fast kalau available.
+    """
+    import requests
+
+    symbol = base_symbol.upper() + "USDT"
+
+    try:
+        # Ambil klines dari Binance (public, no auth needed)
+        r = requests.get(
+            "https://api.binance.com/api/v3/klines",
+            params={"symbol": symbol, "interval": "15m", "limit": 50},
+            timeout=8
+        )
+        klines = r.json()
+        if not isinstance(klines, list) or len(klines) < 20:
+            return None
+
+        closes = [float(k[4]) for k in klines]
+        highs  = [float(k[2]) for k in klines]
+        lows   = [float(k[3]) for k in klines]
+        price  = closes[-1]
+
+        # EMA calculation
+        def ema(data, period):
+            k = 2 / (period + 1)
+            e = data[0]
+            for v in data[1:]:
+                e = v * k + e * (1 - k)
+            return e
+
+        ema9  = ema(closes, 9)
+        ema21 = ema(closes, 21)
+        ema9_prev  = ema(closes[:-1], 9)
+        ema21_prev = ema(closes[:-1], 21)
+
+        # RSI
+        gains, losses = [], []
+        for i in range(1, 15):
+            diff = closes[-i] - closes[-i-1]
+            (gains if diff > 0 else losses).append(abs(diff))
+        avg_gain = sum(gains) / 14 if gains else 0.001
+        avg_loss = sum(losses) / 14 if losses else 0.001
+        rsi = 100 - (100 / (1 + avg_gain / avg_loss))
+
+        # 24h change
+        change_24h = (price - closes[0]) / closes[0] * 100
+
+        # Recent high/low (last 20 candles)
+        recent_high = max(highs[-20:])
+        recent_low  = min(lows[-20:])
+        range_pct   = (recent_high - recent_low) / recent_low * 100
+
+        side = None
+        confidence = 50
+        reasons = []
+
+        # EMA crossover bullish
+        if ema9 > ema21 and ema9_prev <= ema21_prev:
+            side = "LONG"
+            confidence = 72
+            reasons.append("EMA9 cross above EMA21")
+        # EMA crossover bearish
+        elif ema9 < ema21 and ema9_prev >= ema21_prev:
+            side = "SHORT"
+            confidence = 72
+            reasons.append("EMA9 cross below EMA21")
+        # EMA trend + RSI
+        elif ema9 > ema21 and rsi < 45:
+            side = "LONG"
+            confidence = 68
+            reasons.append(f"Uptrend + RSI oversold ({rsi:.0f})")
+        elif ema9 < ema21 and rsi > 55:
+            side = "SHORT"
+            confidence = 68
+            reasons.append(f"Downtrend + RSI overbought ({rsi:.0f})")
+        # Breakout
+        elif price > recent_high * 0.999 and change_24h > 1.5:
+            side = "LONG"
+            confidence = 70
+            reasons.append(f"Breakout high + momentum {change_24h:+.1f}%")
+        elif price < recent_low * 1.001 and change_24h < -1.5:
+            side = "SHORT"
+            confidence = 70
+            reasons.append(f"Breakdown low + momentum {change_24h:.1f}%")
+
+        if side is None:
+            return None
+
+        # RSI confirmation bonus
+        if side == "LONG" and rsi < 50:
+            confidence += 5
+            reasons.append(f"RSI {rsi:.0f}")
+        elif side == "SHORT" and rsi > 50:
+            confidence += 5
+            reasons.append(f"RSI {rsi:.0f}")
+
+        # TP/SL based on recent range
+        atr = range_pct / 100 * price * 0.3  # simplified ATR
+        if side == "LONG":
+            tp1 = price + atr * 2
+            sl  = price - atr
+        else:
+            tp1 = price - atr * 2
+            sl  = price + atr
+
+        return {
+            "symbol": symbol,
+            "side": side,
+            "confidence": int(min(confidence, 90)),
+            "entry_price": price,
+            "tp1": round(tp1, 6),
+            "tp2": round(tp1 * (1.01 if side == "LONG" else 0.99), 6),
+            "sl": round(sl, 6),
+            "reasons": reasons,
+        }
+
+    except Exception as e:
+        logger.warning(f"_compute_signal_simple error {base_symbol}: {e}")
+        return None
+
+
 def is_running(user_id: int) -> bool:
     t = _running_tasks.get(user_id)
     return t is not None and not t.done()
@@ -55,7 +179,6 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
         sys.path.insert(0, bismillah_root)
 
     from app.bitunix_autotrade_client import BitunixAutoTradeClient
-    from app.autosignal_fast import compute_signal_fast
     from app.supabase_repo import _client
 
     client = BitunixAutoTradeClient(api_key=api_key, api_secret=api_secret)
@@ -103,7 +226,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             scan_results = []
             for sym in SYMBOLS:
                 try:
-                    sig = await asyncio.to_thread(compute_signal_fast, sym)
+                    sig = await asyncio.to_thread(_compute_signal_simple, sym, client)
                     if sig:
                         scan_results.append(f"{sym}:{sig.get('confidence',0)}%")
                         if sig.get('confidence', 0) >= MIN_CONFIDENCE:
