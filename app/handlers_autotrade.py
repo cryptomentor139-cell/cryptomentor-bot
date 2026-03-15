@@ -22,6 +22,7 @@ WAITING_API_KEY      = 1
 WAITING_API_SECRET   = 2
 WAITING_TRADE_AMOUNT = 3
 WAITING_LEVERAGE     = 4
+WAITING_NEW_LEVERAGE = 5
 
 
 # ------------------------------------------------------------------ #
@@ -150,6 +151,7 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("📊 Status Portfolio", callback_data="at_status")],
             [InlineKeyboardButton("📈 Trade History",    callback_data="at_history")],
             engine_btn,
+            [InlineKeyboardButton("⚙️ Settings",         callback_data="at_settings")],
             [InlineKeyboardButton("🔑 Ganti API Key",    callback_data="at_change_key")],
         ])
         await update.message.reply_text(
@@ -812,6 +814,236 @@ async def callback_restart_engine(update: Update, context: ContextTypes.DEFAULT_
 
 
 # ------------------------------------------------------------------ #
+#  Settings: leverage & margin mode                                   #
+# ------------------------------------------------------------------ #
+
+async def callback_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tampilkan menu settings leverage & margin mode."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    session = get_autotrade_session(user_id)
+    current_leverage = int(session.get("leverage", 10)) if session else 10
+    current_margin   = session.get("margin_mode", "cross") if session else "cross"
+    margin_label     = "Cross ♾️" if current_margin == "cross" else "Isolated 🔒"
+
+    await query.edit_message_text(
+        f"⚙️ <b>Settings AutoTrade</b>\n\n"
+        f"📊 Leverage saat ini: <b>{current_leverage}x</b>\n"
+        f"💼 Margin mode: <b>{margin_label}</b>\n\n"
+        "Pilih yang ingin diubah:",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 Ganti Leverage",    callback_data="at_set_leverage")],
+            [InlineKeyboardButton("💼 Ganti Margin Mode", callback_data="at_set_margin")],
+            [InlineKeyboardButton("🔙 Kembali",           callback_data="at_dashboard")],
+        ])
+    )
+    return ConversationHandler.END
+
+
+async def callback_set_leverage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tampilkan pilihan leverage baru."""
+    query = update.callback_query
+    await query.answer()
+
+    session = get_autotrade_session(query.from_user.id)
+    current = int(session.get("leverage", 10)) if session else 10
+
+    await query.edit_message_text(
+        f"📊 <b>Ganti Leverage</b>\n\n"
+        f"Leverage saat ini: <b>{current}x</b>\n\n"
+        "Pilih leverage baru atau ketik angka (1–125):",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("5x",  callback_data="at_newlev_5"),
+                InlineKeyboardButton("10x", callback_data="at_newlev_10"),
+                InlineKeyboardButton("20x", callback_data="at_newlev_20"),
+            ],
+            [
+                InlineKeyboardButton("50x",  callback_data="at_newlev_50"),
+                InlineKeyboardButton("75x",  callback_data="at_newlev_75"),
+                InlineKeyboardButton("100x", callback_data="at_newlev_100"),
+            ],
+            [InlineKeyboardButton("🔙 Kembali", callback_data="at_settings")],
+        ])
+    )
+    return WAITING_NEW_LEVERAGE
+
+
+async def receive_new_leverage_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle input leverage manual dari teks."""
+    try:
+        leverage = int(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("❌ Masukkan angka. Contoh: <code>25</code>", parse_mode='HTML')
+        return WAITING_NEW_LEVERAGE
+
+    if leverage < 1 or leverage > 125:
+        await update.message.reply_text("❌ Leverage harus antara 1–125.")
+        return WAITING_NEW_LEVERAGE
+
+    await _apply_new_leverage(update.message, update.effective_user.id, leverage, context, from_callback=False)
+    return ConversationHandler.END
+
+
+async def callback_new_leverage_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle tombol leverage baru (at_newlev_XX)."""
+    query = update.callback_query
+    await query.answer()
+    leverage = int(query.data.split("_")[-1])
+    await _apply_new_leverage(query, query.from_user.id, leverage, context, from_callback=True)
+    return ConversationHandler.END
+
+
+async def _apply_new_leverage(msg_or_query, user_id: int, leverage: int,
+                               context, from_callback: bool):
+    """Simpan leverage baru ke Supabase + apply ke Bitunix jika engine aktif."""
+    from app.bitunix_autotrade_client import BitunixAutoTradeClient
+    import asyncio
+
+    keys    = get_user_api_keys(user_id)
+    session = get_autotrade_session(user_id)
+
+    # Update di Supabase
+    try:
+        _client().table("autotrade_sessions").update({
+            "leverage": leverage,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("telegram_id", user_id).execute()
+    except Exception as e:
+        pass
+
+    # Apply ke Bitunix untuk semua symbol aktif
+    apply_status = ""
+    if keys:
+        try:
+            client = BitunixAutoTradeClient(api_key=keys['api_key'], api_secret=keys['api_secret'])
+            symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
+            margin_mode = session.get("margin_mode", "cross") if session else "cross"
+            results = []
+            for sym in symbols:
+                r = await asyncio.to_thread(client.set_leverage, sym, leverage, margin_mode)
+                results.append("✅" if r.get("success") else "⚠️")
+            apply_status = f"\n\nApply ke Bitunix: {' '.join(results)}"
+        except Exception as e:
+            apply_status = f"\n\n⚠️ Gagal apply ke Bitunix: {e}"
+
+    # Restart engine dengan leverage baru jika sedang berjalan
+    from app.autotrade_engine import is_running, start_engine, stop_engine
+    engine_restarted = ""
+    if is_running(user_id) and keys and session:
+        stop_engine(user_id)
+        import asyncio
+        await asyncio.sleep(0.5)
+        bot = msg_or_query.get_bot() if from_callback else context.bot
+        start_engine(
+            bot=bot,
+            user_id=user_id,
+            api_key=keys['api_key'],
+            api_secret=keys['api_secret'],
+            amount=float(session.get("initial_deposit", 10)),
+            leverage=leverage,
+            notify_chat_id=user_id,
+        )
+        engine_restarted = "\n🔄 Engine direstart dengan leverage baru."
+
+    text = (
+        f"✅ <b>Leverage diubah ke {leverage}x</b>"
+        f"{apply_status}"
+        f"{engine_restarted}"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⚙️ Settings", callback_data="at_settings")],
+        [InlineKeyboardButton("🏠 Dashboard", callback_data="at_dashboard")],
+    ])
+
+    if from_callback:
+        await msg_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
+    else:
+        await msg_or_query.reply_text(text, parse_mode='HTML', reply_markup=keyboard)
+
+
+async def callback_set_margin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tampilkan pilihan margin mode."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    session = get_autotrade_session(user_id)
+    current = session.get("margin_mode", "cross") if session else "cross"
+
+    cross_check    = "✅ " if current == "cross"    else ""
+    isolated_check = "✅ " if current == "isolated" else ""
+
+    await query.edit_message_text(
+        f"💼 <b>Ganti Margin Mode</b>\n\n"
+        f"Mode saat ini: <b>{'Cross ♾️' if current == 'cross' else 'Isolated 🔒'}</b>\n\n"
+        "<b>Cross Margin</b> — semua balance dipakai sebagai margin, risiko likuidasi lebih kecil.\n"
+        "<b>Isolated Margin</b> — margin terbatas per posisi, loss maksimal = margin yang dialokasikan.\n\n"
+        "Pilih mode:",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"{cross_check}♾️ Cross Margin",    callback_data="at_margin_cross")],
+            [InlineKeyboardButton(f"{isolated_check}🔒 Isolated Margin", callback_data="at_margin_isolated")],
+            [InlineKeyboardButton("🔙 Kembali", callback_data="at_settings")],
+        ])
+    )
+    return ConversationHandler.END
+
+
+async def callback_margin_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Apply margin mode yang dipilih."""
+    query = update.callback_query
+    await query.answer()
+    user_id  = query.from_user.id
+    mode     = query.data.split("_")[-1]   # "cross" or "isolated"
+    mode_label = "Cross ♾️" if mode == "cross" else "Isolated 🔒"
+
+    keys    = get_user_api_keys(user_id)
+    session = get_autotrade_session(user_id)
+    leverage = int(session.get("leverage", 10)) if session else 10
+
+    # Simpan ke Supabase
+    try:
+        _client().table("autotrade_sessions").update({
+            "margin_mode": mode,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("telegram_id", user_id).execute()
+    except Exception:
+        pass
+
+    # Apply ke Bitunix
+    apply_status = ""
+    if keys:
+        try:
+            import asyncio
+            from app.bitunix_autotrade_client import BitunixAutoTradeClient
+            client  = BitunixAutoTradeClient(api_key=keys['api_key'], api_secret=keys['api_secret'])
+            symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
+            results = []
+            for sym in symbols:
+                r = await asyncio.to_thread(client.set_leverage, sym, leverage, mode)
+                results.append("✅" if r.get("success") else "⚠️")
+            apply_status = f"\n\nApply ke Bitunix: {' '.join(results)}"
+        except Exception as e:
+            apply_status = f"\n\n⚠️ Gagal apply: {e}"
+
+    await query.edit_message_text(
+        f"✅ <b>Margin mode diubah ke {mode_label}</b>"
+        f"{apply_status}",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚙️ Settings",  callback_data="at_settings")],
+            [InlineKeyboardButton("🏠 Dashboard", callback_data="at_dashboard")],
+        ])
+    )
+    return ConversationHandler.END
+
+
+# ------------------------------------------------------------------ #
 #  Register handlers                                                  #
 # ------------------------------------------------------------------ #
 
@@ -819,9 +1051,10 @@ def register_autotrade_handlers(application):
     conv = ConversationHandler(
         entry_points=[
             CommandHandler("autotrade", cmd_autotrade),
-            CallbackQueryHandler(callback_setup_key,   pattern="^at_setup_key$"),
-            CallbackQueryHandler(callback_change_key,  pattern="^at_change_key$"),
-            CallbackQueryHandler(callback_start_trade, pattern="^at_start_trade$"),
+            CallbackQueryHandler(callback_setup_key,      pattern="^at_setup_key$"),
+            CallbackQueryHandler(callback_change_key,     pattern="^at_change_key$"),
+            CallbackQueryHandler(callback_start_trade,    pattern="^at_start_trade$"),
+            CallbackQueryHandler(callback_set_leverage,   pattern="^at_set_leverage$"),
         ],
         states={
             WAITING_API_KEY: [
@@ -841,6 +1074,11 @@ def register_autotrade_handlers(application):
                 CallbackQueryHandler(callback_leverage_select, pattern="^at_lev_\\d+$"),
                 CallbackQueryHandler(callback_cancel, pattern="^at_cancel$"),
             ],
+            WAITING_NEW_LEVERAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_leverage_text),
+                CallbackQueryHandler(callback_new_leverage_select, pattern="^at_newlev_\\d+$"),
+                CallbackQueryHandler(callback_cancel, pattern="^at_cancel$"),
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cmd_cancel),
@@ -850,13 +1088,15 @@ def register_autotrade_handlers(application):
     )
 
     application.add_handler(conv)
-    application.add_handler(CallbackQueryHandler(callback_howto,          pattern="^at_howto$"))
-    application.add_handler(CallbackQueryHandler(callback_delete_key,     pattern="^at_delete_key$"))
-    application.add_handler(CallbackQueryHandler(callback_confirm_delete, pattern="^at_confirm_delete$"))
-    application.add_handler(CallbackQueryHandler(callback_dashboard,      pattern="^at_dashboard$"))
-    application.add_handler(CallbackQueryHandler(callback_confirm_trade,  pattern="^at_confirm_trade$"))
-    application.add_handler(CallbackQueryHandler(callback_stop_engine,    pattern="^at_stop_engine$"))
-
-    application.add_handler(CallbackQueryHandler(callback_restart_engine, pattern="^at_restart_engine$"))
+    application.add_handler(CallbackQueryHandler(callback_howto,              pattern="^at_howto$"))
+    application.add_handler(CallbackQueryHandler(callback_delete_key,         pattern="^at_delete_key$"))
+    application.add_handler(CallbackQueryHandler(callback_confirm_delete,     pattern="^at_confirm_delete$"))
+    application.add_handler(CallbackQueryHandler(callback_dashboard,          pattern="^at_dashboard$"))
+    application.add_handler(CallbackQueryHandler(callback_confirm_trade,      pattern="^at_confirm_trade$"))
+    application.add_handler(CallbackQueryHandler(callback_stop_engine,        pattern="^at_stop_engine$"))
+    application.add_handler(CallbackQueryHandler(callback_restart_engine,     pattern="^at_restart_engine$"))
+    application.add_handler(CallbackQueryHandler(callback_settings,           pattern="^at_settings$"))
+    application.add_handler(CallbackQueryHandler(callback_set_margin,         pattern="^at_set_margin$"))
+    application.add_handler(CallbackQueryHandler(callback_margin_select,      pattern="^at_margin_(cross|isolated)$"))
 
     print("✅ AutoTrade handlers registered (Supabase + AES-256-GCM + Engine)")
