@@ -405,22 +405,26 @@ class TelegramBot:
             await query.edit_message_text(f"⏳ Analyzing {symbol} {timeframe}...")
 
 
+    def _admin_main_keyboard(self):
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("👑 Add Premium",     callback_data="admin_add_premium"),
+             InlineKeyboardButton("❌ Remove Premium",  callback_data="admin_remove_premium")],
+            [InlineKeyboardButton("♾️ Set Lifetime",    callback_data="admin_set_lifetime"),
+             InlineKeyboardButton("💰 Add Credits",     callback_data="admin_add_credits")],
+            [InlineKeyboardButton("📊 User Stats",      callback_data="admin_user_stats"),
+             InlineKeyboardButton("📡 Signal On/Off",   callback_data="admin_signal_control")],
+            [InlineKeyboardButton("📢 Broadcast",       callback_data="admin_broadcast")],
+        ])
+
     async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         if user_id not in self.admin_ids:
             await update.message.reply_text("❌ Access denied.")
             return
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("👑 Add Premium", callback_data="admin_add_premium"),
-             InlineKeyboardButton("❌ Remove Premium", callback_data="admin_remove_premium")],
-            [InlineKeyboardButton("♾️ Set Lifetime", callback_data="admin_set_lifetime"),
-             InlineKeyboardButton("💰 Add Credits", callback_data="admin_add_credits")],
-            [InlineKeyboardButton("📊 User Stats", callback_data="admin_user_stats"),
-             InlineKeyboardButton("📡 Signal On/Off", callback_data="admin_signal_control")],
-        ])
         await update.message.reply_text(
-            f"🔧 *Admin Panel*\n\nWelcome, Admin {user_id}",
-            reply_markup=keyboard, parse_mode='MARKDOWN'
+            f"🔧 *Admin Panel*\n\nWelcome, Admin `{user_id}`",
+            reply_markup=self._admin_main_keyboard(),
+            parse_mode='MARKDOWN'
         )
 
     async def admin_button_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -432,53 +436,134 @@ class TelegramBot:
         await query.answer()
         data = query.data
 
-        if data == "admin_add_premium":
-            context.user_data['awaiting_input'] = 'admin_add_premium'
-            context.user_data['state_timestamp'] = __import__('time').time()
+        back_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_back")]])
+
+        # ── Navigation ──────────────────────────────────────────────
+        if data == "admin_back":
+            context.user_data.clear()
             await query.edit_message_text(
-                "👑 *Add Premium*\n\nFormat: `user_id days`\nContoh: `123456789 30`",
-                parse_mode='MARKDOWN',
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_cancel")]])
+                f"🔧 *Admin Panel*\n\nWelcome, Admin `{user_id}`",
+                reply_markup=self._admin_main_keyboard(),
+                parse_mode='MARKDOWN'
             )
-        elif data == "admin_remove_premium":
-            context.user_data['awaiting_input'] = 'admin_remove_premium'
-            context.user_data['state_timestamp'] = __import__('time').time()
-            await query.edit_message_text(
-                "❌ *Remove Premium*\n\nMasukkan user_id:",
-                parse_mode='MARKDOWN',
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_cancel")]])
-            )
-        elif data == "admin_set_lifetime":
-            context.user_data['awaiting_input'] = 'admin_set_lifetime'
-            context.user_data['state_timestamp'] = __import__('time').time()
-            await query.edit_message_text(
-                "♾️ *Set Lifetime*\n\nMasukkan user_id:",
-                parse_mode='MARKDOWN',
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_cancel")]])
-            )
-        elif data == "admin_add_credits":
-            context.user_data['awaiting_input'] = 'admin_add_credits_manual'
-            context.user_data['state_timestamp'] = __import__('time').time()
-            await query.edit_message_text(
-                "💰 *Add Credits*\n\nFormat: `user_id amount`\nContoh: `123456789 500`",
-                parse_mode='MARKDOWN',
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_cancel")]])
-            )
+
         elif data == "admin_cancel":
             context.user_data.clear()
-            await query.edit_message_text("✅ Cancelled.")
+            await query.edit_message_text(
+                "✅ Dibatalkan.",
+                reply_markup=self._admin_main_keyboard()
+            )
+
+        # ── Add Premium ──────────────────────────────────────────────
+        elif data == "admin_add_premium":
+            context.user_data['awaiting_input'] = 'admin_add_premium'
+            await query.edit_message_text(
+                "👑 *Add Premium*\n\nFormat: `user_id days`\nContoh: `123456789 30`",
+                parse_mode='MARKDOWN', reply_markup=back_kb
+            )
+
+        # ── Remove Premium ───────────────────────────────────────────
+        elif data == "admin_remove_premium":
+            context.user_data['awaiting_input'] = 'admin_remove_premium'
+            await query.edit_message_text(
+                "❌ *Remove Premium*\n\nMasukkan `user_id`:",
+                parse_mode='MARKDOWN', reply_markup=back_kb
+            )
+
+        # ── Set Lifetime ─────────────────────────────────────────────
+        elif data == "admin_set_lifetime":
+            context.user_data['awaiting_input'] = 'admin_set_lifetime'
+            await query.edit_message_text(
+                "♾️ *Set Lifetime*\n\nMasukkan `user_id`:",
+                parse_mode='MARKDOWN', reply_markup=back_kb
+            )
+
+        # ── Add Credits ──────────────────────────────────────────────
+        elif data == "admin_add_credits":
+            context.user_data['awaiting_input'] = 'admin_add_credits_manual'
+            await query.edit_message_text(
+                "💰 *Add Credits*\n\nFormat: `user_id amount`\nContoh: `123456789 500`",
+                parse_mode='MARKDOWN', reply_markup=back_kb
+            )
+
+        # ── User Stats ───────────────────────────────────────────────
         elif data == "admin_user_stats":
             try:
-                from services import get_database
-                db = get_database()
-                stats = db.get_stats() if hasattr(db, 'get_stats') else {}
+                from app.supabase_repo import _client
+                s = _client()
+                # Total users
+                total_res = s.table("users").select("telegram_id", count="exact").execute()
+                total = total_res.count or len(total_res.data or [])
+                # Premium users
+                prem_res = s.table("users").select("telegram_id", count="exact").eq("is_premium", True).execute()
+                premium = prem_res.count or len(prem_res.data or [])
+                # Lifetime users
+                life_res = s.table("users").select("telegram_id", count="exact").eq("is_lifetime", True).execute()
+                lifetime = life_res.count or len(life_res.data or [])
+                # New today
+                from datetime import datetime, timedelta
+                today = (datetime.utcnow() - timedelta(hours=0)).strftime('%Y-%m-%d')
+                new_res = s.table("users").select("telegram_id", count="exact").gte("created_at", today).execute()
+                new_today = new_res.count or len(new_res.data or [])
+
                 await query.edit_message_text(
-                    f"📊 *User Stats*\n\nTotal users: {stats.get('total_users', 'N/A')}\n"
-                    f"Premium: {stats.get('premium_users', 'N/A')}",
-                    parse_mode='MARKDOWN'
+                    f"📊 *User Statistics*\n\n"
+                    f"👥 Total Users: `{total}`\n"
+                    f"⭐ Premium: `{premium}`\n"
+                    f"♾️ Lifetime: `{lifetime}`\n"
+                    f"🆕 New Today: `{new_today}`\n"
+                    f"🆓 Free Users: `{total - premium}`",
+                    parse_mode='MARKDOWN',
+                    reply_markup=back_kb
                 )
             except Exception as e:
-                await query.edit_message_text(f"❌ Error: {e}")
+                await query.edit_message_text(f"❌ Error stats: {e}", reply_markup=back_kb)
+
+        # ── Signal On/Off ────────────────────────────────────────────
+        elif data == "admin_signal_control":
+            try:
+                from app.scheduler import get_signal_status, toggle_signal
+                status = get_signal_status()
+                status_text = "🟢 ON" if status else "🔴 OFF"
+                await query.edit_message_text(
+                    f"📡 *Auto Signal Control*\n\nStatus saat ini: {status_text}",
+                    parse_mode='MARKDOWN',
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🟢 Turn ON",  callback_data="admin_signal_on"),
+                         InlineKeyboardButton("🔴 Turn OFF", callback_data="admin_signal_off")],
+                        [InlineKeyboardButton("🔙 Back", callback_data="admin_back")]
+                    ])
+                )
+            except Exception as e:
+                await query.edit_message_text(f"❌ Error signal control: {e}", reply_markup=back_kb)
+
+        elif data == "admin_signal_on":
+            try:
+                from app.scheduler import toggle_signal
+                toggle_signal(True)
+                await query.edit_message_text("✅ Auto Signal *ON*", parse_mode='MARKDOWN', reply_markup=back_kb)
+            except Exception as e:
+                await query.edit_message_text(f"❌ Error: {e}", reply_markup=back_kb)
+
+        elif data == "admin_signal_off":
+            try:
+                from app.scheduler import toggle_signal
+                toggle_signal(False)
+                await query.edit_message_text("🔴 Auto Signal *OFF*", parse_mode='MARKDOWN', reply_markup=back_kb)
+            except Exception as e:
+                await query.edit_message_text(f"❌ Error: {e}", reply_markup=back_kb)
+
+        # ── Broadcast ────────────────────────────────────────────────
+        elif data == "admin_broadcast":
+            context.user_data['awaiting_input'] = 'admin_broadcast'
+            await query.edit_message_text(
+                "📢 *Broadcast ke Semua User*\n\n"
+                "Ketik pesan yang ingin dikirim ke semua user di Supabase.\n\n"
+                "⚠️ Pesan akan dikirim ke semua user yang pernah pakai bot.\n"
+                "Supports HTML formatting.",
+                parse_mode='MARKDOWN',
+                reply_markup=back_kb
+            )
 
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -509,10 +594,10 @@ class TelegramBot:
                     db.set_user_premium(uid, premium_until)
                     try:
                         from app.supabase_repo import set_premium_normalized
-                        set_premium_normalized(uid, 'premium', days)
+                        set_premium_normalized(uid, f'{days}d')
                     except Exception:
                         pass
-                    await update.message.reply_text(f"✅ Premium added!\nUser: {uid}\nDays: {days}")
+                    await update.message.reply_text(f"✅ Premium added!\nUser: `{uid}`\nDays: {days}", parse_mode='MARKDOWN')
                     try:
                         await context.bot.send_message(uid,
                             f"🎉 Anda mendapat Premium {days} hari!\nBerlaku hingga: {premium_until.strftime('%Y-%m-%d')}")
@@ -527,7 +612,11 @@ class TelegramBot:
                         revoke_premium(uid)
                     except Exception:
                         pass
-                    await update.message.reply_text(f"✅ Premium removed for user {uid}")
+                    await update.message.reply_text(f"✅ Premium removed for user `{uid}`", parse_mode='MARKDOWN')
+                    try:
+                        await context.bot.send_message(uid, "ℹ️ Status premium Anda telah dicabut.")
+                    except Exception:
+                        pass
 
                 elif awaiting == 'admin_set_lifetime':
                     uid = int(parts[0])
@@ -537,7 +626,7 @@ class TelegramBot:
                         set_premium_normalized(uid, 'lifetime')
                     except Exception:
                         pass
-                    await update.message.reply_text(f"✅ Lifetime set for user {uid}")
+                    await update.message.reply_text(f"✅ Lifetime set for user `{uid}`", parse_mode='MARKDOWN')
                     try:
                         await context.bot.send_message(uid, "🎉 Anda mendapat Lifetime Premium!")
                     except Exception:
@@ -547,9 +636,70 @@ class TelegramBot:
                     if len(parts) < 2:
                         await update.message.reply_text("Format: `user_id amount`", parse_mode='MARKDOWN')
                         return
-                    uid, credits = int(parts[0]), int(parts[1])
-                    db.add_user_credits(uid, credits)
-                    await update.message.reply_text(f"✅ Added {credits} credits to user {uid}")
+                    uid, credits_amt = int(parts[0]), int(parts[1])
+                    db.add_user_credits(uid, credits_amt)
+                    # Also update Supabase
+                    try:
+                        from app.supabase_repo import _client
+                        s = _client()
+                        # Get current credits first
+                        res = s.table("users").select("credits").eq("telegram_id", uid).execute()
+                        current = int(res.data[0].get('credits', 0)) if res.data else 0
+                        s.table("users").update({"credits": current + credits_amt}).eq("telegram_id", uid).execute()
+                    except Exception as sup_e:
+                        print(f"Supabase credits update error: {sup_e}")
+                    await update.message.reply_text(f"✅ Added `{credits_amt}` credits to user `{uid}`", parse_mode='MARKDOWN')
+                    try:
+                        await context.bot.send_message(uid, f"💰 {credits_amt} credits telah ditambahkan ke akun Anda!")
+                    except Exception:
+                        pass
+
+                elif awaiting == 'admin_broadcast':
+                    # Broadcast to all users in Supabase
+                    broadcast_text = text  # raw text, supports HTML
+                    await update.message.reply_text("⏳ Memulai broadcast...")
+                    try:
+                        from app.supabase_repo import _client
+                        s = _client()
+                        # Fetch all telegram_ids in batches
+                        all_ids = []
+                        page = 0
+                        page_size = 1000
+                        while True:
+                            res = s.table("users").select("telegram_id").range(page * page_size, (page + 1) * page_size - 1).execute()
+                            if not res.data:
+                                break
+                            all_ids.extend([r['telegram_id'] for r in res.data])
+                            if len(res.data) < page_size:
+                                break
+                            page += 1
+
+                        sent = 0
+                        failed = 0
+                        for tid in all_ids:
+                            try:
+                                await context.bot.send_message(
+                                    chat_id=tid,
+                                    text=broadcast_text,
+                                    parse_mode='HTML'
+                                )
+                                sent += 1
+                            except Exception:
+                                failed += 1
+                            # Small delay to avoid flood
+                            if sent % 30 == 0:
+                                import asyncio
+                                await asyncio.sleep(1)
+
+                        await update.message.reply_text(
+                            f"📢 *Broadcast selesai!*\n\n"
+                            f"✅ Terkirim: `{sent}`\n"
+                            f"❌ Gagal: `{failed}`\n"
+                            f"👥 Total: `{len(all_ids)}`",
+                            parse_mode='MARKDOWN'
+                        )
+                    except Exception as bc_e:
+                        await update.message.reply_text(f"❌ Broadcast error: {bc_e}")
 
             except Exception as e:
                 await update.message.reply_text(f"❌ Error: {e}")

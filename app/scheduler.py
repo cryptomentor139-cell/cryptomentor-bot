@@ -16,6 +16,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Global signal toggle state
+_signal_enabled = True
+
+def get_signal_status() -> bool:
+    return _signal_enabled
+
+def toggle_signal(enabled: bool):
+    global _signal_enabled
+    _signal_enabled = enabled
+    logger.info(f"Auto signal toggled: {'ON' if enabled else 'OFF'}")
 
 
 class TaskScheduler:
