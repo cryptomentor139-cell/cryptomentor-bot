@@ -90,6 +90,7 @@ def save_autotrade_session(telegram_id: int, amount: float, leverage: int = 10):
         "current_balance": amount,
         "total_profit": 0,
         "status": "active",
+        "leverage": leverage,
         "started_at": datetime.utcnow().isoformat(),
         "updated_at": datetime.utcnow().isoformat(),
     }
@@ -117,12 +118,20 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if keys and is_active:
         from app.autotrade_engine import is_running as engine_running
-        engine_status = "🟢 Engine berjalan" if engine_running(user_id) else "🟡 Engine tidak aktif (restart bot?)"
+        engine_on = engine_running(user_id)
+        engine_status = "🟢 Engine berjalan" if engine_on else "🟡 Engine tidak aktif"
+
+        engine_btn = (
+            [InlineKeyboardButton("🛑 Stop AutoTrade", callback_data="at_stop_engine")]
+            if engine_on else
+            [InlineKeyboardButton("🔄 Restart Engine", callback_data="at_restart_engine")]
+        )
+
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📊 Status Portfolio", callback_data="at_status")],
             [InlineKeyboardButton("📈 Trade History",    callback_data="at_history")],
             [InlineKeyboardButton("💸 Withdraw",         callback_data="at_withdraw")],
-            [InlineKeyboardButton("🛑 Stop AutoTrade",   callback_data="at_stop_engine")],
+            engine_btn,
             [InlineKeyboardButton("🔑 Ganti API Key",    callback_data="at_change_key")],
         ])
         await update.message.reply_text(
@@ -737,6 +746,53 @@ async def callback_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 
+async def callback_restart_engine(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Restart autotrade engine untuk user ini tanpa perlu restart bot."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    keys = get_user_api_keys(user_id)
+    session = get_autotrade_session(user_id)
+
+    if not keys or not session or session.get("status") != "active":
+        await query.edit_message_text(
+            "❌ Tidak ada sesi aktif. Gunakan /autotrade untuk mulai.",
+            parse_mode='HTML'
+        )
+        return ConversationHandler.END
+
+    from app.autotrade_engine import start_engine, is_running
+    if is_running(user_id):
+        await query.answer("✅ Engine sudah berjalan!", show_alert=True)
+        return ConversationHandler.END
+
+    amount = float(session.get("initial_deposit", 10))
+    leverage = int(session.get("leverage", 10))
+
+    start_engine(
+        bot=query.get_bot(),
+        user_id=user_id,
+        api_key=keys["api_key"],
+        api_secret=keys["api_secret"],
+        amount=amount,
+        leverage=leverage,
+        notify_chat_id=user_id,
+    )
+
+    await query.edit_message_text(
+        "✅ <b>Engine berhasil direstart!</b>\n\n"
+        f"💵 Modal: {amount} USDT | ⚙️ Leverage: {leverage}x\n\n"
+        "Bot sedang memantau pasar. Gunakan /autotrade untuk cek status.",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 Dashboard", callback_data="at_dashboard")],
+            [InlineKeyboardButton("🛑 Stop AutoTrade", callback_data="at_stop_engine")],
+        ])
+    )
+    return ConversationHandler.END
+
+
 # ------------------------------------------------------------------ #
 #  Register handlers                                                  #
 # ------------------------------------------------------------------ #
@@ -782,5 +838,7 @@ def register_autotrade_handlers(application):
     application.add_handler(CallbackQueryHandler(callback_dashboard,      pattern="^at_dashboard$"))
     application.add_handler(CallbackQueryHandler(callback_confirm_trade,  pattern="^at_confirm_trade$"))
     application.add_handler(CallbackQueryHandler(callback_stop_engine,    pattern="^at_stop_engine$"))
+
+    application.add_handler(CallbackQueryHandler(callback_restart_engine, pattern="^at_restart_engine$"))
 
     print("✅ AutoTrade handlers registered (Supabase + AES-256-GCM + Engine)")

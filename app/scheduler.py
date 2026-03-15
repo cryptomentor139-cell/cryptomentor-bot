@@ -196,3 +196,53 @@ class TaskScheduler:
 
 task_scheduler = TaskScheduler()
 
+
+def start_scheduler(application):
+    """Start scheduler dan auto-restart autotrade engines."""
+    import asyncio
+
+    async def _start():
+        # Auto-restart autotrade engines untuk semua active sessions
+        try:
+            from app.supabase_repo import _client
+            from app.handlers_autotrade import get_user_api_keys
+            from app.autotrade_engine import start_engine, is_running
+
+            res = _client().table("autotrade_sessions").select("*").eq("status", "active").execute()
+            sessions = res.data or []
+            logger.info(f"[AutoTrade] Found {len(sessions)} active sessions to restore")
+
+            for session in sessions:
+                user_id = session.get("telegram_id")
+                if not user_id:
+                    continue
+                if is_running(user_id):
+                    continue
+                keys = get_user_api_keys(user_id)
+                if not keys:
+                    logger.warning(f"[AutoTrade] No API keys for user {user_id}, skipping")
+                    continue
+                amount = float(session.get("initial_deposit", 10))
+                leverage = int(session.get("leverage", 10))
+                try:
+                    start_engine(
+                        bot=application.bot,
+                        user_id=user_id,
+                        api_key=keys["api_key"],
+                        api_secret=keys["api_secret"],
+                        amount=amount,
+                        leverage=leverage,
+                        notify_chat_id=user_id,
+                    )
+                    logger.info(f"[AutoTrade] Engine restored for user {user_id}")
+                except Exception as e:
+                    logger.error(f"[AutoTrade] Failed to restore engine for user {user_id}: {e}")
+        except Exception as e:
+            logger.error(f"[AutoTrade] Auto-restore failed: {e}")
+
+        # Start scheduler tasks
+        task_scheduler.running = True
+        logger.info("[ROCKET] Scheduler started")
+
+    asyncio.create_task(_start())
+
