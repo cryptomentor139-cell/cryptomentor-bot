@@ -560,18 +560,133 @@ class TelegramBot:
 
         # Handle symbol input
         if user_data.get('awaiting_manual_symbol'):
-            symbol = text.upper()
-            if not symbol.endswith('USDT'):
-                symbol += 'USDT'
+            symbol = text.upper().strip()
+            # Strip USDT suffix if user typed it, then re-add cleanly
+            base = symbol.replace('USDT', '').replace('/', '').strip()
+            if not base:
+                await update.message.reply_text("❌ Symbol tidak valid. Contoh: BTC, ETH, SOL")
+                return
+            symbol = base + 'USDT'
             user_data['awaiting_manual_symbol'] = False
             user_data['symbol'] = symbol
             action = user_data.get('current_action', '')
+
             if action == 'price':
                 context.args = [symbol]
                 await self.price_command(update, context)
-            elif action in ('analyze', 'futures'):
-                context.args = [symbol]
-                await self.analyze_command(update, context)
+
+            elif action == 'analyze':
+                # Spot analysis - run directly via menu handler
+                from menu_system import MenuBuilder
+                msg = await update.message.reply_text(
+                    f"⏳ <b>Analyzing {base}...</b>\n\nFetching Binance data...",
+                    parse_mode='HTML'
+                )
+                # Reuse the execute_analyze_command logic via a fake query-like object
+                import asyncio
+                from smc_analyzer import SMCAnalyzer
+                from app.credits_guard import require_credits
+
+                user_id = update.effective_user.id
+                chat_id = update.effective_chat.id
+                message_id = msg.message_id
+
+                ok, remain, credit_msg = require_credits(user_id, 20)
+                if not ok:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id, message_id=message_id,
+                        text=f"❌ {credit_msg}\n\nUpgrade ke Premium untuk akses unlimited!"
+                    )
+                    return
+
+                async def run_spot():
+                    try:
+                        analyzer = SMCAnalyzer()
+                        result = await asyncio.to_thread(analyzer.analyze, symbol, '1h', 200)
+                        if 'error' in result:
+                            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                text=f"❌ Error: {result['error']}", parse_mode='HTML')
+                            return
+                        current_price = result.get('current_price', 0)
+                        order_blocks = result.get('order_blocks', [])
+                        structure = result.get('structure')
+                        ema_21 = result.get('ema_21', 0)
+
+                        def fmt_price(p):
+                            if p >= 1000: return f"${p:,.2f}"
+                            elif p >= 1: return f"${p:,.4f}"
+                            elif p >= 0.0001: return f"${p:.6f}"
+                            else: return f"${p:.8f}"
+
+                        trend = structure.trend if structure else 'ranging'
+                        bullish_obs = [ob for ob in order_blocks if ob.type == 'bullish']
+                        bearish_obs = [ob for ob in order_blocks if ob.type == 'bearish']
+
+                        if trend == 'uptrend' or (bullish_obs and not bearish_obs):
+                            sentiment, sentiment_emoji = "BULLISH", "🟢"
+                        elif trend == 'downtrend' or (bearish_obs and not bullish_obs):
+                            sentiment, sentiment_emoji = "BEARISH", "🔴"
+                        elif bullish_obs and bearish_obs:
+                            best_bull = max(bullish_obs, key=lambda x: x.strength)
+                            best_bear = max(bearish_obs, key=lambda x: x.strength)
+                            sentiment, sentiment_emoji = ("BULLISH", "🟢") if best_bull.strength > best_bear.strength else ("BEARISH", "🔴")
+                        else:
+                            sentiment, sentiment_emoji = "SIDEWAYS", "🟡"
+
+                        best_ob = order_blocks[0] if order_blocks else None
+                        confidence = int(best_ob.strength) if best_ob else 55
+
+                        response = (
+                            f"📊 <b>SPOT ANALYSIS: {base} (1H)</b>\n\n"
+                            f"💰 Current Price: {fmt_price(current_price)}\n"
+                            f"{sentiment_emoji} Market Sentiment: <b>{sentiment}</b>\n"
+                            f"✅ Confidence: {confidence}%\n\n"
+                        )
+                        if sentiment == "BULLISH" and bullish_obs:
+                            response += "🟢 <b>BUY ZONES (SMC Order Blocks):</b>\n"
+                            for i, ob in enumerate(bullish_obs[:3], 1):
+                                zw = ob.high - ob.low
+                                response += (f"\n<b>Zone {i}</b>\n📍 Entry: {fmt_price(ob.low)} – {fmt_price(ob.high)}\n"
+                                             f"🎯 TP1: {fmt_price(ob.high + zw*1.5)}\n🎯 TP2: {fmt_price(ob.high + zw*3)}\n"
+                                             f"🛑 SL: {fmt_price(ob.low - zw*0.5)}\n💪 Strength: {int(ob.strength)}%\n")
+                        elif sentiment == "BEARISH" and bearish_obs:
+                            response += "🔴 <b>SHORT ZONES (SMC Order Blocks):</b>\n"
+                            for i, ob in enumerate(bearish_obs[:3], 1):
+                                zw = ob.high - ob.low
+                                response += (f"\n<b>Zone {i}</b>\n📍 Entry: {fmt_price(ob.low)} – {fmt_price(ob.high)}\n"
+                                             f"🎯 TP1: {fmt_price(ob.low - zw*1.5)}\n🎯 TP2: {fmt_price(ob.low - zw*3)}\n"
+                                             f"🛑 SL: {fmt_price(ob.high + zw*0.5)}\n💪 Strength: {int(ob.strength)}%\n")
+                        else:
+                            response += "⏳ No clear Order Block — wait for breakout\n"
+
+                        if ema_21:
+                            ema_signal = "above EMA 21 (bullish bias)" if current_price > ema_21 else "below EMA 21 (bearish bias)"
+                            response += f"\n📋 <b>Context:</b>\n• Price {ema_signal}\n• EMA 21: {fmt_price(ema_21)}\n"
+
+                        response += ("\n⚠️ <b>RISK MANAGEMENT:</b>\n• Use LIMIT orders at zone levels\n"
+                                     "• Risk max 1-2% per trade\n• Always set Stop Loss\n"
+                                     "<i>📌 Spot only — entry range, not market buy</i>")
+
+                        await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                            text=response, parse_mode='HTML')
+                    except Exception as e:
+                        print(f"❌ Spot analysis error (manual): {e}")
+                        try:
+                            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                text=f"❌ Error: {str(e)[:100]}\n\nPlease try again", parse_mode=None)
+                        except:
+                            pass
+
+                asyncio.create_task(run_spot())
+
+            elif action == 'futures':
+                # Show timeframe selection keyboard
+                from menu_system import MenuBuilder
+                await update.message.reply_text(
+                    f"📊 <b>Futures Analysis: {base}</b>\n\nSelect timeframe:",
+                    reply_markup=MenuBuilder.build_timeframe_selection(base),
+                    parse_mode='HTML'
+                )
             return
 
         # Handle amount input

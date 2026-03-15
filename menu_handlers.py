@@ -818,8 +818,9 @@ Type the cryptocurrency symbol you want to {action_text}.
 
 Just type the symbol in your next message!"""
 
+        back_callback = TRADING_ANALYSIS if current_action in ('analyze', 'futures') else MAIN_MENU
         back_button = InlineKeyboardMarkup([
-            [InlineKeyboardButton(" Cancel", callback_data=MAIN_MENU)]
+            [InlineKeyboardButton("🔙 Cancel", callback_data=back_callback)]
         ])
 
         await query.edit_message_text(
