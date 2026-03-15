@@ -130,7 +130,6 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📊 Status Portfolio", callback_data="at_status")],
             [InlineKeyboardButton("📈 Trade History",    callback_data="at_history")],
-            [InlineKeyboardButton("💸 Withdraw",         callback_data="at_withdraw")],
             engine_btn,
             [InlineKeyboardButton("🔑 Ganti API Key",    callback_data="at_change_key")],
         ])

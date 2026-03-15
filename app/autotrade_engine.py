@@ -29,9 +29,19 @@ def start_engine(bot, user_id: int, api_key: str, api_secret: str,
                  amount: float, leverage: int, notify_chat_id: int):
     """Start per-user autotrade loop as background asyncio task."""
     stop_engine(user_id)  # cancel existing if any
+
+    def _task_done_callback(task: asyncio.Task):
+        if task.cancelled():
+            logger.info(f"AutoTrade task cancelled for user {user_id}")
+        elif task.exception():
+            logger.error(f"AutoTrade task CRASHED for user {user_id}: {task.exception()}", exc_info=task.exception())
+        else:
+            logger.info(f"AutoTrade task completed normally for user {user_id}")
+
     task = asyncio.create_task(
         _trade_loop(bot, user_id, api_key, api_secret, amount, leverage, notify_chat_id)
     )
+    task.add_done_callback(_task_done_callback)
     _running_tasks[user_id] = task
     logger.info(f"AutoTrade started for user {user_id}, amount={amount}, leverage={leverage}x")
 
@@ -39,6 +49,12 @@ def start_engine(bot, user_id: int, api_key: str, api_secret: str,
 async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                       amount: float, leverage: int, notify_chat_id: int):
     """Main trading loop — runs until cancelled."""
+    import sys, os
+    # Pastikan root Bismillah ada dalam path supaya import crypto_api, smc_analyzer etc berjaya
+    bismillah_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if bismillah_root not in sys.path:
+        sys.path.insert(0, bismillah_root)
+
     from app.bitunix_autotrade_client import BitunixAutoTradeClient
     from app.autosignal_fast import compute_signal_fast
     from app.supabase_repo import _client
@@ -48,7 +64,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     # Symbols to scan (top liquid futures)
     SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
     SCAN_INTERVAL = 60   # seconds between scans
-    MIN_CONFIDENCE = 75  # only trade high-confidence signals
+    MIN_CONFIDENCE = 65  # lowered from 75 to get more signals
 
     await bot.send_message(
         chat_id=notify_chat_id,
