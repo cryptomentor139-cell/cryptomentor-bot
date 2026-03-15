@@ -82,6 +82,10 @@ class BitunixAutoTradeClient:
 
         # Cek apakah ada proxy configured (untuk bypass Railway IP block)
         proxy_url = os.getenv('PROXY_URL')  # format: http://user:pass@host:port
+        if proxy_url:
+            print(f"[Bitunix] Using proxy: {proxy_url[:30]}...")
+        else:
+            print(f"[Bitunix] No proxy configured (PROXY_URL not set)")
 
         try:
             from curl_cffi import requests as cffi_requests
