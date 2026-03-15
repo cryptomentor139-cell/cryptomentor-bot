@@ -15,11 +15,13 @@ from datetime import datetime
 
 class BitunixAutoTradeClient:
     def __init__(self, api_key: str = None, api_secret: str = None):
-        self.api_key = api_key or os.getenv('BITUNIX_API_KEY')
-        self.api_secret = api_secret or os.getenv('BITUNIX_API_SECRET')
-        # Kalau ada Cloudflare Worker gateway, pakai itu. Kalau tidak, langsung ke Bitunix.
-        gateway = os.getenv('BITUNIX_GATEWAY_URL', '').rstrip('/')
-        self.base_url = gateway if gateway else os.getenv('BITUNIX_BASE_URL', 'https://fapi.bitunix.com')
+        # Jika api_key/api_secret diberikan secara eksplisit, SELALU pakai itu.
+        # Fallback ke env var HANYA jika tidak ada sama sekali (untuk testing CLI).
+        self.api_key = api_key if api_key else os.getenv('BITUNIX_API_KEY')
+        self.api_secret = api_secret if api_secret else os.getenv('BITUNIX_API_SECRET')
+        # Selalu langsung ke Bitunix — gateway Cloudflare Worker tidak reliable
+        # karena *.workers.dev bisa diblokir atau Preview URL disabled
+        self.base_url = os.getenv('BITUNIX_BASE_URL', 'https://fapi.bitunix.com')
 
         if not self.api_key or not self.api_secret:
             print("⚠️ Bitunix API credentials not configured")
@@ -65,7 +67,7 @@ class BitunixAutoTradeClient:
 
     def _request(self, method: str, endpoint: str,
                  params: Dict = None, body: Dict = None,
-                 signed: bool = False) -> Dict:
+                 signed: bool = False, _retry: int = 0) -> Dict:
         if signed and (not self.api_key or not self.api_secret):
             return {'success': False, 'error': 'API credentials not configured'}
 
@@ -82,44 +84,48 @@ class BitunixAutoTradeClient:
         else:
             headers = {"Content-Type": "application/json"}
 
-        # Tambah gateway secret header kalau ada
-        gateway_secret = os.getenv('BITUNIX_GATEWAY_SECRET', '')
-        if gateway_secret:
-            headers['x-gateway-secret'] = gateway_secret
-
-        # Cek apakah ada proxy configured (untuk bypass Railway IP block)
-        proxy_url = os.getenv('PROXY_URL')  # format: http://user:pass@host:port
-        gateway = os.getenv('BITUNIX_GATEWAY_URL', '')
-        if gateway:
-            print(f"[Bitunix] Using Cloudflare Worker gateway: {gateway[:40]}")
-        elif proxy_url:
+        # Proxy untuk bypass Railway IP block (jika dikonfigurasi)
+        proxy_url = os.getenv('PROXY_URL')
+        if proxy_url:
             print(f"[Bitunix] Using proxy: {proxy_url[:30]}...")
         else:
-            print(f"[Bitunix] No proxy configured (PROXY_URL not set)")
+            print(f"[Bitunix] Direct connection to Bitunix")
 
         try:
-            from curl_cffi import requests as cffi_requests
-            kwargs = dict(params=params, headers=headers, timeout=15, impersonate="chrome120")
+            # Gunakan requests biasa dengan proxy — lebih reliable daripada curl_cffi untuk proxy HTTPS
             if proxy_url:
-                kwargs['proxies'] = {'http': proxy_url, 'https': proxy_url}
-            if method.upper() == 'GET':
-                r = cffi_requests.get(url, **kwargs)
+                kwargs = dict(params=params, headers=headers, timeout=15,
+                              proxies={'http': proxy_url, 'https': proxy_url})
+                if method.upper() == 'GET':
+                    r = requests.get(url, **kwargs)
+                else:
+                    r = requests.post(url, data=body_str, **kwargs)
             else:
-                r = cffi_requests.post(url, data=body_str, **kwargs)
-        except ImportError:
-            print("⚠️ curl_cffi not available, falling back to requests")
-            kwargs = dict(params=params, headers=headers, timeout=15)
-            if proxy_url:
-                kwargs['proxies'] = {'http': proxy_url, 'https': proxy_url}
-            if method.upper() == 'GET':
-                r = requests.get(url, **kwargs)
-            else:
-                r = requests.post(url, data=body_str, **kwargs)
+                # Tanpa proxy: pakai curl_cffi untuk browser fingerprint
+                try:
+                    from curl_cffi import requests as cffi_requests
+                    kwargs = dict(params=params, headers=headers, timeout=15, impersonate="chrome120")
+                    if method.upper() == 'GET':
+                        r = cffi_requests.get(url, **kwargs)
+                    else:
+                        r = cffi_requests.post(url, data=body_str, **kwargs)
+                except ImportError:
+                    kwargs = dict(params=params, headers=headers, timeout=15)
+                    if method.upper() == 'GET':
+                        r = requests.get(url, **kwargs)
+                    else:
+                        r = requests.post(url, data=body_str, **kwargs)
 
         try:
             if r.status_code == 403:
-                print(f"[Bitunix] 403 Forbidden: {r.text[:200]}")
+                body_text = r.text[:500]
+                print(f"[Bitunix] 403 Forbidden: {body_text[:200]}")
                 return {'success': False, 'error': 'HTTP 403: IP tidak diizinkan. Buat API Key baru tanpa IP restriction di Bitunix.'}
+            if r.status_code in (500, 502, 503, 504) and _retry < 2:
+                # Server error — retry sekali lagi dengan delay
+                import time as _time
+                _time.sleep(3 * (_retry + 1))
+                return self._request(method, endpoint, params, body, signed, _retry + 1)
             if r.status_code == 200:
                 data = r.json()
                 code = data.get('code')
@@ -127,8 +133,17 @@ class BitunixAutoTradeClient:
                 if code == 0:
                     return {'success': True, 'data': data.get('data')}
                 elif code == 10003:
+                    # TOKEN_INVALID — bisa transient (timestamp drift), retry sekali dengan nonce baru
+                    if _retry < 1 and signed:
+                        import time as _time
+                        _time.sleep(2)
+                        return self._request(method, endpoint, params, body, signed, _retry + 1)
                     return {'success': False, 'error': 'TOKEN_INVALID: API Key/Secret salah atau IP server tidak diizinkan di Bitunix.'}
                 elif code == 10007:
+                    if _retry < 1 and signed:
+                        import time as _time
+                        _time.sleep(2)
+                        return self._request(method, endpoint, params, body, signed, _retry + 1)
                     return {'success': False, 'error': 'SIGNATURE_ERROR: Signature tidak valid.'}
                 else:
                     return {'success': False, 'error': f"API error {code}: {data.get('msg')}"}

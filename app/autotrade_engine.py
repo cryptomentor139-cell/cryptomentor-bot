@@ -513,24 +513,62 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             if not order_result.get('success'):
                 err = order_result.get('error', 'Unknown')
                 logger.error(f"[Engine:{user_id}] Order FAILED: {err}")
-                if 'TOKEN_INVALID' in str(err) or '403' in str(err):
+
+                # Cek apakah ini benar-benar API key invalid (bukan transient error)
+                is_auth_error = 'TOKEN_INVALID' in str(err) or 'SIGNATURE_ERROR' in str(err)
+                is_ip_blocked = 'HTTP 403' in str(err) or ('403' in str(err) and 'IP' in str(err))
+
+                if is_auth_error or is_ip_blocked:
+                    # Retry sekali dulu sebelum menyerah — bisa jadi timestamp drift
+                    logger.warning(f"[Engine:{user_id}] Auth error, retrying once in 10s: {err}")
+                    await asyncio.sleep(10)
+                    retry_result = await asyncio.to_thread(
+                        client.place_order_with_tpsl, symbol,
+                        "BUY" if side == "LONG" else "SELL",
+                        qty, tp1, sl
+                    )
+                    if retry_result.get('success'):
+                        order_result = retry_result
+                        # Lanjut ke bawah dengan order sukses
+                    else:
+                        retry_err = retry_result.get('error', '')
+                        # Hanya stop jika retry juga gagal dengan auth error
+                        if 'TOKEN_INVALID' in str(retry_err) or 'HTTP 403' in str(retry_err):
+                            await bot.send_message(
+                                chat_id=notify_chat_id,
+                                text=(
+                                    "❌ <b>AutoTrade dihentikan — API Key bermasalah</b>\n\n"
+                                    "Bitunix menolak request setelah 2x percobaan.\n"
+                                    "Kemungkinan penyebab:\n"
+                                    "• API Key punya IP restriction — hapus dan buat baru tanpa IP\n"
+                                    "• API Key sudah expired atau dihapus\n\n"
+                                    "Setup ulang: /autotrade → Ganti API Key"
+                                ),
+                                parse_mode='HTML'
+                            )
+                            return
+                        else:
+                            # Error lain setelah retry — lanjut saja
+                            await bot.send_message(
+                                chat_id=notify_chat_id,
+                                text=f"⚠️ <b>Order gagal (2x):</b> {retry_err}\n\nBot tetap berjalan.",
+                                parse_mode='HTML'
+                            )
+                            await asyncio.sleep(cfg["scan_interval"])
+                            continue
+                else:
                     await bot.send_message(
                         chat_id=notify_chat_id,
-                        text=(
-                            "❌ <b>AutoTrade dihentikan — API Key bermasalah</b>\n\n"
-                            "Bitunix menolak request. Buat API Key baru tanpa IP restriction.\n"
-                            "Setup ulang: /autotrade → Ganti API Key"
-                        ),
+                        text=f"⚠️ <b>Order gagal:</b> {err}\n\nBot tetap berjalan.",
                         parse_mode='HTML'
                     )
-                    return
-                await bot.send_message(
-                    chat_id=notify_chat_id,
-                    text=f"⚠️ <b>Order gagal:</b> {err}\n\nBot tetap berjalan.",
-                    parse_mode='HTML'
-                )
-                await asyncio.sleep(cfg["scan_interval"])
-                continue
+                    await asyncio.sleep(cfg["scan_interval"])
+                    continue
+
+                # Jika retry sukses, pastikan order_result sudah diupdate di atas
+                if not order_result.get('success'):
+                    await asyncio.sleep(cfg["scan_interval"])
+                    continue
 
             order_id = order_result.get('order_id', '-')
             trades_today += 1
@@ -600,5 +638,12 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             return
 
         except Exception as e:
+            err_str = str(e)
             logger.error(f"[Engine:{user_id}] Loop error: {e}", exc_info=True)
-            await asyncio.sleep(30)
+            # Jangan stop engine karena network/timeout error — hanya retry
+            if any(x in err_str for x in ['TOKEN_INVALID', 'SIGNATURE_ERROR']):
+                # Auth error di luar order placement — kemungkinan transient, retry 3x
+                logger.warning(f"[Engine:{user_id}] Auth error in loop, will retry: {err_str}")
+                await asyncio.sleep(60)  # tunggu lebih lama sebelum retry
+            else:
+                await asyncio.sleep(30)
