@@ -21,6 +21,7 @@ def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
     import requests
 
     symbol = base_symbol.upper() + "USDT"
+    logger.info(f"[Signal] Computing for {symbol}...")
 
     try:
         # Ambil klines dari Binance (public, no auth needed)
@@ -31,6 +32,7 @@ def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
         )
         klines = r.json()
         if not isinstance(klines, list) or len(klines) < 20:
+            logger.warning(f"[Signal] {symbol} klines invalid: {type(klines)} len={len(klines) if isinstance(klines, list) else 'N/A'}")
             return None
 
         closes = [float(k[4]) for k in klines]
@@ -194,6 +196,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
     SCAN_INTERVAL = 60
     MIN_CONFIDENCE = 0  # TEST MODE: accept any signal
+    logger.info(f"[Engine:{user_id}] ENGINE v2 STARTED — EMA+RSI signal, MIN_CONF={MIN_CONFIDENCE}")
 
     # Qty precision per symbol (Bitunix minimum & decimal places)
     QTY_PRECISION = {
