@@ -96,25 +96,16 @@ class BitunixAutoTradeClient:
             if proxy_url:
                 kwargs = dict(params=params, headers=headers, timeout=15,
                               proxies={'http': proxy_url, 'https': proxy_url})
-                if method.upper() == 'GET':
-                    r = requests.get(url, **kwargs)
-                else:
-                    r = requests.post(url, data=body_str, **kwargs)
             else:
-                # Tanpa proxy: pakai curl_cffi untuk browser fingerprint
-                try:
-                    from curl_cffi import requests as cffi_requests
-                    kwargs = dict(params=params, headers=headers, timeout=15, impersonate="chrome120")
-                    if method.upper() == 'GET':
-                        r = cffi_requests.get(url, **kwargs)
-                    else:
-                        r = cffi_requests.post(url, data=body_str, **kwargs)
-                except ImportError:
-                    kwargs = dict(params=params, headers=headers, timeout=15)
-                    if method.upper() == 'GET':
-                        r = requests.get(url, **kwargs)
-                    else:
-                        r = requests.post(url, data=body_str, **kwargs)
+                kwargs = dict(params=params, headers=headers, timeout=15)
+
+            if method.upper() == 'GET':
+                r = requests.get(url, **kwargs)
+            else:
+                r = requests.post(url, data=body_str, **kwargs)
+
+        except Exception as e:
+            return {'success': False, 'error': f'Request failed: {str(e)}'}
 
         try:
             if r.status_code == 403:
