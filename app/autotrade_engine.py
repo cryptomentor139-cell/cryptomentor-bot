@@ -15,30 +15,29 @@ _running_tasks: Dict[int, asyncio.Task] = {}
 
 def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
     """
-    Simple but reliable signal using EMA crossover + RSI + momentum.
-    Fallback ke compute_signal_fast kalau available.
+    Signal using EMA crossover + RSI dari CryptoCompare (reliable alternative).
     """
-    import requests
+    import os
 
     symbol = base_symbol.upper() + "USDT"
     logger.info(f"[Signal] Computing for {symbol}...")
 
     try:
-        # Ambil klines dari Binance (public, no auth needed)
-        r = requests.get(
-            "https://api.binance.com/api/v3/klines",
-            params={"symbol": symbol, "interval": "15m", "limit": 50},
-            timeout=8
-        )
-        klines = r.json()
-        if not isinstance(klines, list) or len(klines) < 20:
-            logger.warning(f"[Signal] {symbol} klines invalid: {type(klines)} len={len(klines) if isinstance(klines, list) else 'N/A'}")
+        from app.providers.alternative_klines_provider import alternative_klines_provider
+
+        # Guna CryptoCompare/CoinGecko — reliable dari Railway
+        klines = alternative_klines_provider.get_klines(base_symbol.upper(), interval='15m', limit=50)
+
+        if not klines or len(klines) < 20:
+            logger.warning(f"[Signal] {symbol} klines empty from alternative provider")
             return None
 
+        # Binance format: [timestamp, open, high, low, close, volume, ...]
         closes = [float(k[4]) for k in klines]
         highs  = [float(k[2]) for k in klines]
         lows   = [float(k[3]) for k in klines]
         price  = closes[-1]
+        logger.info(f"[Signal] {symbol} price={price:.4f} candles={len(klines)}")
 
         # EMA calculation
         def ema(data, period):
