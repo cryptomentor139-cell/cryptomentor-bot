@@ -121,6 +121,25 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
         engine_on = engine_running(user_id)
         engine_status = "🟢 Engine berjalan" if engine_on else "🟡 Engine tidak aktif"
 
+        # Fetch real balance dari Bitunix
+        balance_line = ""
+        try:
+            import asyncio
+            from app.bitunix_autotrade_client import BitunixAutoTradeClient
+            acc = await asyncio.wait_for(
+                asyncio.to_thread(BitunixAutoTradeClient(
+                    api_key=keys['api_key'], api_secret=keys['api_secret']
+                ).get_account_info),
+                timeout=8.0
+            )
+            if acc.get('success'):
+                balance_line = (
+                    f"💳 Balance Bitunix: <b>{acc['available']:.2f} USDT</b>\n"
+                    f"📈 Unrealized PnL: <b>{acc['total_unrealized_pnl']:+.2f} USDT</b>\n"
+                )
+        except Exception:
+            balance_line = ""
+
         engine_btn = (
             [InlineKeyboardButton("🛑 Stop AutoTrade", callback_data="at_stop_engine")]
             if engine_on else
@@ -137,7 +156,7 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🤖 <b>Auto Trade Dashboard</b>\n\n"
             "✅ Status: <b>AKTIF</b>\n"
             f"💰 Deposit: {session['initial_deposit']} USDT\n"
-            f"📊 Balance: {session['current_balance']} USDT\n"
+            f"{balance_line}"
             f"📈 Profit: {session['total_profit']:.2f} USDT\n\n"
             f"🔑 API Key: <code>...{keys['key_hint']}</code>\n"
             f"🏦 Exchange: {keys['exchange'].upper()}\n"
