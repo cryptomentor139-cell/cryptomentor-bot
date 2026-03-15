@@ -840,6 +840,188 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
     return ConversationHandler.END
 
 
+async def callback_status_portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tampilkan posisi terbuka saat ini dari Bitunix."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    keys = get_user_api_keys(user_id)
+    if not keys:
+        await query.edit_message_text(
+            "❌ API Key belum disetup.\n\nGunakan /autotrade untuk setup.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="at_dashboard")]])
+        )
+        return
+
+    await query.edit_message_text("⏳ Mengambil data posisi dari Bitunix...")
+
+    try:
+        import asyncio
+        from app.bitunix_autotrade_client import BitunixAutoTradeClient
+
+        client = BitunixAutoTradeClient(api_key=keys['api_key'], api_secret=keys['api_secret'])
+
+        pos_result  = await asyncio.to_thread(client.get_positions)
+        acc_result  = await asyncio.to_thread(client.get_account_info)
+
+        back_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Refresh", callback_data="at_status"),
+             InlineKeyboardButton("🔙 Back", callback_data="at_dashboard")]
+        ])
+
+        if not pos_result.get('success'):
+            await query.edit_message_text(
+                f"❌ Gagal mengambil posisi: {pos_result.get('error', 'Unknown error')}",
+                reply_markup=back_kb
+            )
+            return
+
+        positions = pos_result.get('positions', [])
+        balance   = acc_result.get('balance', 0) if acc_result.get('success') else 0
+        upnl      = acc_result.get('total_unrealized_pnl', 0) if acc_result.get('success') else 0
+
+        from app.autotrade_engine import is_running
+        engine_status = "🟢 Aktif" if is_running(user_id) else "🔴 Tidak aktif"
+
+        lines = [
+            f"📊 <b>Status Portfolio</b>",
+            f"",
+            f"⚙️ Engine: {engine_status}",
+            f"💰 Balance: <b>{balance:.2f} USDT</b>",
+            f"📈 Unrealized PnL: <b>{upnl:+.2f} USDT</b>",
+            f"🔄 Posisi terbuka: <b>{len(positions)}</b>",
+            f"",
+        ]
+
+        if positions:
+            lines.append("📋 <b>Posisi Aktif:</b>")
+            for p in positions:
+                pnl      = p.get('pnl', 0)
+                pnl_emoji = "📈" if pnl >= 0 else "📉"
+                side_emoji = "🟢" if p.get('side') == 'BUY' else "🔴"
+                entry    = p.get('entry_price', 0)
+                mark     = p.get('mark_price', 0)
+                lev      = p.get('leverage', '-')
+                sym      = p.get('symbol', '?').replace('USDT', '')
+                pnl_pct  = ((mark - entry) / entry * 100) if entry > 0 else 0
+                if p.get('side') == 'SELL':
+                    pnl_pct = -pnl_pct
+
+                lines.append(
+                    f"\n{side_emoji} <b>{sym}</b> {p.get('side')} {lev}x\n"
+                    f"  📍 Entry: <code>{entry:.4f}</code>\n"
+                    f"  💹 Mark:  <code>{mark:.4f}</code>\n"
+                    f"  📦 Size:  {p.get('size')}\n"
+                    f"  {pnl_emoji} PnL: <b>{pnl:+.4f} USDT</b> ({pnl_pct:+.2f}%)"
+                )
+        else:
+            lines.append("💤 <i>Tidak ada posisi terbuka saat ini.</i>")
+
+        from datetime import datetime
+        lines.append(f"\n⏱ Update: {datetime.now().strftime('%H:%M:%S')}")
+
+        await query.edit_message_text(
+            "\n".join(lines),
+            parse_mode='HTML',
+            reply_markup=back_kb
+        )
+
+    except Exception as e:
+        await query.edit_message_text(
+            f"❌ Error: {str(e)[:150]}",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="at_dashboard")]])
+        )
+
+
+async def callback_trade_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tampilkan riwayat trade dari Bitunix."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    keys = get_user_api_keys(user_id)
+    if not keys:
+        await query.edit_message_text(
+            "❌ API Key belum disetup.\n\nGunakan /autotrade untuk setup.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="at_dashboard")]])
+        )
+        return
+
+    await query.edit_message_text("⏳ Mengambil riwayat trade dari Bitunix...")
+
+    try:
+        import asyncio
+        from app.bitunix_autotrade_client import BitunixAutoTradeClient
+
+        client  = BitunixAutoTradeClient(api_key=keys['api_key'], api_secret=keys['api_secret'])
+        result  = await asyncio.to_thread(client.get_trade_history, user_id, 15)
+
+        back_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Refresh", callback_data="at_history"),
+             InlineKeyboardButton("🔙 Back", callback_data="at_dashboard")]
+        ])
+
+        if not result.get('success'):
+            await query.edit_message_text(
+                f"❌ Gagal mengambil history: {result.get('response', 'Unknown error')}",
+                reply_markup=back_kb
+            )
+            return
+
+        # Re-fetch raw data for richer display
+        raw = client._request('GET', '/api/v1/futures/trade/get_history_orders',
+                               params={'pageSize': 15}, signed=True)
+        orders = raw.get('data') or [] if raw.get('success') else []
+
+        if not orders:
+            await query.edit_message_text(
+                "📈 <b>Trade History</b>\n\n💤 Belum ada riwayat trade.",
+                parse_mode='HTML',
+                reply_markup=back_kb
+            )
+            return
+
+        lines = ["📈 <b>Trade History (15 terakhir)</b>\n"]
+        for o in orders[:15]:
+            side      = o.get('side', '?')
+            sym       = o.get('symbol', '?').replace('USDT', '')
+            qty       = o.get('qty', '?')
+            price     = o.get('avgPrice') or o.get('price') or 'market'
+            status    = o.get('status', '?')
+            ctime     = o.get('ctime', '')[:16] if o.get('ctime') else ''
+            pnl       = o.get('realizedPNL') or o.get('pnl')
+
+            side_emoji = "🟢" if side == 'BUY' else "🔴"
+            status_emoji = "✅" if status in ('FILLED', 'FULL_FILLED') else "⏳" if status == 'PARTIAL_FILLED' else "❌"
+
+            line = f"{side_emoji} <b>{sym}</b> {side} | {qty} @ {price}"
+            if pnl is not None:
+                try:
+                    pnl_f = float(pnl)
+                    pnl_emoji = "📈" if pnl_f >= 0 else "📉"
+                    line += f"\n   {pnl_emoji} PnL: <b>{pnl_f:+.4f} USDT</b>"
+                except Exception:
+                    pass
+            line += f"\n   {status_emoji} {status} | {ctime}"
+            lines.append(line)
+
+        from datetime import datetime
+        lines.append(f"\n⏱ Update: {datetime.now().strftime('%H:%M:%S')}")
+
+        await query.edit_message_text(
+            "\n\n".join(lines),
+            parse_mode='HTML',
+            reply_markup=back_kb
+        )
+
+    except Exception as e:
+        await query.edit_message_text(
+            f"❌ Error: {str(e)[:150]}",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="at_dashboard")]])
+        )
+
+
 async def callback_stop_engine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Stop autotrade engine untuk user ini."""
     query = update.callback_query
@@ -1421,5 +1603,7 @@ def register_autotrade_handlers(application):
     application.add_handler(CallbackQueryHandler(callback_why_referral,       pattern="^at_why_referral$"))
     application.add_handler(CallbackQueryHandler(callback_uid_acc,            pattern="^uid_acc_\\d+$"))
     application.add_handler(CallbackQueryHandler(callback_uid_reject,         pattern="^uid_reject_\\d+$"))
+    application.add_handler(CallbackQueryHandler(callback_status_portfolio,   pattern="^at_status$"))
+    application.add_handler(CallbackQueryHandler(callback_trade_history,      pattern="^at_history$"))
 
     print("✅ AutoTrade handlers registered (Supabase + AES-256-GCM + Engine)")
