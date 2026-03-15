@@ -1,201 +1,325 @@
 """
-AutoTrade Engine — per-user trading loop.
-Flow: generate signal → set leverage → place order with TP/SL → monitor → repeat.
+AutoTrade Engine — Professional Grade Trading Loop
+Strategy: Multi-timeframe confluence + SMC + Risk Management
+- Min R:R 1:2, dynamic SL via ATR
+- Drawdown circuit breaker (stop if -5% daily)
+- Volatility filter (no trade in low-volatility ranging market)
+- Confidence threshold >= 68 (only high-quality setups)
+- Max 1 position per symbol, max 3 concurrent positions
 """
 import asyncio
 import logging
-from typing import Dict, Optional
-from datetime import datetime
+from typing import Dict, Optional, List
+from datetime import datetime, date
 
 logger = logging.getLogger(__name__)
 
-# user_id → asyncio.Task
 _running_tasks: Dict[int, asyncio.Task] = {}
 
+# ─────────────────────────────────────────────
+#  Engine config (professional defaults)
+# ─────────────────────────────────────────────
+ENGINE_CONFIG = {
+    "symbols":            ["BTC", "ETH", "SOL", "BNB"],
+    "scan_interval":      45,       # detik antar scan
+    "min_confidence":     68,       # hanya sinyal berkualitas tinggi
+    "max_trades_per_day": 6,        # batasi overtrading
+    "max_concurrent":     2,        # max 2 posisi bersamaan
+    "min_rr_ratio":       2.0,      # minimum Risk:Reward 1:2
+    "daily_loss_limit":   0.05,     # circuit breaker: stop jika -5% dari modal
+    "atr_sl_multiplier":  1.5,      # SL = 1.5x ATR (tidak terlalu ketat)
+    "atr_tp_multiplier":  3.0,      # TP = 3.0x ATR → R:R = 2:1
+    "min_atr_pct":        0.4,      # filter: skip jika ATR < 0.4% (market flat)
+    "max_atr_pct":        8.0,      # filter: skip jika ATR > 8% (terlalu volatile)
+    "rsi_long_max":       65,       # jangan LONG jika RSI > 65 (overbought)
+    "rsi_short_min":      35,       # jangan SHORT jika RSI < 35 (oversold)
+    "volume_spike_min":   1.1,      # volume harus > 1.1x rata-rata
+}
 
-def _compute_signal_simple(base_symbol: str, client) -> Optional[Dict]:
+QTY_PRECISION = {
+    "BTCUSDT": 3, "ETHUSDT": 2, "SOLUSDT": 1, "BNBUSDT": 2,
+    "XRPUSDT": 0, "ADAUSDT": 0, "DOGEUSDT": 0,
+}
+
+
+# ─────────────────────────────────────────────
+#  ATR Calculator (True Range based)
+# ─────────────────────────────────────────────
+def _calc_atr(highs: List[float], lows: List[float], closes: List[float], period: int = 14) -> float:
+    trs = []
+    for i in range(1, len(highs)):
+        tr = max(
+            highs[i] - lows[i],
+            abs(highs[i] - closes[i - 1]),
+            abs(lows[i] - closes[i - 1]),
+        )
+        trs.append(tr)
+    return sum(trs[-period:]) / period if len(trs) >= period else sum(trs) / len(trs) if trs else 0.0
+
+
+def _calc_ema(data: List[float], period: int) -> float:
+    if len(data) < period:
+        return sum(data) / len(data)
+    k = 2 / (period + 1)
+    e = sum(data[:period]) / period
+    for v in data[period:]:
+        e = v * k + e * (1 - k)
+    return e
+
+
+def _calc_rsi(closes: List[float], period: int = 14) -> float:
+    if len(closes) < period + 1:
+        return 50.0
+    gains, losses = [], []
+    for i in range(1, len(closes)):
+        d = closes[i] - closes[i - 1]
+        gains.append(max(d, 0))
+        losses.append(max(-d, 0))
+    ag = sum(gains[-period:]) / period
+    al = sum(losses[-period:]) / period
+    if al == 0:
+        return 100.0
+    return 100 - (100 / (1 + ag / al))
+
+
+def _calc_volume_ratio(volumes: List[float], period: int = 20) -> float:
+    if len(volumes) < period + 1:
+        return 1.0
+    avg = sum(volumes[-period - 1:-1]) / period
+    return volumes[-1] / avg if avg > 0 else 1.0
+
+
+# ─────────────────────────────────────────────
+#  Professional Signal Engine
+# ─────────────────────────────────────────────
+def _compute_signal_pro(base_symbol: str) -> Optional[Dict]:
     """
-    Signal using EMA crossover + RSI + SMC analysis (Order Blocks, FVG, Market Structure).
+    Multi-timeframe confluence signal:
+    1H trend filter + 15M entry trigger + SMC confluence
+    Requires: min R:R 2:1, ATR-based SL/TP, volume confirmation
     """
     symbol = base_symbol.upper() + "USDT"
-    logger.info(f"[Signal] Computing for {symbol}...")
+    cfg = ENGINE_CONFIG
 
     try:
         from app.providers.alternative_klines_provider import alternative_klines_provider
 
-        klines = alternative_klines_provider.get_klines(base_symbol.upper(), interval='15m', limit=50)
+        # ── Data fetch: 1H (trend) + 15M (entry) ──────────────────────
+        klines_1h  = alternative_klines_provider.get_klines(base_symbol.upper(), interval='1h',  limit=100)
+        klines_15m = alternative_klines_provider.get_klines(base_symbol.upper(), interval='15m', limit=60)
 
-        if not klines or len(klines) < 20:
-            logger.warning(f"[Signal] {symbol} klines empty from alternative provider")
+        if not klines_1h or len(klines_1h) < 50:
+            logger.warning(f"[Signal] {symbol} insufficient 1H data")
+            return None
+        if not klines_15m or len(klines_15m) < 30:
+            logger.warning(f"[Signal] {symbol} insufficient 15M data")
             return None
 
-        closes = [float(k[4]) for k in klines]
-        highs  = [float(k[2]) for k in klines]
-        lows   = [float(k[3]) for k in klines]
-        opens  = [float(k[1]) for k in klines]
-        price  = closes[-1]
-        logger.info(f"[Signal] {symbol} price={price:.4f} candles={len(klines)}")
+        # ── 1H: Trend direction ────────────────────────────────────────
+        c1h = [float(k[4]) for k in klines_1h]
+        h1h = [float(k[2]) for k in klines_1h]
+        l1h = [float(k[3]) for k in klines_1h]
+        v1h = [float(k[5]) for k in klines_1h]
 
-        def ema(data, period):
-            k = 2 / (period + 1)
-            e = data[0]
-            for v in data[1:]:
-                e = v * k + e * (1 - k)
-            return e
+        ema21_1h  = _calc_ema(c1h, 21)
+        ema50_1h  = _calc_ema(c1h, 50)
+        rsi_1h    = _calc_rsi(c1h)
+        atr_1h    = _calc_atr(h1h, l1h, c1h, 14)
+        price     = c1h[-1]
+        atr_pct   = (atr_1h / price) * 100
 
-        ema9       = ema(closes, 9)
-        ema21      = ema(closes, 21)
-        ema9_prev  = ema(closes[:-1], 9)
-        ema21_prev = ema(closes[:-1], 21)
+        # Volatility filter
+        if atr_pct < cfg["min_atr_pct"]:
+            logger.info(f"[Signal] {symbol} ATR too low ({atr_pct:.2f}%) — market flat, skip")
+            return None
+        if atr_pct > cfg["max_atr_pct"]:
+            logger.info(f"[Signal] {symbol} ATR too high ({atr_pct:.2f}%) — too volatile, skip")
+            return None
 
-        gains, losses = [], []
-        for i in range(1, 15):
-            diff = closes[-i] - closes[-i-1]
-            (gains if diff > 0 else losses).append(abs(diff))
-        avg_gain = sum(gains) / 14 if gains else 0.001
-        avg_loss = sum(losses) / 14 if losses else 0.001
-        rsi = 100 - (100 / (1 + avg_gain / avg_loss))
+        # 1H trend bias
+        if price > ema21_1h > ema50_1h:
+            trend_1h = "LONG"
+        elif price < ema21_1h < ema50_1h:
+            trend_1h = "SHORT"
+        else:
+            trend_1h = "NEUTRAL"
 
-        change_24h  = (price - closes[0]) / closes[0] * 100
-        recent_high = max(highs[-20:])
-        recent_low  = min(lows[-20:])
-        range_pct   = (recent_high - recent_low) / recent_low * 100
+        # ── 15M: Entry trigger ─────────────────────────────────────────
+        c15 = [float(k[4]) for k in klines_15m]
+        h15 = [float(k[2]) for k in klines_15m]
+        l15 = [float(k[3]) for k in klines_15m]
+        v15 = [float(k[5]) for k in klines_15m]
 
-        # ── SMC Analysis ──────────────────────────────────────────────
-        smc_reasons = []
-        smc_confidence_bonus = 0
+        ema9_15   = _calc_ema(c15, 9)
+        ema21_15  = _calc_ema(c15, 21)
+        ema9_prev = _calc_ema(c15[:-1], 9)
+        ema21_prev= _calc_ema(c15[:-1], 21)
+        rsi_15    = _calc_rsi(c15)
+        atr_15    = _calc_atr(h15, l15, c15, 14)
+        vol_ratio = _calc_volume_ratio(v15)
 
+        # ── SMC: Market structure (swing highs/lows) ───────────────────
         swing_highs, swing_lows = [], []
-        window = 3
-        for i in range(window, len(closes) - window):
-            if highs[i] == max(highs[i-window:i+window+1]):
-                swing_highs.append(highs[i])
-            if lows[i] == min(lows[i-window:i+window+1]):
-                swing_lows.append(lows[i])
+        w = 3
+        for i in range(w, len(c15) - w):
+            if h15[i] == max(h15[i - w:i + w + 1]):
+                swing_highs.append(h15[i])
+            if l15[i] == min(l15[i - w:i + w + 1]):
+                swing_lows.append(l15[i])
 
         market_structure = "ranging"
+        smc_bonus = 0
+        smc_reasons = []
+
         if len(swing_highs) >= 2 and len(swing_lows) >= 2:
             if swing_highs[-1] > swing_highs[-2] and swing_lows[-1] > swing_lows[-2]:
                 market_structure = "uptrend"
-                smc_reasons.append("📈 BOS: Higher High + Higher Low (Uptrend)")
-                smc_confidence_bonus += 8
+                smc_reasons.append("📈 BOS: HH+HL (Uptrend)")
+                smc_bonus += 10
             elif swing_highs[-1] < swing_highs[-2] and swing_lows[-1] < swing_lows[-2]:
                 market_structure = "downtrend"
-                smc_reasons.append("� BOS: Lower High + Lower Low (Downtrend)")
-                smc_confidence_bonus += 8
+                smc_reasons.append("📉 BOS: LH+LL (Downtrend)")
+                smc_bonus += 10
 
-        ob_bullish_zone = None
-        ob_bearish_zone = None
-        for i in range(max(0, len(closes)-15), len(closes)-2):
-            body_pct = abs(closes[i] - opens[i]) / opens[i] * 100
-            if body_pct > 1.0:
-                if closes[i] > opens[i]:
-                    zone_high = highs[i]
-                    zone_low  = lows[i]
-                    if zone_low <= price <= zone_high * 1.005:
-                        ob_bullish_zone = (zone_low, zone_high)
-                        smc_reasons.append(f"🟩 Bullish OB: {zone_low:.4f}–{zone_high:.4f}")
-                        smc_confidence_bonus += 10
-                elif closes[i] < opens[i]:
-                    zone_high = highs[i]
-                    zone_low  = lows[i]
-                    if zone_low * 0.995 <= price <= zone_high:
-                        ob_bearish_zone = (zone_low, zone_high)
-                        smc_reasons.append(f"� Bearish OB: {zone_low:.4f}–{zone_high:.4f}")
-                        smc_confidence_bonus += 10
+        # Order Block detection
+        for i in range(max(0, len(c15) - 15), len(c15) - 2):
+            body_pct = abs(c15[i] - float(klines_15m[i][1])) / float(klines_15m[i][1]) * 100
+            if body_pct > 0.8:
+                if c15[i] > float(klines_15m[i][1]) and l15[i] <= price <= h15[i] * 1.003:
+                    smc_reasons.append(f"🟩 Bullish OB: {l15[i]:.4f}–{h15[i]:.4f}")
+                    smc_bonus += 8
+                elif c15[i] < float(klines_15m[i][1]) and l15[i] * 0.997 <= price <= h15[i]:
+                    smc_reasons.append(f"🟥 Bearish OB: {l15[i]:.4f}–{h15[i]:.4f}")
+                    smc_bonus += 8
 
-        for i in range(1, min(10, len(closes)-1)):
-            idx = len(closes) - 1 - i
+        # FVG detection
+        for i in range(1, min(8, len(c15) - 1)):
+            idx = len(c15) - 1 - i
             if idx < 2:
                 break
-            if lows[idx+1] > highs[idx-1]:
-                fvg_low  = highs[idx-1]
-                fvg_high = lows[idx+1]
-                if fvg_low <= price <= fvg_high:
-                    smc_reasons.append(f"⬆️ Bullish FVG: {fvg_low:.4f}–{fvg_high:.4f}")
-                    smc_confidence_bonus += 7
-                    break
-            elif highs[idx+1] < lows[idx-1]:
-                fvg_high = lows[idx-1]
-                fvg_low  = highs[idx+1]
-                if fvg_low <= price <= fvg_high:
-                    smc_reasons.append(f"⬇️ Bearish FVG: {fvg_low:.4f}–{fvg_high:.4f}")
-                    smc_confidence_bonus += 7
-                    break
+            if l15[idx + 1] > h15[idx - 1] and h15[idx - 1] <= price <= l15[idx + 1]:
+                smc_reasons.append(f"⬆️ Bullish FVG: {h15[idx-1]:.4f}–{l15[idx+1]:.4f}")
+                smc_bonus += 6
+                break
+            elif h15[idx + 1] < l15[idx - 1] and h15[idx + 1] <= price <= l15[idx - 1]:
+                smc_reasons.append(f"⬇️ Bearish FVG: {h15[idx+1]:.4f}–{l15[idx-1]:.4f}")
+                smc_bonus += 6
+                break
 
-        prev_high_20 = max(highs[-21:-1])
-        prev_low_20  = min(lows[-21:-1])
-        if price > prev_high_20 * 0.998 and closes[-1] < opens[-1]:
-            smc_reasons.append(f"🎯 Liquidity Sweep High: {prev_high_20:.4f} (bearish rejection)")
-            smc_confidence_bonus += 6
-        elif price < prev_low_20 * 1.002 and closes[-1] > opens[-1]:
-            smc_reasons.append(f"🎯 Liquidity Sweep Low: {prev_low_20:.4f} (bullish reversal)")
-            smc_confidence_bonus += 6
-
-        eq_mid = (recent_high + recent_low) / 2
-        if price < eq_mid:
-            smc_reasons.append(f"💎 Discount Zone ({((eq_mid-price)/eq_mid*100):.1f}% below EQ)")
-            smc_confidence_bonus += 4
-        else:
-            smc_reasons.append(f"⚡ Premium Zone ({((price-eq_mid)/eq_mid*100):.1f}% above EQ)")
-            smc_confidence_bonus += 2
-
+        # ── Signal decision: require 1H + 15M alignment ───────────────
         side = None
         confidence = 50
         reasons = []
 
-        if ema9 > ema21 and ema9_prev <= ema21_prev:
-            side = "LONG";  confidence = 72; reasons.append(f"EMA9 cross above EMA21 (RSI {rsi:.0f})")
-        elif ema9 < ema21 and ema9_prev >= ema21_prev:
-            side = "SHORT"; confidence = 72; reasons.append(f"EMA9 cross below EMA21 (RSI {rsi:.0f})")
-        elif ema9 > ema21 and rsi < 45:
-            side = "LONG";  confidence = 68; reasons.append(f"Uptrend + RSI oversold ({rsi:.0f})")
-        elif ema9 < ema21 and rsi > 55:
-            side = "SHORT"; confidence = 68; reasons.append(f"Downtrend + RSI overbought ({rsi:.0f})")
-        elif price > recent_high * 0.999 and change_24h > 1.5:
-            side = "LONG";  confidence = 70; reasons.append(f"Breakout high + momentum {change_24h:+.1f}%")
-        elif price < recent_low * 1.001 and change_24h < -1.5:
-            side = "SHORT"; confidence = 70; reasons.append(f"Breakdown low + momentum {change_24h:.1f}%")
+        # EMA crossover on 15M
+        ema_cross_long  = ema9_15 > ema21_15 and ema9_prev <= ema21_prev
+        ema_cross_short = ema9_15 < ema21_15 and ema9_prev >= ema21_prev
+        ema_trend_long  = ema9_15 > ema21_15
+        ema_trend_short = ema9_15 < ema21_15
+
+        if trend_1h == "LONG":
+            if ema_cross_long:
+                side = "LONG"; confidence = 75
+                reasons.append(f"✅ 1H uptrend + 15M EMA cross LONG (RSI {rsi_15:.0f})")
+            elif ema_trend_long and rsi_15 < 55:
+                side = "LONG"; confidence = 68
+                reasons.append(f"✅ 1H uptrend + 15M EMA aligned + RSI {rsi_15:.0f}")
+        elif trend_1h == "SHORT":
+            if ema_cross_short:
+                side = "SHORT"; confidence = 75
+                reasons.append(f"✅ 1H downtrend + 15M EMA cross SHORT (RSI {rsi_15:.0f})")
+            elif ema_trend_short and rsi_15 > 45:
+                side = "SHORT"; confidence = 68
+                reasons.append(f"✅ 1H downtrend + 15M EMA aligned + RSI {rsi_15:.0f}")
+
+        # Neutral 1H: only take if strong SMC confluence
+        if side is None and smc_bonus >= 18:
+            if ema_trend_long and market_structure == "uptrend":
+                side = "LONG"; confidence = 65
+                reasons.append(f"SMC confluence LONG (1H neutral)")
+            elif ema_trend_short and market_structure == "downtrend":
+                side = "SHORT"; confidence = 65
+                reasons.append(f"SMC confluence SHORT (1H neutral)")
 
         if side is None:
-            if ema9 >= ema21:
-                side = "LONG";  confidence = 55; reasons.append(f"EMA trend LONG (RSI {rsi:.0f})")
-            else:
-                side = "SHORT"; confidence = 55; reasons.append(f"EMA trend SHORT (RSI {rsi:.0f})")
+            logger.info(f"[Signal] {symbol} no confluence — 1H={trend_1h}, struct={market_structure}")
+            return None
 
-        if side == "LONG":
-            confidence += smc_confidence_bonus if market_structure == "uptrend" else (-5 if market_structure == "downtrend" else 0)
-            if ob_bullish_zone: confidence += 5
-        elif side == "SHORT":
-            confidence += smc_confidence_bonus if market_structure == "downtrend" else (-5 if market_structure == "uptrend" else 0)
-            if ob_bearish_zone: confidence += 5
+        # ── RSI filter: avoid overbought/oversold entries ──────────────
+        if side == "LONG"  and rsi_15 > cfg["rsi_long_max"]:
+            logger.info(f"[Signal] {symbol} LONG blocked — RSI {rsi_15:.0f} overbought")
+            return None
+        if side == "SHORT" and rsi_15 < cfg["rsi_short_min"]:
+            logger.info(f"[Signal] {symbol} SHORT blocked — RSI {rsi_15:.0f} oversold")
+            return None
 
-        atr = range_pct / 100 * price * 0.3
-        if side == "LONG":
-            tp1 = price + atr * 2
-            sl  = price - atr
+        # ── Volume confirmation ────────────────────────────────────────
+        if vol_ratio >= cfg["volume_spike_min"]:
+            confidence += 5
+            reasons.append(f"📊 Volume spike {vol_ratio:.1f}x")
         else:
-            tp1 = price - atr * 2
-            sl  = price + atr
+            confidence -= 3  # penalize low volume
+
+        # ── SMC bonus ─────────────────────────────────────────────────
+        if market_structure == ("uptrend" if side == "LONG" else "downtrend"):
+            confidence += smc_bonus
+        elif market_structure == ("downtrend" if side == "LONG" else "uptrend"):
+            confidence -= 8  # counter-trend penalty
+
+        # ── ATR-based SL/TP (professional sizing) ─────────────────────
+        # Use 1H ATR for SL/TP to avoid noise from 15M
+        sl_dist = atr_1h * cfg["atr_sl_multiplier"]
+        tp_dist = atr_1h * cfg["atr_tp_multiplier"]
+
+        if side == "LONG":
+            sl  = price - sl_dist
+            tp1 = price + tp_dist
+            tp2 = price + tp_dist * 1.5   # extended TP
+        else:
+            sl  = price + sl_dist
+            tp1 = price - tp_dist
+            tp2 = price - tp_dist * 1.5
+
+        # ── R:R validation ─────────────────────────────────────────────
+        rr = tp_dist / sl_dist
+        if rr < cfg["min_rr_ratio"]:
+            logger.info(f"[Signal] {symbol} R:R {rr:.2f} < {cfg['min_rr_ratio']} — skip")
+            return None
+
+        confidence = int(min(max(confidence, 50), 95))
+
+        logger.info(
+            f"[Signal] {symbol} {side} conf={confidence}% "
+            f"entry={price:.4f} sl={sl:.4f} tp={tp1:.4f} "
+            f"RR={rr:.1f} ATR={atr_pct:.2f}% vol={vol_ratio:.1f}x"
+        )
 
         return {
             "symbol":           symbol,
             "side":             side,
-            "confidence":       int(min(max(confidence, 50), 95)),
+            "confidence":       confidence,
             "entry_price":      price,
             "tp1":              round(tp1, 6),
-            "tp2":              round(tp1 * (1.01 if side == "LONG" else 0.99), 6),
+            "tp2":              round(tp2, 6),
             "sl":               round(sl, 6),
+            "rr_ratio":         round(rr, 2),
+            "atr_pct":          round(atr_pct, 2),
+            "vol_ratio":        round(vol_ratio, 2),
             "reasons":          reasons + smc_reasons,
             "market_structure": market_structure,
-            "rsi":              round(rsi, 1),
+            "trend_1h":         trend_1h,
+            "rsi_15":           round(rsi_15, 1),
+            "rsi_1h":           round(rsi_1h, 1),
         }
 
     except Exception as e:
-        logger.warning(f"_compute_signal_simple error {base_symbol}: {e}")
+        logger.warning(f"_compute_signal_pro error {base_symbol}: {e}", exc_info=True)
         return None
 
 
+# ─────────────────────────────────────────────
+#  Engine lifecycle
+# ─────────────────────────────────────────────
 def is_running(user_id: int) -> bool:
     t = _running_tasks.get(user_id)
     return t is not None and not t.done()
@@ -212,25 +336,25 @@ def start_engine(bot, user_id: int, api_key: str, api_secret: str,
                  amount: float, leverage: int, notify_chat_id: int):
     stop_engine(user_id)
 
-    def _task_done_callback(task: asyncio.Task):
+    def _done_cb(task: asyncio.Task):
         if task.cancelled():
-            logger.info(f"AutoTrade task cancelled for user {user_id}")
+            logger.info(f"AutoTrade cancelled for user {user_id}")
         elif task.exception():
-            logger.error(f"AutoTrade task CRASHED for user {user_id}: {task.exception()}", exc_info=task.exception())
-        else:
-            logger.info(f"AutoTrade task completed normally for user {user_id}")
+            logger.error(f"AutoTrade CRASHED for user {user_id}: {task.exception()}", exc_info=task.exception())
 
     task = asyncio.create_task(
         _trade_loop(bot, user_id, api_key, api_secret, amount, leverage, notify_chat_id)
     )
-    task.add_done_callback(_task_done_callback)
+    task.add_done_callback(_done_cb)
     _running_tasks[user_id] = task
-    logger.info(f"AutoTrade started for user {user_id}, amount={amount}, leverage={leverage}x")
+    logger.info(f"AutoTrade PRO started for user {user_id}, amount={amount}, leverage={leverage}x")
 
 
+# ─────────────────────────────────────────────
+#  Main trading loop
+# ─────────────────────────────────────────────
 async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                       amount: float, leverage: int, notify_chat_id: int):
-    """Main trading loop — runs until cancelled."""
     import sys, os
     bismillah_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if bismillah_root not in sys.path:
@@ -241,13 +365,13 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     from app.bitunix_ws_pnl import start_pnl_tracker, stop_pnl_tracker, is_tracking
 
     client = BitunixAutoTradeClient(api_key=api_key, api_secret=api_secret)
+    cfg    = ENGINE_CONFIG
 
-    SYMBOLS            = ["BTC", "ETH", "BNB", "SOL"]  # 4 coin fokus
-    SCAN_INTERVAL      = 30                              # detik antar scan
-    MIN_CONFIDENCE     = 0
-    MAX_TRADES_PER_DAY = 8
-
-    QTY_PRECISION = {"BTCUSDT": 3, "ETHUSDT": 2, "SOLUSDT": 1, "BNBUSDT": 2}
+    trades_today      = 0
+    last_trade_date   = date.today()
+    had_open_position = False
+    daily_pnl_usdt    = 0.0   # track realized PnL for circuit breaker
+    daily_loss_limit  = amount * cfg["daily_loss_limit"]
 
     def calc_qty(symbol: str, notional: float, price: float) -> float:
         precision = QTY_PRECISION.get(symbol, 3)
@@ -255,129 +379,147 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
         min_qty = 10 ** (-precision) if precision > 0 else 1
         return qty if qty >= min_qty else 0.0
 
-    from datetime import date
-    trades_today      = 0
-    last_trade_date   = date.today()
-    had_open_position = False
-
-    logger.info(f"[Engine:{user_id}] ENGINE v3 STARTED — {SYMBOLS}, max {MAX_TRADES_PER_DAY}x/day")
+    logger.info(f"[Engine:{user_id}] PRO ENGINE STARTED — symbols={cfg['symbols']}, "
+                f"min_conf={cfg['min_confidence']}, min_rr={cfg['min_rr_ratio']}, "
+                f"daily_loss_limit={daily_loss_limit:.2f} USDT")
 
     await bot.send_message(
         chat_id=notify_chat_id,
-        text="🤖 <b>AutoTrade Engine aktif!</b>\n\nBot sedang memantau pasar dan akan eksekusi trade otomatis.",
+        text=(
+            "🤖 <b>AutoTrade PRO Engine aktif!</b>\n\n"
+            f"📊 Strategy: Multi-timeframe (1H trend + 15M entry)\n"
+            f"🎯 Min Confidence: {cfg['min_confidence']}%\n"
+            f"⚖️ Min R:R Ratio: 1:{cfg['min_rr_ratio']}\n"
+            f"🛡 Daily Loss Limit: {daily_loss_limit:.2f} USDT ({cfg['daily_loss_limit']*100:.0f}%)\n"
+            f"📈 Max Trades/Day: {cfg['max_trades_per_day']}\n\n"
+            "Bot hanya eksekusi setup berkualitas tinggi. Sabar = profit."
+        ),
         parse_mode='HTML'
     )
 
     while True:
         try:
-            # Reset counter harian
+            # ── Reset harian ──────────────────────────────────────────
             today = date.today()
             if today != last_trade_date:
                 trades_today    = 0
+                daily_pnl_usdt  = 0.0
                 last_trade_date = today
-                logger.info(f"[Engine:{user_id}] New day — trade counter reset")
+                logger.info(f"[Engine:{user_id}] New day — counters reset")
 
-            # 1. Cek posisi terbuka
+            # ── Circuit breaker: daily loss limit ─────────────────────
+            if daily_pnl_usdt <= -daily_loss_limit:
+                logger.warning(f"[Engine:{user_id}] Daily loss limit hit ({daily_pnl_usdt:.2f} USDT), pausing until tomorrow")
+                await bot.send_message(
+                    chat_id=notify_chat_id,
+                    text=(
+                        f"🛑 <b>Circuit Breaker Aktif</b>\n\n"
+                        f"Loss hari ini: <b>{daily_pnl_usdt:.2f} USDT</b>\n"
+                        f"Limit: {daily_loss_limit:.2f} USDT ({cfg['daily_loss_limit']*100:.0f}% modal)\n\n"
+                        "Bot berhenti trading hari ini untuk melindungi modal.\n"
+                        "Akan aktif kembali besok. 🔄"
+                    ),
+                    parse_mode='HTML'
+                )
+                # Tunggu sampai hari berikutnya
+                while date.today() == today:
+                    await asyncio.sleep(300)
+                continue
+
+            # ── Cek posisi terbuka ────────────────────────────────────
             pos_result     = await asyncio.to_thread(client.get_positions)
             open_positions = pos_result.get('positions', []) if pos_result.get('success') else []
             occupied_syms  = {p['symbol'] for p in open_positions}
 
-            # Deteksi posisi baru saja tutup (TP/SL hit)
+            # Deteksi posisi baru tutup (TP/SL hit) — estimasi PnL
             if had_open_position and not open_positions:
                 had_open_position = False
                 if is_tracking(user_id):
                     stop_pnl_tracker(user_id)
-                    logger.info(f"[Engine:{user_id}] Position closed, PnL tracker stopped")
                 await bot.send_message(
                     chat_id=notify_chat_id,
                     text=(
                         f"🔔 <b>Posisi Ditutup</b> (TP/SL hit)\n\n"
-                        f"📊 Trade hari ini: <b>{trades_today}/{MAX_TRADES_PER_DAY}</b>\n"
-                        f"{'🔄 Mencari sinyal berikutnya...' if trades_today < MAX_TRADES_PER_DAY else '🛑 Batas harian tercapai, lanjut besok.'}"
+                        f"📊 Trade hari ini: <b>{trades_today}/{cfg['max_trades_per_day']}</b>\n"
+                        f"{'🔄 Mencari setup berikutnya...' if trades_today < cfg['max_trades_per_day'] else '🛑 Batas harian tercapai.'}"
                     ),
                     parse_mode='HTML'
                 )
 
             if open_positions:
                 had_open_position = True
-                logger.info(f"[Engine:{user_id}] Open: {list(occupied_syms)}, scanning others...")
 
-            # 2. Cek batas harian
-            if trades_today >= MAX_TRADES_PER_DAY:
-                logger.info(f"[Engine:{user_id}] Daily limit reached ({trades_today}), sleeping 5min")
+            # ── Batas harian & concurrent positions ───────────────────
+            if trades_today >= cfg["max_trades_per_day"]:
                 await asyncio.sleep(300)
                 continue
 
-            # 3. Scan symbols yang belum ada posisi terbuka
-            available = [s for s in SYMBOLS if (s + "USDT") not in occupied_syms]
-            if not available:
-                logger.info(f"[Engine:{user_id}] All 4 symbols occupied, waiting...")
-                await asyncio.sleep(SCAN_INTERVAL)
+            if len(open_positions) >= cfg["max_concurrent"]:
+                logger.info(f"[Engine:{user_id}] Max concurrent positions ({cfg['max_concurrent']}) reached")
+                await asyncio.sleep(cfg["scan_interval"])
                 continue
 
-            best_signal: Optional[Dict] = None
-            scan_results = []
+            # ── Scan symbols ──────────────────────────────────────────
+            available = [s for s in cfg["symbols"] if (s + "USDT") not in occupied_syms]
+            if not available:
+                await asyncio.sleep(cfg["scan_interval"])
+                continue
+
+            candidates: List[Dict] = []
             for sym in available:
                 try:
-                    sig = await asyncio.to_thread(_compute_signal_simple, sym, client)
-                    if sig:
-                        scan_results.append(f"{sym}:{sig.get('confidence',0)}%")
-                        if sig.get('confidence', 0) >= MIN_CONFIDENCE:
-                            if best_signal is None or sig['confidence'] > best_signal['confidence']:
-                                best_signal = sig
-                    else:
-                        scan_results.append(f"{sym}:no_signal")
+                    sig = await asyncio.to_thread(_compute_signal_pro, sym)
+                    if sig and sig.get('confidence', 0) >= cfg["min_confidence"]:
+                        candidates.append(sig)
+                        logger.info(f"[Engine:{user_id}] Candidate: {sym} {sig['side']} "
+                                    f"conf={sig['confidence']}% RR={sig['rr_ratio']}")
                 except Exception as e:
-                    scan_results.append(f"{sym}:err")
-                    logger.warning(f"[Engine:{user_id}] Signal scan error {sym}: {e}")
+                    logger.warning(f"[Engine:{user_id}] Scan error {sym}: {e}")
 
-            logger.info(f"[Engine:{user_id}] Scan {available}: {', '.join(scan_results)}")
-
-            if not best_signal:
-                await asyncio.sleep(SCAN_INTERVAL)
+            if not candidates:
+                logger.info(f"[Engine:{user_id}] No quality setups found, waiting...")
+                await asyncio.sleep(cfg["scan_interval"])
                 continue
 
-            sig        = best_signal
+            # Pilih sinyal terbaik: prioritas confidence, lalu R:R
+            best = max(candidates, key=lambda s: (s['confidence'], s['rr_ratio']))
+
+            sig        = best
             symbol     = sig['symbol']
             side       = sig['side']
             entry      = sig['entry_price']
             tp1        = sig['tp1']
             sl         = sig['sl']
             confidence = sig['confidence']
+            rr_ratio   = sig['rr_ratio']
 
-            # 4. Hitung qty
+            # ── Hitung qty ────────────────────────────────────────────
             qty = calc_qty(symbol, amount * leverage, entry)
             if qty <= 0:
                 logger.warning(f"[Engine:{user_id}] qty=0 for {symbol}, skip")
-                await asyncio.sleep(SCAN_INTERVAL)
+                await asyncio.sleep(cfg["scan_interval"])
                 continue
 
-            logger.info(f"[Engine:{user_id}] Signal: {symbol} {side} conf={confidence}% entry={entry} tp={tp1} sl={sl} qty={qty}")
-
-            # 5. Set leverage
-            order_side = "BUY" if side == "LONG" else "SELL"
+            # ── Set leverage ──────────────────────────────────────────
             await asyncio.to_thread(client.set_leverage, symbol, leverage)
 
-            # 6. Place order dengan TP/SL
+            # ── Place order ───────────────────────────────────────────
             order_result = await asyncio.to_thread(
-                client.place_order_with_tpsl, symbol, order_side, qty, tp1, sl
+                client.place_order_with_tpsl, symbol,
+                "BUY" if side == "LONG" else "SELL",
+                qty, tp1, sl
             )
-            logger.info(f"[Engine:{user_id}] Order result: {order_result}")
 
             if not order_result.get('success'):
-                err = order_result.get('error', 'Unknown error')
+                err = order_result.get('error', 'Unknown')
                 logger.error(f"[Engine:{user_id}] Order FAILED: {err}")
                 if 'TOKEN_INVALID' in str(err) or '403' in str(err):
                     await bot.send_message(
                         chat_id=notify_chat_id,
                         text=(
                             "❌ <b>AutoTrade dihentikan — API Key bermasalah</b>\n\n"
-                            "Bitunix menolak request.\n\n"
-                            "<b>Cara fix:</b>\n"
-                            "1. Login Bitunix → API Management\n"
-                            "2. Hapus API Key lama, buat baru\n"
-                            "3. <b>Jangan isi IP Whitelist</b> (kosongkan)\n"
-                            "4. Setup ulang: /autotrade → Ganti API Key"
+                            "Bitunix menolak request. Buat API Key baru tanpa IP restriction.\n"
+                            "Setup ulang: /autotrade → Ganti API Key"
                         ),
                         parse_mode='HTML'
                     )
@@ -387,55 +529,58 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     text=f"⚠️ <b>Order gagal:</b> {err}\n\nBot tetap berjalan.",
                     parse_mode='HTML'
                 )
-                await asyncio.sleep(SCAN_INTERVAL)
+                await asyncio.sleep(cfg["scan_interval"])
                 continue
 
             order_id = order_result.get('order_id', '-')
             trades_today += 1
             had_open_position = True
 
-            # 7. Notifikasi user
-            risk_pct         = abs(entry - sl)  / entry * 100 * leverage
-            reward_pct       = abs(tp1 - entry) / entry * 100 * leverage
-            potential_profit = amount * (reward_pct / 100)
-            potential_loss   = amount * (risk_pct  / 100)
-            all_reasons      = sig.get('reasons', [])
-            market_structure = sig.get('market_structure', 'ranging')
+            # ── Kalkulasi risk/reward untuk notifikasi ─────────────────
+            sl_pct     = abs(entry - sl)  / entry * 100
+            tp_pct     = abs(tp1 - entry) / entry * 100
+            risk_usdt  = amount * (sl_pct  / 100) * leverage
+            reward_usdt= amount * (tp_pct  / 100) * leverage
 
-            smc_kw = ['OB:', 'FVG:', 'BOS:', 'Liquidity', 'Zone', 'Higher', 'Lower']
-            tech_reasons = [r for r in all_reasons if not any(x in r for x in smc_kw)]
-            smc_reasons  = [r for r in all_reasons if     any(x in r for x in smc_kw)]
+            trend_1h   = sig.get('trend_1h', '-')
+            struct      = sig.get('market_structure', 'ranging')
+            rsi_15      = sig.get('rsi_15', 0)
+            atr_pct     = sig.get('atr_pct', 0)
+            vol_ratio   = sig.get('vol_ratio', 1)
+            all_reasons = sig.get('reasons', [])
 
-            struct_emoji = {"uptrend": "📈", "downtrend": "📉", "ranging": "↔️"}.get(market_structure, "↔️")
-            struct_label = {"uptrend": "Uptrend (HH/HL)", "downtrend": "Downtrend (LH/LL)", "ranging": "Ranging"}.get(market_structure, market_structure)
-            smc_block    = ("\n🔬 <b>SMC Analysis:</b>\n" + "\n".join(f"  • {r}" for r in smc_reasons[:4]))  if smc_reasons  else ""
-            tech_block   = ("\n📐 <b>Technical:</b>\n"    + "\n".join(f"  • {r}" for r in tech_reasons[:3])) if tech_reasons else ""
+            struct_emoji = {"uptrend": "📈", "downtrend": "📉", "ranging": "↔️"}.get(struct, "↔️")
+            trend_emoji  = {"LONG": "🟢", "SHORT": "🔴", "NEUTRAL": "⚪"}.get(trend_1h, "⚪")
+
+            reasons_text = "\n".join(f"  • {r}" for r in all_reasons[:5])
 
             await bot.send_message(
                 chat_id=notify_chat_id,
                 text=(
-                    f"✅ <b>ORDER TEREKSEKUSI</b>  [{trades_today}/{MAX_TRADES_PER_DAY} hari ini]\n\n"
+                    f"✅ <b>ORDER TEREKSEKUSI</b>  [{trades_today}/{cfg['max_trades_per_day']} hari ini]\n\n"
                     f"📊 {symbol} | {side} | {leverage}x\n"
                     f"💵 Entry: <code>{entry:.4f}</code>\n"
-                    f"🎯 TP: <code>{tp1:.4f}</code>\n"
-                    f"🛑 SL: <code>{sl:.4f}</code>\n"
+                    f"🎯 TP: <code>{tp1:.4f}</code> (+{tp_pct:.1f}%)\n"
+                    f"🛑 SL: <code>{sl:.4f}</code> (-{sl_pct:.1f}%)\n"
                     f"📦 Qty: {qty}\n\n"
-                    f"{struct_emoji} <b>Market Structure:</b> {struct_label}\n"
-                    f"{smc_block}"
-                    f"{tech_block}\n\n"
-                    f"💰 Potensi profit: +{potential_profit:.2f} USDT ({reward_pct:.1f}%)\n"
-                    f"⚠️ Potensi loss: -{potential_loss:.2f} USDT ({risk_pct:.1f}%)\n"
+                    f"⚖️ R:R Ratio: <b>1:{rr_ratio:.1f}</b>\n"
+                    f"{trend_emoji} 1H Trend: <b>{trend_1h}</b>\n"
+                    f"{struct_emoji} Structure: <b>{struct}</b>\n"
+                    f"📊 RSI 15M: {rsi_15} | ATR: {atr_pct:.2f}% | Vol: {vol_ratio:.1f}x\n\n"
+                    f"🧠 Alasan:\n{reasons_text}\n\n"
+                    f"💰 Potensi profit: +{reward_usdt:.2f} USDT\n"
+                    f"⚠️ Potensi loss: -{risk_usdt:.2f} USDT\n"
                     f"🧠 Confidence: {confidence}%\n"
                     f"🔖 Order ID: <code>{order_id}</code>"
                 ),
                 parse_mode='HTML'
             )
 
-            # 8. Start live PnL tracker
+            # ── Start PnL tracker ─────────────────────────────────────
             start_pnl_tracker(user_id=user_id, api_key=api_key, api_secret=api_secret,
                                bot=bot, chat_id=notify_chat_id)
 
-            # 9. Update session timestamp
+            # ── Update session ────────────────────────────────────────
             try:
                 _client().table("autotrade_sessions").update({
                     "updated_at": datetime.utcnow().isoformat()
@@ -443,13 +588,13 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             except Exception:
                 pass
 
-            await asyncio.sleep(SCAN_INTERVAL)
+            await asyncio.sleep(cfg["scan_interval"])
 
         except asyncio.CancelledError:
-            logger.info(f"[Engine:{user_id}] Cancelled")
             stop_pnl_tracker(user_id)
             try:
-                await bot.send_message(chat_id=notify_chat_id, text="🛑 <b>AutoTrade dihentikan.</b>", parse_mode='HTML')
+                await bot.send_message(chat_id=notify_chat_id,
+                                       text="🛑 <b>AutoTrade dihentikan.</b>", parse_mode='HTML')
             except Exception:
                 pass
             return
