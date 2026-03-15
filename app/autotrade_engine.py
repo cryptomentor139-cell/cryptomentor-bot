@@ -290,10 +290,243 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     client = BitunixAutoTradeClient(api_key=api_key, api_secret=api_secret)
     from app.bitunix_ws_pnl import start_pnl_tracker, stop_pnl_tracker
 
-    SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP"]
-    SCAN_INTERVAL = 60
-    MIN_CONFIDENCE = 0  # TEST MODE: accept any signal
-    logger.info(f"[Engine:{user_id}] ENGINE v2 STARTED — EMA+RSI signal, MIN_CONF={MIN_CONFIDENCE}")
+    SYMBOLS       = ["BTC", "ETH", "BNB", "SOL"]   # 4 coin fokus
+    SCAN_INTERVAL = 30          # cek posisi setiap 30 detik
+    MIN_CONFIDENCE = 0
+    MAX_TRADES_PER_DAY = 8
+
+    logger.info(f"[Engine:{user_id}] ENGINE v3 STARTED — 4 coins, max {MAX_TRADES_PER_DAY}x/day")
+
+    # Qty precision per symbol
+    QTY_PRECISION = {
+        "BTCUSDT": 3,
+        "ETHUSDT": 2,
+        "SOLUSDT": 1,
+        "BNBUSDT": 2,
+    }
+
+    def calc_qty(symbol: str, notional: float, price: float) -> float:
+        raw = notional / price
+        precision = QTY_PRECISION.get(symbol, 3)
+        qty = round(raw, precision)
+        min_qty = 10 ** (-precision) if precision > 0 else 1
+        return qty if qty >= min_qty else 0.0
+
+    # ── Daily trade counter ──────────────────────────────────────────
+    from datetime import date
+    trades_today   = 0
+    last_trade_date = date.today()
+    had_open_position = False   # track apakah sebelumnya ada posisi terbuka
+
+    await bot.send_message(
+        chat_id=notify_chat_id,
+        text="🤖 <b>AutoTrade Engine aktif!</b>\n\nBot sedang memantau pasar dan akan eksekusi trade otomatis.",
+        parse_mode='HTML'
+    )
+
+    while True:
+        try:
+            # Reset counter harian
+            today = date.today()
+            if today != last_trade_date:
+                trades_today    = 0
+                last_trade_date = today
+                logger.info(f"[Engine:{user_id}] New day — trade counter reset")
+
+            # 1. Cek posisi terbuka
+            pos_result    = await asyncio.to_thread(client.get_positions)
+            open_positions = pos_result.get('positions', []) if pos_result.get('success') else []
+
+            if open_positions:
+                had_open_position = True
+                logger.info(f"[Engine:{user_id}] {len(open_positions)} open positions, waiting...")
+                await asyncio.sleep(SCAN_INTERVAL)
+                continue
+
+            # Posisi baru saja tutup (TP/SL hit)
+            if had_open_position:
+                had_open_position = False
+                from app.bitunix_ws_pnl import stop_pnl_tracker, is_tracking
+                if is_tracking(user_id):
+                    stop_pnl_tracker(user_id)
+                    logger.info(f"[Engine:{user_id}] Position closed, PnL tracker stopped")
+
+                await bot.send_message(
+                    chat_id=notify_chat_id,
+                    text=(
+                        f"🔔 <b>Posisi Ditutup</b> (TP/SL hit)\n\n"
+                        f"📊 Trade hari ini: <b>{trades_today}/{MAX_TRADES_PER_DAY}</b>\n"
+                        f"{'🔄 Mencari sinyal berikutnya...' if trades_today < MAX_TRADES_PER_DAY else '🛑 Batas harian tercapai, lanjut besok.'}"
+                    ),
+                    parse_mode='HTML'
+                )
+
+            # 2. Cek batas harian
+            if trades_today >= MAX_TRADES_PER_DAY:
+                logger.info(f"[Engine:{user_id}] Daily limit {MAX_TRADES_PER_DAY} reached, sleeping 5min")
+                await asyncio.sleep(300)
+                continue
+
+            # 3. Scan 4 symbols untuk signal terbaik
+            best_signal: Optional[Dict] = None
+            scan_results = []
+            for sym in SYMBOLS:
+                try:
+                    sig = await asyncio.to_thread(_compute_signal_simple, sym, client)
+                    if sig:
+                        scan_results.append(f"{sym}:{sig.get('confidence',0)}%")
+                        if sig.get('confidence', 0) >= MIN_CONFIDENCE:
+                            if best_signal is None or sig['confidence'] > best_signal['confidence']:
+                                best_signal = sig
+                    else:
+                        scan_results.append(f"{sym}:no_signal")
+                except Exception as e:
+                    scan_results.append(f"{sym}:err")
+                    logger.warning(f"[Engine:{user_id}] Signal scan error {sym}: {e}")
+
+            logger.info(f"[Engine:{user_id}] Scan: {', '.join(scan_results)}")
+
+            if not best_signal:
+                await asyncio.sleep(SCAN_INTERVAL)
+                continue
+
+            sig        = best_signal
+            symbol     = sig['symbol']
+            side       = sig['side']
+            entry      = sig['entry_price']
+            tp1        = sig['tp1']
+            sl         = sig['sl']
+            confidence = sig['confidence']
+
+            # 4. Hitung qty
+            notional = amount * leverage
+            qty = calc_qty(symbol, notional, entry)
+            if qty <= 0:
+                logger.warning(f"[Engine:{user_id}] qty=0 for {symbol}, skip")
+                await asyncio.sleep(SCAN_INTERVAL)
+                continue
+
+            logger.info(f"[Engine:{user_id}] Signal: {symbol} {side} conf={confidence}% entry={entry} tp={tp1} sl={sl} qty={qty}")
+
+            # 5. Set leverage
+            order_side = "BUY" if side == "LONG" else "SELL"
+            lev_result = await asyncio.to_thread(client.set_leverage, symbol, leverage)
+            logger.info(f"[Engine:{user_id}] Set leverage {leverage}x: {lev_result}")
+
+            # 6. Place order dengan TP/SL
+            order_result = await asyncio.to_thread(
+                client.place_order_with_tpsl,
+                symbol, order_side, qty, tp1, sl
+            )
+
+            logger.info(f"[Engine:{user_id}] Order result: {order_result}")
+
+            if not order_result.get('success'):
+                err = order_result.get('error', 'Unknown error')
+                logger.error(f"[Engine:{user_id}] Order FAILED: {err}")
+
+                if 'TOKEN_INVALID' in str(err) or '403' in str(err):
+                    await bot.send_message(
+                        chat_id=notify_chat_id,
+                        text=(
+                            "❌ <b>AutoTrade dihentikan — API Key bermasalah</b>\n\n"
+                            "Bitunix menolak request.\n\n"
+                            "<b>Cara fix:</b>\n"
+                            "1. Login Bitunix → API Management\n"
+                            "2. Hapus API Key lama, buat baru\n"
+                            "3. <b>Jangan isi IP Whitelist</b> (kosongkan)\n"
+                            "4. Setup ulang: /autotrade → Ganti API Key"
+                        ),
+                        parse_mode='HTML'
+                    )
+                    return
+
+                await bot.send_message(
+                    chat_id=notify_chat_id,
+                    text=f"⚠️ <b>Order gagal:</b> {err}\n\nBot tetap berjalan.",
+                    parse_mode='HTML'
+                )
+                await asyncio.sleep(SCAN_INTERVAL)
+                continue
+
+            order_id = order_result.get('order_id', '-')
+            trades_today += 1
+            had_open_position = True
+
+            # 7. Notifikasi user
+            risk_pct       = abs(entry - sl)  / entry * 100 * leverage
+            reward_pct     = abs(tp1 - entry) / entry * 100 * leverage
+            potential_profit = amount * (reward_pct / 100)
+            potential_loss   = amount * (risk_pct  / 100)
+
+            all_reasons      = sig.get('reasons', [])
+            market_structure = sig.get('market_structure', 'ranging')
+
+            tech_reasons = [r for r in all_reasons if not any(
+                x in r for x in ['OB:', 'FVG:', 'BOS:', 'Liquidity', 'Zone', 'Higher', 'Lower']
+            )]
+            smc_reasons = [r for r in all_reasons if any(
+                x in r for x in ['OB:', 'FVG:', 'BOS:', 'Liquidity', 'Zone', 'Higher', 'Lower']
+            )]
+
+            struct_emoji = {"uptrend": "📈", "downtrend": "📉", "ranging": "↔️"}.get(market_structure, "↔️")
+            struct_label = {"uptrend": "Uptrend (HH/HL)", "downtrend": "Downtrend (LH/LL)", "ranging": "Ranging"}.get(market_structure, market_structure)
+
+            smc_block  = ("\n🔬 <b>SMC Analysis:</b>\n" + "\n".join(f"  • {r}" for r in smc_reasons[:4])) if smc_reasons else ""
+            tech_block = ("\n📐 <b>Technical:</b>\n"    + "\n".join(f"  • {r}" for r in tech_reasons[:3])) if tech_reasons else ""
+
+            await bot.send_message(
+                chat_id=notify_chat_id,
+                text=(
+                    f"✅ <b>ORDER TEREKSEKUSI</b>  [{trades_today}/{MAX_TRADES_PER_DAY} hari ini]\n\n"
+                    f"📊 {symbol} | {side} | {leverage}x\n"
+                    f"💵 Entry: <code>{entry:.4f}</code>\n"
+                    f"🎯 TP: <code>{tp1:.4f}</code>\n"
+                    f"🛑 SL: <code>{sl:.4f}</code>\n"
+                    f"📦 Qty: {qty}\n\n"
+                    f"{struct_emoji} <b>Market Structure:</b> {struct_label}\n"
+                    f"{smc_block}"
+                    f"{tech_block}\n\n"
+                    f"💰 Potensi profit: +{potential_profit:.2f} USDT ({reward_pct:.1f}%)\n"
+                    f"⚠️ Potensi loss: -{potential_loss:.2f} USDT ({risk_pct:.1f}%)\n"
+                    f"🧠 Confidence: {confidence}%\n"
+                    f"🔖 Order ID: <code>{order_id}</code>"
+                ),
+                parse_mode='HTML'
+            )
+
+            # 8. Start live PnL tracker
+            start_pnl_tracker(
+                user_id=user_id,
+                api_key=api_key,
+                api_secret=api_secret,
+                bot=bot,
+                chat_id=notify_chat_id,
+            )
+
+            # 9. Update session
+            try:
+                _client().table("autotrade_sessions").update({
+                    "updated_at": datetime.utcnow().isoformat()
+                }).eq("telegram_id", user_id).execute()
+            except Exception:
+                pass
+
+            # Langsung scan lagi setelah order (tidak perlu tunggu lama)
+            await asyncio.sleep(SCAN_INTERVAL)
+
+        except asyncio.CancelledError:
+            logger.info(f"[Engine:{user_id}] Cancelled")
+            stop_pnl_tracker(user_id)
+            try:
+                await bot.send_message(chat_id=notify_chat_id, text="🛑 <b>AutoTrade dihentikan.</b>", parse_mode='HTML')
+            except Exception:
+                pass
+            return
+
+        except Exception as e:
+            logger.error(f"[Engine:{user_id}] Loop error: {e}", exc_info=True)
+            await asyncio.sleep(30)
 
     # Qty precision per symbol (Bitunix minimum & decimal places)
     QTY_PRECISION = {
