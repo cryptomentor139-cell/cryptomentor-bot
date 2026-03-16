@@ -777,10 +777,11 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
     try:
         import asyncio
         from app.bitunix_autotrade_client import BitunixAutoTradeClient
+        _client = BitunixAutoTradeClient(
+            api_key=keys['api_key'], api_secret=keys['api_secret']
+        )
         acc = await asyncio.wait_for(
-            asyncio.to_thread(BitunixAutoTradeClient(
-                api_key=keys['api_key'], api_secret=keys['api_secret']
-            ).get_account_info),
+            asyncio.to_thread(_client.get_account_info),
             timeout=15.0
         )
     except asyncio.TimeoutError:
