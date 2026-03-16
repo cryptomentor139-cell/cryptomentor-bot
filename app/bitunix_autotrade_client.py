@@ -19,9 +19,10 @@ class BitunixAutoTradeClient:
         # Fallback ke env var HANYA jika tidak ada sama sekali (untuk testing CLI).
         self.api_key = api_key if api_key else os.getenv('BITUNIX_API_KEY')
         self.api_secret = api_secret if api_secret else os.getenv('BITUNIX_API_SECRET')
-        # Selalu langsung ke Bitunix — gateway Cloudflare Worker tidak reliable
-        # karena *.workers.dev bisa diblokir atau Preview URL disabled
-        self.base_url = os.getenv('BITUNIX_BASE_URL', 'https://fapi.bitunix.com')
+        # Gateway via custom domain (lebih reliable dari *.workers.dev)
+        # Set BITUNIX_GATEWAY_URL=https://proxy.cryptomentor.site di Railway Variables
+        gateway = os.getenv('BITUNIX_GATEWAY_URL', '').rstrip('/')
+        self.base_url = gateway if gateway else os.getenv('BITUNIX_BASE_URL', 'https://fapi.bitunix.com')
 
         if not self.api_key or not self.api_secret:
             print("⚠️ Bitunix API credentials not configured")
@@ -86,6 +87,11 @@ class BitunixAutoTradeClient:
 
         # Proxy untuk bypass Railway IP block (jika dikonfigurasi)
         proxy_url = os.getenv('PROXY_URL')
+        if proxy_url:
+            # Sensor password untuk log
+            import re
+            safe_proxy = re.sub(r':[^:@]+@', ':***@', proxy_url)
+            print(f"[Bitunix] Using proxy: {safe_proxy}")
 
         r = None
         last_error = None
@@ -105,13 +111,11 @@ class BitunixAutoTradeClient:
                 r = cffi_requests.get(url, **kwargs)
             else:
                 r = cffi_requests.post(url, data=body_str, **kwargs)
-            # Kalau dapat HTML response (bot challenge), anggap gagal dan coba tanpa proxy
+            # Kalau dapat HTML response (bot challenge), anggap gagal — jangan retry tanpa proxy
             if r.status_code == 403 and '<html' in r.text[:100].lower():
                 if proxy_url:
-                    print(f"[Bitunix] curl_cffi+proxy got HTML 403, retrying without proxy...")
-                    r = cffi_requests.get(url, params=params, headers=headers, timeout=15, impersonate="chrome120") \
-                        if method.upper() == 'GET' else \
-                        cffi_requests.post(url, data=body_str, params=params, headers=headers, timeout=15, impersonate="chrome120")
+                    print(f"[Bitunix] curl_cffi+proxy got HTML 403, proxy IP mungkin diblokir Bitunix")
+                    r = None  # biarkan fallback ke requests biasa dengan proxy
         except ImportError:
             pass
         except Exception as e:
