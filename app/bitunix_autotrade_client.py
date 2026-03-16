@@ -101,13 +101,16 @@ class BitunixAutoTradeClient:
         # Strategy: curl_cffi dengan browser impersonation + proxy (paling reliable)
         try:
             from curl_cffi import requests as cffi_requests
-            kwargs = dict(params=params, headers=headers, timeout=15, impersonate="chrome120")
+            import curl_cffi
+            print(f"[Bitunix] curl_cffi version: {curl_cffi.__version__}")
+            kwargs = dict(params=params, headers=headers, timeout=15, impersonate="chrome124")
             if proxy_url:
                 kwargs['proxies'] = {'http': proxy_url, 'https': proxy_url}
             if method.upper() == 'GET':
                 r = cffi_requests.get(url, **kwargs)
             else:
                 r = cffi_requests.post(url, data=body_str, **kwargs)
+            print(f"[Bitunix] curl_cffi response: {r.status_code}, html={('<html' in r.text[:100].lower())}")
             if r.status_code == 403 and '<html' in r.text[:100].lower():
                 print(f"[Bitunix] curl_cffi got HTML 403")
                 r = None
