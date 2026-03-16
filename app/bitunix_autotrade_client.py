@@ -98,47 +98,32 @@ class BitunixAutoTradeClient:
         r = None
         last_error = None
 
-        # Kalau ada proxy: pakai requests biasa dulu (lebih reliable bypass Cloudflare dari server)
-        # Kalau tidak ada proxy: coba curl_cffi dengan browser impersonation
-        if proxy_url:
-            # Strategy: requests biasa dengan proxy
-            try:
-                kwargs = dict(params=params, headers=headers, timeout=15)
+        # Strategy: curl_cffi dengan browser impersonation + proxy (paling reliable)
+        try:
+            from curl_cffi import requests as cffi_requests
+            kwargs = dict(params=params, headers=headers, timeout=15, impersonate="chrome120")
+            if proxy_url:
                 kwargs['proxies'] = {'http': proxy_url, 'https': proxy_url}
-                if method.upper() == 'GET':
-                    r = requests.get(url, **kwargs)
-                else:
-                    r = requests.post(url, data=body_str, **kwargs)
-                if r.status_code == 403 and '<html' in r.text[:100].lower():
-                    print(f"[Bitunix] requests+proxy got HTML 403")
-                    r = None
-            except Exception as e:
-                last_error = e
-                print(f"[Bitunix] requests+proxy failed: {e}")
+            if method.upper() == 'GET':
+                r = cffi_requests.get(url, **kwargs)
+            else:
+                r = cffi_requests.post(url, data=body_str, **kwargs)
+            if r.status_code == 403 and '<html' in r.text[:100].lower():
+                print(f"[Bitunix] curl_cffi got HTML 403")
                 r = None
-        else:
-            # Strategy: curl_cffi dengan browser impersonation (tanpa proxy)
-            try:
-                from curl_cffi import requests as cffi_requests
-                kwargs = dict(params=params, headers=headers, timeout=15, impersonate="chrome120")
-                if method.upper() == 'GET':
-                    r = cffi_requests.get(url, **kwargs)
-                else:
-                    r = cffi_requests.post(url, data=body_str, **kwargs)
-                if r.status_code == 403 and '<html' in r.text[:100].lower():
-                    print(f"[Bitunix] curl_cffi got HTML 403")
-                    r = None
-            except ImportError:
-                pass
-            except Exception as e:
-                last_error = e
-                print(f"[Bitunix] curl_cffi failed: {e}")
-                r = None
+        except ImportError:
+            pass
+        except Exception as e:
+            last_error = e
+            print(f"[Bitunix] curl_cffi failed: {e}")
+            r = None
 
-        # Final fallback: requests biasa tanpa proxy
+        # Fallback: requests biasa
         if r is None:
             try:
                 kwargs = dict(params=params, headers=headers, timeout=15)
+                if proxy_url:
+                    kwargs['proxies'] = {'http': proxy_url, 'https': proxy_url}
                 if method.upper() == 'GET':
                     r = requests.get(url, **kwargs)
                 else:
