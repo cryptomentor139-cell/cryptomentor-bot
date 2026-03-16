@@ -85,11 +85,13 @@ class BitunixAutoTradeClient:
         else:
             headers = {"Content-Type": "application/json"}
 
-        # Proxy untuk bypass Railway IP block (jika dikonfigurasi)
-        proxy_url = os.getenv('PROXY_URL')
+        # Proxy rotation — PROXY_URL bisa berisi satu atau beberapa URL dipisah koma
+        # Contoh: http://user:pass@ip1:port,http://user:pass@ip2:port
+        import re, random
+        proxy_raw = os.getenv('PROXY_URL', '')
+        proxy_list = [p.strip() for p in proxy_raw.split(',') if p.strip()]
+        proxy_url = random.choice(proxy_list) if proxy_list else None
         if proxy_url:
-            # Sensor password untuk log
-            import re
             safe_proxy = re.sub(r':[^:@]+@', ':***@', proxy_url)
             print(f"[Bitunix] Using proxy: {safe_proxy}")
 
