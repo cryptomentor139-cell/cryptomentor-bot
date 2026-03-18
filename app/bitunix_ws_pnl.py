@@ -13,7 +13,23 @@ from typing import Dict, Optional, Callable
 
 logger = logging.getLogger(__name__)
 
-BITUNIX_WS_URL = "wss://fapi.bitunix.com/private"
+def _get_ws_url() -> str:
+    """Build WS URL, always using wss:// scheme."""
+    import os
+    base = os.getenv('BITUNIX_WS_URL', '').rstrip('/')
+    if not base:
+        base = os.getenv('BITUNIX_BASE_URL', '').rstrip('/')
+    if not base:
+        return "wss://fapi.bitunix.com/private"
+    # Force convert http(s) → ws(s), strip any trailing /private first
+    base = base.replace('https://', 'wss://').replace('http://', 'ws://')
+    base = base.rstrip('/')
+    # Remove /private suffix if already present to avoid duplication
+    if base.endswith('/private'):
+        return base
+    return f"{base}/private"
+
+BITUNIX_WS_URL = _get_ws_url()
 
 # user_id → WsPnlTracker instance
 _trackers: Dict[int, "WsPnlTracker"] = {}
@@ -105,7 +121,9 @@ class WsPnlTracker:
             "args": ["position"]
         })
 
-        async with websockets.connect(BITUNIX_WS_URL, ping_interval=None) as ws:
+        ws_url = _get_ws_url()
+        logger.info(f"[WsPnL:{self.user_id}] Connecting to {ws_url}")
+        async with websockets.connect(ws_url, ping_interval=None) as ws:
             logger.info(f"[WsPnL:{self.user_id}] WS connected")
             await ws.send(auth_msg)
 

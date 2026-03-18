@@ -8,6 +8,8 @@ Simple entry point for Railway deployment
 if __name__ == "__main__":
     import bot
     import asyncio
+    from dotenv import load_dotenv
+    load_dotenv()
 
     print("🚀 Starting CryptoMentor AI Bot...")
 

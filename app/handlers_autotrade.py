@@ -125,7 +125,7 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if keys and is_active:
         from app.autotrade_engine import is_running as engine_running
         engine_on = engine_running(user_id)
-        engine_status = "🟢 Engine berjalan" if engine_on else "🟡 Engine tidak aktif"
+        engine_status = "🟢 Engine running" if engine_on else "🟡 Engine inactive"
 
         # Fetch real balance dari Bitunix
         balance_line = ""
@@ -140,7 +140,7 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             if acc.get('success'):
                 balance_line = (
-                    f"💳 Balance Bitunix: <b>{acc['available']:.2f} USDT</b>\n"
+                    f"💳 Bitunix Balance: <b>{acc['available']:.2f} USDT</b>\n"
                     f"📈 Unrealized PnL: <b>{acc['total_unrealized_pnl']:+.2f} USDT</b>\n"
                 )
         except Exception:
@@ -153,11 +153,11 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📊 Status Portfolio", callback_data="at_status")],
-            [InlineKeyboardButton("📈 Trade History",    callback_data="at_history")],
+            [InlineKeyboardButton("📊 Status Portfolio",  callback_data="at_status")],
+            [InlineKeyboardButton("📈 Trade History",     callback_data="at_history")],
             engine_btn,
-            [InlineKeyboardButton("⚙️ Settings",         callback_data="at_settings")],
-            [InlineKeyboardButton("🔑 Ganti API Key",    callback_data="at_change_key")],
+            [InlineKeyboardButton("⚙️ Settings",          callback_data="at_settings")],
+            [InlineKeyboardButton("🔑 Change API Key",    callback_data="at_change_key")],
         ])
         current_leverage = int(session.get("leverage", 10))
         current_margin   = session.get("margin_mode", "cross")
@@ -165,9 +165,9 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             "🤖 <b>Auto Trade Dashboard</b>\n\n"
-            "✅ Status: <b>AKTIF</b>\n\n"
-            f"💵 <b>Modal Trading:</b> {session['initial_deposit']} USDT\n"
-            f"   <i>(jumlah USDT yang dipakai bot untuk trade)</i>\n"
+            "✅ Status: <b>ACTIVE</b>\n\n"
+            f"💵 <b>Trading Capital:</b> {session['initial_deposit']} USDT\n"
+            f"   <i>(USDT amount used by the bot for trading)</i>\n"
             f"{balance_line}"
             f"📈 Profit: {session['total_profit']:.2f} USDT\n\n"
             f"⚙️ Leverage: <b>{current_leverage}x</b> | Margin: <b>{margin_label}</b>\n"
@@ -180,14 +180,14 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif keys:
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚀 Mulai Trading",  callback_data="at_start_trade")],
-            [InlineKeyboardButton("🔑 Ganti API Key",  callback_data="at_change_key")],
-            [InlineKeyboardButton("❌ Hapus API Key",  callback_data="at_delete_key")],
+            [InlineKeyboardButton("🚀 Start Trading",   callback_data="at_start_trade")],
+            [InlineKeyboardButton("🔑 Change API Key",  callback_data="at_change_key")],
+            [InlineKeyboardButton("❌ Delete API Key",  callback_data="at_delete_key")],
         ])
         await update.message.reply_text(
             "🤖 <b>Auto Trade - Bitunix</b>\n\n"
-            f"✅ API Key tersimpan: <code>...{keys['key_hint']}</code>\n"
-            "⏸ Status: Belum aktif\n\nPilih aksi:",
+            f"✅ API Key saved: <code>...{keys['key_hint']}</code>\n"
+            "⏸ Status: Not active\n\nChoose an action:",
             parse_mode='HTML', reply_markup=keyboard
         )
         return ConversationHandler.END
@@ -195,22 +195,22 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         GROUP_URL = "https://t.me/+pKKCinyKUQlhMjk1"
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("👥 Join Group CryptoMentor x Bitunix", url=GROUP_URL)],
-            [InlineKeyboardButton("🔗 Daftar Bitunix via Referral", url=BITUNIX_REFERRAL_URL)],
-            [InlineKeyboardButton("✅ Sudah Join & Daftar, Lanjut Setup", callback_data="at_confirm_referral")],
-            [InlineKeyboardButton("❓ Kenapa Harus via Referral?",        callback_data="at_why_referral")],
+            [InlineKeyboardButton("👥 Join CryptoMentor x Bitunix Group", url=GROUP_URL)],
+            [InlineKeyboardButton("🔗 Register Bitunix via Referral", url=BITUNIX_REFERRAL_URL)],
+            [InlineKeyboardButton("✅ Already Joined & Registered, Continue Setup", callback_data="at_confirm_referral")],
+            [InlineKeyboardButton("❓ Why Referral Required?", callback_data="at_why_referral")],
         ])
         await update.message.reply_text(
             "🤖 <b>Auto Trade - Bitunix</b>\n\n"
-            "Sebelum mulai, ada 2 langkah penting:\n\n"
-            "👥 <b>Step 1 — Join Group Eksklusif:</b>\n"
+            "Before starting, there are 2 important steps:\n\n"
+            "👥 <b>Step 1 — Join Exclusive Group:</b>\n"
             f"<a href=\"{GROUP_URL}\">CryptoMentor AI x Bitunix</a>\n"
-            "Akan ada banyak <b>event cuan dari Bitunix</b> khusus untuk para user CryptoMentor AI "
-            "yang sudah mengaktifkan AutoTrade. Jangan sampai ketinggalan! 🎁\n\n"
-            "🔗 <b>Step 2 — Daftar Bitunix via Referral:</b>\n"
+            "There will be many <b>exclusive Bitunix events</b> for CryptoMentor AI users "
+            "who have activated AutoTrade. Don't miss out! 🎁\n\n"
+            "🔗 <b>Step 2 — Register Bitunix via Referral:</b>\n"
             f"<code>{BITUNIX_REFERRAL_URL}</code>\n"
             f"🎟 Referral Code: <code>{BITUNIX_REFERRAL_CODE}</code>\n\n"
-            "Klik tombol di bawah, lalu kembali ke sini setelah selesai.",
+            "Click the button below, then come back here when done.",
             parse_mode='HTML',
             reply_markup=keyboard,
             disable_web_page_preview=True
@@ -226,17 +226,17 @@ async def callback_why_referral(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "❓ <b>Kenapa Harus Daftar via Referral?</b>\n\n"
-        "Referral memungkinkan kami terus mengembangkan bot ini secara gratis untuk kamu.\n\n"
-        "✅ Kamu tetap punya full control atas akun Bitunix sendiri\n"
-        "✅ Dana kamu aman — API Key hanya punya permission Trade, tidak bisa withdraw\n"
-        "✅ Tidak ada biaya tambahan dari kami\n\n"
-        f"🔗 Daftar sekarang: {BITUNIX_REFERRAL_URL}",
+        "❓ <b>Why is Referral Required?</b>\n\n"
+        "Referral allows us to keep developing this bot for free for you.\n\n"
+        "✅ You retain full control over your own Bitunix account\n"
+        "✅ Your funds are safe — API Key only has Trade permission, cannot withdraw\n"
+        "✅ No additional fees from us\n\n"
+        f"🔗 Register now: {BITUNIX_REFERRAL_URL}",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Daftar Sekarang", url=BITUNIX_REFERRAL_URL)],
-            [InlineKeyboardButton("✅ Sudah Daftar",    callback_data="at_confirm_referral")],
-            [InlineKeyboardButton("🔙 Kembali",         callback_data="at_cancel")],
+            [InlineKeyboardButton("🔗 Register Now", url=BITUNIX_REFERRAL_URL)],
+            [InlineKeyboardButton("✅ Already Registered", callback_data="at_confirm_referral")],
+            [InlineKeyboardButton("🔙 Back",               callback_data="at_cancel")],
         ]),
         disable_web_page_preview=True
     )
@@ -254,13 +254,13 @@ async def callback_confirm_referral(update: Update, context: ContextTypes.DEFAUL
     if existing_keys:
         # Sudah pernah setup sebelumnya
         await query.edit_message_text(
-            f"✅ <b>Akun sudah terdaftar</b>\n\n"
+            f"✅ <b>Account already registered</b>\n\n"
             f"🔑 API Key: <code>...{existing_keys['key_hint']}</code>\n\n"
-            "Lanjutkan ke setup trading:",
+            "Continue to trading setup:",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🚀 Mulai Trading", callback_data="at_start_trade")],
-                [InlineKeyboardButton("🔑 Ganti API Key", callback_data="at_change_key")],
+                [InlineKeyboardButton("🚀 Start Trading", callback_data="at_start_trade")],
+                [InlineKeyboardButton("🔑 Change API Key", callback_data="at_change_key")],
             ])
         )
         return ConversationHandler.END
@@ -272,10 +272,10 @@ async def callback_confirm_referral(update: Update, context: ContextTypes.DEFAUL
         uid_status = session.get("status", "") if session else ""
 
         if uid_status == "uid_verified":
-            # UID sudah diverifikasi, langsung ke setup API key
+            # UID already verified, go straight to API key setup
             await query.edit_message_text(
-                f"✅ <b>UID Bitunix terverifikasi:</b> <code>{uid_saved}</code>\n\n"
-                "Sekarang masukkan API Key kamu:",
+                f"✅ <b>Bitunix UID verified:</b> <code>{uid_saved}</code>\n\n"
+                "Now enter your API Key:",
                 parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")],
@@ -284,43 +284,43 @@ async def callback_confirm_referral(update: Update, context: ContextTypes.DEFAUL
             return ConversationHandler.END
         elif uid_status == "pending_verification":
             await query.edit_message_text(
-                f"⏳ <b>UID kamu sedang diverifikasi admin</b>\n\n"
+                f"⏳ <b>Your UID is being verified by admin</b>\n\n"
                 f"🔢 UID: <code>{uid_saved}</code>\n\n"
-                "Mohon tunggu, kamu akan dapat notifikasi setelah diverifikasi.",
+                "Please wait — you'll receive a notification once verified.",
                 parse_mode='HTML'
             )
             return ConversationHandler.END
         elif uid_status == "uid_rejected":
             await query.edit_message_text(
-                f"❌ <b>UID sebelumnya ditolak</b>\n\n"
-                f"UID <code>{uid_saved}</code> tidak terverifikasi.\n\n"
-                "Masukkan UID baru jika kamu sudah daftar ulang via referral:",
+                f"❌ <b>Previous UID was rejected</b>\n\n"
+                f"UID <code>{uid_saved}</code> could not be verified.\n\n"
+                "Enter a new UID if you've re-registered via referral:",
                 parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔗 Daftar via Referral", url=BITUNIX_REFERRAL_URL)],
-                    [InlineKeyboardButton("🔄 Masukkan UID Baru",   callback_data="at_confirm_referral")],
+                    [InlineKeyboardButton("🔗 Register via Referral", url=BITUNIX_REFERRAL_URL)],
+                    [InlineKeyboardButton("🔄 Enter New UID",         callback_data="at_confirm_referral")],
                 ])
             )
-            # Reset UID agar bisa input ulang
+            # Reset UID so user can re-enter
             _save_uid(user_id, "", status="pending")
             return ConversationHandler.END
 
     await query.edit_message_text(
-        "✅ <b>Langkah 1/3 — Verifikasi UID</b>\n\n"
-        "Masukkan <b>UID Bitunix</b> kamu.\n\n"
-        "📍 Cara cek UID:\n"
-        "Login Bitunix → klik foto profil → UID tertera di bawah nama kamu\n\n"
-        "Contoh: <code>123456789</code>",
+        "✅ <b>Step 1/3 — UID Verification</b>\n\n"
+        "Enter your <b>Bitunix UID</b>.\n\n"
+        "📍 How to find your UID:\n"
+        "Login to Bitunix → tap your profile photo → UID is shown below your name\n\n"
+        "Example: <code>123456789</code>",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Batal", callback_data="at_cancel")]
+            [InlineKeyboardButton("❌ Cancel", callback_data="at_cancel")]
         ])
     )
     return WAITING_BITUNIX_UID
 
 
 async def receive_bitunix_uid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Terima UID Bitunix dari user, kirim ke admin untuk verifikasi."""
+    """Receive Bitunix UID from user, send to admin for verification."""
     uid = update.message.text.strip()
     user_id = update.effective_user.id
     user = update.effective_user
@@ -330,36 +330,36 @@ async def receive_bitunix_uid(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception:
         pass
 
-    # Validasi: UID Bitunix biasanya angka 6–12 digit
+    # Validate: Bitunix UID is typically a numeric string 5–12 digits
     if not uid.isdigit() or len(uid) < 5:
         await update.message.reply_text(
-            "❌ UID tidak valid. UID Bitunix berupa angka (contoh: <code>123456789</code>).\n\nCoba lagi:",
+            "❌ Invalid UID. Bitunix UID is a number (example: <code>123456789</code>).\n\nTry again:",
             parse_mode='HTML'
         )
         return WAITING_BITUNIX_UID
 
-    # Simpan UID ke Supabase dengan status pending_verification
+    # Save UID to Supabase with pending_verification status
     _save_uid(user_id, uid, status="pending_verification")
 
-    # Kirim notifikasi ke semua admin
+    # Notify all admins
     admin_ids = _get_admin_ids()
     username_display = f"@{user.username}" if user.username else f"#{user_id}"
     full_name = user.full_name or "Unknown"
 
     admin_keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ ACC",   callback_data=f"uid_acc_{user_id}"),
-            InlineKeyboardButton("❌ TOLAK", callback_data=f"uid_reject_{user_id}"),
+            InlineKeyboardButton("✅ APPROVE", callback_data=f"uid_acc_{user_id}"),
+            InlineKeyboardButton("❌ REJECT",  callback_data=f"uid_reject_{user_id}"),
         ]
     ])
 
     admin_text = (
-        f"🔔 <b>Verifikasi UID AutoTrade</b>\n\n"
+        f"🔔 <b>AutoTrade UID Verification</b>\n\n"
         f"👤 User: <b>{full_name}</b> ({username_display})\n"
         f"🆔 Telegram ID: <code>{user_id}</code>\n"
         f"🔢 Bitunix UID: <code>{uid}</code>\n\n"
-        f"Pastikan UID ini terdaftar under referral <b>sq45</b> di Bitunix.\n\n"
-        f"Acc atau tolak pendaftaran user ini:"
+        f"Verify that this UID is registered under referral <b>sq45</b> on Bitunix.\n\n"
+        f"Approve or reject this user's registration:"
     )
 
     notified = 0
@@ -374,14 +374,14 @@ async def receive_bitunix_uid(update: Update, context: ContextTypes.DEFAULT_TYPE
             notified += 1
         except Exception as e:
             import logging
-            logging.getLogger(__name__).warning(f"Gagal kirim notif ke admin {admin_id}: {e}")
+            logging.getLogger(__name__).warning(f"Failed to notify admin {admin_id}: {e}")
 
-    # Konfirmasi ke user bahwa UID sedang diverifikasi
+    # Confirm to user that UID is being verified
     await update.message.reply_text(
-        f"⏳ <b>UID kamu sedang diverifikasi</b>\n\n"
+        f"⏳ <b>Your UID is being verified</b>\n\n"
         f"🔢 UID: <code>{uid}</code>\n\n"
-        "Admin kami akan memverifikasi bahwa akun Bitunix kamu terdaftar under referral kami.\n\n"
-        "Kamu akan mendapat notifikasi setelah verifikasi selesai (biasanya dalam beberapa menit).",
+        "Our admin will verify that your Bitunix account is registered under our referral.\n\n"
+        "You'll receive a notification once verification is complete (usually within a few minutes).",
         parse_mode='HTML'
     )
     return ConversationHandler.END
@@ -441,30 +441,37 @@ async def callback_setup_key(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     user_id = query.from_user.id
 
-    # Kalau sudah punya key, jangan minta input lagi — langsung ke dashboard
+    # If key already exists, don't ask for input again — go straight to dashboard
     existing = get_user_api_keys(user_id)
     if existing:
         await query.edit_message_text(
-            f"✅ <b>API Key sudah tersimpan</b>\n\n"
+            f"✅ <b>API Key already saved</b>\n\n"
             f"🔑 Key: <code>...{existing['key_hint']}</code>\n"
             f"🏦 Exchange: {existing['exchange'].upper()}\n\n"
-            "Gunakan <b>Ganti API Key</b> jika ingin menggantinya.",
+            "Use <b>Change API Key</b> if you want to replace it.",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🚀 Mulai Trading", callback_data="at_start_trade")],
-                [InlineKeyboardButton("🔑 Ganti API Key", callback_data="at_change_key")],
-                [InlineKeyboardButton("❌ Hapus API Key", callback_data="at_delete_key")],
+                [InlineKeyboardButton("🚀 Start Trading",  callback_data="at_start_trade")],
+                [InlineKeyboardButton("🔑 Change API Key", callback_data="at_change_key")],
+                [InlineKeyboardButton("❌ Delete API Key", callback_data="at_delete_key")],
             ])
         )
         return ConversationHandler.END
 
     await query.edit_message_text(
-        "🔑 <b>Setup API Key — Langkah 1/2</b>\n\n"
-        "Masukkan <b>API Key</b> Bitunix kamu:\n\n"
-        "💡 Settings → API Management → Create API Key\n"
-        "Permission yang dibutuhkan: ✅ Trade, ✅ Read",
+        "🔑 <b>Setup API Key — Step 1/2</b>\n\n"
+        "Enter your Bitunix <b>API Key</b> below.\n\n"
+        "📖 <b>How to create your API Key:</b>\n"
+        "1️⃣ Go to <a href=\"https://www.bitunix.com/account/api-management\">Bitunix API Management</a>\n"
+        "2️⃣ Click <b>Create API Key</b>\n"
+        "3️⃣ Set a label (e.g. <code>CryptoMentor Bot</code>)\n"
+        "4️⃣ Enable permissions: ✅ <b>Trade</b>, ✅ <b>Read</b>\n"
+        "5️⃣ <b>Leave IP Address field empty</b> (do not restrict by IP)\n"
+        "6️⃣ Copy the <b>API Key</b> and paste it here\n\n"
+        "⚠️ Never share your API Key with anyone else.",
         parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Batal", callback_data="at_cancel")]])
+        disable_web_page_preview=True,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="at_cancel")]])
     )
     return WAITING_API_KEY
 
@@ -473,9 +480,19 @@ async def callback_change_key(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "🔑 <b>Ganti API Key — Langkah 1/2</b>\n\nMasukkan <b>API Key</b> Bitunix baru:",
+        "🔑 <b>Change API Key — Step 1/2</b>\n\n"
+        "Enter your new Bitunix <b>API Key</b> below.\n\n"
+        "📖 <b>How to create your API Key:</b>\n"
+        "1️⃣ Go to <a href=\"https://www.bitunix.com/account/api-management\">Bitunix API Management</a>\n"
+        "2️⃣ Click <b>Create API Key</b>\n"
+        "3️⃣ Set a label (e.g. <code>CryptoMentor Bot</code>)\n"
+        "4️⃣ Enable permissions: ✅ <b>Trade</b>, ✅ <b>Read</b>\n"
+        "5️⃣ <b>Leave IP Address field empty</b> (do not restrict by IP)\n"
+        "6️⃣ Copy the <b>API Key</b> and paste it here\n\n"
+        "⚠️ Never share your API Key with anyone else.",
         parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Batal", callback_data="at_cancel")]])
+        disable_web_page_preview=True,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="at_cancel")]])
     )
     return WAITING_API_KEY
 
@@ -488,16 +505,16 @@ async def receive_api_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     if len(api_key) < 10:
-        await update.message.reply_text("❌ API Key tidak valid (min 10 karakter). Coba lagi:")
+        await update.message.reply_text("❌ Invalid API Key (min 10 characters). Try again:")
         return WAITING_API_KEY
 
     context.user_data['temp_api_key'] = api_key
     await update.message.reply_text(
-        "✅ API Key diterima.\n\n"
-        "🔐 <b>Langkah 2/2</b> — Masukkan <b>API Secret</b>:\n\n"
-        "⚠️ Pesan ini akan dihapus setelah diproses.",
+        "✅ API Key received.\n\n"
+        "🔐 <b>Step 2/2</b> — Enter your <b>API Secret</b>:\n\n"
+        "⚠️ This message will be deleted after processing.",
         parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Batal", callback_data="at_cancel")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="at_cancel")]])
     )
     return WAITING_API_SECRET
 
@@ -511,22 +528,22 @@ async def receive_api_secret(update: Update, context: ContextTypes.DEFAULT_TYPE)
         pass
 
     if len(api_secret) < 10:
-        await update.message.reply_text("❌ API Secret tidak valid. Coba lagi:")
+        await update.message.reply_text("❌ Invalid API Secret. Try again:")
         return WAITING_API_SECRET
 
     api_key = context.user_data.pop('temp_api_key', None)
     if not api_key:
-        await update.message.reply_text("❌ Session expired. Mulai ulang dengan /autotrade")
+        await update.message.reply_text("❌ Session expired. Restart with /autotrade")
         return ConversationHandler.END
 
-    # Simpan terenkripsi ke Supabase
+    # Save encrypted to Supabase
     try:
         save_user_api_keys(user_id, api_key, api_secret)
     except Exception as e:
-        await update.message.reply_text(f"❌ Gagal menyimpan API Key: {e}")
+        await update.message.reply_text(f"❌ Failed to save API Key: {e}")
         return ConversationHandler.END
 
-    loading = await update.message.reply_text("⏳ <b>Memverifikasi koneksi...</b>", parse_mode='HTML')
+    loading = await update.message.reply_text("⏳ <b>Verifying connection...</b>", parse_mode='HTML')
 
     try:
         import asyncio
@@ -537,50 +554,50 @@ async def receive_api_secret(update: Update, context: ContextTypes.DEFAULT_TYPE)
             timeout=15.0
         )
     except asyncio.TimeoutError:
-        result = {'online': False, 'error': 'Timeout: server tidak merespons dalam 15 detik'}
+        result = {'online': False, 'error': 'Timeout: server did not respond within 15 seconds'}
     except Exception as e:
         result = {'online': False, 'error': str(e)}
 
     if result.get('online'):
         await loading.edit_text(
-            "✅ <b>API Key tersimpan dan terverifikasi!</b>\n\n"
+            "✅ <b>API Key saved and verified!</b>\n\n"
             f"🔑 Key: <code>...{api_key[-4:]}</code>\n"
             "🏦 Exchange: BITUNIX\n"
-            "🔒 Secret: terenkripsi AES-256-GCM\n\n"
-            "Siap mulai trading:",
+            "🔒 Secret: encrypted AES-256-GCM\n\n"
+            "Ready to start trading:",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🚀 Mulai Trading", callback_data="at_start_trade")],
+                [InlineKeyboardButton("🚀 Start Trading", callback_data="at_start_trade")],
             ])
         )
     else:
         err = result.get('error', '')
         if '403' in str(err) or 'TOKEN_INVALID' in str(err):
             msg = (
-                "⚠️ <b>API Key tersimpan, tapi akses ditolak</b>\n\n"
-                "API Key kamu punya <b>IP Restriction</b> yang memblokir server bot.\n\n"
-                "<b>Cara fix (wajib):</b>\n"
-                "1. Login Bitunix → API Management\n"
-                "2. Hapus API Key yang ada\n"
-                "3. Buat API Key baru\n"
-                "4. Di bagian <b>Bind IP Address</b> → <b>KOSONGKAN</b> (jangan isi apapun)\n"
-                "5. Centang permission: ✅ Trade\n"
-                "6. Setup ulang di bot ini\n\n"
-                "⚠️ <b>Kenapa harus kosong?</b>\n"
-                "Server bot menggunakan IP dinamis. Jika diisi IP tertentu, Bitunix akan blokir semua request dari IP lain."
+                "⚠️ <b>API Key saved, but access was denied</b>\n\n"
+                "Your API Key has an <b>IP Restriction</b> that is blocking the bot server.\n\n"
+                "<b>How to fix (required):</b>\n"
+                "1. Login to Bitunix → API Management\n"
+                "2. Delete the existing API Key\n"
+                "3. Create a new API Key\n"
+                "4. In <b>Bind IP Address</b> → <b>LEAVE BLANK</b> (do not enter anything)\n"
+                "5. Check permission: ✅ Trade\n"
+                "6. Re-setup in this bot\n\n"
+                "⚠️ <b>Why must it be blank?</b>\n"
+                "The bot server uses dynamic IPs. If a specific IP is set, Bitunix will block all requests from other IPs."
             )
         else:
             msg = (
-                f"⚠️ <b>Tersimpan, tapi verifikasi gagal:</b>\n{err}\n\n"
-                "Pastikan API Key dan Secret sudah benar, lalu coba lagi."
+                f"⚠️ <b>Saved, but verification failed:</b>\n{err}\n\n"
+                "Make sure your API Key and Secret are correct, then try again."
             )
         await loading.edit_text(
             msg,
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("❓ Tutorial", callback_data="at_howto")],
-                [InlineKeyboardButton("🔄 Coba Lagi", callback_data="at_setup_key")],
-                [InlineKeyboardButton("✅ Simpan Tetap", callback_data="at_dashboard")],
+                [InlineKeyboardButton("❓ Tutorial",        callback_data="at_howto")],
+                [InlineKeyboardButton("🔄 Try Again",       callback_data="at_setup_key")],
+                [InlineKeyboardButton("✅ Save Anyway",     callback_data="at_dashboard")],
             ])
         )
     return ConversationHandler.END
@@ -596,10 +613,10 @@ async def callback_start_trade(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = query.from_user.id
 
     if not get_user_api_keys(user_id):
-        await query.edit_message_text("❌ API Key tidak ditemukan. Gunakan /autotrade untuk setup.")
+        await query.edit_message_text("❌ API Key not found. Use /autotrade to set it up.")
         return ConversationHandler.END
 
-    # Cek balance real dari Bitunix
+    # Check real balance from Bitunix
     keys = get_user_api_keys(user_id)
     try:
         import asyncio
@@ -610,17 +627,17 @@ async def callback_start_trade(update: Update, context: ContextTypes.DEFAULT_TYP
             ).get_account_info),
             timeout=10.0
         )
-        balance_line = f"\n💳 Balance tersedia: <b>{acc.get('available', 0):.2f} USDT</b>" if acc.get('success') else ""
+        balance_line = f"\n💳 Available balance: <b>{acc.get('available', 0):.2f} USDT</b>" if acc.get('success') else ""
     except Exception:
         balance_line = ""
 
     await query.edit_message_text(
-        f"💰 <b>Mulai Auto Trade</b>{balance_line}\n\n"
-        "Masukkan jumlah USDT yang ingin ditradingkan:\n\n"
+        f"💰 <b>Start Auto Trade</b>{balance_line}\n\n"
+        "Enter the amount of USDT to trade with:\n\n"
         "📌 Min: 10 USDT | Max: 1000 USDT\n"
-        "Contoh: ketik <code>50</code>",
+        "Example: type <code>50</code>",
         parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Batal", callback_data="at_cancel")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="at_cancel")]])
     )
     context.user_data['at_flow'] = 'start_trade'
     return WAITING_TRADE_AMOUNT
@@ -631,7 +648,7 @@ async def receive_trade_amount(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         amount = float(update.message.text.strip())
     except ValueError:
-        await update.message.reply_text("❌ Masukkan angka. Contoh: <code>50</code>", parse_mode='HTML')
+        await update.message.reply_text("❌ Enter a number. Example: <code>50</code>", parse_mode='HTML')
         return WAITING_TRADE_AMOUNT
 
     if amount < 10:
@@ -643,16 +660,16 @@ async def receive_trade_amount(update: Update, context: ContextTypes.DEFAULT_TYP
 
     keys = get_user_api_keys(user_id)
     if not keys:
-        await update.message.reply_text("❌ API Key tidak ditemukan. Gunakan /autotrade.")
+        await update.message.reply_text("❌ API Key not found. Use /autotrade.")
         return ConversationHandler.END
 
     context.user_data['trade_amount'] = amount
 
-    # Tanya leverage
+    # Ask for leverage
     await update.message.reply_text(
-        f"⚙️ <b>Pilih Leverage</b>\n\n"
-        f"Modal: <b>{amount} USDT</b>\n\n"
-        "Pilih leverage atau ketik angka (1-125):",
+        f"⚙️ <b>Select Leverage</b>\n\n"
+        f"Capital: <b>{amount} USDT</b>\n\n"
+        "Choose a leverage or type a number (1-125):",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
             [
@@ -665,7 +682,7 @@ async def receive_trade_amount(update: Update, context: ContextTypes.DEFAULT_TYP
                 InlineKeyboardButton("75x",  callback_data="at_lev_75"),
                 InlineKeyboardButton("100x", callback_data="at_lev_100"),
             ],
-            [InlineKeyboardButton("❌ Batal", callback_data="at_cancel")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="at_cancel")],
         ])
     )
     return WAITING_LEVERAGE
@@ -687,37 +704,37 @@ async def _show_leverage_preview(update_or_query, context, leverage: int, from_c
 
     # Risk level label
     if leverage <= 10:
-        risk_label = "🟢 RENDAH"
-        risk_note  = "Cocok untuk pemula. Risiko likuidasi kecil."
+        risk_label = "🟢 LOW"
+        risk_note  = "Suitable for beginners. Low liquidation risk."
     elif leverage <= 25:
-        risk_label = "🟡 SEDANG"
-        risk_note  = "Perlu manajemen risiko yang baik."
+        risk_label = "🟡 MEDIUM"
+        risk_note  = "Requires good risk management."
     elif leverage <= 50:
-        risk_label = "🟠 TINGGI"
-        risk_note  = "Hanya untuk trader berpengalaman."
+        risk_label = "🟠 HIGH"
+        risk_note  = "For experienced traders only."
     else:
-        risk_label = "🔴 SANGAT TINGGI"
-        risk_note  = "Risiko likuidasi sangat besar. Hati-hati!"
+        risk_label = "🔴 VERY HIGH"
+        risk_note  = "Extremely high liquidation risk. Be careful!"
 
     text = (
-        f"📊 <b>Preview Risk/Reward — {leverage}x Leverage</b>\n\n"
-        f"💵 Modal: <b>{amount} USDT</b>\n"
+        f"📊 <b>Risk/Reward Preview — {leverage}x Leverage</b>\n\n"
+        f"💵 Capital: <b>{amount} USDT</b>\n"
         f"📈 Notional value: <b>{notional:.0f} USDT</b>\n\n"
-        f"✅ Potensi profit (TP ~2%): <b>+{potential_profit_2pct:.2f} USDT</b>\n"
-        f"❌ Potensi loss (SL ~2%): <b>-{potential_loss_2pct:.2f} USDT</b>\n"
-        f"💥 Likuidasi jika harga turun: <b>{liquidation_pct}%</b>\n\n"
+        f"✅ Potential profit (TP ~2%): <b>+{potential_profit_2pct:.2f} USDT</b>\n"
+        f"❌ Potential loss (SL ~2%): <b>-{potential_loss_2pct:.2f} USDT</b>\n"
+        f"💥 Liquidation if price moves: <b>{liquidation_pct}%</b>\n\n"
         f"⚠️ Risk Level: {risk_label}\n"
         f"📝 {risk_note}\n\n"
-        f"Bot akan otomatis:\n"
-        f"• Scan signal SMC + Order Block setiap menit\n"
-        f"• Eksekusi order dengan TP & SL otomatis\n"
-        f"• Notifikasi setiap trade masuk\n\n"
-        f"Lanjutkan dengan <b>{leverage}x</b>?"
+        f"Bot will automatically:\n"
+        f"• Scan SMC + Order Block signals every minute\n"
+        f"• Execute orders with automatic TP & SL\n"
+        f"• Notify you on every trade entry\n\n"
+        f"Continue with <b>{leverage}x</b>?"
     )
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"✅ Mulai dengan {leverage}x", callback_data=f"at_confirm_trade")],
-        [InlineKeyboardButton("🔄 Ganti Leverage", callback_data="at_start_trade")],
-        [InlineKeyboardButton("❌ Batal", callback_data="at_cancel")],
+        [InlineKeyboardButton(f"✅ Start with {leverage}x", callback_data=f"at_confirm_trade")],
+        [InlineKeyboardButton("🔄 Change Leverage",         callback_data="at_start_trade")],
+        [InlineKeyboardButton("❌ Cancel",                  callback_data="at_cancel")],
     ])
 
     context.user_data['trade_leverage'] = leverage
@@ -738,15 +755,15 @@ async def callback_leverage_select(update: Update, context: ContextTypes.DEFAULT
 
 
 async def receive_leverage_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle input leverage manual (angka)."""
+    """Handle manual leverage input (number)."""
     try:
         leverage = int(update.message.text.strip())
     except ValueError:
-        await update.message.reply_text("❌ Masukkan angka leverage. Contoh: <code>20</code>", parse_mode='HTML')
+        await update.message.reply_text("❌ Enter a leverage number. Example: <code>20</code>", parse_mode='HTML')
         return WAITING_LEVERAGE
 
     if leverage < 1 or leverage > 125:
-        await update.message.reply_text("❌ Leverage harus antara 1–125.")
+        await update.message.reply_text("❌ Leverage must be between 1–125.")
         return WAITING_LEVERAGE
 
     await _show_leverage_preview(update.message, context, leverage, from_callback=False)
@@ -763,16 +780,16 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
     leverage = context.user_data.get('trade_leverage', 10)
 
     if not amount:
-        await query.edit_message_text("❌ Session expired. Mulai ulang dengan /autotrade.")
+        await query.edit_message_text("❌ Session expired. Restart with /autotrade.")
         return ConversationHandler.END
 
     keys = get_user_api_keys(user_id)
     if not keys:
-        await query.edit_message_text("❌ API Key tidak ditemukan.")
+        await query.edit_message_text("❌ API Key not found.")
         return ConversationHandler.END
 
-    # Cek balance sebelum mulai
-    loading = await query.edit_message_text("⏳ <b>Memverifikasi balance...</b>", parse_mode='HTML')
+    # Check balance before starting
+    loading = await query.edit_message_text("⏳ <b>Verifying balance...</b>", parse_mode='HTML')
 
     try:
         import asyncio
@@ -785,7 +802,7 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
             timeout=15.0
         )
     except asyncio.TimeoutError:
-        await loading.edit_text("❌ Timeout saat cek balance. Coba lagi.")
+        await loading.edit_text("❌ Timeout while checking balance. Try again.")
         return ConversationHandler.END
     except Exception as e:
         await loading.edit_text(f"❌ Error: {e}")
@@ -795,36 +812,36 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
         err = acc.get('error', '')
         if '403' in str(err) or 'TOKEN_INVALID' in str(err):
             await loading.edit_text(
-                "❌ <b>Akses ditolak Bitunix</b>\n\n"
-                "API Key kamu punya <b>IP Restriction</b> yang memblokir server bot.\n\n"
-                "<b>Cara fix:</b>\n"
-                "1. Login Bitunix → API Management\n"
-                "2. Hapus API Key yang ada\n"
-                "3. Buat API Key baru\n"
-                "4. Di bagian <b>Bind IP Address</b> → <b>KOSONGKAN</b>\n"
-                "5. Centang permission: ✅ Trade\n"
-                "6. Setup ulang di bot: /autotrade → Ganti API Key",
+                "❌ <b>Access denied by Bitunix</b>\n\n"
+                "Your API Key has an <b>IP Restriction</b> that is blocking the bot server.\n\n"
+                "<b>How to fix:</b>\n"
+                "1. Login to Bitunix → API Management\n"
+                "2. Delete the existing API Key\n"
+                "3. Create a new API Key\n"
+                "4. In <b>Bind IP Address</b> → <b>LEAVE BLANK</b>\n"
+                "5. Check permission: ✅ Trade\n"
+                "6. Re-setup in bot: /autotrade → Change API Key",
                 parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("❓ Tutorial Lengkap", callback_data="at_howto")],
-                    [InlineKeyboardButton("🔑 Setup Ulang API Key", callback_data="at_change_key")],
+                    [InlineKeyboardButton("❓ Full Tutorial",       callback_data="at_howto")],
+                    [InlineKeyboardButton("🔑 Re-setup API Key",    callback_data="at_change_key")],
                 ])
             )
         else:
-            await loading.edit_text(f"❌ Gagal cek balance: {err}", parse_mode='HTML')
+            await loading.edit_text(f"❌ Failed to check balance: {err}", parse_mode='HTML')
         return ConversationHandler.END
 
     available = acc.get('available', 0)
     if available < amount:
         await loading.edit_text(
-            f"❌ <b>Balance tidak cukup</b>\n\n"
-            f"Tersedia: {available:.2f} USDT\n"
-            f"Dibutuhkan: {amount} USDT",
+            f"❌ <b>Insufficient balance</b>\n\n"
+            f"Available: {available:.2f} USDT\n"
+            f"Required: {amount} USDT",
             parse_mode='HTML'
         )
         return ConversationHandler.END
 
-    # Simpan session dan start engine
+    # Save session and start engine
     save_autotrade_session(user_id, amount, leverage)
 
     from app.autotrade_engine import start_engine
@@ -839,16 +856,16 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
     )
 
     await loading.edit_text(
-        f"✅ <b>AutoTrade Aktif!</b>\n\n"
-        f"💵 Modal: {amount} USDT\n"
+        f"✅ <b>AutoTrade Active!</b>\n\n"
+        f"💵 Capital: {amount} USDT\n"
         f"⚙️ Leverage: {leverage}x\n"
         f"🏦 Exchange: BITUNIX\n\n"
-        f"Bot sedang memantau pasar. Kamu akan dapat notifikasi setiap kali ada trade masuk.\n\n"
-        f"Gunakan /autotrade untuk cek status atau stop.",
+        f"Bot is now monitoring the market. You'll receive a notification every time a trade is placed.\n\n"
+        f"Use /autotrade to check status or stop.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🛑 Stop AutoTrade", callback_data="at_stop_engine")],
-            [InlineKeyboardButton("📊 Dashboard", callback_data="at_dashboard")],
+            [InlineKeyboardButton("📊 Dashboard",      callback_data="at_dashboard")],
         ])
     )
     return ConversationHandler.END
@@ -863,12 +880,12 @@ async def callback_status_portfolio(update: Update, context: ContextTypes.DEFAUL
     keys = get_user_api_keys(user_id)
     if not keys:
         await query.edit_message_text(
-            "❌ API Key belum disetup.\n\nGunakan /autotrade untuk setup.",
+            "❌ API Key not set up.\n\nUse /autotrade to set it up.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="at_dashboard")]])
         )
         return
 
-    await query.edit_message_text("⏳ Mengambil data posisi dari Bitunix...")
+    await query.edit_message_text("⏳ Fetching position data from Bitunix...")
 
     try:
         import asyncio
@@ -886,7 +903,7 @@ async def callback_status_portfolio(update: Update, context: ContextTypes.DEFAUL
 
         if not pos_result.get('success'):
             await query.edit_message_text(
-                f"❌ Gagal mengambil posisi: {pos_result.get('error', 'Unknown error')}",
+                f"❌ Failed to fetch positions: {pos_result.get('error', 'Unknown error')}",
                 reply_markup=back_kb
             )
             return
@@ -896,20 +913,20 @@ async def callback_status_portfolio(update: Update, context: ContextTypes.DEFAUL
         upnl      = acc_result.get('total_unrealized_pnl', 0) if acc_result.get('success') else 0
 
         from app.autotrade_engine import is_running
-        engine_status = "🟢 Aktif" if is_running(user_id) else "🔴 Tidak aktif"
+        engine_status = "🟢 Active" if is_running(user_id) else "🔴 Inactive"
 
         lines = [
-            f"📊 <b>Status Portfolio</b>",
+            f"📊 <b>Portfolio Status</b>",
             f"",
             f"⚙️ Engine: {engine_status}",
             f"💰 Balance: <b>{balance:.2f} USDT</b>",
             f"📈 Unrealized PnL: <b>{upnl:+.2f} USDT</b>",
-            f"🔄 Posisi terbuka: <b>{len(positions)}</b>",
+            f"🔄 Open positions: <b>{len(positions)}</b>",
             f"",
         ]
 
         if positions:
-            lines.append("📋 <b>Posisi Aktif:</b>")
+            lines.append("📋 <b>Active Positions:</b>")
             for p in positions:
                 pnl      = p.get('pnl', 0)
                 pnl_emoji = "📈" if pnl >= 0 else "📉"
@@ -930,10 +947,10 @@ async def callback_status_portfolio(update: Update, context: ContextTypes.DEFAUL
                     f"  {pnl_emoji} PnL: <b>{pnl:+.4f} USDT</b> ({pnl_pct:+.2f}%)"
                 )
         else:
-            lines.append("💤 <i>Tidak ada posisi terbuka saat ini.</i>")
+            lines.append("💤 <i>No open positions at the moment.</i>")
 
         from datetime import datetime
-        lines.append(f"\n⏱ Update: {datetime.now().strftime('%H:%M:%S')}")
+        lines.append(f"\n⏱ Updated: {datetime.now().strftime('%H:%M:%S')}")
 
         await query.edit_message_text(
             "\n".join(lines),
@@ -949,79 +966,94 @@ async def callback_status_portfolio(update: Update, context: ContextTypes.DEFAUL
 
 
 async def callback_trade_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Tampilkan riwayat trade dari Bitunix."""
+    """Show trade history from Supabase autotrade_trades table."""
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
 
-    keys = get_user_api_keys(user_id)
-    if not keys:
-        await query.edit_message_text(
-            "❌ API Key belum disetup.\n\nGunakan /autotrade untuk setup.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="at_dashboard")]])
-        )
-        return
-
-    await query.edit_message_text("⏳ Mengambil riwayat trade dari Bitunix...")
+    back_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Refresh", callback_data="at_history"),
+         InlineKeyboardButton("🔙 Back",    callback_data="at_dashboard")]
+    ])
 
     try:
-        import asyncio
-        from app.bitunix_autotrade_client import BitunixAutoTradeClient
+        from app.trade_history import get_trade_history
 
-        client  = BitunixAutoTradeClient(api_key=keys['api_key'], api_secret=keys['api_secret'])
-        result  = await asyncio.to_thread(client.get_trade_history, user_id, 15)
+        trades = get_trade_history(user_id, limit=15)
 
-        back_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 Refresh", callback_data="at_history"),
-             InlineKeyboardButton("🔙 Back", callback_data="at_dashboard")]
-        ])
-
-        if not result.get('success'):
+        if not trades:
             await query.edit_message_text(
-                f"❌ Gagal mengambil history: {result.get('response', 'Unknown error')}",
-                reply_markup=back_kb
-            )
-            return
-
-        # Re-fetch raw data for richer display
-        raw = client._request('GET', '/api/v1/futures/trade/get_history_orders',
-                               params={'pageSize': 15}, signed=True)
-        orders = raw.get('data') or [] if raw.get('success') else []
-
-        if not orders:
-            await query.edit_message_text(
-                "📈 <b>Trade History</b>\n\n💤 Belum ada riwayat trade.",
+                "📈 <b>Trade History</b>\n\n💤 No trade history yet.\n\n"
+                "<i>Trades will appear here once the engine executes orders.</i>",
                 parse_mode='HTML',
                 reply_markup=back_kb
             )
             return
 
-        lines = ["📈 <b>Trade History (15 terakhir)</b>\n"]
-        for o in orders[:15]:
-            side      = o.get('side', '?')
-            sym       = o.get('symbol', '?').replace('USDT', '')
-            qty       = o.get('qty', '?')
-            price     = o.get('avgPrice') or o.get('price') or 'market'
-            status    = o.get('status', '?')
-            ctime     = o.get('ctime', '')[:16] if o.get('ctime') else ''
-            pnl       = o.get('realizedPNL') or o.get('pnl')
+        total_pnl  = 0.0
+        wins       = 0
+        losses     = 0
+        lines      = ["📈 <b>Trade History (last 15)</b>\n"]
 
-            side_emoji = "🟢" if side == 'BUY' else "🔴"
-            status_emoji = "✅" if status in ('FILLED', 'FULL_FILLED') else "⏳" if status == 'PARTIAL_FILLED' else "❌"
+        for t in trades:
+            side        = t.get("side", "?")
+            symbol      = t.get("symbol", "?").replace("USDT", "")
+            entry       = t.get("entry_price", 0)
+            exit_px     = t.get("exit_price")
+            pnl         = t.get("pnl_usdt")
+            status      = t.get("status", "open")
+            leverage    = t.get("leverage", "-")
+            confidence  = t.get("confidence", 0)
+            opened_at   = (t.get("opened_at") or "")[:16].replace("T", " ")
+            is_flip     = t.get("is_flip", False)
+            loss_reason = t.get("loss_reasoning", "")
 
-            line = f"{side_emoji} <b>{sym}</b> {side} | {qty} @ {price}"
-            if pnl is not None:
-                try:
-                    pnl_f = float(pnl)
-                    pnl_emoji = "📈" if pnl_f >= 0 else "📉"
-                    line += f"\n   {pnl_emoji} PnL: <b>{pnl_f:+.4f} USDT</b>"
-                except Exception:
-                    pass
-            line += f"\n   {status_emoji} {status} | {ctime}"
+            side_emoji   = "🟢" if side == "LONG" else "🔴"
+            flip_tag     = " 🔄" if is_flip else ""
+
+            if status == "open":
+                status_emoji = "⏳"
+                pnl_line     = "   ⏳ Position still open"
+            elif status in ("closed_tp",):
+                status_emoji = "✅"
+                pnl_line     = f"   📈 PnL: <b>+{pnl:.4f} USDT</b>"
+                wins += 1
+                total_pnl += pnl or 0
+            elif status in ("closed_sl", "closed_flip"):
+                status_emoji = "❌"
+                pnl_line     = f"   📉 PnL: <b>{pnl:.4f} USDT</b>"
+                if loss_reason:
+                    # Show first reason only to keep it compact
+                    short_reason = loss_reason.split(" | ")[0] if " | " in loss_reason else loss_reason
+                    pnl_line    += f"\n   💡 <i>{short_reason[:80]}</i>"
+                losses += 1
+                total_pnl += pnl or 0
+            else:
+                status_emoji = "🔵"
+                pnl_line     = f"   PnL: {pnl:.4f} USDT" if pnl is not None else ""
+
+            line = (
+                f"{status_emoji} {side_emoji} <b>{symbol}</b> {side}{flip_tag} | {leverage}x\n"
+                f"   📍 Entry: <code>{entry:.4f}</code>"
+            )
+            if exit_px:
+                line += f" → Exit: <code>{exit_px:.4f}</code>"
+            line += f"\n   🧠 Conf: {confidence}% | {opened_at}"
+            line += f"\n{pnl_line}"
             lines.append(line)
 
+        # Summary footer
+        total_trades = wins + losses
+        win_rate     = round(wins / total_trades * 100) if total_trades > 0 else 0
+        pnl_emoji    = "📈" if total_pnl >= 0 else "📉"
+        lines.append(
+            f"\n━━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 Closed: {total_trades} | ✅ {wins}W / ❌ {losses}L | WR: {win_rate}%\n"
+            f"{pnl_emoji} Total PnL: <b>{total_pnl:+.4f} USDT</b>"
+        )
+
         from datetime import datetime
-        lines.append(f"\n⏱ Update: {datetime.now().strftime('%H:%M:%S')}")
+        lines.append(f"⏱ Updated: {datetime.now().strftime('%H:%M:%S')}")
 
         await query.edit_message_text(
             "\n\n".join(lines),
@@ -1037,7 +1069,7 @@ async def callback_trade_history(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def callback_stop_engine(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stop autotrade engine untuk user ini."""
+    """Stop autotrade engine for this user."""
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
@@ -1045,7 +1077,7 @@ async def callback_stop_engine(update: Update, context: ContextTypes.DEFAULT_TYP
     from app.autotrade_engine import stop_engine, is_running
     if is_running(user_id):
         stop_engine(user_id)
-        # Update status di Supabase
+        # Update status in Supabase
         try:
             _client().table("autotrade_sessions").update({
                 "status": "stopped",
@@ -1054,25 +1086,25 @@ async def callback_stop_engine(update: Update, context: ContextTypes.DEFAULT_TYP
         except Exception:
             pass
         await query.edit_message_text(
-            "🛑 <b>AutoTrade dihentikan.</b>\n\nGunakan /autotrade untuk mulai lagi.",
+            "🛑 <b>AutoTrade stopped.</b>\n\nUse /autotrade to start again.",
             parse_mode='HTML'
         )
     else:
         await query.edit_message_text(
-            "ℹ️ AutoTrade tidak sedang berjalan.\n\nGunakan /autotrade untuk mulai.",
+            "ℹ️ AutoTrade is not currently running.\n\nUse /autotrade to start.",
             parse_mode='HTML'
         )
     return ConversationHandler.END
 
 
 def _get_server_ip() -> str:
-    """Ambil IP publik server ini (Railway/VPS)."""
+    """Get this server's public IP (Railway/VPS)."""
     try:
         import requests as _req
         r = _req.get("https://api.ipify.org?format=json", timeout=5)
-        return r.json().get("ip", "tidak diketahui")
+        return r.json().get("ip", "unknown")
     except Exception:
-        return "tidak diketahui"
+        return "unknown"
 
 
 async def callback_howto(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1080,30 +1112,30 @@ async def callback_howto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     await query.edit_message_text(
-        "📖 <b>Cara Setup API Key Bitunix</b>\n\n"
-        "<b>Langkah-langkah:</b>\n"
-        "1. Login ke <a href='https://www.bitunix.com'>bitunix.com</a>\n"
-        "2. Klik foto profil → <b>API Management</b>\n"
-        "3. Klik <b>Create API Key</b>\n"
-        "4. Isi <b>Note</b>: bebas (contoh: AutoTrade)\n"
-        "5. <b>Purpose</b>: pilih <b>Trading API</b>\n"
-        "6. <b>Bind IP address</b>: ⚠️ <b>WAJIB KOSONG</b> — jangan isi apapun\n"
-        "7. <b>Permission</b>: centang ✅ <b>Trade</b>\n"
-        "8. Klik <b>Confirm</b> → verifikasi email\n"
-        "9. Copy <b>API Key</b> dan <b>Secret Key</b>\n\n"
+        "📖 <b>How to Setup Bitunix API Key</b>\n\n"
+        "<b>Steps:</b>\n"
+        "1. Login to <a href='https://www.bitunix.com'>bitunix.com</a>\n"
+        "2. Click your profile photo → <b>API Management</b>\n"
+        "3. Click <b>Create API Key</b>\n"
+        "4. Fill in <b>Note</b>: anything (e.g. AutoTrade)\n"
+        "5. <b>Purpose</b>: select <b>Trading API</b>\n"
+        "6. <b>Bind IP address</b>: ⚠️ <b>MUST BE BLANK</b> — do not enter anything\n"
+        "7. <b>Permission</b>: check ✅ <b>Trade</b>\n"
+        "8. Click <b>Confirm</b> → verify via email\n"
+        "9. Copy your <b>API Key</b> and <b>Secret Key</b>\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "🚫 <b>JANGAN isi Bind IP Address</b>\n\n"
-        "Server bot menggunakan IP dinamis yang bisa berubah sewaktu-waktu. "
-        "Jika IP diisi, Bitunix akan blokir semua request dari IP lain dan autotrade tidak bisa jalan.\n\n"
-        "✅ <b>Aman tanpa IP restriction?</b>\n"
-        "Ya — API key ini hanya punya permission <b>Trade</b>, "
-        "tidak bisa withdraw dana. Dana kamu tetap aman.\n\n"
+        "🚫 <b>DO NOT fill in Bind IP Address</b>\n\n"
+        "The bot server uses dynamic IPs that can change at any time. "
+        "If an IP is set, Bitunix will block all requests from other IPs and autotrade won't work.\n\n"
+        "✅ <b>Is it safe without IP restriction?</b>\n"
+        "Yes — this API key only has <b>Trade</b> permission, "
+        "it cannot withdraw funds. Your funds remain safe.\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "⚠️ Secret Key hanya tampil <b>sekali</b> — simpan baik-baik sebelum klik Got it!",
+        "⚠️ Secret Key is only shown <b>once</b> — save it before clicking Got it!",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")],
-            [InlineKeyboardButton("🌐 Buka Bitunix API Management",
+            [InlineKeyboardButton("🌐 Open Bitunix API Management",
                                   url="https://www.bitunix.com/user/api-management")],
         ]),
         disable_web_page_preview=True
@@ -1116,11 +1148,11 @@ async def callback_delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "⚠️ <b>Hapus API Key?</b>\n\nIni akan menghentikan auto trading dan menghapus API Key.",
+        "⚠️ <b>Delete API Key?</b>\n\nThis will stop auto trading and remove your API Key.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Ya, Hapus", callback_data="at_confirm_delete")],
-            [InlineKeyboardButton("❌ Batal",     callback_data="at_cancel")],
+            [InlineKeyboardButton("✅ Yes, Delete", callback_data="at_confirm_delete")],
+            [InlineKeyboardButton("❌ Cancel",      callback_data="at_cancel")],
         ])
     )
     return ConversationHandler.END
@@ -1132,7 +1164,7 @@ async def callback_confirm_delete(update: Update, context: ContextTypes.DEFAULT_
     user_id = query.from_user.id
     delete_user_api_keys(user_id)
     update_autotrade_status(user_id, 'inactive')
-    await query.edit_message_text("✅ API Key dihapus. Gunakan /autotrade untuk setup ulang.")
+    await query.edit_message_text("✅ API Key deleted. Use /autotrade to set up again.")
     return ConversationHandler.END
 
 
@@ -1141,14 +1173,14 @@ async def callback_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     context.user_data.pop('temp_api_key', None)
     context.user_data.pop('at_flow', None)
-    await query.edit_message_text("❌ Dibatalkan. Gunakan /autotrade untuk memulai lagi.")
+    await query.edit_message_text("❌ Cancelled. Use /autotrade to start again.")
     return ConversationHandler.END
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop('temp_api_key', None)
     context.user_data.pop('at_flow', None)
-    await update.message.reply_text("❌ Dibatalkan.")
+    await update.message.reply_text("❌ Cancelled.")
     return ConversationHandler.END
 
 
@@ -1163,30 +1195,30 @@ async def callback_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if is_active and keys:
         await query.edit_message_text(
             "🤖 <b>Auto Trade Dashboard</b>\n\n"
-            "✅ Status: <b>AKTIF</b>\n"
+            "✅ Status: <b>ACTIVE</b>\n"
             f"💰 Deposit: {session['initial_deposit']} USDT\n"
             f"🔑 Key: <code>...{keys['key_hint']}</code>",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📊 Status", callback_data="at_status")],
-                [InlineKeyboardButton("💸 Withdraw", callback_data="at_withdraw")],
+                [InlineKeyboardButton("📊 Status",    callback_data="at_status")],
+                [InlineKeyboardButton("💸 Withdraw",  callback_data="at_withdraw")],
             ])
         )
     else:
         await query.edit_message_text(
             "🤖 <b>Auto Trade</b>\n\n"
             f"✅ API Key: <code>...{keys['key_hint'] if keys else '????'}</code>\n"
-            "⏸ Status: Belum aktif",
+            "⏸ Status: Not active",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🚀 Mulai Trading", callback_data="at_start_trade")]
+                [InlineKeyboardButton("🚀 Start Trading", callback_data="at_start_trade")]
             ])
         )
     return ConversationHandler.END
 
 
 async def callback_restart_engine(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Restart autotrade engine untuk user ini tanpa perlu restart bot."""
+    """Restart autotrade engine for this user without restarting the bot."""
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
@@ -1196,14 +1228,14 @@ async def callback_restart_engine(update: Update, context: ContextTypes.DEFAULT_
 
     if not keys or not session or session.get("status") != "active":
         await query.edit_message_text(
-            "❌ Tidak ada sesi aktif. Gunakan /autotrade untuk mulai.",
+            "❌ No active session. Use /autotrade to start.",
             parse_mode='HTML'
         )
         return ConversationHandler.END
 
     from app.autotrade_engine import start_engine, is_running
     if is_running(user_id):
-        await query.answer("✅ Engine sudah berjalan!", show_alert=True)
+        await query.answer("✅ Engine is already running!", show_alert=True)
         return ConversationHandler.END
 
     amount = float(session.get("initial_deposit", 10))
@@ -1220,12 +1252,12 @@ async def callback_restart_engine(update: Update, context: ContextTypes.DEFAULT_
     )
 
     await query.edit_message_text(
-        "✅ <b>Engine berhasil direstart!</b>\n\n"
-        f"💵 Modal: {amount} USDT | ⚙️ Leverage: {leverage}x\n\n"
-        "Bot sedang memantau pasar. Gunakan /autotrade untuk cek status.",
+        "✅ <b>Engine restarted successfully!</b>\n\n"
+        f"💵 Capital: {amount} USDT | ⚙️ Leverage: {leverage}x\n\n"
+        "Bot is monitoring the market. Use /autotrade to check status.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("📊 Dashboard", callback_data="at_dashboard")],
+            [InlineKeyboardButton("📊 Dashboard",      callback_data="at_dashboard")],
             [InlineKeyboardButton("🛑 Stop AutoTrade", callback_data="at_stop_engine")],
         ])
     )
@@ -1260,14 +1292,14 @@ async def callback_uid_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML'
     )
 
-    # Notifikasi ke user
+    # Notify user
     try:
         await context.bot.send_message(
             chat_id=target_user_id,
             text=(
-                "✅ <b>UID Kamu Telah Diverifikasi!</b>\n\n"
-                "Akun Bitunix kamu sudah terkonfirmasi under referral kami.\n\n"
-                "Sekarang setup API Key untuk mulai Auto Trade:"
+                "✅ <b>Your UID Has Been Verified!</b>\n\n"
+                "Your Bitunix account is confirmed under our referral.\n\n"
+                "Now set up your API Key to start Auto Trade:"
             ),
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
@@ -1276,7 +1308,7 @@ async def callback_uid_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning(f"Gagal notif user {target_user_id}: {e}")
+        logging.getLogger(__name__).warning(f"Failed to notify user {target_user_id}: {e}")
 
 
 async def callback_uid_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1301,27 +1333,27 @@ async def callback_uid_reject(update: Update, context: ContextTypes.DEFAULT_TYPE
         parse_mode='HTML'
     )
 
-    # Notifikasi ke user
+    # Notify user
     try:
         await context.bot.send_message(
             chat_id=target_user_id,
             text=(
-                "❌ <b>Verifikasi UID Ditolak</b>\n\n"
-                "UID Bitunix kamu tidak terdeteksi terdaftar under referral kami.\n\n"
-                "Pastikan kamu mendaftar Bitunix menggunakan link berikut:\n"
+                "❌ <b>UID Verification Rejected</b>\n\n"
+                "Your Bitunix UID was not detected as registered under our referral.\n\n"
+                "Make sure you registered on Bitunix using the following link:\n"
                 f"🔗 <code>{BITUNIX_REFERRAL_URL}</code>\n\n"
-                "Setelah daftar ulang dengan referral yang benar, kirim UID baru kamu dengan /autotrade."
+                "After re-registering with the correct referral, send your new UID with /autotrade."
             ),
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔗 Daftar Ulang via Referral", url=BITUNIX_REFERRAL_URL)],
-                [InlineKeyboardButton("🔄 Coba Lagi", callback_data="at_confirm_referral")],
+                [InlineKeyboardButton("🔗 Re-register via Referral", url=BITUNIX_REFERRAL_URL)],
+                [InlineKeyboardButton("🔄 Try Again", callback_data="at_confirm_referral")],
             ]),
             disable_web_page_preview=True
         )
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning(f"Gagal notif user {target_user_id}: {e}")
+        logging.getLogger(__name__).warning(f"Failed to notify user {target_user_id}: {e}")
 
 
 # ------------------------------------------------------------------ #
@@ -1344,30 +1376,30 @@ async def callback_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     notional       = current_amount * current_leverage
     liquidation_pct = round(100 / current_leverage, 1) if current_leverage > 0 else 100
     if current_leverage <= 10:
-        risk_label = "🟢 Rendah"
+        risk_label = "🟢 Low"
     elif current_leverage <= 25:
-        risk_label = "🟡 Sedang"
+        risk_label = "🟡 Medium"
     elif current_leverage <= 50:
-        risk_label = "🟠 Tinggi"
+        risk_label = "🟠 High"
     else:
-        risk_label = "🔴 Sangat Tinggi"
+        risk_label = "🔴 Very High"
 
     await query.edit_message_text(
-        f"⚙️ <b>Settings AutoTrade</b>\n\n"
-        f"💵 Modal trading: <b>{current_amount:.0f} USDT</b>\n"
-        f"   <i>(dari total balance Bitunix kamu)</i>\n"
+        f"⚙️ <b>AutoTrade Settings</b>\n\n"
+        f"💵 Trading capital: <b>{current_amount:.0f} USDT</b>\n"
+        f"   <i>(from your total Bitunix balance)</i>\n"
         f"📊 Leverage: <b>{current_leverage}x</b>\n"
         f"📈 Notional value: <b>{notional:.0f} USDT</b>\n"
-        f"💥 Likuidasi jika harga bergerak: <b>{liquidation_pct}%</b>\n"
+        f"💥 Liquidation if price moves: <b>{liquidation_pct}%</b>\n"
         f"⚠️ Risk level: {risk_label}\n"
         f"💼 Margin mode: <b>{margin_label}</b>\n\n"
-        "Pilih yang ingin diubah:",
+        "Select what to change:",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("💰 Ubah Modal Trading", callback_data="at_set_amount")],
-            [InlineKeyboardButton("📊 Ganti Leverage",     callback_data="at_set_leverage")],
-            [InlineKeyboardButton("💼 Ganti Margin Mode",  callback_data="at_set_margin")],
-            [InlineKeyboardButton("🔙 Kembali",            callback_data="at_dashboard")],
+            [InlineKeyboardButton("💰 Change Trading Capital", callback_data="at_set_amount")],
+            [InlineKeyboardButton("📊 Change Leverage",        callback_data="at_set_leverage")],
+            [InlineKeyboardButton("💼 Change Margin Mode",     callback_data="at_set_margin")],
+            [InlineKeyboardButton("🔙 Back",                   callback_data="at_dashboard")],
         ])
     )
     return ConversationHandler.END
@@ -1397,19 +1429,19 @@ async def callback_set_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         if acc.get('success'):
             avail = acc.get('available', 0)
-            balance_line = f"💳 Balance Bitunix tersedia: <b>{avail:.2f} USDT</b>\n\n"
+            balance_line = f"💳 Available Bitunix balance: <b>{avail:.2f} USDT</b>\n\n"
     except Exception:
         pass
 
     await query.edit_message_text(
-        f"💰 <b>Ubah Modal Trading</b>\n\n"
+        f"💰 <b>Change Trading Capital</b>\n\n"
         f"{balance_line}"
-        f"Modal saat ini: <b>{current_amount:.0f} USDT</b>\n"
+        f"Current capital: <b>{current_amount:.0f} USDT</b>\n"
         f"Leverage: <b>{current_leverage}x</b>\n\n"
-        f"ℹ️ <b>Modal trading</b> = jumlah USDT dari balance Bitunix kamu yang dipakai bot untuk buka posisi.\n"
-        f"Semakin besar modal, semakin besar potensi profit <i>dan</i> loss.\n\n"
-        f"Masukkan jumlah modal baru (USDT):\n"
-        f"📌 Min: 10 USDT | Max: 10.000 USDT",
+        f"ℹ️ <b>Trading capital</b> = the amount of USDT from your Bitunix balance the bot uses to open positions.\n"
+        f"The larger the capital, the larger the potential profit <i>and</i> loss.\n\n"
+        f"Enter new capital amount (USDT):\n"
+        f"📌 Min: 10 USDT | Max: 10,000 USDT",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
             [
@@ -1422,25 +1454,25 @@ async def callback_set_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
                 InlineKeyboardButton("250", callback_data="at_newamt_250"),
                 InlineKeyboardButton("500", callback_data="at_newamt_500"),
             ],
-            [InlineKeyboardButton("🔙 Kembali", callback_data="at_settings")],
+            [InlineKeyboardButton("🔙 Back", callback_data="at_settings")],
         ])
     )
     return WAITING_NEW_AMOUNT
 
 
 async def receive_new_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle input modal baru dari teks."""
+    """Handle new capital input from text."""
     try:
         amount = float(update.message.text.strip())
     except ValueError:
-        await update.message.reply_text("❌ Masukkan angka. Contoh: <code>100</code>", parse_mode='HTML')
+        await update.message.reply_text("❌ Enter a number. Example: <code>100</code>", parse_mode='HTML')
         return WAITING_NEW_AMOUNT
 
     if amount < 10:
         await update.message.reply_text("❌ Minimum 10 USDT.")
         return WAITING_NEW_AMOUNT
     if amount > 10000:
-        await update.message.reply_text("❌ Maximum 10.000 USDT.")
+        await update.message.reply_text("❌ Maximum 10,000 USDT.")
         return WAITING_NEW_AMOUNT
 
     await _apply_new_amount(update.message, update.effective_user.id, amount, context, from_callback=False)
@@ -1463,7 +1495,7 @@ async def _apply_new_amount(msg_or_query, user_id: int, amount: float,
     session = get_autotrade_session(user_id)
     leverage = int(session.get("leverage", 10)) if session else 10
 
-    # Cek balance cukup
+    # Check if balance is sufficient
     balance_ok = True
     if keys:
         try:
@@ -1478,12 +1510,12 @@ async def _apply_new_amount(msg_or_query, user_id: int, amount: float,
             if acc.get('success') and acc.get('available', 0) < amount:
                 avail = acc.get('available', 0)
                 text = (
-                    f"❌ <b>Balance tidak cukup</b>\n\n"
-                    f"Balance tersedia: <b>{avail:.2f} USDT</b>\n"
-                    f"Modal yang diminta: <b>{amount:.0f} USDT</b>\n\n"
-                    "Kurangi jumlah modal atau top up balance Bitunix kamu."
+                    f"❌ <b>Insufficient balance</b>\n\n"
+                    f"Available balance: <b>{avail:.2f} USDT</b>\n"
+                    f"Requested capital: <b>{amount:.0f} USDT</b>\n\n"
+                    "Reduce the capital amount or top up your Bitunix balance."
                 )
-                kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="at_set_amount")]])
+                kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="at_set_amount")]])
                 if from_callback:
                     await msg_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
                 else:
@@ -1518,16 +1550,16 @@ async def _apply_new_amount(msg_or_query, user_id: int, amount: float,
             leverage=leverage,
             notify_chat_id=user_id,
         )
-        engine_restarted = "\n🔄 Engine direstart dengan modal baru."
+        engine_restarted = "\n🔄 Engine restarted with new capital."
 
     notional = amount * leverage
     liquidation_pct = round(100 / leverage, 1)
 
     text = (
-        f"✅ <b>Modal trading diubah ke {amount:.0f} USDT</b>\n\n"
+        f"✅ <b>Trading capital updated to {amount:.0f} USDT</b>\n\n"
         f"📊 Leverage: {leverage}x\n"
         f"📈 Notional value: <b>{notional:.0f} USDT</b>\n"
-        f"💥 Likuidasi jika harga bergerak: <b>{liquidation_pct}%</b>"
+        f"💥 Liquidation if price moves: <b>{liquidation_pct}%</b>"
         f"{engine_restarted}"
     )
     keyboard = InlineKeyboardMarkup([
@@ -1542,7 +1574,7 @@ async def _apply_new_amount(msg_or_query, user_id: int, amount: float,
 
 
 async def callback_set_leverage(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Tampilkan pilihan leverage baru."""
+    """Show new leverage options."""
     query = update.callback_query
     await query.answer()
 
@@ -1550,9 +1582,9 @@ async def callback_set_leverage(update: Update, context: ContextTypes.DEFAULT_TY
     current = int(session.get("leverage", 10)) if session else 10
 
     await query.edit_message_text(
-        f"📊 <b>Ganti Leverage</b>\n\n"
-        f"Leverage saat ini: <b>{current}x</b>\n\n"
-        "Pilih leverage baru atau ketik angka (1–125):",
+        f"📊 <b>Change Leverage</b>\n\n"
+        f"Current leverage: <b>{current}x</b>\n\n"
+        "Choose a new leverage or type a number (1–125):",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
             [
@@ -1565,22 +1597,22 @@ async def callback_set_leverage(update: Update, context: ContextTypes.DEFAULT_TY
                 InlineKeyboardButton("75x",  callback_data="at_newlev_75"),
                 InlineKeyboardButton("100x", callback_data="at_newlev_100"),
             ],
-            [InlineKeyboardButton("🔙 Kembali", callback_data="at_settings")],
+            [InlineKeyboardButton("🔙 Back", callback_data="at_settings")],
         ])
     )
     return WAITING_NEW_LEVERAGE
 
 
 async def receive_new_leverage_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle input leverage manual dari teks."""
+    """Handle manual leverage input from text."""
     try:
         leverage = int(update.message.text.strip())
     except ValueError:
-        await update.message.reply_text("❌ Masukkan angka. Contoh: <code>25</code>", parse_mode='HTML')
+        await update.message.reply_text("❌ Enter a number. Example: <code>25</code>", parse_mode='HTML')
         return WAITING_NEW_LEVERAGE
 
     if leverage < 1 or leverage > 125:
-        await update.message.reply_text("❌ Leverage harus antara 1–125.")
+        await update.message.reply_text("❌ Leverage must be between 1–125.")
         return WAITING_NEW_LEVERAGE
 
     await _apply_new_leverage(update.message, update.effective_user.id, leverage, context, from_callback=False)
@@ -1614,7 +1646,7 @@ async def _apply_new_leverage(msg_or_query, user_id: int, leverage: int,
     except Exception as e:
         pass
 
-    # Apply ke Bitunix untuk semua symbol aktif
+    # Apply to Bitunix for all active symbols
     apply_status = ""
     if keys:
         try:
@@ -1625,11 +1657,11 @@ async def _apply_new_leverage(msg_or_query, user_id: int, leverage: int,
             for sym in symbols:
                 r = await asyncio.to_thread(client.set_leverage, sym, leverage, margin_mode)
                 results.append("✅" if r.get("success") else "⚠️")
-            apply_status = f"\n\nApply ke Bitunix: {' '.join(results)}"
+            apply_status = f"\n\nApplied to Bitunix: {' '.join(results)}"
         except Exception as e:
-            apply_status = f"\n\n⚠️ Gagal apply ke Bitunix: {e}"
+            apply_status = f"\n\n⚠️ Failed to apply to Bitunix: {e}"
 
-    # Restart engine dengan leverage baru jika sedang berjalan
+    # Restart engine with new leverage if running
     from app.autotrade_engine import is_running, start_engine, stop_engine
     engine_restarted = ""
     if is_running(user_id) and keys and session:
@@ -1646,15 +1678,15 @@ async def _apply_new_leverage(msg_or_query, user_id: int, leverage: int,
             leverage=leverage,
             notify_chat_id=user_id,
         )
-        engine_restarted = "\n🔄 Engine direstart dengan leverage baru."
+        engine_restarted = "\n🔄 Engine restarted with new leverage."
 
     text = (
-        f"✅ <b>Leverage diubah ke {leverage}x</b>"
+        f"✅ <b>Leverage updated to {leverage}x</b>"
         f"{apply_status}"
         f"{engine_restarted}"
     )
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⚙️ Settings", callback_data="at_settings")],
+        [InlineKeyboardButton("⚙️ Settings",  callback_data="at_settings")],
         [InlineKeyboardButton("🏠 Dashboard", callback_data="at_dashboard")],
     ])
 
@@ -1677,16 +1709,16 @@ async def callback_set_margin(update: Update, context: ContextTypes.DEFAULT_TYPE
     isolated_check = "✅ " if current == "isolated" else ""
 
     await query.edit_message_text(
-        f"💼 <b>Ganti Margin Mode</b>\n\n"
-        f"Mode saat ini: <b>{'Cross ♾️' if current == 'cross' else 'Isolated 🔒'}</b>\n\n"
-        "<b>Cross Margin</b> — semua balance dipakai sebagai margin, risiko likuidasi lebih kecil.\n"
-        "<b>Isolated Margin</b> — margin terbatas per posisi, loss maksimal = margin yang dialokasikan.\n\n"
-        "Pilih mode:",
+        f"💼 <b>Change Margin Mode</b>\n\n"
+        f"Current mode: <b>{'Cross ♾️' if current == 'cross' else 'Isolated 🔒'}</b>\n\n"
+        "<b>Cross Margin</b> — entire balance used as margin, lower liquidation risk.\n"
+        "<b>Isolated Margin</b> — margin limited per position, max loss = allocated margin.\n\n"
+        "Select mode:",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"{cross_check}♾️ Cross Margin",    callback_data="at_margin_cross")],
+            [InlineKeyboardButton(f"{cross_check}♾️ Cross Margin",       callback_data="at_margin_cross")],
             [InlineKeyboardButton(f"{isolated_check}🔒 Isolated Margin", callback_data="at_margin_isolated")],
-            [InlineKeyboardButton("🔙 Kembali", callback_data="at_settings")],
+            [InlineKeyboardButton("🔙 Back", callback_data="at_settings")],
         ])
     )
     return ConversationHandler.END
@@ -1713,7 +1745,7 @@ async def callback_margin_select(update: Update, context: ContextTypes.DEFAULT_T
     except Exception:
         pass
 
-    # Apply ke Bitunix
+    # Apply to Bitunix
     apply_status = ""
     if keys:
         try:
@@ -1725,12 +1757,12 @@ async def callback_margin_select(update: Update, context: ContextTypes.DEFAULT_T
             for sym in symbols:
                 r = await asyncio.to_thread(client.set_leverage, sym, leverage, mode)
                 results.append("✅" if r.get("success") else "⚠️")
-            apply_status = f"\n\nApply ke Bitunix: {' '.join(results)}"
+            apply_status = f"\n\nApplied to Bitunix: {' '.join(results)}"
         except Exception as e:
-            apply_status = f"\n\n⚠️ Gagal apply: {e}"
+            apply_status = f"\n\n⚠️ Failed to apply: {e}"
 
     await query.edit_message_text(
-        f"✅ <b>Margin mode diubah ke {mode_label}</b>"
+        f"✅ <b>Margin mode updated to {mode_label}</b>"
         f"{apply_status}",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([

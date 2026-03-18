@@ -1,7 +1,7 @@
 """
 Alternative Klines Provider
-Menggunakan CoinGecko dan CryptoCompare sebagai alternatif Binance
-Untuk mengatasi masalah network timeout ke Binance API
+Menggunakan Bitunix, CryptoCompare, dan CoinGecko sebagai sumber data OHLCV.
+Prioritas: Bitunix (exchange utama) → CryptoCompare → CoinGecko
 """
 import os
 import requests
@@ -10,43 +10,103 @@ from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 
 class AlternativeKlinesProvider:
-    """Provider alternatif untuk mendapatkan OHLCV data ketika Binance tidak accessible"""
+    """Provider OHLCV data dengan fallback multi-source"""
     
     def __init__(self):
-        self.coingecko_api = "https://api.coingecko.com/api/v3"
+        self.bitunix_api      = os.getenv('BITUNIX_BASE_URL', 'https://fapi.bitunix.com')
+        self.coingecko_api    = "https://api.coingecko.com/api/v3"
         self.cryptocompare_api = "https://min-api.cryptocompare.com/data/v2"
         self.cryptocompare_key = os.getenv('CRYPTOCOMPARE_API_KEY', '')
         
     def get_klines(self, symbol: str, interval: str = '1h', limit: int = 100) -> List:
         """
-        Get OHLCV data from alternative sources
-        
-        Args:
-            symbol: Trading pair (e.g., 'BTCUSDT')
-            interval: Timeframe ('1h', '4h', '1d')
-            limit: Number of candles
-            
-        Returns:
-            List of klines in Binance format: [timestamp, open, high, low, close, volume, ...]
+        Get OHLCV data — prioritas Bitunix, fallback ke CryptoCompare/CoinGecko.
+        Returns list of klines in Binance format: [timestamp, open, high, low, close, volume, ...]
         """
-        # Clean symbol
         clean_symbol = symbol.upper().replace('USDT', '').replace('BUSD', '').replace('USDC', '')
-        
-        # Try CryptoCompare first (more reliable for OHLCV)
+        full_symbol  = clean_symbol + "USDT"
+
+        # 1. Bitunix (prioritas utama — data futures langsung)
+        klines = self._get_from_bitunix(full_symbol, interval, limit)
+        if klines:
+            return klines
+
+        # 2. CryptoCompare
         if self.cryptocompare_key:
             klines = self._get_from_cryptocompare(clean_symbol, interval, limit)
             if klines:
                 print(f"✅ Got {len(klines)} candles from CryptoCompare for {symbol}")
                 return klines
-        
-        # Fallback to CoinGecko
+
+        # 3. CoinGecko
         klines = self._get_from_coingecko(clean_symbol, interval, limit)
         if klines:
             print(f"✅ Got {len(klines)} candles from CoinGecko for {symbol}")
             return klines
-        
+
         print(f"❌ Failed to get klines for {symbol} from all sources")
         return []
+
+    def _get_from_bitunix(self, symbol: str, interval: str, limit: int) -> List:
+        """Get OHLCV dari Bitunix futures API — tidak perlu auth, public endpoint."""
+        try:
+            # Bitunix interval mapping (sudah sama dengan standar)
+            # Supported: 1m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d 3d 1w 1M
+            interval_map = {
+                '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m',
+                '1h': '1h', '2h': '2h', '4h': '4h', '6h': '6h',
+                '8h': '8h', '12h': '12h', '1d': '1d', '1w': '1w',
+            }
+            bx_interval = interval_map.get(interval)
+            if not bx_interval:
+                return []
+
+            # Bitunix max limit per request = 200
+            fetch_limit = min(limit, 200)
+
+            url = f"{self.bitunix_api}/api/v1/futures/market/kline"
+            params = {
+                'symbol':   symbol,
+                'interval': bx_interval,
+                'limit':    fetch_limit,
+            }
+
+            resp = requests.get(url, params=params, timeout=10)
+            if resp.status_code != 200:
+                return []
+
+            data = resp.json()
+            if data.get('code') != 0 or not data.get('data'):
+                return []
+
+            raw = data['data']
+            # Bitunix response: [{open, high, low, close, time, quoteVol, baseVol, type}, ...]
+            # Sort ascending by time
+            raw.sort(key=lambda x: x.get('time', 0))
+
+            klines = []
+            for c in raw:
+                ts     = int(c.get('time', 0))
+                open_  = str(c.get('open', 0))
+                high   = str(c.get('high', 0))
+                low    = str(c.get('low', 0))
+                close  = str(c.get('close', 0))
+                vol    = str(c.get('baseVol', 0))   # coin volume
+                qvol   = str(c.get('quoteVol', 0))  # USDT volume
+                klines.append([
+                    ts, open_, high, low, close, vol,
+                    ts + 1, qvol, 0, "0", "0", "0"
+                ])
+
+            if len(klines) >= 10:
+                print(f"✅ Got {len(klines)} candles from Bitunix for {symbol}")
+                return klines
+
+            return []
+
+        except Exception as e:
+            print(f"Bitunix klines error ({symbol}): {e}")
+            return []
     
     def _get_from_cryptocompare(self, symbol: str, interval: str, limit: int) -> List:
         """Get OHLCV from CryptoCompare"""
