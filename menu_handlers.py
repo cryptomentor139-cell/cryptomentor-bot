@@ -67,6 +67,21 @@ class MenuCallbackHandler:
         user_id = query.from_user.id
 
         try:
+            # Onboarding: arahkan user baru ke /autotrade
+            if callback_data == "start_autotrade":
+                from app.handlers_autotrade import cmd_autotrade
+                # Buat fake update agar cmd_autotrade bisa dipanggil dari callback
+                class _FakeMsg:
+                    async def reply_text(self, *a, **kw):
+                        return await query.message.reply_text(*a, **kw)
+                class _FakeUpdate:
+                    effective_user = query.from_user
+                    message = _FakeMsg()
+                fake_update = _FakeUpdate()
+                context.args = []
+                await cmd_autotrade(fake_update, context)
+                return
+
             # Main menu navigation
             if callback_data == MAIN_MENU:
                 await self.show_main_menu(query, context)

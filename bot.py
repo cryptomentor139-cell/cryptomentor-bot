@@ -195,14 +195,44 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ User registration error: {e}")
 
-        from menu_system import MenuBuilder, get_menu_text, MAIN_MENU
-        await update.message.reply_text(
-            f"🤖 *Welcome to CryptoMentor AI 3.0*\n\nHello {user.first_name}! 👋\n\n"
-            "📊 Fitur tersedia:\n• Signal Trading (Spot & Futures)\n• Auto Signal\n"
-            "• AutoTrade (Bitunix)\n• Market Analysis\n\nGunakan menu di bawah:",
-            reply_markup=MenuBuilder.build_main_menu(),
-            parse_mode='MARKDOWN'
-        )
+        # Cek apakah user sudah punya API key / session autotrade
+        is_new_user = False
+        try:
+            from app.handlers_autotrade import get_user_api_keys, get_autotrade_session
+            keys = get_user_api_keys(user.id)
+            session = get_autotrade_session(user.id)
+            is_new_user = not keys and not session
+        except Exception:
+            is_new_user = True
+
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        from menu_system import MenuBuilder
+
+        if is_new_user:
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🚀 Mulai AutoTrade Sekarang", callback_data="start_autotrade")],
+                [InlineKeyboardButton("📋 Menu Utama", callback_data="main_menu")],
+            ])
+            await update.message.reply_text(
+                f"👋 <b>Selamat datang, {user.first_name}!</b>\n\n"
+                "Aku <b>CryptoMentor AI</b> — bot trading crypto otomatis yang siap bekerja untukmu 24/7.\n\n"
+                "🤖 <b>Fitur Unggulan: AutoTrade</b>\n"
+                "Bot kami akan trading futures secara otomatis di Bitunix menggunakan AI signal — "
+                "kamu cukup set sekali, bot yang kerja.\n\n"
+                "✅ <b>Cara mulai:</b>\n"
+                "1️⃣ Daftar akun Bitunix via referral kami\n"
+                "2️⃣ Hubungkan API key ke bot\n"
+                "3️⃣ Set modal & leverage — bot langsung jalan!\n\n"
+                "Ketik /autotrade atau klik tombol di bawah untuk mulai registrasi.",
+                parse_mode='HTML',
+                reply_markup=keyboard
+            )
+        else:
+            await update.message.reply_text(
+                f"👋 Halo lagi, <b>{user.first_name}</b>!\n\nGunakan menu di bawah:",
+                parse_mode='HTML',
+                reply_markup=MenuBuilder.build_main_menu()
+            )
 
     async def menu_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:

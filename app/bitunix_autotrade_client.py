@@ -331,6 +331,47 @@ class BitunixAutoTradeClient:
             }
         return result
 
+    def set_position_sl(self, symbol: str, sl_price: float) -> Dict:
+        """
+        Update SL on an open position (used for breakeven after TP1 hit).
+        Bitunix endpoint: POST /api/v1/futures/position/set_tpsl
+        """
+        body = {
+            "symbol": symbol,
+            "slPrice": str(round(sl_price, 6)),
+            "slStopType": "MARK_PRICE",
+        }
+        result = self._request('POST', '/api/v1/futures/position/set_tpsl',
+                               body=body, signed=True)
+        if result['success']:
+            return {'success': True, 'symbol': symbol, 'new_sl': sl_price}
+        return result
+
+    def close_partial(self, symbol: str, side: str, qty: float) -> Dict:
+        """
+        Close a partial position (reduce-only market order).
+        Used to take TP1 profit on 75% of position.
+        side: BUY to close SHORT, SELL to close LONG
+        """
+        body = {
+            "symbol": symbol,
+            "qty": str(qty),
+            "side": side.upper(),
+            "tradeSide": "CLOSE",
+            "orderType": "MARKET",
+            "reduceOnly": True,
+        }
+        result = self._request('POST', '/api/v1/futures/trade/place_order',
+                               body=body, signed=True)
+        if result['success']:
+            return {
+                'success': True,
+                'order_id': result['data'].get('orderId'),
+                'symbol': symbol,
+                'closed_qty': qty,
+            }
+        return result
+
     def get_24h_stats(self) -> Dict:
         return {
             'success': True,

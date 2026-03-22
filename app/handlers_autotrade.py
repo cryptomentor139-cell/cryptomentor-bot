@@ -156,6 +156,7 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("📊 Status Portfolio",  callback_data="at_status")],
             [InlineKeyboardButton("📈 Trade History",     callback_data="at_history")],
             engine_btn,
+            [InlineKeyboardButton("🧠 Bot Skills",        callback_data="skills_menu")],
             [InlineKeyboardButton("⚙️ Settings",          callback_data="at_settings")],
             [InlineKeyboardButton("🔑 Change API Key",    callback_data="at_change_key")],
         ])
@@ -844,6 +845,10 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
     # Save session and start engine
     save_autotrade_session(user_id, amount, leverage)
 
+    # Cek skill dual_tp_rr3 — has_skill sudah otomatis grant ke admin & premium
+    from app.skills_repo import has_skill
+    _is_premium = has_skill(user_id, "dual_tp_rr3")
+
     from app.autotrade_engine import start_engine
     start_engine(
         bot=query.get_bot(),
@@ -853,6 +858,7 @@ async def callback_confirm_trade(update: Update, context: ContextTypes.DEFAULT_T
         amount=amount,
         leverage=leverage,
         notify_chat_id=user_id,
+        is_premium=_is_premium,
     )
 
     await loading.edit_text(
@@ -1241,6 +1247,9 @@ async def callback_restart_engine(update: Update, context: ContextTypes.DEFAULT_
     amount = float(session.get("initial_deposit", 10))
     leverage = int(session.get("leverage", 10))
 
+    from app.skills_repo import has_skill
+    _is_premium = has_skill(user_id, "dual_tp_rr3")
+
     start_engine(
         bot=query.get_bot(),
         user_id=user_id,
@@ -1249,6 +1258,7 @@ async def callback_restart_engine(update: Update, context: ContextTypes.DEFAULT_
         amount=amount,
         leverage=leverage,
         notify_chat_id=user_id,
+        is_premium=_is_premium,
     )
 
     await query.edit_message_text(
@@ -1846,5 +1856,17 @@ def register_autotrade_handlers(application):
     application.add_handler(CallbackQueryHandler(callback_uid_reject,         pattern="^uid_reject_\\d+$"))
     application.add_handler(CallbackQueryHandler(callback_status_portfolio,   pattern="^at_status$"))
     application.add_handler(CallbackQueryHandler(callback_trade_history,      pattern="^at_history$"))
+
+    # Skills handlers
+    from app.handlers_skills import register_skills_handlers
+    register_skills_handlers(application)
+
+    # at_back_dashboard → redirect ke cmd_autotrade flow
+    async def _back_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        await callback_dashboard(update, context)
+
+    application.add_handler(CallbackQueryHandler(_back_dashboard, pattern="^at_back_dashboard$"))
 
     print("✅ AutoTrade handlers registered (Supabase + AES-256-GCM + Engine)")
