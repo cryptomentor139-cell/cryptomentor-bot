@@ -339,6 +339,21 @@ async def receive_bitunix_uid(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return WAITING_BITUNIX_UID
 
+    # Demo users: auto-approve without admin verification
+    from app.demo_users import is_demo_user
+    if is_demo_user(user_id):
+        _save_uid(user_id, uid, status="uid_verified")
+        await update.message.reply_text(
+            f"✅ <b>UID Verified!</b>\n\n"
+            f"🔢 UID: <code>{uid}</code>\n\n"
+            "Proceed to setup your API Key:",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔑 Setup API Key", callback_data="at_setup_key")],
+            ])
+        )
+        return ConversationHandler.END
+
     # Save UID to Supabase with pending_verification status
     _save_uid(user_id, uid, status="pending_verification")
 

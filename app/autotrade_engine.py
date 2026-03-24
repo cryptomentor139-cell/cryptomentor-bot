@@ -804,6 +804,32 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     await asyncio.sleep(300)
                 continue
 
+            # ── Demo user: balance cap $50 ────────────────────────────
+            from app.demo_users import is_demo_user, DEMO_BALANCE_LIMIT
+            if is_demo_user(user_id):
+                try:
+                    acc_info = await asyncio.wait_for(
+                        asyncio.to_thread(client.get_account_info),
+                        timeout=8.0
+                    )
+                    if acc_info.get('success'):
+                        total_balance = acc_info.get('available', 0) + acc_info.get('total_unrealized_pnl', 0)
+                        if total_balance > DEMO_BALANCE_LIMIT:
+                            await bot.send_message(
+                                chat_id=notify_chat_id,
+                                text=(
+                                    "⚠️ <b>Demo Limit Reached</b>\n\n"
+                                    f"Your balance has exceeded the <b>${DEMO_BALANCE_LIMIT:.0f} demo limit</b>.\n\n"
+                                    "This is a <b>special demo account</b> — the bot has been stopped automatically.\n\n"
+                                    "To increase your balance limit, contact @yongdnf3 🙂"
+                                ),
+                                parse_mode='HTML'
+                            )
+                            stop_engine(user_id)
+                            return
+                except Exception:
+                    pass
+
             # ── Cek posisi terbuka ────────────────────────────────────
             pos_result     = await asyncio.to_thread(client.get_positions)
             open_positions = pos_result.get('positions', []) if pos_result.get('success') else []
