@@ -195,43 +195,51 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ User registration error: {e}")
 
-        # Cek apakah user sudah punya API key / session autotrade
-        is_new_user = False
-        try:
-            from app.handlers_autotrade import get_user_api_keys, get_autotrade_session
-            keys = get_user_api_keys(user.id)
-            session = get_autotrade_session(user.id)
-            is_new_user = not keys and not session
-        except Exception:
-            is_new_user = True
-
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         from menu_system import MenuBuilder
 
-        if is_new_user:
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🚀 Mulai AutoTrade Sekarang", callback_data="start_autotrade")],
-                [InlineKeyboardButton("📋 Menu Utama", callback_data="main_menu")],
-            ])
-            await update.message.reply_text(
-                f"👋 <b>Selamat datang, {user.first_name}!</b>\n\n"
-                "Aku <b>CryptoMentor AI</b> — bot trading crypto otomatis yang siap bekerja untukmu 24/7.\n\n"
-                "🤖 <b>Fitur Unggulan: AutoTrade</b>\n"
-                "Bot kami akan trading futures secara otomatis di Bitunix menggunakan AI signal — "
-                "kamu cukup set sekali, bot yang kerja.\n\n"
-                "✅ <b>Cara mulai:</b>\n"
-                "1️⃣ Daftar akun Bitunix via referral kami\n"
-                "2️⃣ Hubungkan API key ke bot\n"
-                "3️⃣ Set modal & leverage — bot langsung jalan!\n\n"
-                "Ketik /autotrade atau klik tombol di bawah untuk mulai registrasi.",
-                parse_mode='HTML',
-                reply_markup=keyboard
-            )
-        else:
+        # Cek apakah user sudah punya API key Bitunix
+        has_api_key = False
+        try:
+            from app.handlers_autotrade import get_user_api_keys
+            keys = get_user_api_keys(user.id)
+            has_api_key = keys is not None
+        except Exception:
+            has_api_key = False
+
+        if has_api_key:
+            # User sudah registrasi API key — tampilkan sambutan + menu utama
             await update.message.reply_text(
                 f"👋 Halo lagi, <b>{user.first_name}</b>!\n\nGunakan menu di bawah:",
                 parse_mode='HTML',
                 reply_markup=MenuBuilder.build_main_menu()
+            )
+        else:
+            # User baru / belum punya API key — tampilkan penjelasan auto trading
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🤖 Mulai Auto Trading", callback_data="start_autotrade")],
+                [InlineKeyboardButton("📋 Menu Utama", callback_data="main_menu")],
+            ])
+            await update.message.reply_text(
+                f"👋 <b>Halo, {user.first_name}!</b>\n\n"
+                "Selamat datang di <b>CryptoMentor AI</b> — bot auto trading crypto yang bekerja 24/7 untukmu.\n\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "🤖 <b>APA ITU AUTO TRADING?</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "Bot ini akan <b>trading futures secara otomatis</b> di exchange Bitunix menggunakan sinyal AI — "
+                "kamu tidak perlu pantau chart terus-menerus.\n\n"
+                "⚡ <b>Yang bot lakukan untukmu:</b>\n"
+                "• Analisa pasar & deteksi sinyal entry/exit\n"
+                "• Buka & tutup posisi futures otomatis\n"
+                "• Kelola risk dengan stop loss & take profit\n"
+                "• Bekerja 24 jam, 7 hari seminggu\n\n"
+                "🔧 <b>Cara mulai (3 langkah):</b>\n"
+                "1️⃣ Daftar akun Bitunix via link referral kami\n"
+                "2️⃣ Buat API key di Bitunix & hubungkan ke bot\n"
+                "3️⃣ Set modal awal & leverage — bot langsung jalan!\n\n"
+                "Klik tombol di bawah untuk mulai setup auto trading. 👇",
+                parse_mode='HTML',
+                reply_markup=keyboard
             )
 
     async def menu_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
