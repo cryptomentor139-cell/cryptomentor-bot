@@ -195,10 +195,7 @@ class TelegramBot:
         except Exception as e:
             print(f"⚠️ User registration error: {e}")
 
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        from menu_system import MenuBuilder
-
-        # Cek apakah user sudah punya API key Bitunix
+        # Check if user already has Bitunix API key
         has_api_key = False
         try:
             from app.handlers_autotrade import get_user_api_keys
@@ -208,36 +205,34 @@ class TelegramBot:
             has_api_key = False
 
         if has_api_key:
-            # User sudah registrasi API key — tampilkan sambutan + menu utama
-            await update.message.reply_text(
-                f"👋 Halo lagi, <b>{user.first_name}</b>!\n\nGunakan menu di bawah:",
-                parse_mode='HTML',
-                reply_markup=MenuBuilder.build_main_menu()
-            )
+            # User already set up — go straight to autotrade dashboard
+            from app.handlers_autotrade import cmd_autotrade
+            await cmd_autotrade(update, context)
         else:
-            # User baru / belum punya API key — tampilkan penjelasan auto trading
+            # New user — show auto trading intro in English
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🤖 Mulai Auto Trading", callback_data="start_autotrade")],
-                [InlineKeyboardButton("📋 Menu Utama", callback_data="main_menu")],
+                [InlineKeyboardButton("🤖 Start Auto Trading", callback_data="start_autotrade")],
+                [InlineKeyboardButton("📋 Main Menu", callback_data="main_menu")],
             ])
             await update.message.reply_text(
-                f"👋 <b>Halo, {user.first_name}!</b>\n\n"
-                "Selamat datang di <b>CryptoMentor AI</b> — bot auto trading crypto yang bekerja 24/7 untukmu.\n\n"
+                f"👋 <b>Welcome, {user.first_name}!</b>\n\n"
+                "Welcome to <b>CryptoMentor AI</b> — your 24/7 automated crypto trading bot.\n\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "🤖 <b>APA ITU AUTO TRADING?</b>\n"
+                "🤖 <b>WHAT IS AUTO TRADING?</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
-                "Bot ini akan <b>trading futures secara otomatis</b> di exchange Bitunix menggunakan sinyal AI — "
-                "kamu tidak perlu pantau chart terus-menerus.\n\n"
-                "⚡ <b>Yang bot lakukan untukmu:</b>\n"
-                "• Analisa pasar & deteksi sinyal entry/exit\n"
-                "• Buka & tutup posisi futures otomatis\n"
-                "• Kelola risk dengan stop loss & take profit\n"
-                "• Bekerja 24 jam, 7 hari seminggu\n\n"
-                "🔧 <b>Cara mulai (3 langkah):</b>\n"
-                "1️⃣ Daftar akun Bitunix via link referral kami\n"
-                "2️⃣ Buat API key di Bitunix & hubungkan ke bot\n"
-                "3️⃣ Set modal awal & leverage — bot langsung jalan!\n\n"
-                "Klik tombol di bawah untuk mulai setup auto trading. 👇",
+                "This bot trades <b>futures automatically</b> on Bitunix exchange using AI signals — "
+                "no need to watch charts all day.\n\n"
+                "⚡ <b>What the bot does for you:</b>\n"
+                "• Analyzes the market & detects entry/exit signals\n"
+                "• Opens & closes futures positions automatically\n"
+                "• Manages risk with stop loss & take profit\n"
+                "• Runs 24 hours a day, 7 days a week\n\n"
+                "🔧 <b>How to get started (3 steps):</b>\n"
+                "1️⃣ Register a Bitunix account via our referral link\n"
+                "2️⃣ Create an API key on Bitunix & connect it to the bot\n"
+                "3️⃣ Set your capital & leverage — the bot starts immediately!\n\n"
+                "Click the button below to begin setup. 👇",
                 parse_mode='HTML',
                 reply_markup=keyboard
             )
