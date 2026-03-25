@@ -1,7 +1,7 @@
 # Demo users — special restricted accounts (prank/demo only)
 # These users bypass referral requirement but have a $50 balance cap.
 
-DEMO_USER_IDS = {1227424284, 801937545}
+DEMO_USER_IDS = {1227424284, 801937545, 5765813002}
 DEMO_BALANCE_LIMIT = 50.0  # USD
 
 
