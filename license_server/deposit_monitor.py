@@ -10,7 +10,7 @@ import os
 import httpx
 from dotenv import load_dotenv
 
-from license_server.license_manager import LicenseManager
+from license_manager import LicenseManager
 
 load_dotenv()
 
