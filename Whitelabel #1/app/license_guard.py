@@ -26,6 +26,7 @@ class LicenseGuard:
     CACHE_MAX_AGE  = 172800     # 48 jam
     API_TIMEOUT    = 10         # detik
     CACHE_FILE     = "data/license_cache.json"
+    NOTIF_FLAG_FILE = "data/license_notif_sent.json"  # Track notifikasi yang sudah dikirim
 
     def __init__(self):
         self._wl_id          = os.getenv("WL_ID", "")
@@ -54,6 +55,8 @@ class LicenseGuard:
 
             if response.get("valid") is True:
                 logger.info("[LicenseGuard] License valid — status: %s", response.get("status"))
+                # Clear suspended notification flag jika license aktif kembali
+                self._clear_notif_flag("suspended")
                 await self._maybe_send_warning(response)
                 return True
 
@@ -231,13 +234,29 @@ class LicenseGuard:
             await self._send_telegram(msg)
 
     async def _notify_suspended(self):
-        """Kirim notifikasi ke admin bahwa bot di-suspend."""
+        """Kirim notifikasi ke admin bahwa bot di-suspend (hanya 1x)."""
+        # Cek apakah notifikasi suspended sudah pernah dikirim
+        if self._check_notif_sent("suspended"):
+            logger.info("[LicenseGuard] Suspended notification already sent, skipping")
+            return
+        
+        # Get deposit address dari env atau database
+        deposit_address = os.getenv("DEPOSIT_ADDRESS", "0xff680baa2BaaD50f3756efF778eF673d0fd8cAF9")
+        
         msg = (
-            "🚫 *Bot Suspended*\n"
-            "Lisensi bot telah di-suspend karena balance habis.\n"
-            "Silakan top-up USDT dan hubungi admin CryptoMentor untuk reaktivasi."
+            "🚫 *Bot Suspended*\n\n"
+            "Lisensi bot telah di-suspend karena balance habis.\n\n"
+            "📥 *Untuk Reaktivasi:*\n"
+            f"Kirim USDT (BSC Network) ke:\n"
+            f"`{deposit_address}`\n\n"
+            "Minimum: $10 USDT\n"
+            "Recommended: $50 USDT (5 bulan)\n\n"
+            "Bot akan otomatis aktif setelah deposit dikonfirmasi (5-10 menit)."
         )
         await self._send_telegram(msg)
+        
+        # Mark notifikasi sudah dikirim
+        self._mark_notif_sent("suspended")
 
     async def _notify_api_down_no_cache(self):
         """Kirim notifikasi: API down dan tidak ada cache."""
@@ -278,3 +297,55 @@ class LicenseGuard:
                         logger.warning("[LicenseGuard] Failed to notify admin %s: %s", admin_id, exc)
         except Exception as exc:
             logger.error("[LicenseGuard] Telegram notification error: %s", exc)
+
+    def _check_notif_sent(self, notif_type: str) -> bool:
+        """Check apakah notifikasi tipe tertentu sudah pernah dikirim."""
+        try:
+            path = Path(self.NOTIF_FLAG_FILE)
+            if not path.exists():
+                return False
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data.get(notif_type, False)
+        except (json.JSONDecodeError, OSError):
+            return False
+
+    def _mark_notif_sent(self, notif_type: str):
+        """Mark notifikasi tipe tertentu sudah dikirim."""
+        try:
+            path = Path(self.NOTIF_FLAG_FILE)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Load existing data
+            data = {}
+            if path.exists():
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    pass
+            
+            # Update flag
+            data[notif_type] = True
+            data[f"{notif_type}_at"] = datetime.now(timezone.utc).isoformat()
+            
+            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            logger.debug("[LicenseGuard] Marked notification '%s' as sent", notif_type)
+        except OSError as exc:
+            logger.error("[LicenseGuard] Failed to mark notification: %s", exc)
+
+    def _clear_notif_flag(self, notif_type: str):
+        """Clear notifikasi flag (dipanggil saat license aktif kembali)."""
+        try:
+            path = Path(self.NOTIF_FLAG_FILE)
+            if not path.exists():
+                return
+            
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if notif_type in data:
+                del data[notif_type]
+                if f"{notif_type}_at" in data:
+                    del data[f"{notif_type}_at"]
+                path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+                logger.debug("[LicenseGuard] Cleared notification flag '%s'", notif_type)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("[LicenseGuard] Failed to clear notification flag: %s", exc)
+
