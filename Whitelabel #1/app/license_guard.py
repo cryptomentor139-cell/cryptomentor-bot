@@ -42,8 +42,8 @@ class LicenseGuard:
         Returns True jika bot boleh jalan, False jika harus halt.
         """
         # Development mode: skip license check jika LICENSE_API_URL kosong
-        if not self._api_url:
-            logger.warning("[LicenseGuard] LICENSE_API_URL not set — running in DEV MODE (no license check)")
+        if not self._api_url or not self._wl_id or not self._secret_key:
+            logger.info("[LicenseGuard] LICENSE_API_URL/WL_ID/SECRET_KEY not set — running in DEV MODE (no license check)")
             return True
 
         response = await self._call_api()

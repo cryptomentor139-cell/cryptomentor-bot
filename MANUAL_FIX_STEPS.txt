@@ -1,0 +1,113 @@
+# Manual Fix Steps untuk Whitelabel Bot Error
+
+## MASALAH YANG DITEMUKAN:
+ValueError: invalid literal for int() with base 10: ''
+- Terjadi di config.py saat parsing ADMIN_IDS
+- ADMIN2 dan ADMIN3 kosong di .env, tapi code mencoba convert ke int
+
+## SOLUSI:
+File config.py sudah diperbaiki di local. Sekarang perlu di-push ke VPS.
+
+## CARA 1: Menggunakan Script (Recommended)
+
+Di local machine (Windows), jalankan:
+```bash
+bash push_fix_to_vps.sh
+```
+
+Script akan:
+1. Copy config.py yang sudah diperbaiki ke VPS
+2. Restart whitelabel1 service
+3. Show status dan logs
+
+## CARA 2: Manual Copy & Restart
+
+### Step 1: Copy file ke VPS
+```bash
+scp "Whitelabel #1/config.py" root@147.93.156.165:/root/cryptomentor-bot/whitelabel-1/config.py
+```
+
+### Step 2: SSH ke VPS
+```bash
+ssh root@147.93.156.165
+```
+
+### Step 3: Restart service
+```bash
+cd /root/cryptomentor-bot/whitelabel-1
+sudo systemctl restart whitelabel1
+sudo systemctl status whitelabel1
+```
+
+### Step 4: Check logs
+```bash
+sudo journalctl -u whitelabel1 -f
+```
+
+## CARA 3: Edit Langsung di VPS (Jika SCP tidak bisa)
+
+### Step 1: SSH ke VPS
+```bash
+ssh root@147.93.156.165
+```
+
+### Step 2: Edit config.py
+```bash
+cd /root/cryptomentor-bot/whitelabel-1
+nano config.py
+```
+
+### Step 3: Cari baris ini (sekitar line 8-14):
+```python
+ADMIN_IDS  = [
+    int(x) for x in [
+        os.getenv("ADMIN1", ""),
+        os.getenv("ADMIN2", ""),
+        os.getenv("ADMIN3", ""),
+    ] if x.strip()
+]
+```
+
+### Step 4: Ganti dengan:
+```python
+ADMIN_IDS  = [
+    int(x.strip()) for x in [
+        os.getenv("ADMIN1", ""),
+        os.getenv("ADMIN2", ""),
+        os.getenv("ADMIN3", ""),
+    ] if x.strip()
+]
+```
+
+Perubahan: `int(x)` → `int(x.strip())`
+
+### Step 5: Save (Ctrl+O, Enter, Ctrl+X)
+
+### Step 6: Restart service
+```bash
+sudo systemctl restart whitelabel1
+sudo systemctl status whitelabel1
+```
+
+### Step 7: Monitor logs
+```bash
+sudo journalctl -u whitelabel1 -f
+```
+
+## VERIFIKASI:
+Setelah restart, bot seharusnya:
+1. ✅ Service status: active (running)
+2. ✅ Tidak ada error "invalid literal for int()"
+3. ✅ Bot merespon di Telegram saat kirim /start
+
+## TEST BOT:
+1. Buka Telegram
+2. Cari bot ID: 8744237679
+3. Kirim: /start
+4. Bot harus merespon dengan welcome message
+
+## JIKA MASIH ERROR:
+Kirim output dari:
+```bash
+sudo journalctl -u whitelabel1 -n 50
+```

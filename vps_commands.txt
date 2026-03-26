@@ -1,0 +1,36 @@
+# Commands untuk dijalankan di VPS untuk memperbaiki whitelabel bot service
+
+# 1. Verifikasi nama folder yang benar
+cd /root/cryptomentor-bot && ls -la | grep -i white
+
+# 2. Update systemd service file dengan path yang benar
+sudo tee /etc/systemd/system/whitelabel1.service > /dev/null <<'EOF'
+[Unit]
+Description=Whitelabel #1 Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/cryptomentor-bot/whitelabel-1
+ExecStart=/root/cryptomentor-bot/whitelabel-1/venv/bin/python bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 3. Reload systemd daemon
+sudo systemctl daemon-reload
+
+# 4. Restart service
+sudo systemctl restart whitelabel1
+
+# 5. Check status
+sudo systemctl status whitelabel1
+
+# 6. View logs (optional)
+sudo journalctl -u whitelabel1 -f

@@ -15,7 +15,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from license_server.license_manager import LicenseManager
+from license_manager import LicenseManager
 
 load_dotenv()
 
@@ -170,4 +170,4 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.environ.get("LICENSE_API_PORT", 8080))
-    uvicorn.run("license_server.license_api:app", host="0.0.0.0", port=port, reload=False)
+    uvicorn.run("license_api:app", host="0.0.0.0", port=port, reload=False)

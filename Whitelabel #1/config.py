@@ -6,7 +6,7 @@ load_dotenv()
 # ── Telegram ──────────────────────────────────────────
 BOT_TOKEN  = os.getenv("BOT_TOKEN", "")
 ADMIN_IDS  = [
-    int(x) for x in [
+    int(x.strip()) for x in [
         os.getenv("ADMIN1", ""),
         os.getenv("ADMIN2", ""),
         os.getenv("ADMIN3", ""),

@@ -6,12 +6,12 @@ Output: wl_id, secret_key, deposit_address → isi ke .env WL
 import asyncio
 import os
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(__file__))
 
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
-from license_server.license_manager import LicenseManager
+from license_manager import LicenseManager
 
 
 async def main():
