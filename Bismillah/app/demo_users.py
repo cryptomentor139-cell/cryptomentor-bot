@@ -1,7 +1,8 @@
 # Demo users — special restricted accounts (prank/demo only)
 # These users bypass referral requirement but have a $50 balance cap.
+# Demo users CANNOT access Community Partners feature.
 
-DEMO_USER_IDS = {1227424284, 801937545, 5765813002}
+DEMO_USER_IDS = {1227424284, 801937545, 5765813002, 1165553495, 6735618958}
 DEMO_BALANCE_LIMIT = 50.0  # USD
 
 
