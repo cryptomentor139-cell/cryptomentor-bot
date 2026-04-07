@@ -742,7 +742,8 @@ def start_engine(bot, user_id: int, api_key: str, api_secret: str,
         if task.cancelled():
             logger.info(f"AutoTrade cancelled for user {user_id}")
         elif task.exception():
-            logger.error(f"AutoTrade CRASHED for user {user_id}: {task.exception()}", exc_info=task.exception())
+            exc = task.exception()
+            logger.error(f"AutoTrade CRASHED for user {user_id}: {exc}", exc_info=exc)
 
     # Start appropriate engine based on mode
     if trading_mode == TradingMode.SCALPING:
@@ -950,6 +951,9 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
     while True:
         try:
+            # ── Initialize btc_bias for this iteration ────────────────
+            btc_bias = {"bias": "NEUTRAL", "strength": 0, "reasons": []}
+            
             # ── Check if engine stop requested ────────────────────────
             try:
                 if asyncio.current_task().cancelled():
