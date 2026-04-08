@@ -97,53 +97,49 @@ class ScalpingEngine:
                     logger.info(f"[Scalping:{self.user_id}] Monitoring positions...")
                     await self.monitor_positions()
                     
-                    # Scan for new signals
-                    logger.info(f"[Scalping:{self.user_id}] Scanning {len(self.config.pairs)} pairs for signals...")
+                    # Scan for new signals in PARALLEL
+                    logger.info(f"[Scalping:{self.user_id}] Scanning {len(self.config.pairs)} pairs simultaneously...")
                     signals_found = 0
                     signals_validated = 0
                     
+                    scan_tasks = []
                     for symbol in self.config.pairs:
-                        if not self.running:
-                            break
+                        scan_tasks.append(self._scan_single_symbol(symbol))
                         
-                        try:
-                            # Check cooldown
-                            if self.check_cooldown(symbol):
-                                logger.debug(f"[Scalping:{self.user_id}] {symbol} in cooldown, skipping")
+                    if scan_tasks and self.running:
+                        results = await asyncio.gather(*scan_tasks, return_exceptions=True)
+                        
+                        valid_signals = []
+                        for r in results:
+                            if isinstance(r, Exception):
+                                logger.error(f"[Scalping:{self.user_id}] Gathered exception: {r}")
+                            elif r is not None:
+                                valid_signals.append(r)
+                                
+                        signals_found += len(valid_signals)
+                        
+                        # Sequentially process the returned valid signals
+                        for signal in valid_signals:
+                            if not self.running:
+                                break
+                                
+                            # Re-check concurrent safety limits safely in the sequential block
+                            if len(self.positions) >= self.config.max_concurrent_positions:
+                                break
+                            
+                            if signal.symbol in self.positions:
                                 continue
-                            
-                            # Generate signal
-                            signal = await self.generate_scalping_signal(symbol)
-                            
-                            if signal is None:
-                                logger.debug(f"[Scalping:{self.user_id}] {symbol} - No signal generated")
-                                continue
-                            
-                            signals_found += 1
-                            logger.info(f"[Scalping:{self.user_id}] {symbol} - Signal found! Validating...")
-                            
-                            # Validate signal
-                            if not self.validate_scalping_entry(signal):
-                                logger.info(f"[Scalping:{self.user_id}] {symbol} - Signal validation failed")
-                                continue
-                            
+                                
                             signals_validated += 1
-                            logger.info(f"[Scalping:{self.user_id}] {symbol} - Signal validated! Placing order...")
+                            logger.info(f"[Scalping:{self.user_id}] {signal.symbol} - Signal validated! Placing order...")
                             
-                            # Place order
                             success = await self.place_scalping_order(signal)
                             
                             if success:
-                                self.mark_cooldown(symbol)
-                                logger.info(f"[Scalping:{self.user_id}] {symbol} - Order placed successfully!")
+                                self.mark_cooldown(signal.symbol)
+                                logger.info(f"[Scalping:{self.user_id}] {signal.symbol} - Order placed successfully!")
                             else:
-                                logger.warning(f"[Scalping:{self.user_id}] {symbol} - Order placement failed")
-                        
-                        except Exception as e:
-                            logger.error(f"[Scalping:{self.user_id}] Error scanning {symbol}: {e}")
-                            import traceback
-                            traceback.print_exc()
-                            continue
+                                logger.warning(f"[Scalping:{self.user_id}] {signal.symbol} - Order placement failed")
                     
                     logger.info(
                         f"[Scalping:{self.user_id}] Scan #{scan_count} complete: "
@@ -170,6 +166,23 @@ class ScalpingEngine:
         logger.info(f"[Scalping:{self.user_id}] Stop requested")
 
     
+    async def _scan_single_symbol(self, symbol: str) -> Optional[ScalpingSignal]:
+        try:
+            if self.check_cooldown(symbol):
+                return None
+                
+            signal = await self.generate_scalping_signal(symbol)
+            if signal is None:
+                return None
+                
+            if not self.validate_scalping_entry(signal):
+                return None
+                
+            return signal
+        except Exception as e:
+            logger.error(f"[Scalping:{self.user_id}] Error in _scan_single_symbol for {symbol}: {e}")
+            return None
+            
     async def generate_scalping_signal(self, symbol: str) -> Optional[ScalpingSignal]:
         """
         Generate 5M scalping signal with 15M trend validation (ASYNC with caching)

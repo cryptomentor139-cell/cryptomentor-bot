@@ -60,11 +60,12 @@ def calculate_stackmentor_levels(
     return (tp1, tp2, tp3)
 
 
-def calculate_qty_splits(total_qty: float, precision: int = 3) -> Tuple[float, float, float]:
+def calculate_qty_splits(total_qty: float, min_qty: float = 0.0, precision: int = 3) -> Tuple[float, float, float]:
     """
     Split quantity into 3 tiers: 60%, 30%, 10%
     Dynamically infers max precision from total_qty to prevent rounding errors
     from breaking percentage expectations.
+    If splits fall below min_qty, safely bundle fragments to avoid MIN_QTY exchange crashes.
     
     Returns: (qty_tp1, qty_tp2, qty_tp3)
     """
@@ -82,6 +83,23 @@ def calculate_qty_splits(total_qty: float, precision: int = 3) -> Tuple[float, f
     # Give remaining directly to tp3 to ensure total sum is perfectly equal
     qty_tp3 = round(total_qty - qty_tp1 - qty_tp2, precision)
     
+    # Collapse small fragments safely to avoid MIN_QTY Bitunix Limit exceptions
+    if min_qty > 0:
+        if 0 < qty_tp3 < min_qty:
+            qty_tp2 += qty_tp3
+            qty_tp3 = 0.0
+            qty_tp2 = round(qty_tp2, precision)
+            
+        if 0 < qty_tp2 < min_qty:
+            qty_tp1 += qty_tp2
+            qty_tp2 = 0.0
+            qty_tp1 = round(qty_tp1, precision)
+            
+        if 0 < qty_tp1 < min_qty:
+            qty_tp1 = round(total_qty, precision)
+            qty_tp2 = 0.0
+            qty_tp3 = 0.0
+            
     return (qty_tp1, qty_tp2, qty_tp3)
 
 
