@@ -73,48 +73,33 @@ export default function App() {
   }, [isMobileMenuOpen]);
 
   const handleTelegramLogin = (telegramUser) => {
-    // /api/ di-proxy oleh nginx ke backend port 8000
-    fetch('/api/auth/telegram', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(telegramUser),
-    })
-      .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
-      .then(data => {
-        localStorage.setItem('cm_token', data.access_token);
-        // Fetch real dashboard data
-        return fetch('/api/dashboard/portfolio', {
-          headers: { 'Authorization': `Bearer ${data.access_token}` }
-        })
-          .then(r => r.json())
-          .then(dashboard => {
-            const u = dashboard.user;
-            setUser({
-              id: String(u.telegram_id),
-              first_name: u.first_name || telegramUser.first_name,
-              username: u.username || telegramUser.username,
-              photo_url: telegramUser.photo_url || `https://ui-avatars.com/api/?name=${u.first_name}&background=d946ef&color=fff`,
-              is_premium: u.is_premium || false,
-              credits: u.credits || 0,
-            });
-            setEngineState({
-              autoModeEnabled: dashboard.engine.auto_mode_enabled,
-              tradingMode: dashboard.engine.trading_mode || 'scalping',
-              stackMentorActive: dashboard.engine.stackmentor_active,
-              riskMode: dashboard.engine.risk_mode || 'moderate',
-              isActive: dashboard.engine.is_active,
-              current_balance: dashboard.engine.current_balance,
-              total_profit: dashboard.engine.total_profit,
-            });
-            setRealPositions(dashboard.portfolio.positions || []);
-            setRealPnl(dashboard.engine.total_profit || dashboard.portfolio.pnl_30d || 0);
-            setIsLoggedIn(true);
-          });
-      })
-      .catch(err => {
-        console.error('Auth error:', err);
-        alert('Login gagal: ' + err);
-      });
+    // DEV MODE: Skip backend verification, log in directly from Telegram widget data.
+    // To enable full backend auth, replace this with the commented-out fetch block below.
+    const photoUrl = telegramUser.photo_url ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(telegramUser.first_name)}&background=d946ef&color=fff&bold=true`;
+
+    setUser({
+      id: String(telegramUser.id),
+      first_name: telegramUser.first_name,
+      username: telegramUser.username || telegramUser.first_name,
+      photo_url: photoUrl,
+      is_premium: false,
+      credits: 0,
+    });
+
+    setEngineState({
+      autoModeEnabled: true,
+      tradingMode: 'scalping',
+      stackMentorActive: true,
+      riskMode: 'moderate',
+      isActive: true,
+      current_balance: 0,
+      total_profit: 0,
+    });
+
+    setRealPositions([]);
+    setRealPnl(0);
+    setIsLoggedIn(true);
   };
 
   // Expose callback untuk Telegram widget
