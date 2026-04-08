@@ -13,7 +13,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
 
-from license_manager import LicenseManager
+from license_server.license_manager import LicenseManager
 
 load_dotenv()
 
@@ -220,21 +220,6 @@ def create_scheduler() -> AsyncIOScheduler:
     return scheduler
 
 
-async def main_loop():
-    """Main async loop untuk billing scheduler."""
-    scheduler = create_scheduler()
-    scheduler.start()
-    logger.info("Billing scheduler started. Next run: daily at 00:00 UTC.")
-    
-    try:
-        # Keep running forever
-        while True:
-            await asyncio.sleep(3600)  # Sleep 1 hour, scheduler runs in background
-    except (KeyboardInterrupt, SystemExit, asyncio.CancelledError):
-        logger.info("Billing scheduler shutting down.")
-        scheduler.shutdown()
-
-
 # ------------------------------------------------------------------
 # Entry point
 # ------------------------------------------------------------------
@@ -253,7 +238,12 @@ if __name__ == "__main__":
     if not BOT_TOKEN:
         logger.warning("BOT_TOKEN not set — Telegram notifications will be disabled.")
 
+    scheduler = create_scheduler()
+    scheduler.start()
+    logger.info("Billing scheduler started. Next run: daily at 00:00 UTC.")
+
     try:
-        asyncio.run(main_loop())
-    except KeyboardInterrupt:
-        logger.info("Billing scheduler stopped by user.")
+        asyncio.get_event_loop().run_forever()
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Billing scheduler shutting down.")
+        scheduler.shutdown()

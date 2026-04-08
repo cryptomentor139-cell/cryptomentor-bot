@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from supabase import AsyncClient, acreate_client
 
-from wallet_manager import HDWalletManager
+from license_server.wallet_manager import HDWalletManager
 
 load_dotenv()
 
@@ -137,20 +137,16 @@ class LicenseManager:
         client = await self._get_client()
 
         # Idempotency check — avoid relying solely on DB exception for clarity
-        try:
-            existing = (
-                await client.table("wl_deposits")
-                .select("id")
-                .eq("tx_hash", tx_hash)
-                .maybe_single()
-                .execute()
-            )
-            if existing and existing.data is not None:
-                logger.debug("credit_balance: tx_hash %s already processed, skipping.", tx_hash)
-                return False
-        except Exception:
-            # If query fails, continue with insert (will fail if duplicate)
-            pass
+        existing = (
+            await client.table("wl_deposits")
+            .select("id")
+            .eq("tx_hash", tx_hash)
+            .maybe_single()
+            .execute()
+        )
+        if existing.data is not None:
+            logger.debug("credit_balance: tx_hash %s already processed, skipping.", tx_hash)
+            return False
 
         # INSERT deposit record
         deposit_row = {
