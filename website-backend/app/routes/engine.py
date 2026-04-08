@@ -5,6 +5,7 @@ Runs on same VPS as Telegram bot, shares the same Python modules.
 
 import os
 import sys
+import importlib.util
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -15,14 +16,45 @@ from app.db.supabase import _client
 router = APIRouter(prefix="/dashboard/engine", tags=["engine"])
 bearer = HTTPBearer()
 
-# Add Bismillah root + Bismillah/app to sys.path so we can import bot modules directly
+# ── Bismillah path injection ────────────────────────────────────────────────
+# IMPORTANT: Bismillah root MUST be first in sys.path so that
+# `from app.X import ...` inside autotrade_engine resolves to
+# Bismillah/app/X, NOT website-backend/app/X.
 _BISMILLAH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "Bismillah")
 )
 _BISMILLAH_APP = os.path.join(_BISMILLAH, "app")
-for _p in [_BISMILLAH, _BISMILLAH_APP]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+
+# Force Bismillah root to position 0 so its `app` package wins
+if _BISMILLAH in sys.path:
+    sys.path.remove(_BISMILLAH)
+sys.path.insert(0, _BISMILLAH)
+
+if _BISMILLAH_APP not in sys.path:
+    sys.path.insert(1, _BISMILLAH_APP)
+
+
+def _get_engine():
+    """
+    Load autotrade_engine from its absolute path using importlib.
+    This avoids any `app.*` namespace collision between the web backend
+    and Bismillah, while still allowing internal `from app.X import ...`
+    calls inside the engine to resolve via Bismillah's sys.path entries.
+    """
+    module_path = os.path.join(_BISMILLAH_APP, "autotrade_engine.py")
+    if not os.path.isfile(module_path):
+        raise ImportError(f"autotrade_engine.py not found at: {module_path}")
+
+    # Reuse cached module if already loaded to preserve in-memory state
+    # (_running_tasks dict must persist across requests)
+    if "bismillah.autotrade_engine" in sys.modules:
+        return sys.modules["bismillah.autotrade_engine"]
+
+    spec = importlib.util.spec_from_file_location("bismillah.autotrade_engine", module_path)
+    ae = importlib.util.module_from_spec(spec)
+    sys.modules["bismillah.autotrade_engine"] = ae
+    spec.loader.exec_module(ae)
+    return ae
 
 
 def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> int:
@@ -43,8 +75,7 @@ def _get_session(tg_id: int) -> dict:
 async def engine_state(tg_id: int = Depends(get_current_user)):
     session = _get_session(tg_id)
     try:
-        # autotrade_engine is at Bismillah/app/autotrade_engine.py
-        import autotrade_engine as ae
+        ae = _get_engine()
         running = ae.is_running(tg_id)
     except Exception:
         running = session.get("engine_active", False) and session.get("status") == "active"
@@ -74,12 +105,14 @@ async def engine_start(tg_id: int = Depends(get_current_user)):
     if not keys:
         raise HTTPException(status_code=409, detail="Bitunix API keys not configured.")
 
+    # Load engine module once — reused for is_running check + start_engine call
     try:
-        import autotrade_engine as ae
-        if ae.is_running(tg_id):
-            return {"running": True, "message": "Engine already running."}
+        ae = _get_engine()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Engine module error: {e}")
+
+    if ae.is_running(tg_id):
+        return {"running": True, "message": "Engine already running."}
 
     try:
         from telegram import Bot
@@ -122,7 +155,7 @@ async def engine_stop(tg_id: int = Depends(get_current_user)):
     s = _client()
 
     try:
-        import autotrade_engine as ae
+        ae = _get_engine()
         ae.stop_engine(tg_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Engine module error: {e}")
