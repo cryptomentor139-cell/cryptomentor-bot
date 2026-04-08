@@ -5,7 +5,7 @@ import {
   Shield, BarChart2, Target, Zap, Layers, RefreshCw,
   GraduationCap, Radio, Cpu, ToggleRight, ToggleLeft,
   Menu, X, Crosshair, ArrowUpRight, ArrowDownRight,
-  PlayCircle, BookOpen, Lock, Clock
+  PlayCircle, BookOpen, Lock, Clock, Power, StopCircle
 } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 
@@ -67,6 +67,8 @@ export default function App() {
   const [realPositions, setRealPositions] = useState([]);
   const [realPnl, setRealPnl] = useState(0);
   const [engineState, setEngineState] = useState({ autoModeEnabled: true, tradingMode: 'scalping', stackMentorActive: true, riskMode: 'moderate' });
+  const [botRunning, setBotRunning] = useState(false);
+  const [showBotStartModal, setShowBotStartModal] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = isMobileMenuOpen ? 'hidden' : 'unset';
@@ -121,8 +123,12 @@ export default function App() {
     }
   }, []);
 
-  const handleLogout = () => { setIsLoggedIn(false); setUser(null); };
+  const handleLogout = () => { setIsLoggedIn(false); setUser(null); setBotRunning(false); };
   const navigateTo = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); };
+  const handleBotConnected = () => setShowBotStartModal(true);
+  const handleStartBot = () => { setBotRunning(true); setShowBotStartModal(false); };
+  const handleCancelStart = () => setShowBotStartModal(false);
+  const handleToggleBot = () => setBotRunning(prev => !prev);
 
   if (!isLoggedIn) {
     return (
@@ -168,6 +174,8 @@ export default function App() {
         </button>
       </div>
 
+      {showBotStartModal && <BotStartModal onStart={handleStartBot} onCancel={handleCancelStart} />}
+
       <div className="flex flex-1 overflow-hidden relative z-10">
         {isMobileMenuOpen && <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
 
@@ -196,16 +204,27 @@ export default function App() {
               </div>
               <div className="overflow-hidden flex-1"><p className="text-sm font-bold text-white truncate">{user.first_name}</p><p className="text-xs text-slate-400 truncate">@{user.username}</p></div>
             </div>
+            {/* Bot Start/Stop Button */}
+            <button
+              onClick={handleToggleBot}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-black rounded-xl transition-all mb-3 ${
+                botRunning
+                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25'
+                  : 'bg-lime-500/15 text-lime-400 border border-lime-500/30 hover:bg-lime-500/25'
+              }`}
+            >
+              {botRunning ? <><StopCircle size={16} /> Stop Bot</> : <><Power size={16} /> Start Bot</>}
+            </button>
             <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-rose-400 hover:text-white hover:bg-rose-500/90 border border-rose-500/20 rounded-xl transition-all"><LogOut size={16} /> Disconnect</button>
           </div>
         </aside>
 
         {/* MAIN CONTENT */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10 w-full relative z-0 pb-20 md:pb-10 custom-scrollbar">
-          {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : INITIAL_POSITIONS} engineState={engineState} pnl30d={realPnl} hasRealData={realPositions.length > 0} />}
-          {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} />}
+          {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : INITIAL_POSITIONS} engineState={engineState} pnl30d={realPnl} hasRealData={realPositions.length > 0} botRunning={botRunning} onToggleBot={handleToggleBot} />}
+          {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} />}
           {activeTab === 'performance' && <PerformanceTab />}
-          {activeTab === 'settings' && <SettingsTab />}
+          {activeTab === 'settings' && <SettingsTab onBotConnected={handleBotConnected} />}
           {activeTab === 'signals' && <SignalsTab user={user} />}
           {activeTab === 'skills' && <SkillsTab />}
         </main>
@@ -259,10 +278,48 @@ function PortfolioTab({ positions, engineState, pnl30d, hasRealData }) {
   );
 }
 
-function EngineTab({ engineState, setEngineState }) {
+function EngineTab({ engineState, setEngineState, botRunning, onToggleBot }) {
   return (
     <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-both">
       <header className="mb-8 md:mb-12"><h2 className="text-3xl md:text-5xl font-black text-white mb-2 tracking-tighter">Engine Controls</h2><p className="text-slate-400 font-medium text-sm md:text-lg">Configure AutoTrade behavior, StackMentor, and Risk models.</p></header>
+
+      {/* Bot Power Control */}
+      <div className={`relative overflow-hidden rounded-[1.5rem] md:rounded-[2.5rem] border p-6 md:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 transition-all duration-500 ${
+        botRunning
+          ? 'bg-lime-500/5 border-lime-500/40 shadow-[0_0_50px_rgba(163,230,53,0.12)]'
+          : 'bg-[#0a0a0a]/60 border-white/10'
+      }`}>
+        {botRunning && <div className="absolute inset-0 bg-gradient-to-r from-lime-500/5 to-transparent pointer-events-none" />}
+        <div className="flex items-center gap-5 relative z-10">
+          <div className={`p-4 rounded-2xl border transition-all duration-500 ${
+            botRunning ? 'bg-lime-500/15 border-lime-500/30' : 'bg-white/5 border-white/10'
+          }`}>
+            <Power className={`w-7 h-7 transition-colors duration-300 ${botRunning ? 'text-lime-400' : 'text-slate-500'}`} />
+          </div>
+          <div>
+            <h3 className="text-xl md:text-2xl font-black text-white tracking-tight mb-1">AutoTrade Engine</h3>
+            <div className="flex items-center gap-2">
+              {botRunning ? (
+                <><span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-lime-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-lime-400"></span></span>
+                <span className="text-xs font-bold text-lime-400 uppercase tracking-wider">Running — Scanning Markets</span></>
+              ) : (
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Stopped — Not Trading</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={onToggleBot}
+          className={`relative z-10 flex items-center gap-3 px-8 py-4 rounded-2xl font-black text-base transition-all duration-300 shrink-0 ${
+            botRunning
+              ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25 hover:shadow-[0_0_30px_rgba(244,63,94,0.2)]'
+              : 'bg-lime-500/15 text-lime-400 border border-lime-500/30 hover:bg-lime-500/25 hover:shadow-[0_0_30px_rgba(163,230,53,0.2)]'
+          }`}
+        >
+          {botRunning ? <><StopCircle size={20} /> Stop Bot</> : <><Power size={20} /> Start Bot</>}
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <div className={`bg-[#0a0a0a]/60 backdrop-blur-2xl border ${engineState.autoModeEnabled ? 'border-fuchsia-500/50 shadow-[0_0_40px_rgba(217,70,239,0.15)]' : 'border-white/10'} rounded-[1.5rem] md:rounded-[2.5rem] p-6 md:p-8 relative overflow-hidden transition-all duration-500 group`}>
           {engineState.autoModeEnabled && <div className="absolute top-0 right-0 w-32 h-32 bg-fuchsia-500/10 blur-[40px] rounded-full pointer-events-none" />}
@@ -368,7 +425,7 @@ function PerformanceTab() {
   );
 }
 
-function SettingsTab() {
+function SettingsTab({ onBotConnected }) {
   const [status, setStatus] = useState('disconnected');
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [apiKey, setApiKey] = useState('');
@@ -411,6 +468,7 @@ function SettingsTab() {
       setIsConfiguring(false);
       setApiKey('');
       setApiSecret('');
+      if (onBotConnected) onBotConnected();
     } catch (e) {
       setErrorMsg(e.message);
     } finally {
@@ -750,6 +808,57 @@ function CourseCard({ course }) {
       <div className="mt-auto relative z-10">
         <div className="flex justify-between items-center mb-2"><span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Progress</span><span className={`text-xs font-black ${course.progress === 100 ? 'text-lime-400' : 'text-cyan-400'}`}>{course.progress}%</span></div>
         <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${course.progress === 100 ? 'bg-lime-400 shadow-[0_0_10px_rgba(163,230,53,0.8)]' : 'bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.8)]'}`} style={{ width: `${course.progress}%` }} /></div>
+      </div>
+    </div>
+  );
+}
+
+function BotStartModal({ onStart, onCancel }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onCancel} />
+
+      {/* Modal */}
+      <div className="relative z-10 w-full max-w-md bg-[#0a0a0a]/95 border border-white/10 rounded-[2rem] p-8 shadow-[0_0_80px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 duration-300">
+        <div className="absolute inset-0 bg-gradient-to-b from-lime-500/5 to-transparent rounded-[2rem] pointer-events-none" />
+
+        {/* Icon */}
+        <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-lime-500/10 border border-lime-500/20 flex items-center justify-center shadow-[0_0_30px_rgba(163,230,53,0.15)]">
+          <Power className="w-8 h-8 text-lime-400" />
+        </div>
+
+        <h2 className="text-2xl font-black text-white text-center mb-2 tracking-tight">API Connected!</h2>
+        <p className="text-slate-400 text-sm text-center font-medium leading-relaxed mb-2">
+          Your Bitunix API keys have been saved successfully.
+        </p>
+        <p className="text-slate-300 text-sm text-center font-semibold mb-8">
+          Would you like to <span className="text-lime-400">start the AutoTrade engine</span> now?
+        </p>
+
+        {/* Warning */}
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-6 flex items-start gap-3">
+          <Shield className="text-amber-400 w-4 h-4 shrink-0 mt-0.5" />
+          <p className="text-amber-200/80 text-xs font-medium leading-relaxed">
+            The bot will begin scanning markets and placing trades automatically based on your configured risk settings.
+          </p>
+        </div>
+
+        {/* Buttons */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-3.5 px-6 rounded-xl font-bold text-sm text-slate-400 border border-white/10 bg-white/5 hover:bg-white/10 transition-all"
+          >
+            Cancel — Start Later
+          </button>
+          <button
+            onClick={onStart}
+            className="flex-1 py-3.5 px-6 rounded-xl font-black text-sm text-lime-400 border border-lime-500/30 bg-lime-500/10 hover:bg-lime-500/20 hover:shadow-[0_0_30px_rgba(163,230,53,0.2)] transition-all flex items-center justify-center gap-2"
+          >
+            <Power size={16} /> Start Bot Now
+          </button>
+        </div>
       </div>
     </div>
   );
