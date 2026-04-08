@@ -9,9 +9,42 @@ import time
 import uuid
 import requests
 import os
+import threading
+from collections import deque
 from typing import Dict, Optional, List
 from datetime import datetime
 
+class RateLimiter:
+    def __init__(self, rate_limit: int = 10, period: float = 1.0):
+        self.rate_limit = rate_limit
+        self.period = period
+        self.lock = threading.Lock()
+        self.history = {}
+
+    def wait(self, proxy_ip: str):
+        with self.lock:
+            if proxy_ip not in self.history:
+                self.history[proxy_ip] = deque()
+                
+            now = time.time()
+            while self.history[proxy_ip] and now - self.history[proxy_ip][0] > self.period:
+                self.history[proxy_ip].popleft()
+                
+            if len(self.history[proxy_ip]) >= self.rate_limit:
+                sleep_time = self.period - (now - self.history[proxy_ip][0])
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                # Recalculate accurately
+                now = time.time()
+                while self.history[proxy_ip] and now - self.history[proxy_ip][0] > self.period:
+                    self.history[proxy_ip].popleft()
+                    
+            self.history[proxy_ip].append(now)
+
+# Global rate limiter ensuring 10 requests per 1.0s per proxy/IP
+_bitunix_rate_limiter = RateLimiter(limit=10, period=1.0) if 'RateLimiter' in locals() else RateLimiter(10, 1.0)
+# (Fixing initializer below)
+_bitunix_rate_limiter = RateLimiter(10, 1.0)
 
 class BitunixAutoTradeClient:
     def __init__(self, api_key: str = None, api_secret: str = None):
@@ -26,6 +59,30 @@ class BitunixAutoTradeClient:
 
         if not self.api_key or not self.api_secret:
             print("⚠️ Bitunix API credentials not configured")
+            
+        proxy_raw = os.getenv('PROXY_URL', '')
+        self.proxy_list = [p.strip() for p in proxy_raw.split(',') if p.strip()]
+        self.penalized_proxies = {}
+
+    def _get_healthy_proxy(self) -> Optional[str]:
+        if not self.proxy_list:
+            return None
+        import time, random
+        now = time.time()
+        expired = [p for p, expiry in self.penalized_proxies.items() if now > expiry]
+        for p in expired:
+            del self.penalized_proxies[p]
+        healthy = [p for p in self.proxy_list if p not in self.penalized_proxies]
+        if not healthy:
+            return random.choice(self.proxy_list)
+        return random.choice(healthy)
+        
+    def _penalize_proxy(self, proxy_url: str, duration_sec: int = 300):
+        if proxy_url:
+            import time, re
+            self.penalized_proxies[proxy_url] = time.time() + duration_sec
+            safe_proxy = re.sub(r':[^:@]+@', ':***@', proxy_url)
+            print(f"[Bitunix] Penalized proxy {safe_proxy} for {duration_sec}s")
 
     # ------------------------------------------------------------------ #
     #  Signature helpers                                                   #
@@ -98,12 +155,14 @@ class BitunixAutoTradeClient:
             url = f"{url}?{sorted_qs}"
             params = None  # already in URL — don't pass again
 
-        # Proxy rotation — PROXY_URL bisa berisi satu atau beberapa URL dipisah koma
-        # Contoh: http://user:pass@ip1:port,http://user:pass@ip2:port
-        import re, random
-        proxy_raw = os.getenv('PROXY_URL', '')
-        proxy_list = [p.strip() for p in proxy_raw.split(',') if p.strip()]
-        proxy_url = random.choice(proxy_list) if proxy_list else None
+        # Smart Proxy rotation
+        import re
+        proxy_url = self._get_healthy_proxy()
+        
+        # Apply 10req/sec per IP rate limits BEFORE calling
+        proxy_key = proxy_url if proxy_url else "LOCAL_IP"
+        _bitunix_rate_limiter.wait(proxy_key)
+        
         if proxy_url:
             safe_proxy = re.sub(r':[^:@]+@', ':***@', proxy_url)
             print(f"[Bitunix] Using proxy: {safe_proxy}")
@@ -126,12 +185,15 @@ class BitunixAutoTradeClient:
             print(f"[Bitunix] curl_cffi response: {r.status_code}, html={('<html' in r.text[:100].lower())}")
             if r.status_code == 403 and '<html' in r.text[:100].lower():
                 print(f"[Bitunix] curl_cffi got HTML 403")
+                self._penalize_proxy(proxy_url, 600)
                 r = None
         except ImportError:
             pass
         except Exception as e:
             last_error = e
             print(f"[Bitunix] curl_cffi failed: {e}")
+            if proxy_url and ("timeout" in str(e).lower() or "connect" in str(e).lower() or "proxy" in str(e).lower()):
+                self._penalize_proxy(proxy_url, 300)
             r = None
 
         # Fallback: requests biasa
@@ -146,18 +208,29 @@ class BitunixAutoTradeClient:
                     r = requests.post(url, data=body_str, **kwargs)
             except Exception as e:
                 last_error = e
+                if proxy_url and ("timeout" in str(e).lower() or "connect" in str(e).lower() or "proxy" in str(e).lower()):
+                    self._penalize_proxy(proxy_url, 300)
                 r = None
 
         if r is None:
-            return {'success': False, 'error': f'Request failed: {last_error}'}
+            if _retry < 2:
+                import time as _time
+                _time.sleep(2)
+                return self._request(method, endpoint, params, body, signed, _retry + 1)
+            return {'success': False, 'error': f'Request failed after network retries: {last_error}'}
 
         try:
             if r.status_code == 403:
                 body_text = r.text[:200]
                 print(f"[Bitunix] 403 Forbidden: {body_text[:100]}")
-                # 403 dengan HTML = IP diblokir Bitunix, bukan auth error
+                # 403 dengan HTML = IP diblokir Bitunix
                 if '<html' in body_text.lower() or '<!doctype' in body_text.lower():
-                    return {'success': False, 'error': 'IP_BLOCKED: IP server diblokir Bitunix. Pastikan PROXY_URL di-set di Railway Variables.'}
+                    self._penalize_proxy(proxy_url, 600)
+                    if _retry < 2:
+                        import time as _time
+                        _time.sleep(2)
+                        return self._request(method, endpoint, params, body, signed, _retry + 1)
+                    return {'success': False, 'error': 'IP_BLOCKED: IP server diblokir Bitunix.'}
                 return {'success': False, 'error': 'HTTP 403: Akses ditolak Bitunix.'}
             if r.status_code in (500, 502, 503, 504) and _retry < 2:
                 # Server error — retry sekali lagi dengan delay
@@ -487,29 +560,30 @@ class BitunixAutoTradeClient:
         """
         Update the SL on an open position (used for breakeven move after TP1).
 
-        Bitunix exposes TP/SL management via /api/v1/futures/tpsl/place_order
-        which requires `positionId` and `slQty`. We resolve both from the
-        live position list.
+        Bitunix exposes TP/SL management via /api/v1/futures/tpsl/position/modify_order
+        which requires `positionId`. We resolve it from the live position list.
         """
         pos = self._resolve_position(symbol)
         if not pos:
             return {'success': False, 'error': f'No open position for {symbol}'}
 
         position_id = pos.get('position_id')
-        qty = float(pos.get('qty') or pos.get('size') or 0)
-        if not position_id or qty <= 0:
-            return {'success': False, 'error': f'Cannot resolve positionId/qty for {symbol}'}
+        if not position_id:
+            return {'success': False, 'error': f'Cannot resolve positionId for {symbol}'}
 
-        qty_f = float(qty)
-        qty_str = str(int(qty_f)) if int(qty_f) == qty_f else str(qty)
+        current_tp = float(pos.get('tp_price') or 0)
+        tp_str = str(round(current_tp, 6)) if current_tp > 0 else ""
+        sl_str = str(round(sl_price, 6)) if sl_price > 0 else ""
+
         body = {
             "symbol": symbol,
             "positionId": str(position_id),
-            "slPrice": str(round(sl_price, 6)),
+            "tpPrice": tp_str,
+            "tpStopType": "MARK_PRICE",
+            "slPrice": sl_str,
             "slStopType": "MARK_PRICE",
-            "slQty": qty_str,
         }
-        result = self._request('POST', '/api/v1/futures/tpsl/place_order',
+        result = self._request('POST', '/api/v1/futures/tpsl/position/modify_order',
                                body=body, signed=True)
         if result['success']:
             return {'success': True, 'symbol': symbol, 'new_sl': sl_price}
@@ -525,23 +599,21 @@ class BitunixAutoTradeClient:
             return {'success': False, 'error': f'No open position for {symbol}'}
 
         position_id = pos.get('position_id')
-        qty = float(pos.get('qty') or pos.get('size') or 0)
-        if not position_id or qty <= 0:
-            return {'success': False, 'error': f'Cannot resolve positionId/qty for {symbol}'}
+        if not position_id:
+            return {'success': False, 'error': f'Cannot resolve positionId for {symbol}'}
 
-        qty_f = float(qty)
-        qty_str = str(int(qty_f)) if int(qty_f) == qty_f else str(qty)
+        tp_str = str(round(tp_price, 6)) if tp_price > 0 else ""
+        sl_str = str(round(sl_price, 6)) if sl_price > 0 else ""
+
         body = {
             "symbol": symbol,
             "positionId": str(position_id),
-            "tpPrice": str(round(tp_price, 6)),
+            "tpPrice": tp_str,
             "tpStopType": "MARK_PRICE",
-            "tpQty": qty_str,
-            "slPrice": str(round(sl_price, 6)),
+            "slPrice": sl_str,
             "slStopType": "MARK_PRICE",
-            "slQty": qty_str,
         }
-        result = self._request('POST', '/api/v1/futures/tpsl/place_order',
+        result = self._request('POST', '/api/v1/futures/tpsl/position/modify_order',
                                body=body, signed=True)
         if result['success']:
             return {'success': True, 'symbol': symbol, 'new_tp': tp_price, 'new_sl': sl_price}
