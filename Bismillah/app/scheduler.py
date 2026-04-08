@@ -585,13 +585,15 @@ async def _engine_health_check_task(application):
 
 async def _check_stale_positions(application):
     """
-    Saat startup: baca semua open trades dari DB, cek apakah arahnya
-    masih sesuai dengan kondisi market sekarang. Jika berlawanan,
-    kirim alert ke user dan biarkan engine handle flip-nya.
+    Saat startup: baca semua open trades dari DB, cross-check dengan exchange,
+    lalu cek apakah arahnya masih sesuai kondisi market.
+    Hanya kirim alert kalau posisi BENAR-BENAR masih open di exchange.
     """
     try:
         from app.trade_history import get_all_open_trades
-        from app.autotrade_engine import _compute_signal_pro, _is_reversal
+        from app.autotrade_engine import _compute_signal_pro
+        from app.supabase_repo import get_user_api_key
+        from app.exchange_registry import get_client
         import asyncio
 
         open_trades = get_all_open_trades()
@@ -599,7 +601,7 @@ async def _check_stale_positions(application):
             logger.info("[StartupCheck] No open trades in DB to check")
             return
 
-        logger.info(f"[StartupCheck] Checking {len(open_trades)} open trades against current market")
+        logger.info(f"[StartupCheck] Checking {len(open_trades)} open trades against exchange + market")
 
         # Group by user
         by_user: dict = {}
@@ -608,13 +610,40 @@ async def _check_stale_positions(application):
             by_user.setdefault(uid, []).append(t)
 
         for user_id, trades in by_user.items():
-            alerts = []
-            for trade in trades:
-                symbol    = trade.get("symbol", "")
-                side      = trade.get("side", "LONG")   # LONG / SHORT
-                base_sym  = symbol.replace("USDT", "")
-                open_side = "BUY" if side == "LONG" else "SELL"
+            # Fetch live positions from exchange for this user
+            live_symbols = set()
+            try:
+                keys = get_user_api_key(int(user_id))
+                if keys:
+                    exchange_id = keys.get("exchange", "bitunix")
+                    client = get_client(exchange_id, keys["api_key"], keys["api_secret"])
+                    pos_result = await asyncio.to_thread(client.get_positions)
+                    if pos_result.get("success"):
+                        for p in (pos_result.get("positions") or []):
+                            sym = (p.get("symbol") or "").upper()
+                            if sym:
+                                live_symbols.add(sym)
+            except Exception as e:
+                logger.warning(f"[StartupCheck] Could not fetch live positions for {user_id}: {e}")
+                # Jika tidak bisa fetch exchange, skip user ini — jangan kirim notif palsu
+                continue
 
+            alerts = []
+            stale_trade_ids = []
+
+            for trade in trades:
+                symbol = trade.get("symbol", "")
+                side   = trade.get("side", "LONG")
+                trade_id = trade.get("id")
+
+                # Kalau posisi tidak ada di exchange, tandai sebagai stale dan skip
+                if symbol not in live_symbols:
+                    logger.info(f"[StartupCheck] Stale DB trade: {symbol} for user {user_id} — not on exchange, marking closed")
+                    stale_trade_ids.append(trade_id)
+                    continue
+
+                # Posisi memang ada di exchange, cek arah vs sinyal
+                base_sym = symbol.replace("USDT", "")
                 try:
                     sig = await asyncio.to_thread(_compute_signal_pro, base_sym)
                 except Exception:
@@ -628,7 +657,6 @@ async def _check_stale_positions(application):
                 struct    = sig.get("market_structure", "ranging")
                 conf      = sig.get("confidence", 0)
 
-                # Cek apakah arah berlawanan
                 is_against = (
                     (side == "LONG"  and new_side == "SHORT") or
                     (side == "SHORT" and new_side == "LONG")
@@ -639,11 +667,22 @@ async def _check_stale_positions(application):
                         f"⚠️ <b>{symbol}</b>: Position <b>{side}</b> but current signal is <b>{new_side}</b>\n"
                         f"   1H: {trend_1h} | Struct: {struct} | Conf: {conf}%"
                     )
-                    logger.warning(
-                        f"[StartupCheck] STALE POSITION user={user_id} {symbol} "
-                        f"{side} vs signal {new_side} (conf={conf}%)"
-                    )
 
+            # Auto-close stale trades di DB
+            if stale_trade_ids:
+                try:
+                    from app.supabase_repo import _client as _db
+                    s = _db()
+                    for tid in stale_trade_ids:
+                        s.table("autotrade_trades").update({
+                            "status": "closed",
+                            "close_reason": "stale_startup_reconcile"
+                        }).eq("id", tid).execute()
+                    logger.info(f"[StartupCheck] Closed {len(stale_trade_ids)} stale DB trades for user {user_id}")
+                except Exception as e:
+                    logger.error(f"[StartupCheck] Failed to close stale trades: {e}")
+
+            # Hanya kirim notif kalau ada posisi NYATA yang konflik
             if alerts:
                 alert_text = "\n".join(alerts)
                 try:
