@@ -95,33 +95,48 @@ export default function App() {
     document.body.style.overflow = isMobileMenuOpen ? 'hidden' : 'unset';
   }, [isMobileMenuOpen]);
 
-  const handleTelegramLogin = (telegramUser) => {
-    // DEV MODE: Skip backend verification, log in directly from Telegram widget data.
-    // To enable full backend auth, replace this with the commented-out fetch block below.
+  const handleTelegramLogin = async (telegramUser) => {
     const photoUrl = telegramUser.photo_url ||
       `https://ui-avatars.com/api/?name=${encodeURIComponent(telegramUser.first_name)}&background=d946ef&color=fff&bold=true`;
 
-    const nextUser = {
-      id: String(telegramUser.id),
-      first_name: telegramUser.first_name,
-      username: telegramUser.username || telegramUser.first_name,
-      photo_url: photoUrl,
-      is_premium: false,
-      credits: 0,
-    };
-    setUser(nextUser);
-    try { localStorage.setItem('cm_user', JSON.stringify(nextUser)); } catch {}
+    // Call backend to verify Telegram auth and get JWT
+    try {
+      const resp = await fetch(`${API_BASE}/auth/telegram`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(telegramUser),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.access_token) {
+          localStorage.setItem('cm_token', data.access_token);
+        }
+        if (data.user) {
+          const nextUser = {
+            id: String(telegramUser.id),
+            first_name: data.user.first_name || telegramUser.first_name,
+            username: data.user.username || telegramUser.username || telegramUser.first_name,
+            photo_url: photoUrl,
+            is_premium: data.user.is_premium || false,
+            credits: data.user.credits || 0,
+          };
+          setUser(nextUser);
+          try { localStorage.setItem('cm_user', JSON.stringify(nextUser)); } catch {}
+        }
+      } else {
+        // Fallback: store user without token (limited functionality)
+        const nextUser = { id: String(telegramUser.id), first_name: telegramUser.first_name, username: telegramUser.username || telegramUser.first_name, photo_url: photoUrl, is_premium: false, credits: 0 };
+        setUser(nextUser);
+        try { localStorage.setItem('cm_user', JSON.stringify(nextUser)); } catch {}
+      }
+    } catch {
+      // Network error fallback
+      const nextUser = { id: String(telegramUser.id), first_name: telegramUser.first_name, username: telegramUser.username || telegramUser.first_name, photo_url: photoUrl, is_premium: false, credits: 0 };
+      setUser(nextUser);
+      try { localStorage.setItem('cm_user', JSON.stringify(nextUser)); } catch {}
+    }
 
-    setEngineState({
-      autoModeEnabled: true,
-      tradingMode: 'scalping',
-      stackMentorActive: true,
-      riskMode: 'moderate',
-      isActive: true,
-      current_balance: 0,
-      total_profit: 0,
-    });
-
+    setEngineState({ autoModeEnabled: true, tradingMode: 'scalping', stackMentorActive: true, riskMode: 'moderate', isActive: true, current_balance: 0, total_profit: 0 });
     setRealPositions([]);
     setRealPnl(0);
     setIsLoggedIn(true);
@@ -147,7 +162,7 @@ export default function App() {
   }, []);
 
   const handleLogout = () => {
-    try { localStorage.removeItem('cm_user'); } catch {}
+    try { localStorage.removeItem('cm_user'); localStorage.removeItem('cm_token'); } catch {}
     setIsLoggedIn(false); setUser(null); setBotRunning(false);
   };
   const navigateTo = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); };
@@ -360,7 +375,7 @@ export default function App() {
 
         {/* MAIN CONTENT */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10 w-full relative z-0 pb-20 md:pb-10 custom-scrollbar">
-          {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : INITIAL_POSITIONS} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} />}
+          {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : []} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} botBusy={botBusy} />}
           {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} />}
           {activeTab === 'performance' && <PerformanceTab />}
           {activeTab === 'settings' && <SettingsTab onBotConnected={handleBotConnected} />}
@@ -372,7 +387,7 @@ export default function App() {
   );
 }
 
-function PortfolioTab({ positions, engineState, unrealizedPnl, cumulativePnl, equity, hasRealData, hasCumulative, botRunning, onToggleBot }) {
+function PortfolioTab({ positions, engineState, unrealizedPnl, cumulativePnl, equity, hasRealData, hasCumulative, botRunning, onToggleBot, botBusy }) {
   const pnlAbs = Math.abs(unrealizedPnl).toFixed(2);
   const pnlDisplay = hasRealData ? `${unrealizedPnl >= 0 ? '+' : '-'}$${pnlAbs}` : '$0.00';
   const realizedAbs = Math.abs(cumulativePnl).toFixed(2);
@@ -382,13 +397,31 @@ function PortfolioTab({ positions, engineState, unrealizedPnl, cumulativePnl, eq
   return (
     <div className="max-w-6xl mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-both">
       <header className="mb-8 md:mb-12 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-        <div><h2 className="text-3xl md:text-5xl font-black text-white mb-2 tracking-tighter">Portfolio Status</h2><span className="text-slate-400 font-medium text-sm md:text-lg">AI-managed assets overview.</span></div>
+        <div>
+          <h2 className="text-3xl md:text-5xl font-black text-white mb-2 tracking-tighter">Portfolio Status</h2>
+          <span className="text-slate-400 font-medium text-sm md:text-lg">AI-managed assets overview.</span>
+        </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-3 bg-white/5 border border-white/10 px-4 py-2.5 rounded-xl backdrop-blur-md">
-            <div className="flex flex-col items-end border-r border-white/10 pr-3"><span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Mode</span><span className={`text-xs font-black uppercase tracking-wider ${engineState.tradingMode === 'scalping' ? 'text-fuchsia-400' : 'text-cyan-400'}`}>{engineState.tradingMode}</span></div>
-            <div className="flex items-center gap-2"><span className="relative flex h-2.5 w-2.5"><span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${botRunning ? 'bg-lime-400' : 'bg-slate-600'}`}></span><span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${botRunning ? 'bg-lime-400 shadow-[0_0_10px_rgba(163,230,53,0.8)]' : 'bg-slate-600'}`}></span></span><span className={`text-[10px] font-bold tracking-[0.1em] uppercase ${botRunning ? 'text-lime-400' : 'text-slate-500'}`}>{botRunning ? 'Active' : 'Stopped'}</span></div>
+            <div className="flex flex-col items-end border-r border-white/10 pr-3">
+              <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Mode</span>
+              <span className={`text-xs font-black uppercase tracking-wider ${engineState.tradingMode === 'scalping' ? 'text-fuchsia-400' : 'text-cyan-400'}`}>{engineState.tradingMode || 'scalping'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${botRunning ? 'bg-lime-400' : 'bg-slate-600'}`}></span>
+                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${botRunning ? 'bg-lime-400 shadow-[0_0_10px_rgba(163,230,53,0.8)]' : 'bg-slate-600'}`}></span>
+              </span>
+              <span className={`text-[10px] font-bold tracking-[0.1em] uppercase ${botRunning ? 'text-lime-400' : 'text-slate-500'}`}>{botRunning ? 'Active' : 'Stopped'}</span>
+            </div>
           </div>
-          <button onClick={onToggleBot} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-sm transition-all whitespace-nowrap ${botRunning ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25' : 'bg-lime-500/15 text-lime-400 border border-lime-500/30 hover:bg-lime-500/25'}`}>{botRunning ? <><StopCircle size={15} /> Stop Engine</> : <><Power size={15} /> Start Engine</>}</button>
+          <button
+            onClick={onToggleBot}
+            disabled={botBusy}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-sm transition-all whitespace-nowrap disabled:opacity-50 ${botRunning ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25' : 'bg-lime-500/15 text-lime-400 border border-lime-500/30 hover:bg-lime-500/25'}`}
+          >
+            {botBusy ? '...' : botRunning ? <><StopCircle size={15} /> Stop Engine</> : <><Power size={15} /> Start Engine</>}
+          </button>
         </div>
       </header>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
@@ -396,6 +429,7 @@ function PortfolioTab({ positions, engineState, unrealizedPnl, cumulativePnl, eq
         <StatCard title="Unrealized PnL" value={pnlDisplay} subtext="Live open positions" isPositive={unrealizedPnl >= 0} icon={<Activity className={`w-6 h-6 ${unrealizedPnl >= 0 ? 'text-lime-400' : 'text-rose-400'}`} />} glowColor={unrealizedPnl >= 0 ? 'lime' : 'rose'} />
         <StatCard title="Realized PnL (30d)" value={realizedDisplay} subtext="Closed trades" isPositive={cumulativePnl >= 0} icon={<TrendingUp className="text-fuchsia-400 w-6 h-6" />} glowColor="fuchsia" />
         <StatCard title="Open Positions" value={positions.length.toString()} icon={<Target className="text-cyan-400 w-6 h-6" />} glowColor="cyan" />
+
       </div>
       <div className="pt-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">

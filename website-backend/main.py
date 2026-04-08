@@ -7,6 +7,7 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.bitunix import router as bitunix_router
 from app.routes.signals import router as signals_router
 from app.routes.performance import router as performance_router
+from app.routes.engine import router as engine_router
 
 app = FastAPI(
     title="CryptoMentor Website API",
@@ -30,6 +31,7 @@ app.include_router(dashboard_router)
 app.include_router(bitunix_router)
 app.include_router(signals_router)
 app.include_router(performance_router)
+app.include_router(engine_router)
 
 
 @app.get("/")
