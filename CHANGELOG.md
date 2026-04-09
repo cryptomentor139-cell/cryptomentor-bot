@@ -2,7 +2,84 @@
 
 All notable changes to the CryptoMentor Artificial Intelligence Trading project will be documented in this file.
 
-## [Unreleased / Latest] - 2026-04-09
+## [Unreleased / Latest] - 2026-04-10
+
+### 🔄 State Persistence & Connection Recovery — Post-Deployment Improvements
+**Problem Resolved**: After deployment/restart, both Telegram bot and web dashboard would lose connection to previous API state, requiring users to restart their sessions, re-authenticate, and restart trading engines. This degraded user experience and interrupted active trading.
+
+#### Root Causes Identified & Fixed:
+1. **In-Memory State Loss** — Signal queue, execution status, and engine state lived only in Python memory. On restart, all context was lost.
+2. **No API Session Recovery** — Bitunix API connections were dropped on deployment without graceful reconnection logic.
+3. **Missing State Sync** — Telegram bot and web dashboard had separate state management; sync only happened at request time.
+4. **No Heartbeat Monitoring** — Dead connections weren't detected until next trade attempt (too late).
+
+#### Solutions Implemented:
+
+##### Signal Queue Persistence (Web-Telegram Sync)
+- 🔥 **SignalQueueManager** (`website-backend/app/services/signal_queue.py`): New service class manages signal queues with full Supabase persistence.
+  - Signals stored in `signal_queue` table with status lifecycle: `pending` → `executing` → `executed|failed`
+  - Both Telegram bot and web dashboard read/write to same queue
+  - No duplicate execution across systems (unique constraint: `(user_id, symbol, status)`)
+  - Queue survives bot/web restart — signals auto-load from DB on startup
+
+- 🔥 **Telegram Bot Queue Sync** (`Bismillah/app/autotrade_engine.py`):
+  - Engine now syncs generated signals to `signal_queue` table immediately
+  - Execution status updates propagated to DB in real-time (pending → executing → executed)
+  - Helper function `_cleanup_signal_queue()` ensures atomicity of queue operations
+  - Web dashboard sees Telegram's queued signals with zero lag
+
+- 🔥 **Supabase Migration** (`website-backend/app/db/migrations/signal_queue_table.sql`):
+  - Created `signal_queue` table with proper indexing for fast lookups
+  - RLS policies limit users to their own signals
+  - Auto-update triggers keep `updated_at` fresh
+  - Constraint prevents race conditions on same symbol
+
+##### Unified State Management
+- 🔥 **Shared Menu Structure** (`Bismillah/menu_system.py`, `Bismillah/menu_handlers.py`):
+  - Restructured Telegram menu to match web dashboard tabs (6 primary navigation sections)
+  - Both platforms now have identical feature discovery and navigation
+  - Users see consistent UI/UX across Telegram and web
+
+- 🔥 **API Connection Health Checks**:
+  - `bitunix_autotrade_client.py` now includes connection validation on startup
+  - Stale API credentials detected before trading begins
+  - Clear error messages guide users to re-authenticate
+
+- 🔥 **Graceful Reconnection** (`autotrade_engine.py`):
+  - On startup, engine loads previous session state from `autotrade_sessions` table
+  - Validates that Bitunix API keys still work before resuming trading
+  - If keys are invalid: notifies user, pauses engine (doesn't fail hard)
+  - Implements exponential backoff on API failures (max 5 retries over 5 minutes)
+
+##### User Experience Improvements
+- 🚀 **Telegram Bot State Recovery**:
+  - `/start` or `/autotrade` on restart checks if engine was running → offers to resume
+  - Shows last known balance and open positions (from cache)
+  - Syncs latest signal queue with web dashboard
+  - No re-authentication required for same session
+
+- 🚀 **Web Dashboard State Recovery**:
+  - On login, automatically fetches current engine status from Supabase
+  - Restores previous trading mode, leverage, risk settings
+  - Shows live signal queue pulled from `signal_queue` table
+  - Displays "engine was interrupted" banner if restart detected
+
+- 🚀 **Zero Data Loss on Deployment**:
+  - All critical state (signals, trades, settings, equity) now persisted to Supabase
+  - In-memory caches are performance optimization only, not source of truth
+  - Database is single source of truth for all user state
+
+#### Benefits
+✅ **Continuous Trading** — Engine resumes after restart without user intervention  
+✅ **No Re-Authentication** — Session persists across deployments  
+✅ **Unified State** — Telegram and web see same signals and execution status  
+✅ **Connection Resilience** — API failures handled gracefully with retry logic  
+✅ **Transparent Status** — Users see exactly what happened during downtime  
+✅ **Improved Reliability** — No more "connection lost after deploy" complaints  
+
+---
+
+## [Previous] - 2026-04-09
 
 ### Trading Signal Algorithm Redesign — Confluence-Based Multi-Factor Detection
 - 🔥 **Confluence-Based Signal Generation** (`website-backend/app/routes/signals.py`): Replaced momentum-only signal algorithm with multi-factor confluence validation combining: Support/Resistance detection (RangeAnalyzer), RSI extremes (oversold/overbought), Volume spike confirmation (>1.5× 20-period MA), Trending market validation (ATR > 0.3%), and long-term price trend alignment (>50-candle moving average). Only generates signals when 2+ factors align with confluence score ≥ 50 (prevents false breakouts & momentum chasing).
