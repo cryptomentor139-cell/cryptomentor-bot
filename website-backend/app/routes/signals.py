@@ -147,7 +147,10 @@ def _calculate_atr(candles: List[Dict], period: int = 14) -> float:
     return sum(true_ranges) / len(true_ranges) if true_ranges else 0.0
 
 
-async def generate_confluence_signals(symbol: str) -> Optional[Dict[str, Any]]:
+async def generate_confluence_signals(
+    symbol: str,
+    user_risk_pct: float = 0.5
+) -> Optional[Dict[str, Any]]:
     """
     Generate a confluence-validated trading signal for symbol if 2+ factors align.
 
@@ -158,11 +161,28 @@ async def generate_confluence_signals(symbol: str) -> Optional[Dict[str, Any]]:
     4. Non-sideways regime: trending (not choppy) = +15 pts
     5. Trend alignment: price above/below EMA200 = +10 pts
 
-    Min confidence to generate = 50 pts (requires 2+ factors)
+    Adaptive confidence thresholds based on user risk tolerance:
+    - Conservative (0.25%): min_confidence=60, tighter TPs (0.5×ATR)
+    - Moderate (0.5%): min_confidence=50, standard TPs (0.75–1.5×ATR)
+    - Aggressive (0.75%): min_confidence=45, wider TPs (1.25×ATR)
+    - Very Aggressive (1.0%): min_confidence=40, widest TPs (1.5×ATR)
 
     Returns: signal dict if confluent, or None if weak setup
     """
     symbol_upper = symbol.upper()
+
+    # Map risk tolerance to confidence threshold and TP scaling
+    risk_config = {
+        0.25: {"min_confidence": 60, "atr_multiplier": 0.5},
+        0.5:  {"min_confidence": 50, "atr_multiplier": 1.0},
+        0.75: {"min_confidence": 45, "atr_multiplier": 1.25},
+        1.0:  {"min_confidence": 40, "atr_multiplier": 1.5},
+    }
+
+    # Get config for user's risk level (default to 0.5 if not in map)
+    config = risk_config.get(user_risk_pct, risk_config[0.5])
+    min_confidence = config["min_confidence"]
+    atr_multiplier = config["atr_multiplier"]
 
     # 1. Fetch 100 1h candles
     candles = await _get_candles_1h(symbol_upper, limit=100)
@@ -271,26 +291,28 @@ async def generate_confluence_signals(symbol: str) -> Optional[Dict[str, Any]]:
             score += 10
             reason_list.append(f"Price above 20-candle MA")
 
-    # 8. Only generate if score >= 50
-    if score < 50:
-        logger.debug(f"[Confluence] {symbol} score={score} < 50 (insufficient confluence)")
+    # 8. Only generate if score >= min_confidence (adaptive based on risk tolerance)
+    if score < min_confidence:
+        logger.debug(f"[Confluence] {symbol} score={score} < {min_confidence} (insufficient confluence for {user_risk_pct}% risk)")
         return None
 
     # 9. Determine direction based on RSI
     direction = 'LONG' if last_rsi < 30 else ('SHORT' if last_rsi > 70 else 'LONG')
 
-    # 10. Calculate TPs with ATR scaling
+    # 10. Calculate TPs with ATR scaling (adaptive based on risk tolerance)
+    # Standard TP tiers: 0.75×, 1.25×, 1.5× ATR
+    # Multiplied by risk tolerance modifier (0.5 for conservative, 1.5 for aggressive)
     if direction == 'LONG':
         entry_price = support
-        tp1 = entry_price + (atr * 0.75)
-        tp2 = entry_price + (atr * 1.25)
-        tp3 = entry_price + (atr * 1.5)
+        tp1 = entry_price + (atr * 0.75 * atr_multiplier)
+        tp2 = entry_price + (atr * 1.25 * atr_multiplier)
+        tp3 = entry_price + (atr * 1.5 * atr_multiplier)
         sl_price = support - (atr * 0.5)
     else:
         entry_price = resistance
-        tp1 = entry_price - (atr * 0.75)
-        tp2 = entry_price - (atr * 1.25)
-        tp3 = entry_price - (atr * 1.5)
+        tp1 = entry_price - (atr * 0.75 * atr_multiplier)
+        tp2 = entry_price - (atr * 1.25 * atr_multiplier)
+        tp3 = entry_price - (atr * 1.5 * atr_multiplier)
         sl_price = resistance + (atr * 0.5)
 
     # 11. Round to symbol precision
@@ -312,9 +334,9 @@ async def generate_confluence_signals(symbol: str) -> Optional[Dict[str, Any]]:
     }
 
     logger.info(
-        f"[Confluence] Generated {symbol} signal: "
-        f"dir={direction} entry={entry_price:.4f} tp1={tp1:.4f} "
-        f"sl={sl_price:.4f} conf={score} [{signal['reason']}]"
+        f"[Confluence] Generated {symbol} signal (risk={user_risk_pct}%): "
+        f"dir={direction} entry={entry_price:.4f} tp1={tp1:.4f} tp2={tp2:.4f} tp3={tp3:.4f} "
+        f"sl={sl_price:.4f} conf={score}/{min_confidence} [{signal['reason']}]"
     )
 
     return signal
@@ -439,12 +461,26 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
     Multiple signals per day are allowed when confluence conditions align.
 
     Returns:
-    - signals: list of confluent signals (only if score >= 50)
+    - signals: list of confluent signals (only if score >= min_confidence)
     - generated_at: current UTC timestamp
     - entry_window_seconds: 5 min window for 1-click execution
     """
     signals: List[Dict[str, Any]] = []
     now_utc = datetime.now(timezone.utc)
+
+    # Fetch user's risk preference (for adaptive signal confidence threshold)
+    user_risk_pct = 0.5  # Default: moderate risk
+    if tg_id:
+        try:
+            s = _client()
+            res = s.table("autotrade_sessions").select(
+                "risk_per_trade"
+            ).eq("telegram_id", tg_id).limit(1).execute()
+            sess = (res.data or [{}])[0]
+            user_risk_pct = float(sess.get("risk_per_trade") or 0.5)
+        except Exception as e:
+            logger.warning(f"Failed to fetch user risk setting: {e}")
+            user_risk_pct = 0.5
 
     # Get trade status (for in-position or closed trade tracking)
     try:
@@ -463,7 +499,8 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
     for idx, (pair, sym, tier, sig_type) in enumerate(_WATCHLIST):
         try:
             # Generate confluence-based signal (async, live market data)
-            conf_signal = await generate_confluence_signals(sym)
+            # Pass user's risk tolerance for adaptive confidence & TP scaling
+            conf_signal = await generate_confluence_signals(sym, user_risk_pct)
 
             if conf_signal:
                 # Found a confluent signal — format for dashboard
@@ -599,7 +636,7 @@ async def execute_signal(
         "risk_per_trade, leverage"
     ).eq("telegram_id", tg_id).limit(1).execute()
     sess = (sess_res.data or [{}])[0]
-    risk_pct = float(sess.get("risk_per_trade") or 2.0)
+    risk_pct = float(sess.get("risk_per_trade") or 0.5)  # Default to 0.5% if not set
     leverage = int(sess.get("leverage") or 10)
 
     # Re-derive the signal from live market data so dynamic sizing reflects
