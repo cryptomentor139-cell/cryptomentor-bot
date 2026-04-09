@@ -91,23 +91,32 @@ class ScalpingEngine:
             while self.running:
                 try:
                     # ── Check Supabase stop signal ────────────────────────────
+                    # Only stop if status is explicitly "stopped" AND engine_active=False
+                    # This prevents race conditions where status briefly shows "stopped"
+                    # during user restart flow
                     try:
                         from app.supabase_repo import _client as _sc
-                        _sr = _sc().table("autotrade_sessions").select("status").eq(
+                        _sr = _sc().table("autotrade_sessions").select("status, engine_active").eq(
                             "telegram_id", self.user_id
                         ).limit(1).execute()
-                        if _sr.data and _sr.data[0].get("status") == "stopped":
-                            logger.info(f"[Scalping:{self.user_id}] Stop signal from Supabase")
-                            self.running = False
-                            try:
-                                await self.bot.send_message(
-                                    chat_id=self.notify_chat_id,
-                                    text="🛑 <b>AutoTrade stopped.</b>\n\nUse /autotrade to restart.",
-                                    parse_mode='HTML'
-                                )
-                            except Exception:
-                                pass
-                            break
+                        if _sr.data:
+                            _row = _sr.data[0]
+                            _status = _row.get("status")
+                            _engine_active = _row.get("engine_active", True)
+                            # Only stop if BOTH status=stopped AND engine_active=False
+                            # If engine_active=True, user just restarted — keep running
+                            if _status == "stopped" and not _engine_active:
+                                logger.info(f"[Scalping:{self.user_id}] Stop signal from Supabase (status=stopped, engine_active=False)")
+                                self.running = False
+                                try:
+                                    await self.bot.send_message(
+                                        chat_id=self.notify_chat_id,
+                                        text="🛑 <b>AutoTrade stopped.</b>\n\nUse /autotrade to restart.",
+                                        parse_mode='HTML'
+                                    )
+                                except Exception:
+                                    pass
+                                break
                     except Exception:
                         pass
 
