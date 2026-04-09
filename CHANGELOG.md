@@ -9,7 +9,27 @@ All notable changes to the CryptoMentor Artificial Intelligence Trading project 
 - 🔥 **ATR-Scaled Realistic TP/SL** (`generate_confluence_signals`): Replaced fixed-% profit targets (TP1=1%, TP2=2%, TP3=3%) with volatility-adaptive ATR-based scaling: TP1 = entry ± 0.75 ATR, TP2 = entry ± 1.25 ATR, TP3 = entry ± 1.5 ATR, SL = entry ± 0.5 ATR. Automatically widens TPs in high-volatility markets and tightens in low-volatility, matching realistic take-profit distances (2–3% typical).
 - 🚀 **Zero-Caching Signal Generation** (`GET /dashboard/signals`): Removed 5-minute signal cache entirely → allows multiple high-probability signals per day when confluence conditions change. No artificial limiting of signal density. Each request generates fresh signals from live market data, enabling traders to act on new confluent setups immediately without waiting for cache expiry.
 - 📊 **Confluence Scoring Matrix** (`generate_confluence_signals`): Transparent scoring system visible in signal `reason` field: S/R bounce (30 pts), RSI extreme (25 pts), Volume spike (20 pts), Trending regime (15 pts), Price trend alignment (10 pts). Min 50 pts required, typically requires 2+ factors. Dashboard users can see exactly which confluence factors triggered each signal.
+- 🎯 **Adaptive Signal Generation by Risk Tolerance** (`generate_confluence_signals`): Signal generation now reads user's `risk_per_trade` setting and adapts confidence threshold + TP scaling accordingly:
+  - **Conservative (0.25%)**: min_confidence=60, tighter TPs (0.5× ATR) — only high-conviction signals
+  - **Moderate (0.5%)**: min_confidence=50, standard TPs (0.75–1.5× ATR) — balanced approach
+  - **Aggressive (0.75%)**: min_confidence=45, wider TPs (1.25× ATR) — more signals, wider targets
+  - **Very Aggressive (1.0%)**: min_confidence=40, widest TPs (1.5× ATR) — maximum signal frequency
+  - Enables traders to tune signal density and target distances to their risk appetite, matching high-frequency low-risk trading profiles.
 - 🛠️ **Multi-Source Candle Fetching**: Integrated with `alternative_klines_provider` for 1-hour candle data with priority chain: Bitunix (primary) → Binance Futures (fallback) → CryptoCompare/CoinGecko. Ensures signal generation never blocks on a single data source.
+
+### Risk Management — Fixed Dollar Risk Per Trade
+- 🔥 **Risk Settings API** (`website-backend/app/routes/dashboard.py`): New `GET /dashboard/settings` endpoint returns current user's `risk_per_trade`, `leverage`, `trading_mode`, and `risk_mode`. New `PUT /dashboard/settings/risk` endpoint accepts `{"risk_per_trade": float}` payload, validates against allowed values [0.25, 0.5, 0.75, 1.0], and persists to `autotrade_sessions` table.
+- 🎛️ **Risk Slider UI** (`website-frontend/src/App.jsx`): New "Risk Management" card in Engine tab with:
+  - Four toggle buttons for risk levels (0.25%, 0.5%, 0.75%, 1.0%)
+  - Text descriptions: "Conservative", "Balanced", "Aggressive", "Very Aggressive"
+  - Live dollar risk preview: "Account $10k will risk $100 at 1%" (recalculates as user types or changes balance)
+  - Visual risk gauge with color scaling (green → cyan → yellow → orange as risk increases)
+  - Immediate save to backend on selection change
+- 🧮 **Fixed Dollar Risk Position Sizing**: Position size formula: `qty = (balance × risk%) / |entry − sl|`. Dollar risk stays constant across all trades regardless of SL distance. Enables high-frequency trading where:
+  - Tight SL (2%) = larger position size (higher units traded)
+  - Wide SL (5%) = smaller position size (fewer units traded)
+  - Both trades risk the same absolute dollars ($100 per trade if set to 1% on $10k account)
+  - Traders can scale position frequency/size by adjusting risk slider without manual recalculation.
 
 ### Critical Fix: StackMentor TP Partials Not Executing
 - 🚨 **Root-cause fixed — `calculate_qty_splits` wrong positional argument** (`Bismillah/app/autotrade_engine.py` line 1477): `calculate_qty_splits(qty, precision)` was passing the symbol's `QTY_PRECISION` integer (e.g. `3`) as the `min_qty` parameter instead of as `precision`. The bundling guard inside `calculate_qty_splits` then treated any position smaller than 3 units as below minimum, collapsing `qty_tp2` and `qty_tp3` to `0.0`. TP1 received 100% of the qty, leaving nothing to close at TP2 and TP3. Fixed by importing `MIN_QTY_MAP` from `trade_execution.py` and calling `calculate_qty_splits(qty, min_qty=min_qty, precision=precision)` — identical to the correct pattern already used in `scalping_engine.py` and `trade_execution.py`.

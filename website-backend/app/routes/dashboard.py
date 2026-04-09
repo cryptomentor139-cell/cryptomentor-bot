@@ -120,6 +120,79 @@ async def engine_state(tg_id: int = Depends(get_current_user)):
     }
 
 
+@router.get("/settings")
+async def get_settings(tg_id: int = Depends(get_current_user)):
+    """
+    Get current trading settings (risk_per_trade, leverage, etc.)
+
+    Returns:
+    - risk_per_trade: Current risk percentage (0.25, 0.5, 0.75, 1.0)
+    - leverage: Current leverage setting
+    - trading_mode: Current mode (auto, scalping, swing)
+    - risk_mode: Risk profile (conservative, moderate, aggressive)
+    """
+    s = _client()
+    res = s.table("autotrade_sessions").select(
+        "risk_per_trade, leverage, trading_mode, risk_mode, current_balance"
+    ).eq("telegram_id", tg_id).limit(1).execute()
+
+    row = (res.data or [{}])[0]
+    return {
+        "success": True,
+        "risk_per_trade": float(row.get("risk_per_trade") or 0.5),
+        "leverage": int(row.get("leverage") or 10),
+        "trading_mode": row.get("trading_mode") or "auto",
+        "risk_mode": row.get("risk_mode") or "moderate",
+        "current_balance": float(row.get("current_balance") or 0),
+    }
+
+
+@router.put("/settings/risk")
+async def update_risk_setting(
+    payload: dict,
+    tg_id: int = Depends(get_current_user)
+):
+    """
+    Update risk_per_trade for user (0.25, 0.5, 0.75, 1.0 percent).
+
+    Fixed dollar risk: position_size = (balance × risk%) / SL_distance
+    - Tight SL → Larger position (same dollar risk)
+    - Wide SL → Smaller position (same dollar risk)
+
+    Args:
+        payload: {"risk_per_trade": 0.5} or {"risk_per_trade": 0.25}
+
+    Returns:
+        {"success": True, "risk_per_trade": 0.5, "note": "Updated successfully"}
+    """
+    from datetime import datetime
+
+    risk = float(payload.get("risk_per_trade") or 0.5)
+
+    # Validate: only allow 0.25, 0.5, 0.75, 1.0
+    valid_risks = [0.25, 0.5, 0.75, 1.0]
+    if risk not in valid_risks:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid risk: {risk}. Must be one of {valid_risks}"
+        )
+
+    s = _client()
+    try:
+        s.table("autotrade_sessions").update({
+            "risk_per_trade": risk,
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("telegram_id", tg_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update risk: {e}")
+
+    return {
+        "success": True,
+        "risk_per_trade": risk,
+        "note": f"Risk updated to {risk}% per trade"
+    }
+
+
 @router.get("/performance")
 async def get_performance(tg_id: int = Depends(get_current_user)):
     """

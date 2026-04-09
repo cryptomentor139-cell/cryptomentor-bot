@@ -132,6 +132,7 @@ export default function App() {
   const [botBusy, setBotBusy] = useState(false);
   const [botError, setBotError] = useState(null);
   const [showBotStartModal, setShowBotStartModal] = useState(false);
+  const [riskSettings, setRiskSettings] = useState({ risk_per_trade: 0.5, leverage: 10, current_balance: 0, loading: true });
 
   useEffect(() => {
     document.body.style.overflow = isMobileMenuOpen ? 'hidden' : 'unset';
@@ -264,6 +265,47 @@ export default function App() {
   const handleCancelStart = () => setShowBotStartModal(false);
   const handleToggleBot = () => callEngine(botRunning ? 'stop' : 'start');
 
+  // Fetch risk settings
+  const fetchRiskSettings = async () => {
+    try {
+      const resp = await apiFetch('/dashboard/settings');
+      if (resp.ok) {
+        const data = await resp.json();
+        setRiskSettings({
+          risk_per_trade: data.risk_per_trade || 0.5,
+          leverage: data.leverage || 10,
+          current_balance: data.current_balance || 0,
+          loading: false,
+        });
+      }
+    } catch (e) {
+      console.error('Failed to fetch risk settings:', e);
+      setRiskSettings(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Update risk setting
+  const updateRiskSetting = async (newRisk) => {
+    try {
+      const resp = await apiFetch('/dashboard/settings/risk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ risk_per_trade: newRisk }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setRiskSettings(prev => ({
+          ...prev,
+          risk_per_trade: data.risk_per_trade,
+        }));
+      } else {
+        console.error('Failed to update risk setting:', resp.status);
+      }
+    } catch (e) {
+      console.error('Error updating risk setting:', e);
+    }
+  };
+
   // Hydrate engine running state on login
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -273,6 +315,12 @@ export default function App() {
       .then(d => { if (d && !cancelled) setBotRunning(!!d.running); })
       .catch(() => {});
     return () => { cancelled = true; };
+  }, [isLoggedIn]);
+
+  // Fetch risk settings on login
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    fetchRiskSettings();
   }, [isLoggedIn]);
 
   // Live unrealized PnL + positions polling
@@ -480,7 +528,7 @@ export default function App() {
         {/* MAIN CONTENT */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10 w-full relative z-0 pb-20 md:pb-10 custom-scrollbar">
           {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : []} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} botBusy={botBusy} connectorStatus={connectorStatus} />}
-          {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} />}
+          {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} />}
           {activeTab === 'performance' && <PerformanceTab />}
           {activeTab === 'settings' && <SettingsTab onBotConnected={handleBotConnected} />}
           {activeTab === 'signals' && <SignalsTab user={user} />}
@@ -589,10 +637,10 @@ function PortfolioTab({ positions, engineState, unrealizedPnl, cumulativePnl, eq
   );
 }
 
-function EngineTab({ engineState, setEngineState, botRunning, onToggleBot }) {
+function EngineTab({ engineState, setEngineState, botRunning, onToggleBot, riskSettings, onUpdateRisk }) {
   return (
     <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-both">
-      <header className="mb-8 md:mb-12"><h2 className="text-3xl md:text-5xl font-black text-white mb-2 tracking-tighter">Engine Controls</h2><p className="text-slate-400 font-medium text-sm md:text-lg">Configure AutoTrade behavior, StackMentor, and Risk models.</p></header>
+      <header className="mb-8 md:mb-12"><h2 className="text-3xl md:text-5xl font-black text-white mb-2 tracking-tighter">Engine Controls</h2><p className="text-slate-400 font-medium text-sm md:text-lg">Configure AutoTrade behavior, StackMentor, Risk management, and Position sizing.</p></header>
 
       {/* Bot Power Control */}
       <div className={`relative overflow-hidden rounded-[1.5rem] md:rounded-[2.5rem] border p-6 md:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 transition-all duration-500 ${
@@ -666,6 +714,87 @@ function EngineTab({ engineState, setEngineState, botRunning, onToggleBot }) {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Risk Management Card */}
+      <div className="bg-[#0a0a0a]/60 backdrop-blur-2xl border border-amber-500/30 rounded-[1.5rem] md:rounded-[2.5rem] p-6 md:p-8 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 blur-[40px] rounded-full pointer-events-none" />
+        <div className="flex items-start justify-between mb-6 relative z-10">
+          <div>
+            <h3 className="text-xl md:text-2xl font-black text-white mb-2">Risk Management</h3>
+            <p className="text-slate-400 text-xs md:text-sm font-medium leading-relaxed">Fixed dollar risk per trade. Position sizes scale inversely with stop loss distance.</p>
+          </div>
+          <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20"><Target className="text-amber-400 w-6 h-6" /></div>
+        </div>
+
+        {/* Risk Level Buttons */}
+        <div className="mb-6 relative z-10">
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Select Risk Per Trade</p>
+          <div className="grid grid-cols-4 gap-3">
+            {[0.25, 0.5, 0.75, 1.0].map(risk => (
+              <button
+                key={risk}
+                onClick={() => onUpdateRisk(risk)}
+                disabled={riskSettings.loading}
+                className={`py-3 px-2 rounded-lg font-bold text-xs transition-all ${
+                  riskSettings.risk_per_trade === risk
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_20px_rgba(217,119,6,0.2)]'
+                    : 'bg-[#050505] text-slate-400 border border-white/5 hover:border-amber-500/30 hover:text-amber-400'
+                } disabled:opacity-50`}
+              >
+                {risk}%
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Risk Preview Calculation */}
+        {riskSettings.current_balance > 0 && (
+          <div className="mb-6 relative z-10 bg-[#050505]/50 border border-white/5 p-4 rounded-xl">
+            <p className="text-[10px] text-slate-500 font-bold uppercase mb-2">Dollar Risk Preview</p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-300">Account Balance:</span>
+              <span className="text-sm font-bold text-cyan-400">${riskSettings.current_balance.toLocaleString('en-US', {maximumFractionDigits: 2})}</span>
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-sm text-slate-300">Risk Per Trade:</span>
+              <span className="text-sm font-bold text-amber-400">
+                ${(riskSettings.current_balance * (riskSettings.risk_per_trade / 100)).toLocaleString('en-US', {maximumFractionDigits: 2})}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Risk Gauge */}
+        <div className="relative z-10 p-4 bg-[#050505] rounded-xl border border-white/5">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Risk Level</span>
+            <span className={`text-xs font-bold ${
+              riskSettings.risk_per_trade <= 0.25 ? 'text-green-400' :
+              riskSettings.risk_per_trade <= 0.5 ? 'text-cyan-400' :
+              riskSettings.risk_per_trade <= 0.75 ? 'text-yellow-400' :
+              'text-orange-400'
+            }`}>
+              {riskSettings.risk_per_trade}%
+            </span>
+          </div>
+          <div className="w-full h-2 bg-[#0a0a0a] rounded-full overflow-hidden border border-white/5">
+            <div
+              className={`h-full transition-all ${
+                riskSettings.risk_per_trade <= 0.25 ? 'bg-green-500' :
+                riskSettings.risk_per_trade <= 0.5 ? 'bg-cyan-500' :
+                riskSettings.risk_per_trade <= 0.75 ? 'bg-yellow-500' : 'bg-orange-500'
+              }`}
+              style={{width: `${(riskSettings.risk_per_trade / 1.0) * 100}%`}}
+            />
+          </div>
+          <p className="text-[10px] text-slate-500 font-medium mt-3 leading-relaxed">
+            {riskSettings.risk_per_trade <= 0.25 ? '🟢 Conservative: Many small wins, low leverage' :
+             riskSettings.risk_per_trade <= 0.5 ? '🔵 Balanced: Standard confluent setups' :
+             riskSettings.risk_per_trade <= 0.75 ? '🟡 Aggressive: Higher frequency, wider targets' :
+             '🔴 Very Aggressive: Maximum signals per day'}
+          </p>
         </div>
       </div>
     </div>
