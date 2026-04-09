@@ -4,6 +4,14 @@ All notable changes to the CryptoMentor Artificial Intelligence Trading project 
 
 ## [Unreleased / Latest] - 2026-04-09
 
+### Critical Fix: StackMentor TP Partials Not Executing
+- 🚨 **Root-cause fixed — `calculate_qty_splits` wrong positional argument** (`Bismillah/app/autotrade_engine.py` line 1477): `calculate_qty_splits(qty, precision)` was passing the symbol's `QTY_PRECISION` integer (e.g. `3`) as the `min_qty` parameter instead of as `precision`. The bundling guard inside `calculate_qty_splits` then treated any position smaller than 3 units as below minimum, collapsing `qty_tp2` and `qty_tp3` to `0.0`. TP1 received 100% of the qty, leaving nothing to close at TP2 and TP3. Fixed by importing `MIN_QTY_MAP` from `trade_execution.py` and calling `calculate_qty_splits(qty, min_qty=min_qty, precision=precision)` — identical to the correct pattern already used in `scalping_engine.py` and `trade_execution.py`.
+- 🛡️ **Hardened `close_partial` against zero-qty orders** (`Bismillah/app/bitunix_autotrade_client.py`): Added an early-return guard that returns `{'success': False, 'error': 'qty=0 ...'}` before touching the exchange, preventing silent Bitunix rejections when qty is invalid.
+- 🛡️ **Fail-loud guards in `handle_tp2_hit` / `handle_tp3_hit`** (`Bismillah/app/stackmentor.py`): If `qty_tp2` or `qty_tp3` is 0 at hit time, the handlers now log a clear error, mark the tier as hit (so monitoring isn't stuck), and return — rather than sending a 0-qty order that Bitunix rejects silently.
+- 📝 **Fixed misleading log label** in `autotrade_engine.py`: `"TP1=50%"` corrected to `"TP1=60%"`. Log now also prints the actual computed `qty_splits` for every new StackMentor position.
+
+
+
 ### Engine Start/Stop — Web Dashboard
 - 🔥 **Engine Start/Stop API** (`website-backend/app/routes/engine.py`): New `POST /engine/start` and `POST /engine/stop` endpoints wire the web dashboard directly into the same `autotrade_engine` that the Telegram bot runs. Starting the engine from the web now has identical effect to the Telegram `/start_autotrade` command.
 - 🔥 **Real JWT Authentication**: Replaced dev-only auth bypass with full `HTTPBearer` token validation across all engine and portfolio routes. Every protected endpoint now decodes the Telegram-issued JWT before executing.

@@ -628,18 +628,39 @@ class BitunixAutoTradeClient:
             return {'success': True, 'symbol': symbol, 'new_tp': tp_price, 'new_sl': sl_price}
         return result
 
-    def close_partial(self, symbol: str, side: str, qty: float) -> Dict:
+    def close_partial(self, symbol: str, side: str, qty: float, position_side: str = None) -> Dict:
         """
         Close a partial position (reduce-only market order).
-        Used to take TP1 profit on 75% of position.
-        side: BUY to close SHORT, SELL to close LONG
+        Used to take TP1/TP2/TP3 profit on StackMentor positions.
+        
+        Args:
+            symbol: Trading pair (e.g., "BTCUSDT")
+            side: Order side - BUY to close SHORT, SELL to close LONG
+            qty: Quantity to close
+            position_side: Required for hedge mode - "LONG" or "SHORT" 
+                          (must match the position being closed)
+        
+        Returns:
+            Dict with success status and order details
         """
         qty_f = float(qty)
-        qty_str = str(int(qty_f)) if int(qty_f) == qty_f else str(qty)
+        if qty_f <= 0:
+            return {
+                'success': False,
+                'error': f'close_partial called with invalid qty={qty_f}. Partial close skipped.',
+            }
+        qty_str = str(int(qty_f)) if int(qty_f) == qty_f else str(qty_f)
+
+        # Infer position_side from order side if not provided
+        # SELL closes LONG position, BUY closes SHORT position
+        if position_side is None:
+            position_side = "LONG" if side.upper() == "SELL" else "SHORT"
+        
         body = {
             "symbol": symbol,
             "qty": qty_str,
             "side": side.upper(),
+            "positionSide": position_side.upper(),  # Required for hedge mode
             "tradeSide": "OPEN",      # reduceOnly carries the close semantics
             "orderType": "MARKET",
             "reduceOnly": True,

@@ -224,12 +224,14 @@ async def handle_tp1_hit(bot, user_id: int, client, notify_chat_id: int,
     qty_tp1 = pos_data['qty_tp1']
     
     # 1. Close 60% position via reduce-only close_partial
+    # Pass position_side for hedge mode compatibility
     close_side = "SELL" if side == "LONG" else "BUY"
     close_result = await asyncio.to_thread(
         client.close_partial,
         symbol,
         close_side,
         qty_tp1,
+        side,  # position_side: LONG or SHORT (required for hedge mode)
     )
     
     if not close_result.get('success'):
@@ -356,11 +358,21 @@ async def handle_tp2_hit(bot, user_id: int, client, notify_chat_id: int,
     TP2 Hit: Close 30% of original position
     """
     logger.warning(f"[StackMentor:{user_id}] TP2 HIT {symbol} @ {mark_price:.4f}")
-    
+
     entry = pos_data['entry_price']
     side = pos_data['side']
     qty_tp2 = pos_data['qty_tp2']
-    
+
+    if qty_tp2 <= 0:
+        logger.error(
+            f"[StackMentor:{user_id}] TP2 qty=0 for {symbol} — qty_splits were miscalculated. "
+            f"Marking hit anyway to unblock TP3."
+        )
+        # Still mark hit so monitoring advances to TP3
+        pos_data['tp2_hit'] = True
+        pos_data['tp2_hit_at'] = datetime.utcnow()
+        return
+
     # Close 30% via reduce-only close_partial
     close_side = "SELL" if side == "LONG" else "BUY"
     close_result = await asyncio.to_thread(
@@ -368,8 +380,9 @@ async def handle_tp2_hit(bot, user_id: int, client, notify_chat_id: int,
         symbol,
         close_side,
         qty_tp2,
+        side,
     )
-    
+
     if not close_result.get('success'):
         logger.error(f"[StackMentor:{user_id}] TP2 close failed: {close_result.get('error')}")
         return
@@ -421,11 +434,19 @@ async def handle_tp3_hit(bot, user_id: int, client, notify_chat_id: int,
     TP3 Hit: Close final 10% - JACKPOT!
     """
     logger.warning(f"[StackMentor:{user_id}] TP3 HIT {symbol} @ {mark_price:.4f} — JACKPOT!")
-    
+
     entry = pos_data['entry_price']
     side = pos_data['side']
     qty_tp3 = pos_data['qty_tp3']
-    
+
+    if qty_tp3 <= 0:
+        logger.error(
+            f"[StackMentor:{user_id}] TP3 qty=0 for {symbol} — qty_splits were miscalculated. "
+            f"Position already fully closed by TP1/TP2. Cleaning up."
+        )
+        remove_stackmentor_position(user_id, symbol)
+        return
+
     # Close final 10% via reduce-only close_partial
     close_side = "SELL" if side == "LONG" else "BUY"
     close_result = await asyncio.to_thread(
@@ -433,8 +454,9 @@ async def handle_tp3_hit(bot, user_id: int, client, notify_chat_id: int,
         symbol,
         close_side,
         qty_tp3,
+        side,
     )
-    
+
     if not close_result.get('success'):
         logger.error(f"[StackMentor:{user_id}] TP3 close failed: {close_result.get('error')}")
         return
