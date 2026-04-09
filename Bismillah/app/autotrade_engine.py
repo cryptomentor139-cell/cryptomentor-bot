@@ -23,6 +23,7 @@ from app.stackmentor import (
     register_stackmentor_position,
     monitor_stackmentor_positions,
 )
+from app.trade_execution import MIN_QTY_MAP
 
 _running_tasks: Dict[int, asyncio.Task] = {}
 
@@ -1184,7 +1185,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
                             if qty_to_close > 0:
                                 partial_result = await asyncio.to_thread(
-                                    client.close_partial, pos_symbol, close_side_tp1, qty_to_close
+                                    client.close_partial, pos_symbol, close_side_tp1, qty_to_close, db_side
                                 )
                                 if not partial_result.get("success"):
                                     logger.warning(f"[Engine:{user_id}] Partial close failed: {partial_result.get('error')}")
@@ -1474,16 +1475,18 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     sl_price=sl,
                     side=side
                 )
-                qty_tp1, qty_tp2, qty_tp3 = calculate_qty_splits(qty, precision)
-                
+                min_qty = MIN_QTY_MAP.get(symbol, 0.001)
+                qty_tp1, qty_tp2, qty_tp3 = calculate_qty_splits(qty, min_qty=min_qty, precision=precision)
+
                 # Override signal TP with StackMentor levels
                 tp1 = tp1_sm
                 tp2 = tp2_sm
                 tp3 = tp3_sm
-                
+
                 logger.info(
                     f"[StackMentor:{user_id}] {symbol} {side} — "
-                    f"TP1={tp1:.4f}(50%) TP2={tp2:.4f}(40%) TP3={tp3:.4f}(10%)"
+                    f"TP1={tp1:.4f}(60%) TP2={tp2:.4f}(30%) TP3={tp3:.4f}(10%) "
+                    f"qty_splits={qty_tp1}/{qty_tp2}/{qty_tp3}"
                 )
             elif _dual_tp_enabled:
                 # Legacy premium: 75%/25% split
