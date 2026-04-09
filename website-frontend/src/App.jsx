@@ -143,7 +143,7 @@ export default function App() {
 
     // Call backend to verify Telegram auth and get JWT
     try {
-      const resp = await fetch(`${API_BASE}/auth/telegram`, {
+      const resp = await fetch(`${_CONFIGURED_BASE}/auth/telegram`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(telegramUser),
@@ -168,26 +168,50 @@ export default function App() {
           setUser(nextUser);
           try { localStorage.setItem('cm_user', JSON.stringify(nextUser)); } catch {}
         }
+        // Only set logged in if we have a token
+        if (data.access_token) {
+          setEngineState({ autoModeEnabled: true, tradingMode: 'scalping', stackMentorActive: true, riskMode: 'moderate', isActive: true, current_balance: 0, total_profit: 0 });
+          setRealPositions([]);
+          setRealPnl(0);
+          setIsLoggedIn(true);
+        } else {
+          console.error('[Auth] Login failed: no token received');
+          alert('Login gagal: tidak mendapat token. Coba lagi.');
+        }
       } else {
         const errText = await resp.text().catch(() => '');
         console.error('[Auth] Backend auth failed:', resp.status, errText);
-        // Fallback: store user without token (limited functionality)
-        const nextUser = { id: String(telegramUser.id), first_name: telegramUser.first_name, username: telegramUser.username || telegramUser.first_name, photo_url: photoUrl, is_premium: false, credits: 0 };
-        setUser(nextUser);
-        try { localStorage.setItem('cm_user', JSON.stringify(nextUser)); } catch {}
+        alert(`Login gagal (${resp.status}). Coba lagi.`);
       }
     } catch (err) {
       console.error('[Auth] Network error:', err);
-      // Network error fallback
-      const nextUser = { id: String(telegramUser.id), first_name: telegramUser.first_name, username: telegramUser.username || telegramUser.first_name, photo_url: photoUrl, is_premium: false, credits: 0 };
-      setUser(nextUser);
-      try { localStorage.setItem('cm_user', JSON.stringify(nextUser)); } catch {}
+      // Try fallback base URL
+      try {
+        const resp2 = await fetch(`${_FALLBACK_BASE}/auth/telegram`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(telegramUser),
+        });
+        if (resp2.ok) {
+          const data = await resp2.json();
+          if (data.access_token) {
+            _resolvedBase = _FALLBACK_BASE;
+            localStorage.setItem('cm_token', data.access_token);
+            if (data.user) {
+              const nextUser = { id: String(telegramUser.id), first_name: data.user.first_name || telegramUser.first_name, username: data.user.username || telegramUser.username || telegramUser.first_name, photo_url: photoUrl, is_premium: data.user.is_premium || false, credits: data.user.credits || 0 };
+              setUser(nextUser);
+              try { localStorage.setItem('cm_user', JSON.stringify(nextUser)); } catch {}
+            }
+            setEngineState({ autoModeEnabled: true, tradingMode: 'scalping', stackMentorActive: true, riskMode: 'moderate', isActive: true, current_balance: 0, total_profit: 0 });
+            setRealPositions([]);
+            setRealPnl(0);
+            setIsLoggedIn(true);
+            return;
+          }
+        }
+      } catch {}
+      alert('Login gagal: tidak dapat terhubung ke server. Coba lagi.');
     }
-
-    setEngineState({ autoModeEnabled: true, tradingMode: 'scalping', stackMentorActive: true, riskMode: 'moderate', isActive: true, current_balance: 0, total_profit: 0 });
-    setRealPositions([]);
-    setRealPnl(0);
-    setIsLoggedIn(true);
   };
 
   // Expose callback untuk Telegram widget
