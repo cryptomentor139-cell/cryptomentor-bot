@@ -10,6 +10,75 @@ Semua kode implementasi ditempatkan di `marketing/agent/` sebagai modul Python i
 
 ---
 
+## Stack Tools & Dependensi
+
+### API Eksternal
+
+| Layanan | Kegunaan | Endpoint |
+|---------|----------|----------|
+| OpenAI API | Pembuatan konten (fallback) | `https://api.openai.com/v1/` |
+| DeepSeek API | Pembuatan konten (fallback) | `https://api.deepseek.com/v1/` |
+| Cerebras API | Pembuatan konten (utama, cepat) | `https://api.cerebras.ai/v1/` |
+| Instagram Graph API | Publikasi feed & reels | `https://graph.instagram.com/v18.0/` |
+| Facebook Graph API | Publikasi feed & reels | `https://graph.facebook.com/v18.0/` |
+| TikTok Content Posting API | Publikasi video & foto | `https://open.tiktokapis.com/v2/` |
+| Threads API | Publikasi threads | `https://graph.threads.net/v1.0/` |
+| **ElevenLabs API** | **Text-to-speech voice-over** | `https://api.elevenlabs.io/v1/text-to-speech/{voice_id}` |
+| **Kling AI API** | **Text-to-video generation** | `https://api.klingai.com/v1/videos/text2video` |
+| Supabase | Database & storage | Dari env `SUPABASE_URL` |
+
+### Environment Variables yang Diperlukan
+
+```bash
+# AI Providers
+OPENAI_API_KEY=
+DEEPSEEK_API_KEY=
+CEREBRAS_API_KEY=
+
+# Social Media
+INSTAGRAM_ACCESS_TOKEN=
+INSTAGRAM_USER_ID=
+FACEBOOK_PAGE_ACCESS_TOKEN=
+FACEBOOK_PAGE_ID=
+TIKTOK_ACCESS_TOKEN=
+THREADS_ACCESS_TOKEN=
+
+# Video Generation
+KLING_AI_API_KEY=
+ELEVENLABS_API_KEY=
+ELEVENLABS_VOICE_ID=          # default voice ID untuk narasi Bahasa Indonesia
+
+# Database
+SUPABASE_URL=
+SUPABASE_KEY=
+
+# Telegram (bot Bismillah yang sudah ada)
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_ADMIN_IDS=
+
+# Platform toggles
+ENABLE_INSTAGRAM=true
+ENABLE_FACEBOOK=true
+ENABLE_TIKTOK=true
+ENABLE_THREADS=true
+ENABLE_VIDEO_GENERATION=true  # toggle Kling AI + ElevenLabs
+```
+
+### Python Dependencies (`marketing/agent/requirements.txt`)
+
+```
+openai>=1.0.0
+httpx>=0.25.0
+supabase>=2.0.0
+python-telegram-bot>=20.0
+elevenlabs>=1.0.0
+Pillow>=10.0.0
+python-dotenv>=1.0.0
+aiofiles>=23.0.0
+```
+
+---
+
 ## Arsitektur
 
 ### Diagram Sistem Multi-Agen
@@ -34,6 +103,7 @@ graph TB
         CE[Content Engine<br/>content_engine.py]
         AB[A/B Testing<br/>ab_testing.py]
         LC[Lead Capture<br/>lead_capture.py]
+        VG[Video Generator<br/>video_generator.py]
     end
 
     subgraph Publishers["marketing/agent/publishers/"]
@@ -45,11 +115,13 @@ graph TB
 
     subgraph External["Infrastruktur Eksternal"]
         SB[(Supabase DB)]
-        TG[Telegram Bot]
+        TG[Telegram Bot<br/>Bismillah/bot.py]
         OAI[OpenAI API]
         DS[DeepSeek API]
         CB[Cerebras API]
         PPTR[Puppeteer / generate.js]
+        KLING[Kling AI API<br/>text-to-video]
+        EL[ElevenLabs API<br/>text-to-speech]
     end
 
     LOOP --> SA
@@ -72,6 +144,10 @@ graph TB
 
     CA --> PPTR
     PPTR -->|PNG output| DIST
+    CA --> VG
+    VG --> EL
+    EL -->|audio MP3| KLING
+    KLING -->|video MP4| DIST
 
     SA & CA & DIST & SALES & AN --> SB
     LOOP --> TG
@@ -172,9 +248,15 @@ class DesignerAgent:
     async def render_feed_image(self, content: FeedContent) -> str  # returns file path
     async def render_via_puppeteer(self, template: str, data: dict, size: ImageSize) -> str
     async def select_template(self, content_type: ContentType) -> str  # returns template path
+    async def generate_reels_video(self, script: ReelsScript) -> str  # returns MP4 file path
 ```
 
 **Integrasi dengan `marketing/generate.js`:** Designer Agent memanggil `generate.js` via subprocess dengan data JSON yang sudah diisi oleh Content Agent.
+
+**Pipeline video Reels:** Designer Agent mengorkestrasikan pipeline tiga tahap untuk menghasilkan video Reels otomatis:
+1. Skrip narasi dari Content Agent dikirim ke ElevenLabs API untuk menghasilkan audio voice-over (MP3)
+2. Audio MP3 + deskripsi visual dikirim ke Kling AI API untuk menghasilkan video (text-to-video)
+3. Output video MP4 disimpan ke `marketing/output/reels/` dan diteruskan ke Distribution Agent
 
 ### 5. Distribution Agent (`marketing/agent/agents/distribution_agent.py`)
 
@@ -188,6 +270,8 @@ class DistributionAgent:
 
 ### 6. Sales Agent (`marketing/agent/agents/sales_agent.py`)
 
+Sales Agent **hanya berjalan di Telegram** — terintegrasi dengan bot Bismillah yang sudah ada di `Bismillah/bot.py`. Lead yang masuk dari konten sosial media diarahkan ke Telegram bot via link `t.me/...` yang disertakan di setiap CTA konten.
+
 ```python
 class SalesAgent:
     async def process_new_lead(self, lead: Lead) -> None
@@ -195,7 +279,10 @@ class SalesAgent:
     async def handle_objection(self, lead: Lead, objection: ObjectionType) -> str
     async def classify_lead_segment(self, lead: Lead, interactions: List[Interaction]) -> AudienceSegment
     async def attempt_closing(self, lead: Lead) -> ClosingResult
+    async def handle_telegram_message(self, telegram_chat_id: int, text: str) -> str
 ```
+
+**Integrasi dengan Bismillah bot:** Sales Agent mendaftarkan handler ke `Bismillah/bot.py` untuk menangkap pesan masuk dari lead. Setiap lead diidentifikasi via `telegram_chat_id` yang disimpan di tabel `marketing_leads`.
 
 ### 7. Analyst Agent (`marketing/agent/agents/analyst_agent.py`)
 
@@ -239,6 +326,42 @@ class ContentEngine:
     async def validate_caption_length(self, caption: str, min_len: int = 150, max_len: int = 300) -> str
     async def add_disclaimer_if_needed(self, content: str) -> str
     def select_provider(self) -> AIProvider  # rotasi OpenAI/DeepSeek/Cerebras
+```
+
+### 11. Video Generator (`marketing/agent/core/video_generator.py`)
+
+Modul yang mengorkestrasikan pipeline video Reels otomatis menggunakan ElevenLabs dan Kling AI.
+
+```python
+class VideoGenerator:
+    async def generate_voiceover(self, narration: str, voice_id: str) -> str  # returns MP3 path
+    async def generate_video(self, prompt: str, audio_path: str) -> str       # returns MP4 path
+    async def create_reels_video(self, script: ReelsScript) -> str            # full pipeline, returns MP4 path
+
+class ElevenLabsClient:
+    """Client untuk ElevenLabs text-to-speech API"""
+    BASE_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    async def synthesize(self, text: str, voice_id: str) -> bytes  # returns audio bytes
+
+class KlingAIClient:
+    """Client untuk Kling AI text-to-video API"""
+    BASE_URL = "https://api.klingai.com/v1/videos/text2video"
+    async def generate(self, prompt: str, audio_url: str, duration: int) -> str  # returns video URL
+    async def poll_status(self, task_id: str) -> VideoStatus
+    async def download_video(self, video_url: str, output_path: str) -> str
+```
+
+**Pipeline lengkap video Reels:**
+```
+ReelsScript (dari Content Agent)
+    ↓
+ElevenLabs API → voice-over audio (MP3)
+    ↓
+Kling AI API (text2video + audio) → video (MP4)
+    ↓
+marketing/output/reels/{tanggal}_{tema}.mp4
+    ↓
+Distribution Agent → publish ke IG/FB/TikTok
 ```
 
 ---
@@ -308,8 +431,9 @@ CREATE TABLE marketing_leads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_platform VARCHAR(20),
     source_content_id UUID REFERENCES marketing_content(id),
-    contact_id TEXT NOT NULL,  -- telegram_id, instagram_handle, dll
-    contact_type VARCHAR(20) CHECK (contact_type IN ('telegram', 'instagram_dm', 'whatsapp')),
+    contact_id TEXT NOT NULL,  -- telegram_id
+    contact_type VARCHAR(20) DEFAULT 'telegram' CHECK (contact_type IN ('telegram')),
+    telegram_chat_id BIGINT,   -- Telegram chat ID untuk Sales Agent
     persona VARCHAR(30) CHECK (persona IN ('Beginner', 'Intermediate_Trader', 'Fear_Driven', 'Greed_Driven')),
     segment VARCHAR(10) DEFAULT 'Cold' CHECK (segment IN ('Cold', 'Warm', 'Hot')),
     status VARCHAR(20) DEFAULT 'new' CHECK (status IN ('new', 'contacted', 'engaged', 'converted', 'opted_out', 'inactive')),
@@ -447,6 +571,64 @@ Threads API menggunakan Instagram Graph API credentials yang sama (Meta ecosyste
 
 ---
 
+### ElevenLabs API (`marketing/agent/core/video_generator.py`)
+
+Digunakan untuk menghasilkan audio voice-over dari narasi skrip Reels.
+
+```
+POST /v1/text-to-speech/{voice_id}      → Generate audio dari teks
+```
+
+**Request body:**
+```json
+{
+  "text": "<narasi skrip reels>",
+  "model_id": "eleven_multilingual_v2",
+  "voice_settings": {
+    "stability": 0.5,
+    "similarity_boost": 0.75
+  }
+}
+```
+
+**Response:** Binary audio (MP3). Disimpan ke `/tmp/voiceover_{content_id}.mp3`.
+
+**Autentikasi:** Header `xi-api-key: {ELEVENLABS_API_KEY}`.
+
+---
+
+### Kling AI API (`marketing/agent/core/video_generator.py`)
+
+Digunakan untuk menghasilkan video Reels dari teks prompt + audio voice-over.
+
+```
+POST /v1/videos/text2video              → Buat task generate video
+GET  /v1/videos/text2video/{task_id}    → Poll status task
+```
+
+**Request body (text2video):**
+```json
+{
+  "model": "kling-v1",
+  "prompt": "<deskripsi visual dari skrip reels>",
+  "negative_prompt": "blurry, low quality, text overlay",
+  "duration": 15,
+  "aspect_ratio": "9:16",
+  "audio_url": "<URL audio MP3 dari ElevenLabs>"
+}
+```
+
+**Flow polling:**
+1. POST ke `/v1/videos/text2video` → dapatkan `task_id`
+2. Poll GET setiap 10 detik hingga `status == "completed"` (timeout 5 menit)
+3. Download video dari `result.video_url` → simpan ke `marketing/output/reels/`
+
+**Autentikasi:** Header `Authorization: Bearer {KLING_AI_API_KEY}`.
+
+**Retry logic:** Jika task gagal atau timeout, retry maksimal 2x. Jika tetap gagal, simpan skrip saja (tanpa video) dan notifikasi admin.
+
+---
+
 ## Integrasi AI Provider
 
 ### Rotasi Provider (`marketing/agent/core/content_engine.py`)
@@ -514,8 +696,12 @@ Output: JSON array dengan 3 string hook
 flowchart LR
     A[Topik dari\nResearch Engine] --> B[Content Agent:\nPAS Framework]
     B --> C[Hook Generator:\n3 varian]
-    C --> D[Designer Agent:\nRender PNG via Puppeteer]
-    D --> E{Approval Queue}
+    C --> D1[Designer Agent:\nRender PNG via Puppeteer]
+    C --> D2[Video Generator:\nElevenLabs + Kling AI]
+    D2 --> D2a[ElevenLabs:\nVoice-over MP3]
+    D2a --> D2b[Kling AI:\nGenerate MP4]
+    D1 --> E{Approval Queue}
+    D2b --> E
     E -->|Auto-publish ON| F[Distribution Agent]
     E -->|Manual| G[Notifikasi Telegram\nAdmin Approve/Reject]
     G -->|Approved| F
@@ -558,11 +744,13 @@ Output disimpan ke `marketing/output/feeds/{tanggal}_{tema}_{platform}.png`.
 
 ### Alur Lead: Awareness → Konversi
 
+Lead masuk ke funnel melalui CTA di konten sosial media yang mengarahkan ke Telegram bot (`t.me/...`). Seluruh interaksi Sales Agent terjadi di dalam Telegram bot Bismillah yang sudah ada.
+
 ```mermaid
 stateDiagram-v2
-    [*] --> New: Lead masuk dari konten
-    New --> Contacted: Sales Agent kirim followup (< 1 jam)
-    Contacted --> Engaged: Lead merespons
+    [*] --> New: Lead klik link t.me/... dari konten sosmed
+    New --> Contacted: Sales Agent kirim followup via Telegram (< 1 jam)
+    Contacted --> Engaged: Lead merespons di Telegram
     Contacted --> Inactive: Tidak respons 48 jam
     Inactive --> Contacted: Re-engagement dengan Free_Value baru
     Engaged --> Hot: Tanya cara daftar/harga/fitur
@@ -584,6 +772,8 @@ stateDiagram-v2
 | Worth it gak | "worth", "manfaat", "hasil", "profit" | Perbandingan nilai + testimoni pengguna aktif |
 | Ribet setup | "ribet", "susah", "bingung", "cara" | Panduan 5 menit + link video tutorial |
 | Gratis beneran | "gratis", "bayar", "biaya", "fee" | Konfirmasi gratis + penjelasan model bisnis |
+
+Semua respons dikirim melalui Telegram bot Bismillah (`Bismillah/bot.py`) menggunakan `telegram_chat_id` yang tersimpan di tabel `marketing_leads`.
 
 ### Klasifikasi Segment Otomatis
 
@@ -653,6 +843,8 @@ def evaluate_content(metrics: ContentMetrics) -> Decision:
 | Instagram API | Rate limit (code 4/32) | Delay 15 menit, retry 3x, notifikasi admin |
 | Facebook API | Token expired (code 190) | Notifikasi admin untuk refresh token |
 | TikTok API | Error umum | Retry 3x interval 10 menit, notifikasi admin |
+| ElevenLabs API | Rate limit / error | Retry 2x, fallback ke video tanpa voice-over |
+| Kling AI API | Task gagal / timeout | Retry 2x, fallback simpan skrip saja (tanpa video), notifikasi admin |
 | Puppeteer render | Timeout / crash | Retry 2x, fallback ke template sederhana |
 | Supabase | Connection error | Retry 3x dengan exponential backoff |
 | Agent error | Exception tidak tertangkap | Log error, notifikasi admin, lanjutkan ke agen berikutnya |
@@ -678,6 +870,7 @@ Jika satu agen gagal, Orchestrator mencatat error dan melanjutkan loop:
 - Strategist gagal → gunakan campaign plan dari siklus sebelumnya
 - Content gagal → skip siklus, coba lagi 1 jam kemudian
 - Designer gagal → publikasikan konten teks saja (tanpa gambar)
+- Video Generator gagal (ElevenLabs/Kling AI) → simpan skrip JSON saja, skip video, notifikasi admin
 - Distribution gagal → tandai konten sebagai `failed`, notifikasi admin
 - Sales gagal → log error, lead tetap tersimpan untuk follow-up manual
 - Analyst gagal → skip laporan, lanjutkan ke siklus berikutnya
