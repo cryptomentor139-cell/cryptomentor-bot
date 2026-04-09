@@ -1830,10 +1830,11 @@ async def callback_stop_engine(update: Update, context: ContextTypes.DEFAULT_TYP
     from app.autotrade_engine import stop_engine, is_running
     if is_running(user_id):
         stop_engine(user_id)
-        # Update status in Supabase
+        # Update status in Supabase — set BOTH status AND engine_active atomically
         try:
             _client().table("autotrade_sessions").update({
                 "status": "stopped",
+                "engine_active": False,
                 "updated_at": datetime.utcnow().isoformat()
             }).eq("telegram_id", user_id).execute()
         except Exception:
