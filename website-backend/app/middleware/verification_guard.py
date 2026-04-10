@@ -2,7 +2,7 @@
 Verification Guard Middleware
 
 Blocks unverified users from accessing trading-related endpoints.
-Only users with status 'uid_verified' or 'active' in autotrade_sessions
+Only users with status 'approved' in user_verifications
 can access protected routes. Returns 403 for unverified users.
 """
 
@@ -14,6 +14,7 @@ from app.db.supabase import _client
 import logging
 
 logger = logging.getLogger(__name__)
+APPROVED_STATUS = "approved"
 
 # Routes that do NOT require exchange verification
 # (Always allowed even if user is not verified on Bitunix)
@@ -32,7 +33,7 @@ UNPROTECTED_PREFIXES = [
     "/",
 ]
 
-# These route prefixes require verification status in ('uid_verified', 'active')
+# These route prefixes require verification status = 'approved'
 PROTECTED_PREFIXES = [
     "/api/bitunix/",
     "/api/dashboard/engine/",
@@ -79,15 +80,19 @@ class VerificationGuardMiddleware(BaseHTTPMiddleware):
         except (KeyError, ValueError, TypeError):
             return await call_next(request)
 
-        # Check verification status
+        # Check verification status from the central table.
         try:
             s = _client()
-            res = s.table("autotrade_sessions").select("status").eq(
-                "telegram_id", tg_id
-            ).limit(1).execute()
+            res = (
+                s.table("user_verifications")
+                .select("status")
+                .eq("telegram_id", tg_id)
+                .limit(1)
+                .execute()
+            )
             row = (res.data or [None])[0]
 
-            if not row or row.get("status") not in ("uid_verified", "active"):
+            if not row or row.get("status") != APPROVED_STATUS:
                 status = row.get("status") if row else "none"
                 logger.info(f"[Guard:{tg_id}] Blocked access to {path} — status: {status}")
                 return JSONResponse(
@@ -95,12 +100,18 @@ class VerificationGuardMiddleware(BaseHTTPMiddleware):
                     content={
                         "error": "verification_required",
                         "status": status,
-                        "message": "Complete exchange registration before accessing trading features." if status != "uid_rejected" else "Your UID was rejected. Please resubmit with a valid referral registration.",
+                        "message": "Your Bitunix UID is not approved yet. Submit UID and wait for Telegram admin approval." if status != "rejected" else "Your UID was rejected. Please resubmit a valid UID.",
                     },
                 )
         except Exception as e:
             logger.error(f"[Guard:{tg_id}] Verification check failed: {e}")
-            # Fail open — don't block users if DB is down
-            pass
+            # Fail closed to prevent accidental bypass during transient DB failures.
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "verification_lookup_failed",
+                    "message": "Unable to validate verification status right now. Please try again shortly.",
+                },
+            )
 
         return await call_next(request)

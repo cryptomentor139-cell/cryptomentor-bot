@@ -1,85 +1,128 @@
-\"\"\"
-Admin handlers for UID verification.
-\"\"\"
-from telegram import Update
-from telegram.ext import ContextTypes
-from app.supabase_repo import save_autotrade_session
+"""
+Admin handlers for UID verification callbacks.
+"""
+
 import logging
+import os
+from datetime import datetime, timezone
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
+
+
+def _is_admin(user_id: int) -> bool:
+    admin_ids = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
+    return user_id in admin_ids
+
 
 async def callback_uid_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
-    # query.data: uid_acc_{user_id}
+
     try:
+        admin_id = query.from_user.id
+        if not _is_admin(admin_id):
+            await query.edit_message_text("❌ Unauthorized: admin only.")
+            return
+
         user_id = int(query.data.split("_")[-1])
-        
-        # 1. Update status in Supabase
+        now_iso = datetime.now(timezone.utc).isoformat()
+
         from app.supabase_repo import _client
+
         s = _client()
-        s.table("autotrade_sessions").update({
-            "status": "uid_verified",
-            "updated_at": __import__('datetime').datetime.utcnow().isoformat()
-        }).eq("telegram_id", user_id).execute()
-        
-        # 2. Notify User
+        # Central verification state used by website gatekeeper.
+        s.table("user_verifications").upsert(
+            {
+                "telegram_id": user_id,
+                "status": "approved",
+                "reviewed_at": now_iso,
+                "reviewed_by_admin_id": admin_id,
+                "updated_at": now_iso,
+            },
+            on_conflict="telegram_id",
+        ).execute()
+
+        # Legacy mirror for existing bot logic that still checks autotrade_sessions.
+        s.table("autotrade_sessions").upsert(
+            {
+                "telegram_id": user_id,
+                "status": "uid_verified",
+                "updated_at": now_iso,
+            },
+            on_conflict="telegram_id",
+        ).execute()
+
         from app.lib.auth import generate_dashboard_url
+
         dash_url = generate_dashboard_url(user_id)
-        
-        msg_to_user = (
-            "🎉 <b>Identity Verified!</b>\n\n"
-            "Your Bitunix UID has been approved by our team. "
-            "You can now access the Web Dashboard to configure your API keys and start trading."
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("🌐 Open Web Dashboard", url=dash_url)]]
         )
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        keyboard = [[InlineKeyboardButton("🌐 Open Web Dashboard", url=dash_url)]]
-        
-        try:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=msg_to_user,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='HTML'
-            )
-        except Exception as e:
-            logger.warning(f"Failed to notify user {user_id} of approval: {e}")
-            
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                "🎉 <b>Identity Verified!</b>\n\n"
+                "Your Bitunix UID has been approved by our team."
+            ),
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
         await query.edit_message_text(f"✅ Approved User {user_id}")
-        
     except Exception as e:
-        logger.error(f"Error in callback_uid_acc: {e}")
+        logger.error("Error in callback_uid_acc: %s", e)
         await query.edit_message_text(f"❌ Error: {e}")
 
 
 async def callback_uid_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
+
     try:
+        admin_id = query.from_user.id
+        if not _is_admin(admin_id):
+            await query.edit_message_text("❌ Unauthorized: admin only.")
+            return
+
         user_id = int(query.data.split("_")[-1])
-        
-        # 1. Update status in Supabase
+        now_iso = datetime.now(timezone.utc).isoformat()
+
         from app.supabase_repo import _client
+
         s = _client()
-        s.table("autotrade_sessions").update({
-            "status": "uid_rejected",
-            "updated_at": __import__('datetime').datetime.utcnow().isoformat()
-        }).eq("telegram_id", user_id).execute()
-        
-        # 2. Notify User
-        msg_to_user = (
-            "❌ <b>Verification Rejected</b>\n\n"
-            "Your UID verification request was rejected. "
-            "Please ensure you registered using our referral link and try again."
+        # Central verification state used by website gatekeeper.
+        s.table("user_verifications").upsert(
+            {
+                "telegram_id": user_id,
+                "status": "rejected",
+                "reviewed_at": now_iso,
+                "reviewed_by_admin_id": admin_id,
+                "updated_at": now_iso,
+            },
+            on_conflict="telegram_id",
+        ).execute()
+
+        # Legacy mirror for existing bot logic that still checks autotrade_sessions.
+        s.table("autotrade_sessions").upsert(
+            {
+                "telegram_id": user_id,
+                "status": "uid_rejected",
+                "updated_at": now_iso,
+            },
+            on_conflict="telegram_id",
+        ).execute()
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                "❌ <b>Verification Rejected</b>\n\n"
+                "Your UID verification request was rejected."
+            ),
+            parse_mode="HTML",
         )
-        try:
-            await context.bot.send_message(chat_id=user_id, text=msg_to_user, parse_mode='HTML')
-        except Exception: pass
-        
         await query.edit_message_text(f"❌ Rejected User {user_id}")
-        
     except Exception as e:
-        logger.error(f"Error in callback_uid_reject: {e}")
+        logger.error("Error in callback_uid_reject: %s", e)
         await query.edit_message_text(f"❌ Error: {e}")

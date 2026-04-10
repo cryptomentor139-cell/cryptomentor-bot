@@ -69,6 +69,10 @@ class ScalpingConfig:
     
     # Cooldown (reduced for sideways scalping)
     cooldown_seconds: int = 150  # 2.5 minutes between signals on same pair (was 5min)
+    sideways_reentry_cooldown_seconds: int = 420  # 7 minutes after sideways close
+    anti_flip_opposite_seconds: int = 600  # 10 minutes block for opposite-direction re-entry
+    signal_confirmations_required: int = 2  # require same-direction signal seen in consecutive scans
+    signal_confirmation_max_gap_seconds: int = 45  # invalidate stale confirmation chain
     
     # Volume and volatility filters
     min_volume_ratio: float = 2.0  # Volume must be >2x average
