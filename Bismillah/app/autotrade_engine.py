@@ -11,9 +11,11 @@ Strategy: Multi-timeframe confluence + SMC + Risk Management
 import asyncio
 import logging
 import os
+from html import escape
 from typing import Dict, Optional, List
 from datetime import datetime, date
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,34 @@ def _dashboard_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📊 Dashboard", url=WEB_DASHBOARD_URL)]
     ])
+
+
+def _build_trade_url(trade_id: Optional[int] = None, order_id: str = "", symbol: str = "") -> str:
+    """Build dashboard URL with trade-specific query parameters."""
+    try:
+        parsed = urlsplit(WEB_DASHBOARD_URL)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        query["tab"] = "portfolio"
+        if trade_id:
+            query["trade_id"] = str(trade_id)
+        if order_id and order_id != "-":
+            query["order_id"] = str(order_id)
+        if symbol:
+            query["symbol"] = symbol
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", urlencode(query), parsed.fragment))
+    except Exception:
+        return WEB_DASHBOARD_URL
+
+
+def _trade_detail_keyboard(trade_id: Optional[int] = None, order_id: str = "", symbol: str = "") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🌐 View Trade Details", url=_build_trade_url(trade_id=trade_id, order_id=order_id, symbol=symbol))]
+    ])
+
+
+def _fmt_price(v: float) -> str:
+    s = f"{float(v):,.6f}"
+    return s.rstrip("0").rstrip(".")
 
 # Import StackMentor system
 from app.stackmentor import (
@@ -626,7 +656,7 @@ def _generate_confluence_signal(
 # ─────────────────────────────────────────────
 #  Professional Signal Engine (Hybrid Mode)
 # ─────────────────────────────────────────────
-def _compute_signal_pro(base_symbol: str, btc_bias: Optional[Dict] = None, user_risk_pct: float = 0.5) -> Optional[Dict]:
+def _compute_signal_pro(base_symbol: str, btc_bias: Optional[Dict] = None, user_risk_pct: float = 1.0) -> Optional[Dict]:
     """
     Hybrid signal generation:
     - PRIMARY: Confluence-based multi-factor detection (S/R + RSI + Volume + Trend)
@@ -1221,7 +1251,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             return qty_fallback, False  # Fallback used
 
     # ── Fetch user's risk_per_trade setting ───────────────────────────
-    user_risk_pct = 0.5  # Default (Moderate)
+    user_risk_pct = 1.0  # Default (1% risk)
     try:
         from app.supabase_repo import get_risk_per_trade
         fetched_risk = get_risk_per_trade(user_id)
@@ -1240,10 +1270,10 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             else:
                 logger.warning(
                     f"[Engine:{user_id}] Invalid risk_per_trade from DB: {fetched_risk} "
-                    f"(not in {valid_risks}), using default 0.5%"
+                    f"(not in {valid_risks}), using default 1.0%"
                 )
     except Exception as e:
-        logger.warning(f"[Engine:{user_id}] Failed to load user risk_pct, using default 0.5%: {e}")
+        logger.warning(f"[Engine:{user_id}] Failed to load user risk_pct, using default 1.0%: {e}")
 
     logger.info(f"[Engine:{user_id}] PRO ENGINE STARTED — symbols={cfg['symbols']}, "
                 f"min_conf={cfg['min_confidence']}, min_rr={cfg['min_rr_ratio']}, "
@@ -2165,9 +2195,10 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 )
 
             # ── Simpan ke trade history ───────────────────────────────
+            trade_id = None
             try:
                 from app.trade_history import save_trade_open
-                save_trade_open(
+                trade_id = save_trade_open(
                     telegram_id=user_id,
                     symbol=symbol,
                     side=side,
@@ -2191,12 +2222,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             except Exception as _he:
                 logger.warning(f"[Engine:{user_id}] trade_history save failed: {_he}")
 
-            # ── Kalkulasi risk/reward untuk notifikasi ─────────────────
-            sl_pct      = abs(entry - sl)  / entry * 100
-            tp1_pct     = abs(tp1 - entry) / entry * 100
-            tp2_pct     = abs(tp2 - entry) / entry * 100
-            
-            # Get actual equity and risk info for notification
+            # ── Trade-open notification (compact + web deep-link) ─────
             acc_result = await asyncio.to_thread(client.get_account_info)
             if acc_result.get('success'):
                 current_available = float(acc_result.get('available', 0) or 0)
@@ -2205,83 +2231,34 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 current_unrealized = float(acc_result.get('total_unrealized_pnl', 0) or 0)
                 current_equity = current_balance + current_unrealized
             else:
-                current_available = 0
-                current_frozen = 0
-                current_balance = 0
-                current_unrealized = 0
                 current_equity = 0
 
-            risk_amount = current_equity * (user_risk_pct / 100) if current_equity > 0 else (amount * (sl_pct / 100) * leverage)
-            
-            # Calculate potential profit based on actual position size
-            reward_tp1  = qty * abs(tp1 - entry)
-            reward_tp2  = qty * abs(tp2 - entry)
-
-            trend_1h   = sig.get('trend_1h', '-')
-            struct      = sig.get('market_structure', 'ranging')
-            rsi_15      = sig.get('rsi_15', 0)
-            atr_pct     = sig.get('atr_pct', 0)
-            vol_ratio   = sig.get('vol_ratio', 1)
-            all_reasons = sig.get('reasons', [])
-
-            struct_emoji = {"uptrend": "📈", "downtrend": "📉", "ranging": "↔️"}.get(struct, "↔️")
-            trend_emoji  = {"LONG": "🟢", "SHORT": "🔴", "NEUTRAL": "⚪"}.get(trend_1h, "⚪")
-
-            reasons_text = "\n".join(f"  • {r}" for r in all_reasons[:5])
+            risk_amount = qty * abs(entry - sl)
+            risk_pct_equity = (risk_amount / current_equity * 100) if current_equity > 0 else None
+            direction = "Long" if side.upper() in ("LONG", "BUY") else "Short"
+            opened_at = datetime.utcnow().strftime("%d %b %Y %H:%M:%S UTC")
+            order_id_text = escape(str(order_id or "-"))
 
             await bot.send_message(
                 chat_id=notify_chat_id,
                 text=(
-                    f"✅ <b>ORDER EXECUTED</b>  [#{trades_today} today]\n\n"
-                    f"📊 {symbol} | {side}\n"
-                    f"💵 Entry: <code>{entry:.4f}</code>\n"
+                    "🤖 <b>Cryptomentor AI Autotrade</b>\n\n"
+                    f"<b>Direction:</b> {direction}\n"
+                    f"<b>Trading Pair:</b> {symbol}\n"
+                    f"<b>Entry:</b> {_fmt_price(entry)}\n"
+                    f"<b>TP:</b> {_fmt_price(tp1)}\n"
+                    f"<b>SL:</b> {_fmt_price(sl)}\n"
+                    f"<b>Risk PNL:</b> ${risk_amount:.2f}\n"
                     + (
-                        f"🎯 TP1: <code>{tp1:.4f}</code> (+{tp1_pct:.1f}%) — 60% position\n"
-                        f"🎯 TP2: <code>{tp2:.4f}</code> (+{tp2_pct:.1f}%) — 30% position\n"
-                        f"🎯 TP3: <code>{tp3:.4f}</code> (+{abs(tp3 - entry) / entry * 100:.1f}%) — 10% position\n"
-                        f"🛑 SL: <code>{sl:.4f}</code> (-{sl_pct:.1f}%)\n"
-                        f"📦 Qty: {qty}\n\n"
-                        f"⚖️ R:R: <b>1:2 → 1:3 → 1:5</b> (StackMentor 🎯)\n"
-                        f"🤖 <i>Automatic partial close when price hits TP</i>\n"
-                        f"🔒 After TP1 hit → SL moves to entry (breakeven)\n"
-                        if stackmentor_enabled else
-                        (
-                            f"🎯 TP1: <code>{tp1:.4f}</code> (+{tp1_pct:.1f}%) — 75% position\n"
-                            f"🎯 TP2: <code>{tp2:.4f}</code> (+{tp2_pct:.1f}%) — 25% position\n"
-                            f"🛑 SL: <code>{sl:.4f}</code> (-{sl_pct:.1f}%)\n"
-                            f"📦 Qty: {qty}\n\n"
-                            f"⚖️ R:R: <b>1:2 → 1:3</b> (dual TP)\n"
-                            f"🤖 <i>Automatic partial close when price hits TP</i>\n"
-                            f"🔒 After TP1 hit → SL moves to entry (breakeven)\n"
-                            if _dual_tp_enabled else
-                            f"🎯 TP: <code>{tp1:.4f}</code> (+{tp1_pct:.1f}%)\n"
-                            f"🛑 SL: <code>{sl:.4f}</code> (-{sl_pct:.1f}%)\n"
-                            f"📦 Qty: {qty}\n\n"
-                            f"⚖️ R:R Ratio: <b>1:{rr_ratio:.1f}</b>\n"
-                        )
+                        f"<b>Risk % on equity:</b> {risk_pct_equity:.2f}%\n"
+                        if risk_pct_equity is not None else
+                        "<b>Risk % on equity:</b> N/A\n"
                     )
-                    + f"{trend_emoji} 1H Trend: <b>{trend_1h}</b>\n"
-                    f"{struct_emoji} Structure: <b>{struct}</b>\n"
-                    f"📊 RSI 15M: {rsi_15} | ATR: {atr_pct:.2f}% | Vol: {vol_ratio:.1f}x\n\n"
-                    f"🧠 Reasons:\n{reasons_text}\n\n"
-                    + (
-                        f"💰 Potential profit: +{reward_tp2:.2f} USDT (full TP)\n"
-                        if _dual_tp_enabled or stackmentor_enabled else
-                        f"💰 Potential profit: +{reward_tp1:.2f} USDT\n"
-                    )
-                    + f"⚠️ Max loss: -{risk_amount:.2f} USDT\n"
-                    + (f"💼 Equity: ${current_equity:.2f} (Balance: ${current_balance:.2f}, Unrealized: ${current_unrealized:.2f}) | Risk: {user_risk_pct}%\n" if current_equity > 0 else "")
-                    + f"🧠 Confidence: {confidence}%\n"
-                    + (
-                        f"🎯 <b>StackMentor Active</b> (3-tier TP)\n"
-                        if stackmentor_enabled else
-                        f"💡 StackMentor disabled in config\n"
-                        if not _dual_tp_enabled else
-                        ""
-                    )
-                    + f"🔖 Order ID: <code>{order_id}</code>"
+                    + f"<b>Order ID:</b> <code>{order_id_text}</code>\n"
+                    + f"<b>Date and time:</b> {opened_at}"
                 ),
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup=_trade_detail_keyboard(trade_id=trade_id, order_id=order_id, symbol=symbol),
             )
 
             # ── Start PnL tracker ─────────────────────────────────────

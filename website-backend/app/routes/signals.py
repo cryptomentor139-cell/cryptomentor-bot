@@ -469,7 +469,7 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
     now_utc = datetime.now(timezone.utc)
 
     # Fetch user's risk preference (for adaptive signal confidence threshold)
-    user_risk_pct = 0.5  # Default: moderate risk
+    user_risk_pct = 1.0  # Default: 1% risk
     if tg_id:
         try:
             s = _client()
@@ -477,10 +477,10 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
                 "risk_per_trade"
             ).eq("telegram_id", tg_id).limit(1).execute()
             sess = (res.data or [{}])[0]
-            user_risk_pct = float(sess.get("risk_per_trade") or 0.5)
+            user_risk_pct = float(sess.get("risk_per_trade") or 1.0)
         except Exception as e:
             logger.warning(f"Failed to fetch user risk setting: {e}")
-            user_risk_pct = 0.5
+            user_risk_pct = 1.0
 
     # Get trade status (for in-position or closed trade tracking)
     try:
@@ -662,7 +662,7 @@ async def execute_signal(
         "risk_per_trade, leverage"
     ).eq("telegram_id", tg_id).limit(1).execute()
     sess = (sess_res.data or [{}])[0]
-    risk_pct = float(sess.get("risk_per_trade") or 0.5)  # Default to 0.5% if not set
+    risk_pct = float(sess.get("risk_per_trade") or 1.0)  # Default to 1.0% if not set
     leverage = int(sess.get("leverage") or 10)
 
     # Re-derive the signal from live market data so dynamic sizing reflects

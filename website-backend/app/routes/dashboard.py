@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
 from app.auth.jwt import decode_token
 from app.db.supabase import _client
 from app.services import bitunix as bsvc
+import asyncio
+import os
+from datetime import datetime, timezone
+import httpx
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,12 +15,245 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 bearer = HTTPBearer()
 
+# Autotrade engines persist multiple closed variants, not only plain "closed".
+CLOSED_STATUSES = [
+    "closed",
+    "closed_tp",
+    "closed_sl",
+    "closed_tp1",
+    "closed_tp2",
+    "closed_tp3",
+    "closed_flip",
+    "closed_manual",
+]
+
 
 def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)):
     payload = decode_token(creds.credentials)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     return int(payload["sub"])
+
+
+def _load_admin_ids() -> list[int]:
+    """Load admin IDs from multiple env keys for resilience."""
+    ids = set()
+    raw_values = [
+        os.getenv("ADMIN_IDS", ""),
+        os.getenv("ADMIN1", ""),
+        os.getenv("ADMIN2", ""),
+        os.getenv("ADMIN_USER_ID", ""),
+        os.getenv("ADMIN2_USER_ID", ""),
+    ]
+    for raw in raw_values:
+        for token in str(raw).split(","):
+            token = token.strip()
+            if token.isdigit():
+                ids.add(int(token))
+    return sorted(ids)
+
+
+def _fmt_price(v: float) -> str:
+    try:
+        return f"{float(v):,.4f}"
+    except Exception:
+        return str(v)
+
+
+def _fmt_money(v: float) -> str:
+    try:
+        return f"{float(v):,.2f}"
+    except Exception:
+        return str(v)
+
+
+async def _send_telegram_html(
+    client: httpx.AsyncClient,
+    bot_token: str,
+    chat_id: int,
+    text: str,
+    reply_markup: dict | None = None,
+) -> tuple[bool, str | None]:
+    try:
+        payload = {
+            "chat_id": int(chat_id),
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        resp = await client.post(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            json=payload,
+        )
+        if resp.status_code >= 400:
+            return False, f"http_{resp.status_code}"
+        body = resp.json() if resp.text else {}
+        if not body.get("ok", False):
+            return False, str(body.get("description") or "telegram_api_error")
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def _fetch_all_user_ids() -> list[int]:
+    s = _client()
+    user_ids: list[int] = []
+    seen: set[int] = set()
+    offset = 0
+    page = 1000
+    while True:
+        res = s.table("users").select("telegram_id").range(offset, offset + page - 1).execute()
+        batch = res.data or []
+        for row in batch:
+            raw = row.get("telegram_id")
+            try:
+                uid = int(raw)
+            except Exception:
+                continue
+            if uid <= 0 or uid in seen:
+                continue
+            seen.add(uid)
+            user_ids.append(uid)
+        if len(batch) < page:
+            break
+        offset += page
+    return user_ids
+
+
+class SampleTradeBroadcastRequest(BaseModel):
+    pair: str = "BTCUSDT"
+    direction: str = "Long"
+    entry_price: float = 66112.6
+    tp_price: float = 67320.0
+    sl_price: float = 65550.0
+    risk_pnl_usd: float = 50.33
+    risk_pct_equity: float = 1.0
+    order_id: str = "CM-SAMPLE-001"
+    close_price: float = 67320.0
+    closed_pnl_usd: float = 63.44
+    close_reason: str = "TP Hit"
+    trade_url: str = "https://cryptomentor.id"
+    target_chat_id: int | None = None
+
+
+@router.post("/admin/broadcast-sample-trades")
+async def admin_broadcast_sample_trades(
+    payload: SampleTradeBroadcastRequest,
+    tg_id: int = Depends(get_current_user),
+):
+    """
+    Admin-only: broadcast two sample trade notifications to all Telegram users:
+    1) Trade opened
+    2) Trade closed
+    """
+    admin_ids = _load_admin_ids()
+    if tg_id not in admin_ids:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+    if not bot_token:
+        raise HTTPException(status_code=500, detail="TELEGRAM_BOT_TOKEN is not configured")
+
+    now_str = datetime.now(timezone.utc).strftime("%d %b %Y %H:%M:%S UTC")
+    direction = str(payload.direction or "Long").strip().title()
+
+    open_text = (
+        "🚀 <b>Cryptomentor AI | Trade Opened</b>\n\n"
+        f"📈 <b>Direction:</b> {direction}\n"
+        f"🪙 <b>Pair:</b> {payload.pair}\n"
+        f"🎯 <b>Entry:</b> {_fmt_price(payload.entry_price)}\n"
+        f"🏁 <b>Take Profit:</b> {_fmt_price(payload.tp_price)}\n"
+        f"🛡️ <b>Stop Loss:</b> {_fmt_price(payload.sl_price)}\n"
+        f"💵 <b>Risk PnL:</b> ${_fmt_money(payload.risk_pnl_usd)}\n"
+        f"📊 <b>Risk on Equity:</b> {_fmt_money(payload.risk_pct_equity)}%\n"
+        f"🧾 <b>Order ID:</b> {payload.order_id}\n"
+        f"🕒 <b>Date & Time:</b> {now_str}\n\n"
+        "🤖 <i>Execution confirmed by AutoTrade Engine.</i>"
+    )
+    closed_text = (
+        "✅ <b>Cryptomentor AI | Trade Closed</b>\n\n"
+        f"🪙 <b>Pair:</b> {payload.pair}\n"
+        f"📈 <b>Direction:</b> {direction}\n"
+        f"🎯 <b>Entry:</b> {_fmt_price(payload.entry_price)}\n"
+        f"🏁 <b>Exit:</b> {_fmt_price(payload.close_price)}\n"
+        f"💰 <b>PnL:</b> ${_fmt_money(payload.closed_pnl_usd)}\n"
+        f"🏆 <b>Result:</b> {payload.close_reason}\n"
+        f"🧾 <b>Order ID:</b> {payload.order_id}\n"
+        f"🕒 <b>Date & Time:</b> {now_str}\n\n"
+        "📌 <i>Risk managed. Trade completed professionally.</i>"
+    )
+
+    reply_markup = {
+        "inline_keyboard": [[
+            {"text": "📊 View Trade Details", "url": payload.trade_url or "https://cryptomentor.id"}
+        ]]
+    }
+
+    if payload.target_chat_id:
+        target_uids = [int(payload.target_chat_id)]
+    else:
+        target_uids = await asyncio.to_thread(_fetch_all_user_ids)
+    if not target_uids:
+        return {
+            "success": True,
+            "message": "No users found to broadcast.",
+            "total_users": 0,
+            "open_sent": 0,
+            "open_failed": 0,
+            "closed_sent": 0,
+            "closed_failed": 0,
+        }
+
+    open_sent = 0
+    open_failed = 0
+    closed_sent = 0
+    closed_failed = 0
+
+    async with httpx.AsyncClient(timeout=12.0) as client:
+        for uid in target_uids:
+            ok_open, _ = await _send_telegram_html(
+                client=client,
+                bot_token=bot_token,
+                chat_id=uid,
+                text=open_text,
+                reply_markup=reply_markup,
+            )
+            if ok_open:
+                open_sent += 1
+            else:
+                open_failed += 1
+
+            await asyncio.sleep(0.04)
+
+            ok_closed, _ = await _send_telegram_html(
+                client=client,
+                bot_token=bot_token,
+                chat_id=uid,
+                text=closed_text,
+                reply_markup=reply_markup,
+            )
+            if ok_closed:
+                closed_sent += 1
+            else:
+                closed_failed += 1
+
+            await asyncio.sleep(0.04)
+
+    logger.info(
+        "[AdminBroadcastSampleTrades] requester=%s users=%s open=(%s/%s) closed=(%s/%s)",
+        tg_id, len(target_uids), open_sent, open_failed, closed_sent, closed_failed
+    )
+
+    return {
+        "success": True,
+        "total_users": len(target_uids),
+        "open_sent": open_sent,
+        "open_failed": open_failed,
+        "closed_sent": closed_sent,
+        "closed_failed": closed_failed,
+    }
 
 
 async def _ensure_session(tg_id: int, status: str) -> dict:
@@ -169,7 +407,7 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
 
     return {
         "success": True,
-        "risk_per_trade": float(row.get("risk_per_trade") or 0.5),
+        "risk_per_trade": float(row.get("risk_per_trade") or 1.0),
         "leverage": int(row.get("leverage") or 10),
         "trading_mode": row.get("trading_mode") or "auto",
         "risk_mode": row.get("risk_mode") or "moderate",
@@ -199,7 +437,7 @@ async def update_risk_setting(    payload: dict,
     """
     from datetime import datetime
 
-    risk = float(payload.get("risk_per_trade") or 0.5)
+    risk = float(payload.get("risk_per_trade") or 1.0)
 
     # Validate: only allow 0.25, 0.5, 0.75, 1.0
     valid_risks = [0.25, 0.5, 0.75, 1.0]
@@ -313,7 +551,7 @@ async def get_performance(tg_id: int = Depends(get_current_user)):
 
     res = s.table("autotrade_trades").select(
         "pnl_usdt, status, opened_at, closed_at"
-    ).eq("telegram_id", tg_id).eq("status", "closed").order("closed_at").execute()
+    ).eq("telegram_id", tg_id).in_("status", CLOSED_STATUSES).order("closed_at").execute()
     trades = res.data or []
 
     total_trades = len(trades)
@@ -475,7 +713,7 @@ async def get_portfolio(tg_id: int = Depends(get_current_user)):
     since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     pnl_res = s.table("autotrade_trades").select("pnl_usdt").eq(
         "telegram_id", tg_id
-    ).eq("status", "closed").gte("closed_at", since).execute()
+    ).in_("status", CLOSED_STATUSES).gte("closed_at", since).execute()
     pnl_30d = sum(float(t.get("pnl_usdt") or 0) for t in (pnl_res.data or []))
 
     # Live Bitunix data (sync with Telegram bot). Best-effort: if keys are
