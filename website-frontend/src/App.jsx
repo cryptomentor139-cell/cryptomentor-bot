@@ -697,11 +697,17 @@ export default function App() {
             <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">AutoTrade Hub</p>
             <NavItem icon={<Activity size={20} />} label="Portfolio Status" active={activeTab === 'portfolio'} onClick={() => navigateTo('portfolio')} />
             <NavItem icon={<Cpu size={20} />} label="Engine Controls" active={activeTab === 'engine'} onClick={() => navigateTo('engine')} />
-            <NavItem icon={<BarChart2 size={20} />} label="Performance" active={false} onClick={() => {}} badge="Soon" disabled />
+            <div className="w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold text-sm opacity-40 cursor-not-allowed select-none pointer-events-none">
+              <div className="flex items-center gap-3"><div className="text-slate-500"><BarChart2 size={20} /></div><span className="tracking-wide text-slate-400">Performance</span></div>
+              <span className="text-[8px] font-black tracking-widest px-1.5 py-0.5 rounded border text-amber-300 bg-amber-500/20 border-amber-500/30">SOON</span>
+            </div>
             <NavItem icon={<Settings size={20} />} label="API Bridges" active={activeTab === 'settings'} onClick={() => navigateTo('settings')} />
             <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-6">Ecosystem</p>
             <NavItem icon={<Radio size={20} />} label="Signals & Market" active={activeTab === 'signals'} onClick={() => navigateTo('signals')} badge={user.is_premium ? "PRO" : "FREE"} />
-            <NavItem icon={<GraduationCap size={20} />} label="Skills & Education" active={false} onClick={() => {}} badge="Soon" disabled />
+            <div className="w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold text-sm opacity-40 cursor-not-allowed select-none pointer-events-none">
+              <div className="flex items-center gap-3"><div className="text-slate-500"><GraduationCap size={20} /></div><span className="tracking-wide text-slate-400">Skills &amp; Education</span></div>
+              <span className="text-[8px] font-black tracking-widest px-1.5 py-0.5 rounded border text-amber-300 bg-amber-500/20 border-amber-500/30">SOON</span>
+            </div>
           </nav>
 
           {/* ── Social Proof Ticker ── */}
