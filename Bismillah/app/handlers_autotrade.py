@@ -15,6 +15,7 @@ from typing import Optional, Dict
 
 from app.supabase_repo import _client
 from app.lib.auth import generate_dashboard_url
+from app.lib.crypto import encrypt, decrypt
 
 # Conversation states
 WAITING_BITUNIX_UID = 6
