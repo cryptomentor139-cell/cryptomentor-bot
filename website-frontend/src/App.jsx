@@ -8,6 +8,7 @@ import {
   PlayCircle, BookOpen, Lock, Clock, Power, StopCircle, XCircle
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import bitunixLogo from './assets/bitunix-logo.png';
 
 const _CONFIGURED_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const _FALLBACK_BASE = '/api';
@@ -592,7 +593,7 @@ export default function App() {
               body: JSON.stringify({ uid }),
             });
             if (resp.ok) {
-              setVerStatus({ status: 'pending_verification' });
+              setVerStatus({ status: 'pending' });
               return { ok: true };
             }
             const err = await resp.json().catch(() => ({}));
@@ -604,10 +605,10 @@ export default function App() {
         onLogout={handleLogout}
       />;
     }
-    if (verStatus.status === 'pending_verification') {
-      return <VerificationPendingScreen onRefresh={fetchVerificationStatus} onLogout={handleLogout} />;
+    if (verStatus.status === 'pending') {
+      return <VerificationPendingScreen onRefresh={fetchVerStatus} onLogout={handleLogout} />;
     }
-    if (verStatus.status === 'uid_rejected') {
+    if (verStatus.status === 'rejected') {
       return <RejectedScreen
         onResubmit={async (uid) => {
           try {
@@ -616,7 +617,7 @@ export default function App() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ uid }),
             });
-            if (resp.ok) { setVerStatus({ status: 'pending_verification' }); return { ok: true }; }
+            if (resp.ok) { setVerStatus({ status: 'pending' }); return { ok: true }; }
             const err = await resp.json().catch(() => ({}));
             return { ok: false, error: err.detail || 'Failed to submit UID' };
           } catch (e) { return { ok: false, error: e.message || 'Network error' }; }
@@ -624,8 +625,8 @@ export default function App() {
         onLogout={handleLogout}
       />;
     }
-    // uid_verified or active — wait for portfolio data, then check API key
-    const isVerified = ['uid_verified', 'active'].includes(verStatus?.status);
+    // approved only — wait for portfolio data, then check API key
+    const isVerified = ['approved'].includes(verStatus?.status);
     if (isVerified && !portfolioLoaded) {
       // Still loading — show spinner, don't let through yet
       return (
@@ -637,7 +638,7 @@ export default function App() {
     if (isVerified && connectorStatus.linked === false) {
       return <OnboardingWizard onComplete={() => {
         setPortfolioLoaded(false);
-        fetchVerificationStatus();
+        fetchVerStatus();
         fetchRiskSettings();
         setActiveTab('portfolio');
       }} onLogout={handleLogout} />;
@@ -708,17 +709,9 @@ export default function App() {
             <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">AutoTrade Hub</p>
             <NavItem icon={<Activity size={20} />} label="Portfolio Status" active={activeTab === 'portfolio'} onClick={() => navigateTo('portfolio')} />
             <NavItem icon={<Cpu size={20} />} label="Engine Controls" active={activeTab === 'engine'} onClick={() => navigateTo('engine')} />
-            <div className="w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold text-sm opacity-40 cursor-not-allowed select-none pointer-events-none">
-              <div className="flex items-center gap-3"><div className="text-slate-500"><BarChart2 size={20} /></div><span className="tracking-wide text-slate-400">Performance</span></div>
-              <span className="text-[8px] font-black tracking-widest px-1.5 py-0.5 rounded border text-amber-300 bg-amber-500/20 border-amber-500/30">SOON</span>
-            </div>
             <NavItem icon={<Settings size={20} />} label="API Bridges" active={activeTab === 'settings'} onClick={() => navigateTo('settings')} />
             <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-6">Ecosystem</p>
             <NavItem icon={<Radio size={20} />} label="Signals & Market" active={activeTab === 'signals'} onClick={() => navigateTo('signals')} badge={user.is_premium ? "PRO" : "FREE"} />
-            <div className="w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold text-sm opacity-40 cursor-not-allowed select-none pointer-events-none">
-              <div className="flex items-center gap-3"><div className="text-slate-500"><GraduationCap size={20} /></div><span className="tracking-wide text-slate-400">Skills &amp; Education</span></div>
-              <span className="text-[8px] font-black tracking-widest px-1.5 py-0.5 rounded border text-amber-300 bg-amber-500/20 border-amber-500/30">SOON</span>
-            </div>
           </nav>
 
           {/* ── Social Proof Ticker ── */}
@@ -753,10 +746,8 @@ export default function App() {
         <main className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10 w-full relative z-0 pb-20 md:pb-10 custom-scrollbar">
           {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : []} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} botBusy={botBusy} connectorStatus={connectorStatus} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} onUpdateLeverage={updateLeverageSetting} onUpdateMarginMode={updateMarginModeSetting} />}
           {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} onUpdateLeverage={updateLeverageSetting} onUpdateMarginMode={updateMarginModeSetting} />}
-          {activeTab === 'performance' && <PerformanceTab />}
           {activeTab === 'settings' && <SettingsTab onBotConnected={handleBotConnected} />}
           {activeTab === 'signals' && <SignalsTab user={user} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} />}
-          {activeTab === 'skills' && <SkillsTab />}
         </main>
       </div>
     </div>
@@ -1447,7 +1438,7 @@ function SettingsTab({ onBotConnected }) {
             <BridgeCard 
               name="Bitunix" 
               status={status} 
-              logo="U" 
+              logoSrc={bitunixLogo}
               colors="from-blue-500 to-indigo-600" 
               onConnect={handleConnect}
               onDisconnect={handleDisconnect}
@@ -1701,12 +1692,18 @@ function TPBadge({ label, price, hit }) {
   );
 }
 
-function BridgeCard({ name, status, logo, colors, onConnect, onDisconnect, loading }) {
+function BridgeCard({ name, status, logo, logoSrc, colors, onConnect, onDisconnect, loading }) {
   const isSynced = status === 'synced';
   return (
     <div className="border border-white/10 rounded-2xl p-4 md:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/[0.02] hover:bg-white/[0.04] transition-all hover:border-white/20 group">
       <div className="flex items-center gap-4 w-full">
-        <div className={`w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br ${colors} rounded-xl flex items-center justify-center font-black text-white text-xl shadow-lg shrink-0`}>{logo}</div>
+        <div className={`w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br ${colors} rounded-xl flex items-center justify-center font-black text-white text-xl shadow-lg shrink-0 overflow-hidden`}>
+          {logoSrc ? (
+            <img src={logoSrc} alt={`${name} logo`} className="w-full h-full object-contain p-1.5 bg-black" />
+          ) : (
+            logo
+          )}
+        </div>
         <div className="flex-1">
           <h4 className="text-white font-black text-lg mb-1">{name} Network</h4>
           {isSynced ? <div className="flex items-center gap-1.5 bg-lime-500/10 border border-lime-500/20 px-2.5 py-1 rounded-lg w-fit"><CheckCircle2 size={12} className="text-lime-400"/><span className="text-[10px] text-lime-400 font-bold uppercase tracking-wider">Node Synced</span></div> : <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 px-2.5 py-1 rounded-lg w-fit"><span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Disconnected</span></div>}

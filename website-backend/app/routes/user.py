@@ -1,5 +1,4 @@
 import os
-import re
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,6 +23,11 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)):
 class SubmitUIDRequest(BaseModel):
     uid: str
 
+
+VER_PENDING = "pending"
+VER_APPROVED = "approved"
+VER_REJECTED = "rejected"
+
 @router.get("/me")
 async def get_me(tg_id: int = Depends(get_current_user)):
     user = get_user_by_tid(tg_id)
@@ -33,52 +37,88 @@ async def get_me(tg_id: int = Depends(get_current_user)):
 
 @router.get("/verification-status")
 async def get_verification_status(tg_id: int = Depends(get_current_user)):
-    """Check user's exchange verification status and admin bypass."""
+    """Single source of truth: user_verifications in Supabase."""
     admin_ids = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
     if tg_id in admin_ids:
-        return {"status": "active", "exchange": "bitunix", "uid": None}
+        return {"status": VER_APPROVED, "exchange": "bitunix", "uid": None}
 
     s = _client()
-    res = s.table("autotrade_sessions").select("status, exchange, bitunix_uid, community_code").eq("telegram_id", tg_id).limit(1).execute()
+    res = (
+        s.table("user_verifications")
+        .select("status, bitunix_uid, submitted_via, reviewed_at, reviewed_by_admin_id")
+        .eq("telegram_id", tg_id)
+        .limit(1)
+        .execute()
+    )
     row = (res.data or [None])[0]
     if not row:
         return {"status": "none", "exchange": None, "uid": None}
     return {
         "status": row.get("status") or "none",
-        "exchange": row.get("exchange") or "bitunix",
+        "exchange": "bitunix",
         "uid": row.get("bitunix_uid"),
-        "community_code": row.get("community_code"),
+        "submitted_via": row.get("submitted_via"),
+        "reviewed_at": row.get("reviewed_at"),
+        "reviewed_by_admin_id": row.get("reviewed_by_admin_id"),
     }
 
 @router.post("/submit-uid")
-async def submit_uid(payload: dict, tg_id: int = Depends(get_current_user)):
+async def submit_uid(payload: SubmitUIDRequest, tg_id: int = Depends(get_current_user)):
     """Submit Bitunix UID for admin verification and notify admins."""
-    uid = str(payload.get("uid", "")).strip()
+    uid = str(payload.uid or "").strip()
     if not uid.isdigit() or len(uid) < 5:
         raise HTTPException(status_code=400, detail="Invalid UID. Must be numeric and at least 5 digits.")
 
     s = _client()
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Check current status — only allow submission if none, uid_rejected, or pending
-    res = s.table("autotrade_sessions").select("status").eq("telegram_id", tg_id).limit(1).execute()
+    # Check current verification status (central source).
+    res = (
+        s.table("user_verifications")
+        .select("status")
+        .eq("telegram_id", tg_id)
+        .limit(1)
+        .execute()
+    )
     row = (res.data or [None])[0]
     current_status = row.get("status") if row else "none"
-    if current_status in ("uid_verified", "active"):
+    if current_status == VER_APPROVED:
         raise HTTPException(status_code=400, detail="Your UID is already verified.")
 
-    s.table("autotrade_sessions").upsert({
-        "telegram_id": tg_id,
-        "exchange": "bitunix",
-        "bitunix_uid": uid,
-        "status": "pending_verification",
-        "updated_at": now_iso,
-    }, on_conflict="telegram_id").execute()
+    s.table("user_verifications").upsert(
+        {
+            "telegram_id": tg_id,
+            "bitunix_uid": uid,
+            "status": VER_PENDING,
+            "submitted_via": "web",
+            "submitted_at": now_iso,
+            "reviewed_at": None,
+            "reviewed_by_admin_id": None,
+            "rejection_reason": None,
+            "updated_at": now_iso,
+        },
+        on_conflict="telegram_id",
+    ).execute()
+
+    # Backward compatibility for legacy flows still reading autotrade_sessions.
+    try:
+        s.table("autotrade_sessions").upsert(
+            {
+                "telegram_id": tg_id,
+                "exchange": "bitunix",
+                "bitunix_uid": uid,
+                "status": "pending_verification",
+                "updated_at": now_iso,
+            },
+            on_conflict="telegram_id",
+        ).execute()
+    except Exception:
+        logger.warning("Failed to mirror pending status into autotrade_sessions for tg_id=%s", tg_id)
 
     # Get user info for richer admin notification
     user = get_user_by_tid(tg_id)
     username = user.get("username") or user.get("first_name") or str(tg_id) if user else str(tg_id)
-    resubmit_note = " (resubmission after rejection)" if current_status == "uid_rejected" else ""
+    resubmit_note = " (resubmission after rejection)" if current_status == VER_REJECTED else ""
 
     # Admin notification
     admin_ids = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
@@ -105,7 +145,7 @@ async def submit_uid(payload: dict, tg_id: int = Depends(get_current_user)):
                         }
                     )
                 except: pass
-    return {"status": "pending_verification", "uid": uid}
+    return {"status": VER_PENDING, "uid": uid}
 
 @router.get("/dashboard")
 async def get_dashboard(tg_id: int = Depends(get_current_user)):

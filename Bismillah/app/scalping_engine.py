@@ -46,12 +46,16 @@ class ScalpingEngine:
         
         # Position tracking
         self.positions: Dict[str, ScalpingPosition] = {}
+        self._closing_symbols = set()
+        self._recent_close_notifications: Dict[str, float] = {}
         
         # Cooldown tracking
         self.cooldown_tracker: Dict[str, float] = {}
         
         # Sideways error counter per symbol
         self.sideways_error_counter: Dict[str, int] = {}
+        self.signal_streaks: Dict[str, Dict[str, float]] = {}
+        self.last_closed_meta: Dict[str, Dict[str, float]] = {}
         
         # Running state
         self.running = False
@@ -206,6 +210,9 @@ class ScalpingEngine:
                 return None
                 
             if not self.validate_scalping_entry(signal):
+                return None
+
+            if not self._passes_anti_flip_filters(signal):
                 return None
                 
             return signal
@@ -538,6 +545,58 @@ class ScalpingEngine:
             logger.warning(
                 f"[Scalping:{self.user_id}] {symbol} sideways error threshold reached, cooldown 5min"
             )
+
+    def _passes_anti_flip_filters(self, signal) -> bool:
+        """Require directional stability + block rapid opposite re-entry."""
+        now = time.time()
+        symbol = signal.symbol
+        direction = signal.side  # LONG / SHORT
+
+        # 1) Consecutive confirmation gate (stability filter)
+        required = int(getattr(self.config, "signal_confirmations_required", 2))
+        max_gap = int(getattr(self.config, "signal_confirmation_max_gap_seconds", 45))
+        streak = self.signal_streaks.get(symbol)
+        if not streak:
+            self.signal_streaks[symbol] = {"direction": direction, "count": 1, "ts": now}
+            logger.info(f"[Scalping:{self.user_id}] {symbol} anti-flip: first {direction} signal seen, waiting confirmation")
+            return False
+
+        last_dir = streak.get("direction")
+        last_ts = float(streak.get("ts", 0))
+        last_count = int(streak.get("count", 0))
+        if direction == last_dir and now - last_ts <= max_gap:
+            new_count = last_count + 1
+            self.signal_streaks[symbol] = {"direction": direction, "count": new_count, "ts": now}
+            if new_count < required:
+                logger.info(f"[Scalping:{self.user_id}] {symbol} anti-flip: streak {new_count}/{required}, waiting")
+                return False
+        else:
+            self.signal_streaks[symbol] = {"direction": direction, "count": 1, "ts": now}
+            logger.info(f"[Scalping:{self.user_id}] {symbol} anti-flip: direction changed/reset to {direction}, waiting confirmation")
+            return False
+
+        # 2) Opposite-direction re-entry cooldown after close
+        closed = self.last_closed_meta.get(symbol)
+        if closed:
+            closed_ts = float(closed.get("ts", 0))
+            closed_side = closed.get("side")  # BUY / SELL
+            closed_reason = str(closed.get("reason", ""))
+            opposite_block = int(getattr(self.config, "anti_flip_opposite_seconds", 600))
+            if "sideways" in closed_reason:
+                opposite_block = max(opposite_block, int(getattr(self.config, "sideways_reentry_cooldown_seconds", 420)))
+
+            is_opposite = (closed_side == "BUY" and direction == "SHORT") or (closed_side == "SELL" and direction == "LONG")
+            if is_opposite and (now - closed_ts) < opposite_block:
+                wait_left = int(opposite_block - (now - closed_ts))
+                logger.info(
+                    f"[Scalping:{self.user_id}] {symbol} anti-flip: blocked opposite re-entry "
+                    f"{direction} for {wait_left}s after close_reason={closed_reason}"
+                )
+                return False
+
+        # Streak consumed for this execution cycle
+        self.signal_streaks.pop(symbol, None)
+        return True
 
     def calculate_position_size_pro(self, entry_price: float, sl_price: float, 
                                     capital: float, leverage: int) -> tuple:
@@ -1175,6 +1234,10 @@ class ScalpingEngine:
     
     async def _close_sideways_max_hold(self, position: ScalpingPosition):
         """Force close sideways position after 2 minutes max hold"""
+        if position.symbol in self._closing_symbols:
+            logger.info(f"[Scalping:{self.user_id}] Skip duplicate close attempt for {position.symbol}")
+            return
+        self._closing_symbols.add(position.symbol)
         try:
             elapsed = int(time.time() - position.opened_at)
             logger.info(
@@ -1213,20 +1276,35 @@ class ScalpingEngine:
 
                 pnl_with_leverage = pnl * position.leverage
 
-                await self._update_position_closed(
+                closed_now = await self._update_position_closed(
                     position, fill_price, pnl_with_leverage, "sideways_max_hold_exceeded"
                 )
-
-                await self._notify_user(
-                    f"⏰ <b>SIDEWAYS Closed (2min)</b>\n\n"
-                    f"Symbol: {position.symbol}\n"
-                    f"Entry: {position.entry_price:.4f}\n"
-                    f"Exit: {fill_price:.4f}\n"
-                    f"Hold Time: {elapsed}s\n"
-                    f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
-                )
-
-                del self.positions[position.symbol]
+                if closed_now:
+                    self.last_closed_meta[position.symbol] = {
+                        "ts": time.time(),
+                        "side": position.side,
+                        "reason": "sideways_max_hold_exceeded",
+                    }
+                    await self._notify_user_once(
+                        dedupe_key=f"sideways_2m:{position.symbol}:{position.entry_price:.4f}",
+                        message=(
+                            f"⏰ <b>SIDEWAYS Closed (2min)</b>\n\n"
+                            f"Symbol: {position.symbol}\n"
+                            f"Entry: {position.entry_price:.4f}\n"
+                            f"Exit: {fill_price:.4f}\n"
+                            f"Hold Time: {elapsed}s\n"
+                            f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
+                        ),
+                        ttl_sec=600,
+                    )
+                    # Prevent rapid churn on the same sideways pair.
+                    sideways_cd = int(getattr(self.config, "sideways_reentry_cooldown_seconds", 420))
+                    self.cooldown_tracker[position.symbol] = time.time() + max(self.config.cooldown_seconds, sideways_cd)
+                    logger.info(
+                        f"[Scalping:{self.user_id}] Applied sideways re-entry cooldown for "
+                        f"{position.symbol}: {max(self.config.cooldown_seconds, sideways_cd)}s"
+                    )
+                self.positions.pop(position.symbol, None)
             else:
                 logger.error(
                     f"[Scalping:{self.user_id}] Failed to close sideways position: {result.get('error')}"
@@ -1234,6 +1312,8 @@ class ScalpingEngine:
         
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error closing sideways max hold: {e}")
+        finally:
+            self._closing_symbols.discard(position.symbol)
     
     async def _close_position_tp(self, position: ScalpingPosition, fill_price: float):
         """Close position when TP hit"""
@@ -1258,18 +1338,23 @@ class ScalpingEngine:
                 
                 pnl_with_leverage = pnl * position.leverage
                 
-                await self._update_position_closed(position, fill_price, pnl_with_leverage, "closed_tp")
-                
-                if position.is_sideways:
-                    await self._notify_sideways_closed(position, fill_price, pnl_with_leverage, "closed_tp")
-                else:
-                    await self._notify_user(
-                        f"✅ <b>TP Hit!</b>\n\n"
-                        f"Symbol: {position.symbol}\n"
-                        f"Entry: {position.entry_price:.4f}\n"
-                        f"Exit: {fill_price:.4f}\n"
-                        f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b> 🎉"
-                    )
+                closed_now = await self._update_position_closed(position, fill_price, pnl_with_leverage, "closed_tp")
+                if closed_now:
+                    self.last_closed_meta[position.symbol] = {
+                        "ts": time.time(),
+                        "side": position.side,
+                        "reason": "closed_tp",
+                    }
+                    if position.is_sideways:
+                        await self._notify_sideways_closed(position, fill_price, pnl_with_leverage, "closed_tp")
+                    else:
+                        await self._notify_user(
+                            f"✅ <b>TP Hit!</b>\n\n"
+                            f"Symbol: {position.symbol}\n"
+                            f"Entry: {position.entry_price:.4f}\n"
+                            f"Exit: {fill_price:.4f}\n"
+                            f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b> 🎉"
+                        )
 
                 # Social proof broadcast — kirim ke semua user jika profit >= 2 USDT
                 if pnl_with_leverage >= 2.0:
@@ -1291,7 +1376,7 @@ class ScalpingEngine:
                     except Exception as _bp_err:
                         logger.warning(f"[Scalping:{self.user_id}] broadcast_profit failed: {_bp_err}")
                 
-                del self.positions[position.symbol]
+                self.positions.pop(position.symbol, None)
         
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error closing TP position: {e}")
@@ -1319,20 +1404,25 @@ class ScalpingEngine:
                 
                 pnl_with_leverage = pnl * position.leverage
                 
-                await self._update_position_closed(position, fill_price, pnl_with_leverage, "closed_sl")
+                closed_now = await self._update_position_closed(position, fill_price, pnl_with_leverage, "closed_sl")
+                if closed_now:
+                    self.last_closed_meta[position.symbol] = {
+                        "ts": time.time(),
+                        "side": position.side,
+                        "reason": "closed_sl",
+                    }
+                    if position.is_sideways:
+                        await self._notify_sideways_closed(position, fill_price, pnl_with_leverage, "closed_sl")
+                    else:
+                        await self._notify_user(
+                            f"🛑 <b>SL Hit</b>\n\n"
+                            f"Symbol: {position.symbol}\n"
+                            f"Entry: {position.entry_price:.4f}\n"
+                            f"Exit: {fill_price:.4f}\n"
+                            f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
+                        )
                 
-                if position.is_sideways:
-                    await self._notify_sideways_closed(position, fill_price, pnl_with_leverage, "closed_sl")
-                else:
-                    await self._notify_user(
-                        f"🛑 <b>SL Hit</b>\n\n"
-                        f"Symbol: {position.symbol}\n"
-                        f"Entry: {position.entry_price:.4f}\n"
-                        f"Exit: {fill_price:.4f}\n"
-                        f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
-                    )
-                
-                del self.positions[position.symbol]
+                self.positions.pop(position.symbol, None)
         
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error closing SL position: {e}")
@@ -1415,20 +1505,35 @@ class ScalpingEngine:
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error saving position to DB: {e}")
     
-    async def _update_position_closed(self, position: ScalpingPosition, close_price: float, 
-                                     pnl: float, close_reason: str):
-        """Update position in database when closed"""
+    async def _update_position_closed(self, position: ScalpingPosition, close_price: float,
+                                     pnl: float, close_reason: str) -> bool:
+        """Update position in database when closed.
+        Returns True only when this call successfully closed an OPEN row.
+        """
         try:
             s = _client()
-            s.table("autotrade_trades").update({
+            open_rows = s.table("autotrade_trades").select("id").eq(
+                "telegram_id", self.user_id
+            ).eq("symbol", position.symbol).eq("status", "open").order("opened_at", desc=True).limit(1).execute()
+            if not open_rows.data:
+                logger.info(f"[Scalping:{self.user_id}] No open DB row to close for {position.symbol} (already closed)")
+                return False
+
+            trade_id = open_rows.data[0]["id"]
+            res = s.table("autotrade_trades").update({
                 "close_price": close_price,
                 "pnl_usdt": pnl,
                 "close_reason": close_reason,
                 "status": close_reason,
                 "closed_at": datetime.utcnow().isoformat(),
-            }).eq("telegram_id", self.user_id).eq("symbol", position.symbol).eq("status", "open").execute()
+            }).eq("id", trade_id).eq("status", "open").execute()
+            if not getattr(res, "data", None):
+                logger.info(f"[Scalping:{self.user_id}] DB close skipped for {position.symbol} (race already closed)")
+                return False
+            return True
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error updating position in DB: {e}")
+            return False
     
     async def _notify_sideways_opened(self, position: ScalpingPosition, signal):
         """Notify user when sideways scalp position opened"""
@@ -1464,12 +1569,16 @@ class ScalpingEngine:
             else:
                 label = "⏰ SIDEWAYS Closed (2min)"
             
-            await self._notify_user(
-                f"{label}\n\n"
-                f"Symbol: {position.symbol}\n"
-                f"Entry: {position.entry_price:.4f}\n"
-                f"Exit: {fill_price:.4f}\n"
-                f"PnL: <b>{pnl:+.2f} USDT</b>"
+            await self._notify_user_once(
+                dedupe_key=f"{reason}:{position.symbol}:{position.entry_price:.4f}",
+                message=(
+                    f"{label}\n\n"
+                    f"Symbol: {position.symbol}\n"
+                    f"Entry: {position.entry_price:.4f}\n"
+                    f"Exit: {fill_price:.4f}\n"
+                    f"PnL: <b>{pnl:+.2f} USDT</b>"
+                ),
+                ttl_sec=600,
             )
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error sending sideways close notification: {e}")
@@ -1543,4 +1652,14 @@ class ScalpingEngine:
             )
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error sending notification: {e}")
+
+    async def _notify_user_once(self, dedupe_key: str, message: str, ttl_sec: int = 600):
+        """Best-effort in-memory dedupe for repeated close notifications."""
+        now = time.time()
+        last_sent = self._recent_close_notifications.get(dedupe_key, 0)
+        if now - last_sent < ttl_sec:
+            logger.info(f"[Scalping:{self.user_id}] Suppressed duplicate notification: {dedupe_key}")
+            return
+        self._recent_close_notifications[dedupe_key] = now
+        await self._notify_user(message)
 

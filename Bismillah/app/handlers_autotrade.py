@@ -1,7 +1,7 @@
-\"\"\"
+"""
 AutoTrade Handlers - Gatekeeper Mode (Phase 1 Migration)
 Redirection flow from Telegram Bot to Web Dashboard.
-\"\"\"
+"""
 
 import os
 from datetime import datetime
@@ -224,12 +224,32 @@ async def process_uid_input_bot(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         from app.supabase_repo import _client
         s = _client()
-        s.table("autotrade_sessions").upsert({
-            "telegram_id": user_id,
-            "bitunix_uid": uid,
-            "status": "pending_verification",
-            "updated_at": datetime.utcnow().isoformat()
-        }, on_conflict="telegram_id").execute()
+        now_iso = datetime.utcnow().isoformat()
+        s.table("user_verifications").upsert(
+            {
+                "telegram_id": user_id,
+                "bitunix_uid": uid,
+                "status": "pending",
+                "submitted_via": "telegram",
+                "submitted_at": now_iso,
+                "reviewed_at": None,
+                "reviewed_by_admin_id": None,
+                "rejection_reason": None,
+                "updated_at": now_iso,
+            },
+            on_conflict="telegram_id",
+        ).execute()
+
+        # Mirror legacy status for old bot screens still reading autotrade_sessions.
+        s.table("autotrade_sessions").upsert(
+            {
+                "telegram_id": user_id,
+                "bitunix_uid": uid,
+                "status": "pending_verification",
+                "updated_at": now_iso,
+            },
+            on_conflict="telegram_id",
+        ).execute()
         
         await notify_admins_of_uid(context.bot, user_id, uid)
         
@@ -277,8 +297,17 @@ async def notify_admins_of_uid(bot, user_id: int, uid: str):
         f"Bitunix UID: <code>{uid}</code>\n\n"
         f"Approving this will allow the user to start trading on the dashboard."
     )
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Approve", callback_data=f"uid_acc_{user_id}"),
+                InlineKeyboardButton("❌ Reject", callback_data=f"uid_reject_{user_id}"),
+            ]
+        ]
+    )
     for aid in set(admin_ids):
-        try: await bot.send_message(chat_id=aid, text=msg, parse_mode='HTML')
+        try:
+            await bot.send_message(chat_id=aid, text=msg, parse_mode='HTML', reply_markup=keyboard)
         except Exception: pass
 
 
