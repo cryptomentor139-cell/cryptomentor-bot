@@ -1047,8 +1047,8 @@ function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUp
       <div className="space-y-6 relative z-10">
         {/* Risk Level */}
         <div>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Risk Per Trade</p>
-          <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Risk Per Trade (0.25% - 5%)</p>
+          <div className="grid grid-cols-4 gap-2">
             {RISK_OPTIONS.map(risk => (
               <button
                 key={risk}
@@ -2125,8 +2125,8 @@ function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
           )}
           {!isPlaced && !windowExpired && riskSettings && onUpdateRisk && (
             <div className="bg-white/5 rounded-lg p-2.5">
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Risk Slider (1-Click)</p>
-              <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Risk Slider (1-Click, 0.25% - 5%)</p>
+              <div className="grid grid-cols-4 gap-1.5">
                 {RISK_OPTIONS.map((risk) => (
                   <button
                     key={risk}
