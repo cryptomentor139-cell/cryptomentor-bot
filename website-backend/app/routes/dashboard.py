@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 bearer = HTTPBearer()
+ALLOWED_RISK_MIN = 0.25
+ALLOWED_RISK_MAX = 5.0
 
 # Autotrade engines persist multiple closed variants, not only plain "closed".
 CLOSED_STATUSES = [
@@ -367,7 +369,7 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
     Get current trading settings (risk_per_trade, leverage, etc.)
 
     Returns:
-    - risk_per_trade: Current risk percentage (0.25, 0.5, 0.75, 1.0)
+    - risk_per_trade: Current risk percentage (0.25% to 5.0%)
     - leverage: Current leverage setting
     - trading_mode: Current mode (auto, scalping, swing)
     - risk_mode: Risk profile (conservative, moderate, aggressive)
@@ -407,7 +409,7 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
 
     return {
         "success": True,
-        "risk_per_trade": float(row.get("risk_per_trade") or 1.0),
+        "risk_per_trade": max(ALLOWED_RISK_MIN, min(ALLOWED_RISK_MAX, float(row.get("risk_per_trade") or 1.0))),
         "leverage": int(row.get("leverage") or 10),
         "trading_mode": row.get("trading_mode") or "auto",
         "risk_mode": row.get("risk_mode") or "moderate",
@@ -423,7 +425,7 @@ async def update_risk_setting(    payload: dict,
     tg_id: int = Depends(get_current_user)
 ):
     """
-    Update risk_per_trade for user (0.25, 0.5, 0.75, 1.0 percent).
+    Update risk_per_trade for user (0.25% up to 5.0%).
 
     Fixed dollar risk: position_size = (balance × risk%) / SL_distance
     - Tight SL → Larger position (same dollar risk)
@@ -439,12 +441,10 @@ async def update_risk_setting(    payload: dict,
 
     risk = float(payload.get("risk_per_trade") or 1.0)
 
-    # Validate: only allow 0.25, 0.5, 0.75, 1.0
-    valid_risks = [0.25, 0.5, 0.75, 1.0]
-    if risk not in valid_risks:
+    if risk < ALLOWED_RISK_MIN or risk > ALLOWED_RISK_MAX:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid risk: {risk}. Must be one of {valid_risks}"
+            detail=f"Invalid risk: {risk}. Must be between {ALLOWED_RISK_MIN}% and {ALLOWED_RISK_MAX}%"
         )
 
     s = _client()

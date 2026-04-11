@@ -108,6 +108,35 @@ const MOCK_COURSES = [
   { id: 3, title: "Institutional Order Flow", category: "Masterclass", progress: 0, lessons: 12, locked: true },
 ];
 
+const RISK_OPTIONS = [0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0, 5.0];
+
+const getRiskButtonTone = (risk) => {
+  const r = Number(risk) || 0;
+  if (r > 1.0) return 'bg-gradient-to-r from-amber-500/20 to-rose-500/20 text-amber-300 border border-amber-400/40';
+  if (r <= 0.25) return 'bg-green-500/20 text-green-400 border border-green-500/30';
+  if (r <= 0.5) return 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30';
+  if (r <= 0.75) return 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30';
+  return 'bg-orange-500/20 text-orange-400 border border-orange-500/30';
+};
+
+const getRiskValueTone = (risk) => {
+  const r = Number(risk) || 0;
+  if (r > 1.0) return 'text-amber-300';
+  if (r <= 0.25) return 'text-green-400';
+  if (r <= 0.5) return 'text-cyan-400';
+  if (r <= 0.75) return 'text-yellow-400';
+  return 'text-orange-400';
+};
+
+const getRiskDescription = (risk) => {
+  const r = Number(risk) || 0;
+  if (r <= 0.25) return '🟢 Conservative — fewer signals, tighter targets, smaller positions';
+  if (r <= 0.5) return '🔵 Moderate — balanced risk-reward ratio (recommended)';
+  if (r <= 0.75) return '🟡 Aggressive — more signals, wider targets, larger positions';
+  if (r <= 1.0) return '🟠 Very Aggressive — higher signal frequency and exposure';
+  return '🟠 Amber-Red Risk Zone (>1%) — high exposure and drawdown sensitivity';
+};
+
 export default function App() {
   const [user, setUser] = useState(() => {
     try {
@@ -426,6 +455,24 @@ export default function App() {
   const handleCancelStart = () => setShowBotStartModal(false);
   const handleToggleBot = () => callEngine(botRunning ? 'stop' : 'start');
 
+  const closeOneClickPosition = async (position) => {
+    const symbol = String(position?.symbol || '').replace('/', '');
+    const side = String(position?.side || position?.sideRaw || '').toUpperCase();
+    if (!symbol) throw new Error('Missing position symbol');
+
+    const resp = await apiFetch('/bitunix/positions/close', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, side, source: '1_click' }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+
+    // Optimistic UI: remove the just-closed card while polling catches up.
+    setRealPositions((prev) => prev.filter((p) => String(p.id) !== String(position.id)));
+    return data;
+  };
+
   // Fetch risk settings (including LIVE equity from Bitunix)
   const fetchRiskSettings = async () => {
     try {
@@ -649,10 +696,19 @@ export default function App() {
           const pnlNum = Number(p.pnl ?? p.unrealizedPNL ?? 0);
           const sideRaw = String(p.side || p.positionSide || '').toUpperCase();
           const side = sideRaw === 'BUY' || sideRaw === 'LONG' ? 'LONG' : 'SHORT';
+          const symbolRaw = String(p.symbol || p.pair || '—');
+          const pairDisplay = symbolRaw.endsWith('USDT')
+            ? `${symbolRaw.slice(0, -4)}/USDT`
+            : symbolRaw;
+          const source = p.source || 'autotrade';
           return {
-            id: p.positionId || p.id || `${p.symbol}-${i}`,
-            pair: p.symbol || p.pair || '—',
+            id: p.position_id || p.positionId || p.id || `${p.symbol}-${i}`,
+            pair: pairDisplay,
+            symbol: symbolRaw,
             side,
+            sideRaw: p.side || sideRaw,
+            source,
+            sourceLabel: p.source_label || (source === '1_click' ? '1-Click' : 'AutoTrade'),
             entry: `$${Number(p.entryValue || p.avgOpenPrice || p.entry_price || 0).toLocaleString()}`,
             current: `$${Number(p.markPrice || p.mark_price || p.current_price || p.entry_price || 0).toLocaleString()}`,
             margin: `$${Number(p.margin || p.initialMargin || 0).toLocaleString()}`,
@@ -964,7 +1020,7 @@ export default function App() {
 
         {/* MAIN CONTENT */}
         <main className="flex-1 min-w-0 overflow-y-auto p-4 md:p-8 lg:p-10 w-full relative z-0 pb-20 md:pb-10 custom-scrollbar">
-          {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : []} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} botBusy={botBusy} connectorStatus={connectorStatus} />}
+          {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : []} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} botBusy={botBusy} connectorStatus={connectorStatus} onCloseOneClickPosition={closeOneClickPosition} />}
           {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} onUpdateLeverage={updateLeverageSetting} onUpdateMarginMode={updateMarginModeSetting} />}
           {activeTab === 'settings' && <SettingsTab onBotConnected={handleBotConnected} />}
           {activeTab === 'signals' && <SignalsTab user={user} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} />}
@@ -992,22 +1048,27 @@ function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUp
         {/* Risk Level */}
         <div>
           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Risk Per Trade</p>
-          <div className="grid grid-cols-4 gap-2">
-            {[0.25, 0.5, 0.75, 1.0].map(risk => (
+          <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+            {RISK_OPTIONS.map(risk => (
               <button
                 key={risk}
                 onClick={() => onUpdateRisk(risk)}
                 disabled={riskSettings.loading}
                 className={`py-2 px-1 rounded-lg font-bold text-[10px] md:text-xs transition-all ${
                   riskSettings.risk_per_trade === risk
-                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                    : 'bg-[#050505] text-slate-400 border border-white/5 hover:border-amber-500/30 hover:text-amber-400'
+                    ? getRiskButtonTone(risk)
+                    : risk > 1.0
+                      ? 'bg-[#090505] text-amber-300/70 border border-amber-500/15 hover:border-rose-500/35 hover:text-amber-200'
+                      : 'bg-[#050505] text-slate-400 border border-white/5 hover:border-amber-500/30 hover:text-amber-300'
                 } disabled:opacity-50`}
               >
                 {risk}%
               </button>
             ))}
           </div>
+          <p className={`text-[10px] mt-2 font-medium ${riskSettings.risk_per_trade > 1.0 ? 'text-amber-300' : 'text-slate-500'}`}>
+            {getRiskDescription(riskSettings.risk_per_trade)}
+          </p>
         </div>
 
         {/* Leverage & Margin Mode Row */}
@@ -1086,6 +1147,7 @@ function PortfolioTab({
   onToggleBot,
   botBusy,
   connectorStatus,
+  onCloseOneClickPosition,
 }) {
   const pnlAbs = Math.abs(unrealizedPnl).toFixed(2);
   const pnlDisplay = hasRealData ? `${unrealizedPnl >= 0 ? '+' : '-'}$${pnlAbs}` : '$0.00';
@@ -1098,6 +1160,8 @@ function PortfolioTab({
   const showOffline  = cs.linked === false;
   const showError    = cs.linked === true  && cs.online === false;
   const showNetError = cs.linked === null  && cs.online === false && cs.error;
+  const autotradePositions = positions.filter((p) => p.source !== '1_click');
+  const oneClickPositions = positions.filter((p) => p.source === '1_click');
 
   return (
     <div className="max-w-6xl w-full mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-both">
@@ -1167,10 +1231,56 @@ function PortfolioTab({
           <h3 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center gap-3">Current Opened Positions <span className="px-2.5 py-1 rounded-lg bg-white/10 text-white/60 text-xs font-bold">{positions.length}</span></h3>
           {engineState.stackMentorActive && <div className="w-fit flex items-center gap-2 text-xs font-bold text-fuchsia-400 bg-fuchsia-500/10 px-3 py-1.5 rounded-lg border border-fuchsia-500/20"><Layers size={14} /> STACKMENTOR TRACKING</div>}
         </div>
-        
+
         {positions.length > 0 ? (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
-            {positions.map(pos => <PositionCard key={pos.id} position={pos} stackMentorActive={engineState.stackMentorActive} />)}
+          <div className="space-y-8">
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-black tracking-widest uppercase text-cyan-300 bg-cyan-500/10 border border-cyan-500/25 px-2.5 py-1 rounded-lg">AutoTrade</span>
+                <span className="text-xs text-slate-400">{autotradePositions.length} positions</span>
+              </div>
+              {autotradePositions.length > 0 ? (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
+                  {autotradePositions.map((pos) => (
+                    <PositionCard
+                      key={pos.id}
+                      position={pos}
+                      stackMentorActive={engineState.stackMentorActive}
+                      isOneClick={false}
+                      onCloseOneClickPosition={onCloseOneClickPosition}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-[#0a0a0a]/50 border border-white/10 rounded-2xl p-4 text-sm text-slate-500">
+                  No AutoTrade positions open right now.
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-black tracking-widest uppercase text-amber-300 bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-lg">1-Click Trade</span>
+                <span className="text-xs text-slate-400">{oneClickPositions.length} positions</span>
+              </div>
+              {oneClickPositions.length > 0 ? (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
+                  {oneClickPositions.map((pos) => (
+                    <PositionCard
+                      key={pos.id}
+                      position={pos}
+                      stackMentorActive={engineState.stackMentorActive}
+                      isOneClick={true}
+                      onCloseOneClickPosition={onCloseOneClickPosition}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-[#0a0a0a]/50 border border-white/10 rounded-2xl p-4 text-sm text-slate-500">
+                  No 1-click positions open right now.
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bg-[#0a0a0a]/60 backdrop-blur-2xl rounded-[1.5rem] md:rounded-[2rem] border border-white/5 p-10 flex flex-col items-center justify-center text-center opacity-80 mt-4">
@@ -1656,16 +1766,15 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">⚡ Risk Level Per Trade</p>
-              <div className="flex gap-2">
-                {[0.25, 0.5, 0.75, 1.0].map(risk => (
+              <div className="flex flex-wrap gap-2">
+                {RISK_OPTIONS.map(risk => (
                   <button key={risk} onClick={() => onUpdateRisk(risk)} disabled={riskSettings?.loading}
                     className={`px-4 py-2 rounded-xl font-bold text-xs transition-all ${
                       riskSettings?.risk_per_trade === risk
-                        ? risk <= 0.25 ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                        : risk <= 0.5 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                        : risk <= 0.75 ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                        : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                        : 'bg-white/5 text-slate-500 border border-white/5 hover:border-white/20 hover:text-slate-300'
+                        ? getRiskButtonTone(risk)
+                        : risk > 1.0
+                          ? 'bg-[#090505] text-amber-300/70 border border-amber-500/15 hover:border-rose-500/35 hover:text-amber-200'
+                          : 'bg-white/5 text-slate-500 border border-white/5 hover:border-white/20 hover:text-slate-300'
                     } disabled:opacity-50`}>{risk}%</button>
                 ))}
               </div>
@@ -1679,20 +1788,13 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
                 <div className="w-px h-8 bg-white/10" />
                 <div className="text-right">
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Risk/Trade</p>
-                  <p className={`font-bold ${
-                    riskSettings.risk_per_trade <= 0.25 ? 'text-green-400' :
-                    riskSettings.risk_per_trade <= 0.5 ? 'text-cyan-400' :
-                    riskSettings.risk_per_trade <= 0.75 ? 'text-yellow-400' : 'text-orange-400'
-                  }`}>${(riskSettings.equity * (riskSettings.risk_per_trade / 100)).toLocaleString('en-US', {maximumFractionDigits: 2})}</p>
+                  <p className={`font-bold ${getRiskValueTone(riskSettings.risk_per_trade)}`}>${(riskSettings.equity * (riskSettings.risk_per_trade / 100)).toLocaleString('en-US', {maximumFractionDigits: 2})}</p>
                 </div>
               </div>
             )}
           </div>
-          <p className="text-[10px] text-slate-600 mt-2">
-            {riskSettings?.risk_per_trade <= 0.25 ? '🟢 Conservative — fewer signals, tighter targets, smaller positions' :
-             riskSettings?.risk_per_trade <= 0.5 ? '🔵 Moderate — balanced risk-reward ratio (recommended)' :
-             riskSettings?.risk_per_trade <= 0.75 ? '🟡 Aggressive — more signals, wider targets, larger positions' :
-             '🟠 Very Aggressive — maximum signal frequency, highest exposure'}
+          <p className={`text-[10px] mt-2 ${riskSettings?.risk_per_trade > 1.0 ? 'text-amber-300' : 'text-slate-600'}`}>
+            {getRiskDescription(riskSettings?.risk_per_trade)}
           </p>
         </div>
       )}
@@ -1767,10 +1869,26 @@ function MiniStat({ title, value, subtitle, highlight, glow }) {
   );
 }
 
-function PositionCard({ position, stackMentorActive }) {
+function PositionCard({ position, stackMentorActive, isOneClick = false, onCloseOneClickPosition }) {
   // Normalize: API returns "BUY"/"SELL", mock data uses "LONG"/"SHORT"
   const isLong = position.side === 'LONG' || position.side === 'BUY';
   const sideLabel = isLong ? 'LONG' : 'SHORT';
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState(null);
+
+  const handleCloseOneClick = async () => {
+    if (!isOneClick || closing || !onCloseOneClickPosition) return;
+    setCloseError(null);
+    setClosing(true);
+    try {
+      await onCloseOneClickPosition(position);
+    } catch (e) {
+      setCloseError(e.message || 'Failed to close position');
+    } finally {
+      setClosing(false);
+    }
+  };
+
   return (
     <div className="bg-[#0a0a0a]/60 backdrop-blur-2xl rounded-[1.5rem] md:rounded-[2rem] border border-white/5 p-5 md:p-7 flex flex-col transition-all duration-500 md:hover:-translate-y-1 hover:border-white/20 relative overflow-hidden group">
       <div className={`absolute top-0 left-0 w-1.5 h-full ${isLong ? 'bg-gradient-to-b from-lime-400 to-lime-600' : 'bg-gradient-to-b from-rose-400 to-rose-600'}`} />
@@ -1779,6 +1897,11 @@ function PositionCard({ position, stackMentorActive }) {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <h4 className="text-white font-black text-xl tracking-tight">{position.pair}</h4>
+              <span className={`text-[8px] font-black tracking-widest px-1.5 py-0.5 rounded border ${
+                isOneClick
+                  ? 'text-amber-300 bg-amber-500/15 border-amber-500/30'
+                  : 'text-cyan-300 bg-cyan-500/15 border-cyan-500/30'
+              }`}>{isOneClick ? '1-CLICK' : 'AUTOTRADE'}</span>
               <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-black tracking-wider ${isLong ? 'bg-lime-500/10 text-lime-400 border border-lime-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
                 {isLong ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {sideLabel} • {position.leverage}
               </div>
@@ -1789,6 +1912,17 @@ function PositionCard({ position, stackMentorActive }) {
             <p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.1em] mb-1">Unrealized PnL</p>
             <p className={`text-xl md:text-2xl font-black tracking-tighter ${position.isProfitable ? 'text-lime-400' : 'text-rose-400'}`}>{position.pnl}</p>
             <div className={`inline-block text-[10px] font-bold px-2 py-1 rounded-md ${position.isProfitable ? 'bg-lime-500/10 text-lime-400' : 'bg-rose-500/10 text-rose-400'}`}>{position.pnlPercent}</div>
+            {isOneClick && (
+              <div className="mt-3">
+                <button
+                  onClick={handleCloseOneClick}
+                  disabled={closing}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-black tracking-wider uppercase text-rose-300 bg-rose-500/15 border border-rose-500/30 hover:bg-rose-500/25 disabled:opacity-50"
+                >
+                  {closing ? 'Closing...' : 'Close Position'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
         {stackMentorActive && position.tp && (
@@ -1805,6 +1939,9 @@ function PositionCard({ position, stackMentorActive }) {
           <div><p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.1em] mb-1.5 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0"/> Entry Price</p><p className="text-white font-bold text-sm">{position.entry}</p></div>
           <div><p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.1em] mb-1.5 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0"/> Mark Price</p><p className="text-white font-bold text-sm">{position.current}</p></div>
         </div>
+        {closeError && (
+          <p className="mt-2 text-[10px] font-bold text-rose-400">{closeError}</p>
+        )}
       </div>
     </div>
   );
@@ -1878,6 +2015,8 @@ function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
   const ageMs = Math.max(0, now - generatedMs);
   const remainingMs = Math.max(0, windowMs - ageMs);
   const windowExpired = remainingMs <= 0;
+  const oneClickRiskPct = Number(riskSettings?.risk_per_trade || 1.0);
+  const oneClickHighRisk = oneClickRiskPct > 1.0;
   const remainingLabel = windowExpired
     ? 'Entry window closed'
     : `${Math.floor(remainingMs / 60000)}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')} left`;
@@ -1971,27 +2110,34 @@ function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
             <div className="bg-white/[0.02] p-3 rounded-xl border border-white/5 min-w-[80px]"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Stop Loss</p><p className="text-rose-400 font-bold text-sm">{signal.stopLoss}</p></div>
           </div>
           {!isPlaced && !windowExpired && riskSettings?.equity > 0 && signal.stopLoss && (
-            <div className="bg-white/5 rounded-lg p-2.5 flex items-center justify-between text-[10px]">
+            <div className={`rounded-lg p-2.5 text-[10px] ${oneClickHighRisk ? 'bg-amber-500/10 border border-amber-500/25' : 'bg-white/5'}`}>
+              <div className="flex items-center justify-between">
               <span className="text-slate-500">1-Click will risk:</span>
-              <span className="text-amber-400 font-bold">
+              <span className={`font-bold ${getRiskValueTone(oneClickRiskPct)}`}>
                 ${(riskSettings.equity * (riskSettings.risk_per_trade / 100)).toFixed(2)}
-                <span className="text-slate-600 ml-1">({riskSettings.risk_per_trade}% of equity)</span>
+                <span className={`ml-1 ${oneClickHighRisk ? 'text-amber-200/80' : 'text-slate-600'}`}>({riskSettings.risk_per_trade}% of equity)</span>
               </span>
+              </div>
+              {oneClickHighRisk && (
+                <p className="mt-1 text-[10px] text-amber-300 font-medium">Amber-Red Risk Zone active for this 1-click trade (&gt;1%).</p>
+              )}
             </div>
           )}
           {!isPlaced && !windowExpired && riskSettings && onUpdateRisk && (
             <div className="bg-white/5 rounded-lg p-2.5">
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Risk Slider (1-Click)</p>
-              <div className="grid grid-cols-4 gap-1.5">
-                {[0.25, 0.5, 0.75, 1.0].map((risk) => (
+              <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
+                {RISK_OPTIONS.map((risk) => (
                   <button
                     key={risk}
                     onClick={() => onUpdateRisk(risk)}
                     disabled={riskSettings?.loading}
                     className={`py-1.5 rounded-lg text-[10px] font-black transition-all ${
                       riskSettings?.risk_per_trade === risk
-                        ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
-                        : "bg-[#050505] text-slate-500 border border-white/10 hover:text-slate-300"
+                        ? getRiskButtonTone(risk)
+                        : risk > 1.0
+                          ? 'bg-[#090505] text-amber-300/70 border border-amber-500/15 hover:border-rose-500/35 hover:text-amber-200'
+                          : "bg-[#050505] text-slate-500 border border-white/10 hover:text-slate-300"
                     }`}
                   >
                     {risk}%
@@ -2216,7 +2362,6 @@ function OnboardingWizard({ onComplete, onLogout }) {
   const [marginMode, setMarginMode] = useState('cross');
   const [starting, setStarting] = useState(false);
 
-  const RISK_OPTIONS = [0.25, 0.5, 0.75, 1.0];
   const LEVERAGE_OPTIONS = [1, 2, 3, 5, 10, 15, 20];
 
   const handleTestConnection = async () => {
@@ -2326,19 +2471,20 @@ function OnboardingWizard({ onComplete, onLogout }) {
             <h2 className="text-xl font-bold text-white mb-2">Configure Risk Management</h2>
             <p className="text-slate-400 text-sm mb-6">Set your trading preferences. You can change these anytime from the Engine tab.</p>
             <label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Risk Per Trade</label>
-            <div className="flex gap-2 mb-2">
+            <div className="grid grid-cols-4 gap-2 mb-2">
               {RISK_OPTIONS.map(risk => (
                 <button key={risk} onClick={() => setRiskPerTrade(risk)}
                   className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
-                    riskPerTrade === risk ? 'bg-cyan-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                    riskPerTrade === risk
+                      ? getRiskButtonTone(risk)
+                      : risk > 1.0
+                        ? 'bg-[#090505] text-amber-300/70 border border-amber-500/15 hover:border-rose-500/35 hover:text-amber-200'
+                        : 'bg-white/5 text-slate-400 hover:bg-white/10'
                   }`}>{risk}%</button>
               ))}
             </div>
-            <p className="text-xs text-slate-500 mb-6">
-              {riskPerTrade <= 0.25 ? 'Conservative — fewer signals, tighter targets' :
-               riskPerTrade <= 0.5 ? 'Moderate — balanced approach (recommended)' :
-               riskPerTrade <= 0.75 ? 'Aggressive — more signals, wider targets' :
-               'Very Aggressive — maximum signal frequency'}
+            <p className={`text-xs mb-6 ${riskPerTrade > 1.0 ? 'text-amber-300' : 'text-slate-500'}`}>
+              {getRiskDescription(riskPerTrade)}
             </p>
             <label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Leverage</label>
             <div className="flex gap-2 mb-6 flex-wrap">

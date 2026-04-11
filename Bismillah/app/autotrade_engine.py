@@ -12,7 +12,7 @@ import asyncio
 import logging
 import os
 from html import escape
-from typing import Dict, Optional, List
+from typing import Any, Dict, Optional, List
 from datetime import datetime, date
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -108,6 +108,41 @@ QTY_PRECISION = {
     "XRPUSDT": 0, "ADAUSDT": 0, "DOGEUSDT": 0, "AVAXUSDT": 2,
     "DOTUSDT": 1, "MATICUSDT": 0,
 }
+
+RISK_MIN_PCT = 0.25
+RISK_MAX_PCT = 5.0
+
+
+def _normalize_risk_pct(raw_value: Any, default: float = 1.0) -> float:
+    """Clamp incoming risk to supported autotrade range [0.25, 5.0]."""
+    try:
+        risk = float(raw_value)
+    except Exception:
+        return float(default)
+    return max(RISK_MIN_PCT, min(RISK_MAX_PCT, risk))
+
+
+def _risk_profile(user_risk_pct: float) -> Dict[str, float]:
+    """
+    Map user risk% to confluence selectivity and TP width.
+    Risk > 1% is intentionally treated as high-risk mode.
+    """
+    risk = _normalize_risk_pct(user_risk_pct, default=1.0)
+    if risk <= 0.25:
+        return {"min_confidence": 60, "atr_multiplier": 0.5}
+    if risk <= 0.5:
+        return {"min_confidence": 50, "atr_multiplier": 1.0}
+    if risk <= 0.75:
+        return {"min_confidence": 45, "atr_multiplier": 1.25}
+    if risk <= 1.0:
+        return {"min_confidence": 40, "atr_multiplier": 1.5}
+    if risk <= 2.0:
+        return {"min_confidence": 38, "atr_multiplier": 1.75}
+    if risk <= 3.0:
+        return {"min_confidence": 36, "atr_multiplier": 2.0}
+    if risk <= 4.0:
+        return {"min_confidence": 34, "atr_multiplier": 2.25}
+    return {"min_confidence": 32, "atr_multiplier": 2.5}
 
 # Cooldown tracker: symbol → timestamp terakhir flip
 _flip_cooldown: Dict[str, float] = {}
@@ -497,15 +532,8 @@ def _generate_confluence_signal(
     Adaptive thresholds based on user risk tolerance.
     """
 
-    # Risk config: {min_confidence, atr_multiplier}
-    risk_config = {
-        0.25: {"min_confidence": 60, "atr_multiplier": 0.5},
-        0.5:  {"min_confidence": 50, "atr_multiplier": 1.0},
-        0.75: {"min_confidence": 45, "atr_multiplier": 1.25},
-        1.0:  {"min_confidence": 40, "atr_multiplier": 1.5},
-    }
-
-    config = risk_config.get(user_risk_pct, risk_config[0.5])
+    user_risk_pct = _normalize_risk_pct(user_risk_pct, default=1.0)
+    config = _risk_profile(user_risk_pct)
     min_confidence = config["min_confidence"]
     atr_multiplier = config["atr_multiplier"]
 
@@ -668,6 +696,7 @@ def _compute_signal_pro(base_symbol: str, btc_bias: Optional[Dict] = None, user_
     - 0.5% (moderate): min conf 50, standard TPs (0.75-1.5×ATR)
     - 0.75% (aggressive): min conf 45, wider TPs (1.25×ATR)
     - 1.0% (very aggressive): min conf 40, widest TPs (1.5×ATR)
+    - >1.0% to 5.0% (amber-red risk zone): progressively lower min conf, wider TPs
     """
     symbol = base_symbol.upper() + "USDT"
     cfg = ENGINE_CONFIG
@@ -1256,22 +1285,9 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
         from app.supabase_repo import get_risk_per_trade
         fetched_risk = get_risk_per_trade(user_id)
 
-        # Valid risk levels: 0.25, 0.5, 0.75, 1.0
-        # Use round() to handle floating-point precision issues
-        valid_risks = {0.25, 0.5, 0.75, 1.0}
-
-        if fetched_risk:
-            # Round to 2 decimal places to handle floating-point comparison
-            rounded_risk = round(float(fetched_risk), 2)
-
-            if rounded_risk in valid_risks:
-                user_risk_pct = rounded_risk
-                logger.info(f"[Engine:{user_id}] Loaded user risk_per_trade: {user_risk_pct}%")
-            else:
-                logger.warning(
-                    f"[Engine:{user_id}] Invalid risk_per_trade from DB: {fetched_risk} "
-                    f"(not in {valid_risks}), using default 1.0%"
-                )
+        if fetched_risk is not None:
+            user_risk_pct = _normalize_risk_pct(fetched_risk, default=1.0)
+            logger.info(f"[Engine:{user_id}] Loaded user risk_per_trade: {user_risk_pct}%")
     except Exception as e:
         logger.warning(f"[Engine:{user_id}] Failed to load user risk_pct, using default 1.0%: {e}")
 
