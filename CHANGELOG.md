@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.1.11] — 2026-04-13 — Effective 1-Click Risk Display Per Signal
+
+### 🚀 What Changed
+
+#### 1) Risk Per Trade Display Now Uses Effective Per-Signal Calculation
+- Updated each 1-click signal card to show effective risk based on reflected signal values:
+  - Entry zone midpoint
+  - Stop loss distance
+  - Estimated position size and margin
+  - Margin-cap impact (95% available balance cap)
+- Main `1-Click will risk` value now reflects effective loss at SL (not only raw target % of equity).
+- File:
+  - `website-frontend/src/App.jsx`
+
+### ✅ Deploy/State Safety Notes
+
+- Frontend rebuilt and redeployed to VPS with latest JS:
+  - `index-B-6fjmST.js`
+- Reloaded `nginx` successfully.
+
 ## [2.1.10] — 2026-04-13 — Force Native Browser Dialogs Into In-App Modal
 
 ### 🚀 What Changed

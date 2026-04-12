@@ -2584,8 +2584,9 @@ function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpda
   const windowExpired = remainingMs <= 0;
   const oneClickRiskPct = Number(riskSettings?.one_click_risk_per_trade || ONECLICK_RISK_MIN);
   const oneClickHighRisk = oneClickRiskPct > 5.0;
-  const oneClickRiskAmount = Number(riskSettings?.equity || 0) * (oneClickRiskPct / 100);
+  const oneClickRiskAmountTarget = Number(riskSettings?.equity || 0) * (oneClickRiskPct / 100);
   const leverageValue = Math.max(1, Number(riskSettings?.leverage || 10));
+  const availableBalance = Math.max(0, Number(riskSettings?.balance || 0));
 
   const parsePrice = (raw) => {
     const v = Number(String(raw ?? '').replace(/,/g, '').trim());
@@ -2610,12 +2611,26 @@ function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpda
   const signalSlDistancePct = (Number.isFinite(signalSlDistance) && Number.isFinite(signalEntryPrice) && signalEntryPrice > 0)
     ? (signalSlDistance / signalEntryPrice)
     : null;
-  const estimatedPositionSizeUsdt = (Number.isFinite(signalSlDistancePct) && signalSlDistancePct > 0)
-    ? (oneClickRiskAmount / signalSlDistancePct)
+  const estimatedPositionSizeUsdtRaw = (Number.isFinite(signalSlDistancePct) && signalSlDistancePct > 0)
+    ? (oneClickRiskAmountTarget / signalSlDistancePct)
     : null;
-  const estimatedMarginUsdt = (Number.isFinite(estimatedPositionSizeUsdt) && leverageValue > 0)
-    ? (estimatedPositionSizeUsdt / leverageValue)
+  const estimatedMarginUsdtRaw = (Number.isFinite(estimatedPositionSizeUsdtRaw) && leverageValue > 0)
+    ? (estimatedPositionSizeUsdtRaw / leverageValue)
     : null;
+  const maxMarginUsdt = availableBalance * 0.95;
+  const estimatedMarginUsdt = Number.isFinite(estimatedMarginUsdtRaw)
+    ? Math.min(estimatedMarginUsdtRaw, maxMarginUsdt)
+    : null;
+  const estimatedPositionSizeUsdt = Number.isFinite(estimatedMarginUsdt)
+    ? estimatedMarginUsdt * leverageValue
+    : null;
+  const oneClickRiskAmountEffective = (Number.isFinite(estimatedPositionSizeUsdt) && Number.isFinite(signalSlDistancePct))
+    ? (estimatedPositionSizeUsdt * signalSlDistancePct)
+    : oneClickRiskAmountTarget;
+  const oneClickRiskPctEffective = Number(riskSettings?.equity || 0) > 0
+    ? (oneClickRiskAmountEffective / Number(riskSettings.equity)) * 100
+    : 0;
+  const isRiskCapped = Number.isFinite(estimatedMarginUsdtRaw) && Number.isFinite(estimatedMarginUsdt) && estimatedMarginUsdtRaw > estimatedMarginUsdt;
   const remainingLabel = windowExpired
     ? 'Entry window closed'
     : `${Math.floor(remainingMs / 60000)}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')} left`;
@@ -2714,8 +2729,8 @@ function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpda
               <div className="flex items-center justify-between">
               <span className="text-slate-500">1-Click will risk:</span>
               <span className={`font-bold ${getRiskValueTone(oneClickRiskPct)}`}>
-                ${oneClickRiskAmount.toFixed(2)}
-                <span className={`ml-1 ${oneClickHighRisk ? 'text-amber-200/80' : 'text-slate-600'}`}>({riskSettings.one_click_risk_per_trade}% of equity)</span>
+                ${oneClickRiskAmountEffective.toFixed(2)}
+                <span className={`ml-1 ${oneClickHighRisk ? 'text-amber-200/80' : 'text-slate-600'}`}>({oneClickRiskPctEffective.toFixed(2)}% effective)</span>
               </span>
               </div>
               {Number.isFinite(signalSlDistancePct) && Number.isFinite(estimatedPositionSizeUsdt) && Number.isFinite(estimatedMarginUsdt) && (
@@ -2733,6 +2748,11 @@ function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpda
                     <p className="text-amber-300 font-bold">${estimatedMarginUsdt.toFixed(2)}</p>
                   </div>
                 </div>
+              )}
+              {isRiskCapped && (
+                <p className="mt-1 text-[10px] text-amber-200/80 font-medium">
+                  Margin cap applied (95% balance), so effective risk is lower than target.
+                </p>
               )}
               {oneClickHighRisk && (
                 <p className="mt-1 text-[10px] text-rose-300 font-medium">Danger Zone active for this 1-click trade (&gt;5%).</p>
