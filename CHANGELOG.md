@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.1.16] — 2026-04-13 — Faster User Reflection via In-App Update Detection
+
+### 🚀 What Changed
+
+#### 1) Added Automatic Frontend Update Detection Banner
+- App now periodically checks deployed `index.html` for a newer hashed JS bundle.
+- If a newer bundle is detected, users get a non-blocking in-app banner:
+  - `Refresh Now` (immediate reload)
+  - `Later` (dismiss)
+- This reduces lag where users stay on old tabs and don’t see fresh changes quickly.
+- File:
+  - `website-frontend/src/App.jsx`
+
+### ✅ Deployment Verification
+
+- Rebuilt and deployed to live nginx web root.
+- Verified public HTML points to latest bundle:
+  - `/assets/index-gUG7Cbpj.js`
+
 ## [2.1.15] — 2026-04-13 — 1-Click Dynamic Capacity Run-Through (Effective in Live UI)
 
 ### 🚀 What Changed

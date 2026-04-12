@@ -331,10 +331,12 @@ export default function App() {
   });
   const [verLoading, setVerLoading] = useState(true);
   const [bootIssue, setBootIssue] = useState(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const audioCtxRef = useRef(null);
   const audioUnlockedRef = useRef(false);
   const prevPositionIdsRef = useRef(new Set());
   const positionsBaselineSetRef = useRef(false);
+  const updateBannerDismissedRef = useRef(false);
 
   const unlockAudio = () => {
     try {
@@ -612,6 +614,35 @@ export default function App() {
     };
     window.addEventListener('cm:ui_notice', onUiNotice);
     return () => window.removeEventListener('cm:ui_notice', onUiNotice);
+  }, []);
+
+  // Detect newly deployed frontend bundle and surface a fast refresh path.
+  useEffect(() => {
+    let cancelled = false;
+    const moduleScript = document.querySelector('script[type="module"][src*="/assets/index-"]');
+    const currentSrc = moduleScript?.getAttribute('src') || '';
+    const currentBundle = currentSrc.split('/').pop() || '';
+    if (!currentBundle) return;
+
+    const checkForUpdate = async () => {
+      try {
+        const resp = await fetch(`/index.html?v=${Date.now()}`, { cache: 'no-store' });
+        const html = await resp.text();
+        const match = html.match(/src="\/assets\/(index-[^"]+\.js)"/);
+        const latestBundle = match?.[1] || '';
+        if (!latestBundle || cancelled) return;
+        if (latestBundle !== currentBundle && !updateBannerDismissedRef.current) {
+          setUpdateAvailable(true);
+        }
+      } catch {}
+    };
+
+    const id = setInterval(checkForUpdate, 45000);
+    checkForUpdate();
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   const previewRiskSetting = (newRisk) => {
@@ -1207,6 +1238,29 @@ export default function App() {
           message={appNotice.message}
           onClose={closeNotice}
         />
+      )}
+      {updateAvailable && (
+        <div className="fixed bottom-4 right-4 z-[95] max-w-sm bg-[#0a0a0a]/95 border border-cyan-500/35 rounded-xl p-3 shadow-[0_10px_30px_rgba(6,182,212,0.2)]">
+          <p className="text-xs font-bold text-cyan-300 mb-2">New update is ready</p>
+          <p className="text-[11px] text-slate-300 mb-3">Refresh now to load the latest improvements.</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => window.location.reload()}
+              className="flex-1 py-1.5 rounded-lg bg-cyan-500/20 border border-cyan-400/45 text-cyan-100 text-xs font-black hover:bg-cyan-500/30"
+            >
+              Refresh Now
+            </button>
+            <button
+              onClick={() => {
+                updateBannerDismissedRef.current = true;
+                setUpdateAvailable(false);
+              }}
+              className="flex-1 py-1.5 rounded-lg bg-white/5 border border-white/15 text-slate-300 text-xs font-bold hover:bg-white/10"
+            >
+              Later
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="flex flex-1 overflow-x-hidden relative z-10">
