@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.1.10] — 2026-04-13 — Force Native Browser Dialogs Into In-App Modal
+
+### 🚀 What Changed
+
+#### 1) Hard Block on Browser Popup Dialogs
+- Added app-level runtime override for native dialogs:
+  - `window.alert`
+  - `window.confirm`
+  - `window.prompt`
+- All such calls are now routed to in-web modal notice UI (`NoticeModal`) so users no longer see browser popup boxes.
+- File:
+  - `website-frontend/src/App.jsx`
+
+### ✅ Deploy/State Safety Notes
+
+- Frontend rebuilt and redeployed to VPS with latest JS:
+  - `index-CLSata6O.js`
+- Reloaded `nginx` successfully.
+
 ## [2.1.9] — 2026-04-13 — Live Per-Signal 1-Click Risk Recalculation
 
 ### 🚀 What Changed

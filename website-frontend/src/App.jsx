@@ -585,6 +585,30 @@ export default function App() {
   const openNotice = (title, message) => setAppNotice({ open: true, title, message });
   const closeNotice = () => setAppNotice({ open: false, title: '', message: '' });
 
+  // Safety net: force native browser dialogs into in-app notice UI.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nativeAlert = window.alert;
+    const nativeConfirm = window.confirm;
+    const nativePrompt = window.prompt;
+    window.alert = (message) => {
+      openNotice('Notice', String(message ?? ''));
+    };
+    window.confirm = (message) => {
+      openNotice('Confirmation', String(message ?? ''));
+      return false;
+    };
+    window.prompt = (message) => {
+      openNotice('Input Required', String(message ?? ''));
+      return null;
+    };
+    return () => {
+      window.alert = nativeAlert;
+      window.confirm = nativeConfirm;
+      window.prompt = nativePrompt;
+    };
+  }, []);
+
   const previewRiskSetting = (newRisk) => {
     const normalizedRisk = Math.max(AUTOTRADE_RISK_MIN, Math.min(AUTOTRADE_RISK_MAX, Number(newRisk) || AUTOTRADE_RISK_MIN));
     const riskValue = Number(normalizedRisk.toFixed(2));
