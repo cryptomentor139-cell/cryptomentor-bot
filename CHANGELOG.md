@@ -33,6 +33,16 @@
 - File:
   - `website-frontend/src/App.jsx`
 
+#### 5) Backward-Compatible Fallback for Existing DB Schema
+- Added safe fallback when `one_click_risk_per_trade` column is unavailable:
+  - Settings endpoint falls back gracefully.
+  - 1-click execution accepts `risk_override_pct` from web request.
+  - Frontend keeps a local persisted 1-click risk value (`localStorage`) so separation still works.
+- Files:
+  - `website-backend/app/routes/dashboard.py`
+  - `website-backend/app/routes/signals.py`
+  - `website-frontend/src/App.jsx`
+
 ### ✅ Deploy/State Safety Notes
 
 - Frontend rebuilt and deployed to VPS dist path:

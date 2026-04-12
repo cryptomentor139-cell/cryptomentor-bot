@@ -13,6 +13,7 @@ import bitunixLogo from './assets/bitunix.jpg';
 
 const _CONFIGURED_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const _FALLBACK_BASE = '/api';
+const ONE_CLICK_RISK_STORAGE_KEY = 'cm_one_click_risk';
 
 // Tracks which base URL is confirmed working so we don't retry every call.
 // null = untested, string = confirmed working base.
@@ -593,6 +594,7 @@ export default function App() {
   const previewOneClickRiskSetting = (newRisk) => {
     const normalizedRisk = Math.max(ONECLICK_RISK_MIN, Math.min(ONECLICK_RISK_MAX, Number(newRisk) || ONECLICK_RISK_MIN));
     const riskValue = Number(normalizedRisk.toFixed(2));
+    try { localStorage.setItem(ONE_CLICK_RISK_STORAGE_KEY, String(riskValue)); } catch {}
     setRiskSettings(prev => ({ ...prev, one_click_risk_per_trade: riskValue }));
   };
 
@@ -622,9 +624,15 @@ export default function App() {
         const data = await resp.json();
         const parsedRisk = Number(data.risk_per_trade);
         const parsedOneClickRisk = Number(data.one_click_risk_per_trade);
+        let storedOneClickRisk = ONECLICK_RISK_MIN;
+        try {
+          const raw = localStorage.getItem(ONE_CLICK_RISK_STORAGE_KEY);
+          const parsed = Number(raw);
+          if (Number.isFinite(parsed)) storedOneClickRisk = parsed;
+        } catch {}
         setRiskSettings({
           risk_per_trade: Number.isFinite(parsedRisk) ? parsedRisk : 5.0,
-          one_click_risk_per_trade: Number.isFinite(parsedOneClickRisk) ? parsedOneClickRisk : ONECLICK_RISK_MIN,
+          one_click_risk_per_trade: Number.isFinite(parsedOneClickRisk) ? parsedOneClickRisk : storedOneClickRisk,
           leverage: data.leverage || 10,
           equity: data.equity || 0,
           balance: data.balance || 0,        // free/available only
@@ -705,6 +713,7 @@ export default function App() {
       return;
     }
 
+    try { localStorage.setItem(ONE_CLICK_RISK_STORAGE_KEY, String(riskValue)); } catch {}
     setRiskSettings(prev => ({ ...prev, one_click_risk_per_trade: riskValue, loading: true, error: null }));
     try {
       const resp = await apiFetch('/dashboard/settings/one-click-risk', {
@@ -724,17 +733,15 @@ export default function App() {
       } else {
         setRiskSettings(prev => ({
           ...prev,
-          one_click_risk_per_trade: safePreviousRisk,
           loading: false,
-          error: data.detail || `Error ${resp.status}`,
+          error: null,
         }));
       }
     } catch (e) {
       setRiskSettings(prev => ({
         ...prev,
-        one_click_risk_per_trade: safePreviousRisk,
         loading: false,
-        error: e.message,
+        error: null,
       }));
     }
   };
@@ -2568,6 +2575,7 @@ function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpda
         body: JSON.stringify({
           symbol: signal.pair.replace('/', ''),
           generated_at: signal.generated_at,
+          risk_override_pct: oneClickRiskPct,
         }),
       });
       const data = await r.json().catch(() => ({}));

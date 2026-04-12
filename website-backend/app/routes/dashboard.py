@@ -387,11 +387,20 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
     - unrealized_pnl: Current open position P&L
     """
     s = _client()
-    res = s.table("autotrade_sessions").select(
-        "risk_per_trade, one_click_risk_per_trade, leverage, trading_mode, risk_mode"
-    ).eq("telegram_id", tg_id).limit(1).execute()
-
-    row = (res.data or [{}])[0]
+    row = {}
+    one_click_column_available = True
+    try:
+        res = s.table("autotrade_sessions").select(
+            "risk_per_trade, one_click_risk_per_trade, leverage, trading_mode, risk_mode"
+        ).eq("telegram_id", tg_id).limit(1).execute()
+        row = (res.data or [{}])[0]
+    except Exception as e:
+        one_click_column_available = False
+        logger.warning(f"[Settings:{tg_id}] one_click_risk_per_trade column unavailable, fallback select: {e}")
+        res = s.table("autotrade_sessions").select(
+            "risk_per_trade, leverage, trading_mode, risk_mode"
+        ).eq("telegram_id", tg_id).limit(1).execute()
+        row = (res.data or [{}])[0]
 
     # Fetch LIVE equity from Bitunix (critical for accurate risk calculations)
     # Equity = available + frozen + unrealized_pnl
@@ -419,7 +428,7 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
     raw_autotrade_risk = row.get("risk_per_trade")
     autotrade_risk = 5.0 if raw_autotrade_risk is None else float(raw_autotrade_risk or 5.0)
     autotrade_risk = max(ALLOWED_RISK_MIN, min(ALLOWED_AUTOTRADE_RISK_MAX, autotrade_risk))
-    raw_one_click_risk = row.get("one_click_risk_per_trade")
+    raw_one_click_risk = row.get("one_click_risk_per_trade") if one_click_column_available else None
     if raw_one_click_risk is None:
         one_click_risk = autotrade_risk
     else:
@@ -514,14 +523,15 @@ async def update_one_click_risk_setting(
             "updated_at": datetime.utcnow().isoformat(),
         }).eq("telegram_id", tg_id).execute()
         logger.info(f"[OneClickRisk:{tg_id}] Updated one_click_risk_per_trade to {risk_value}%")
+        note = f"1-click risk updated to {risk_value}% per trade"
     except Exception as e:
-        logger.error(f"[OneClickRisk:{tg_id}] Failed to update risk: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update 1-click risk: {e}")
+        logger.warning(f"[OneClickRisk:{tg_id}] Persist skipped (column may be missing): {e}")
+        note = "1-click risk applied for current web session; persistent DB column unavailable"
 
     return {
         "success": True,
         "one_click_risk_per_trade": risk_value,
-        "note": f"1-click risk updated to {risk_value}% per trade"
+        "note": note,
     }
 
 

@@ -683,14 +683,26 @@ async def execute_signal(
         raise HTTPException(status_code=400, detail="Insufficient equity (account value is zero or negative)")
 
     s = _client()
-    sess_res = s.table("autotrade_sessions").select(
-        "risk_per_trade, one_click_risk_per_trade, leverage"
-    ).eq("telegram_id", tg_id).limit(1).execute()
+    try:
+        sess_res = s.table("autotrade_sessions").select(
+            "risk_per_trade, one_click_risk_per_trade, leverage"
+        ).eq("telegram_id", tg_id).limit(1).execute()
+    except Exception as e:
+        logger.warning(f"[1ClickRisk:{tg_id}] one_click_risk_per_trade unavailable, fallback select: {e}")
+        sess_res = s.table("autotrade_sessions").select(
+            "risk_per_trade, leverage"
+        ).eq("telegram_id", tg_id).limit(1).execute()
     sess = (sess_res.data or [{}])[0]
-    one_click_raw = sess.get("one_click_risk_per_trade")
-    if one_click_raw is None:
-        one_click_raw = sess.get("risk_per_trade")
-    risk_pct = _normalize_risk_pct(one_click_raw, default=1.0)  # 0.5%..100.0%
+
+    risk_override_raw = payload.get("risk_override_pct")
+    risk_override = _normalize_risk_pct(risk_override_raw, default=-1.0)
+    if risk_override > 0:
+        risk_pct = risk_override
+    else:
+        one_click_raw = sess.get("one_click_risk_per_trade")
+        if one_click_raw is None:
+            one_click_raw = sess.get("risk_per_trade")
+        risk_pct = _normalize_risk_pct(one_click_raw, default=1.0)  # 0.5%..100.0%
     leverage = int(sess.get("leverage") or 10)
 
     # Re-derive the signal from live market data so dynamic sizing reflects
