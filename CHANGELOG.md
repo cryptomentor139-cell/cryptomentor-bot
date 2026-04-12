@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.1.9] — 2026-04-13 — Live Per-Signal 1-Click Risk Recalculation
+
+### 🚀 What Changed
+
+#### 1) Recalculate 1-Click Risk Across All Signal Pairs on Slider Change
+- Each 1-click signal card now recalculates risk panel metrics live when risk slider changes.
+- Recalculation is signal-specific (based on that card’s reflected signal values):
+  - Entry zone midpoint
+  - Stop loss distance (%)
+  - Estimated position size (USDT)
+  - Estimated margin (USDT, using selected leverage)
+- File:
+  - `website-frontend/src/App.jsx`
+
+### ✅ Deploy/State Safety Notes
+
+- Frontend rebuilt and redeployed to VPS with latest assets:
+  - `index-B18f90b3.css`
+  - `index-C3uGWPSU.js`
+- Reloaded `nginx` successfully.
+
 ## [2.1.8] — 2026-04-13 — Segregated AutoTrade vs 1-Click Risk Controls
 
 ### 🚀 What Changed

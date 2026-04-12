@@ -2560,6 +2560,38 @@ function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpda
   const windowExpired = remainingMs <= 0;
   const oneClickRiskPct = Number(riskSettings?.one_click_risk_per_trade || ONECLICK_RISK_MIN);
   const oneClickHighRisk = oneClickRiskPct > 5.0;
+  const oneClickRiskAmount = Number(riskSettings?.equity || 0) * (oneClickRiskPct / 100);
+  const leverageValue = Math.max(1, Number(riskSettings?.leverage || 10));
+
+  const parsePrice = (raw) => {
+    const v = Number(String(raw ?? '').replace(/,/g, '').trim());
+    return Number.isFinite(v) ? v : null;
+  };
+
+  const parseEntryMid = (entryRaw) => {
+    if (!entryRaw) return null;
+    const text = String(entryRaw);
+    const chunks = text.split('-').map((s) => parsePrice(s));
+    const nums = chunks.filter((n) => Number.isFinite(n));
+    if (!nums.length) return null;
+    if (nums.length === 1) return nums[0];
+    return (nums[0] + nums[1]) / 2;
+  };
+
+  const signalEntryPrice = parseEntryMid(signal.entry);
+  const signalStopLoss = parsePrice(signal.stopLoss);
+  const signalSlDistance = (Number.isFinite(signalEntryPrice) && Number.isFinite(signalStopLoss))
+    ? Math.abs(signalEntryPrice - signalStopLoss)
+    : null;
+  const signalSlDistancePct = (Number.isFinite(signalSlDistance) && Number.isFinite(signalEntryPrice) && signalEntryPrice > 0)
+    ? (signalSlDistance / signalEntryPrice)
+    : null;
+  const estimatedPositionSizeUsdt = (Number.isFinite(signalSlDistancePct) && signalSlDistancePct > 0)
+    ? (oneClickRiskAmount / signalSlDistancePct)
+    : null;
+  const estimatedMarginUsdt = (Number.isFinite(estimatedPositionSizeUsdt) && leverageValue > 0)
+    ? (estimatedPositionSizeUsdt / leverageValue)
+    : null;
   const remainingLabel = windowExpired
     ? 'Entry window closed'
     : `${Math.floor(remainingMs / 60000)}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')} left`;
@@ -2658,10 +2690,26 @@ function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpda
               <div className="flex items-center justify-between">
               <span className="text-slate-500">1-Click will risk:</span>
               <span className={`font-bold ${getRiskValueTone(oneClickRiskPct)}`}>
-                ${(riskSettings.equity * (riskSettings.one_click_risk_per_trade / 100)).toFixed(2)}
+                ${oneClickRiskAmount.toFixed(2)}
                 <span className={`ml-1 ${oneClickHighRisk ? 'text-amber-200/80' : 'text-slate-600'}`}>({riskSettings.one_click_risk_per_trade}% of equity)</span>
               </span>
               </div>
+              {Number.isFinite(signalSlDistancePct) && Number.isFinite(estimatedPositionSizeUsdt) && Number.isFinite(estimatedMarginUsdt) && (
+                <div className="mt-1.5 grid grid-cols-3 gap-2 text-[10px]">
+                  <div>
+                    <p className="text-slate-500">SL Dist</p>
+                    <p className="text-slate-300 font-bold">{(signalSlDistancePct * 100).toFixed(2)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Est Size</p>
+                    <p className="text-cyan-300 font-bold">${estimatedPositionSizeUsdt.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Est Margin</p>
+                    <p className="text-amber-300 font-bold">${estimatedMarginUsdt.toFixed(2)}</p>
+                  </div>
+                </div>
+              )}
               {oneClickHighRisk && (
                 <p className="mt-1 text-[10px] text-rose-300 font-medium">Danger Zone active for this 1-click trade (&gt;5%).</p>
               )}
