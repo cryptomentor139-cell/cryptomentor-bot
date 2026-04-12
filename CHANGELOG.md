@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.1.15] — 2026-04-13 — 1-Click Dynamic Capacity Run-Through (Effective in Live UI)
+
+### 🚀 What Changed
+
+#### 1) Signals UI Now Mirrors Backend Dynamic Capacity Logic
+- Updated 1-click signal cards to use live context for dynamic preview:
+  - current open positions count
+  - leverage tier capacity target
+  - remaining slots
+  - AutoTrade-running headroom ratio
+- Added visible capacity line per card:
+  - `Capacity: X/Y open · slots left Z`
+- This aligns what users see in UI with backend concurrency-aware sizing behavior.
+- File:
+  - `website-frontend/src/App.jsx`
+
+### ✅ Deployment Verification
+
+- Rebuilt frontend locally and deployed directly to live nginx root `/var/www/cryptomentor`.
+- Verified public site now serves latest bundle:
+  - `/assets/index-NklXPItR.js`
+- No trading engine restart performed; engine state preserved.
+
 ## [2.1.14] — 2026-04-13 — Dynamic 1-Click Risk Sizing With Leverage-Concurrency Headroom
 
 ### 🚀 What Changed

@@ -1262,7 +1262,7 @@ export default function App() {
           {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : []} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} botBusy={botBusy} connectorStatus={connectorStatus} onCloseOneClickPosition={closeOneClickPosition} />}
           {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} riskSettings={riskSettings} onPreviewRisk={previewRiskSetting} onUpdateRisk={updateRiskSetting} onUpdateLeverage={updateLeverageSetting} onUpdateMarginMode={updateMarginModeSetting} />}
           {activeTab === 'settings' && <SettingsTab onBotConnected={handleBotConnected} />}
-          {activeTab === 'signals' && <SignalsTab user={user} riskSettings={riskSettings} onPreviewRisk={previewOneClickRiskSetting} onUpdateRisk={updateOneClickRiskSetting} />}
+          {activeTab === 'signals' && <SignalsTab user={user} riskSettings={riskSettings} realPositions={realPositions} botRunning={botRunning} onPreviewRisk={previewOneClickRiskSetting} onUpdateRisk={updateOneClickRiskSetting} />}
           {activeTab === 'referral' && <ReferralTab user={user} />}
         </main>
       </div>
@@ -1947,7 +1947,7 @@ function SettingsTab({ onBotConnected }) {
   );
 }
 
-function SignalsTab({ user, riskSettings, onPreviewRisk, onUpdateRisk }) {
+function SignalsTab({ user, riskSettings, realPositions = [], botRunning = false, onPreviewRisk, onUpdateRisk }) {
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -2057,7 +2057,7 @@ function SignalsTab({ user, riskSettings, onPreviewRisk, onUpdateRisk }) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {sortedSignals.map((signal, idx) => (
           <div key={signal.id || signal.pair} className="animate-in fade-in slide-in-from-bottom-8" style={{ animationDelay: `${idx * 100}ms`, animationFillMode: 'both' }}>
-            <SignalCard signal={signal} userIsPremium={user?.is_premium} riskSettings={riskSettings} onPreviewRisk={onPreviewRisk} onUpdateRisk={onUpdateRisk} />
+            <SignalCard signal={signal} userIsPremium={user?.is_premium} riskSettings={riskSettings} realPositions={realPositions} botRunning={botRunning} onPreviewRisk={onPreviewRisk} onUpdateRisk={onUpdateRisk} />
           </div>
         ))}
         {!loading && !signals.length && !error && <div className="col-span-full text-center text-slate-500 text-sm py-10">No signals available right now.</div>}
@@ -2524,7 +2524,7 @@ function BridgeCard({ name, status, logo, logoSrc, colors, onConnect, onDisconne
   );
 }
 
-function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpdateRisk }) {
+function SignalCard({ signal, userIsPremium, riskSettings, realPositions = [], botRunning = false, onPreviewRisk, onUpdateRisk }) {
   const [isPlaced, setIsPlaced] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState(null);
@@ -2548,6 +2548,10 @@ function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpda
   const oneClickRiskAmountTarget = Number(riskSettings?.equity || 0) * (oneClickRiskPct / 100);
   const leverageValue = Math.max(1, Number(riskSettings?.leverage || 10));
   const availableBalance = Math.max(0, Number(riskSettings?.balance || 0));
+  const openPositionsCount = Array.isArray(realPositions) ? realPositions.length : 0;
+  const maxConcurrentTarget = leverageValue >= 20 ? 8 : leverageValue >= 15 ? 6 : leverageValue >= 10 ? 5 : leverageValue >= 5 ? 4 : 3;
+  const remainingSlots = Math.max(1, maxConcurrentTarget - openPositionsCount);
+  const tradableRatio = botRunning ? 0.60 : 0.90;
 
   const parsePrice = (raw) => {
     const v = Number(String(raw ?? '').replace(/,/g, '').trim());
@@ -2578,7 +2582,9 @@ function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpda
   const estimatedMarginUsdtRaw = (Number.isFinite(estimatedPositionSizeUsdtRaw) && leverageValue > 0)
     ? (estimatedPositionSizeUsdtRaw / leverageValue)
     : null;
-  const maxMarginUsdt = availableBalance * 0.95;
+  const maxMarginUsdtHard = availableBalance * 0.95;
+  const maxMarginUsdtDynamic = (availableBalance * tradableRatio) / remainingSlots;
+  const maxMarginUsdt = Math.max(0, Math.min(maxMarginUsdtHard, maxMarginUsdtDynamic));
   const estimatedMarginUsdt = Number.isFinite(estimatedMarginUsdtRaw)
     ? Math.min(estimatedMarginUsdtRaw, maxMarginUsdt)
     : null;
@@ -2710,9 +2716,12 @@ function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpda
                   </div>
                 </div>
               )}
+              <p className="mt-1 text-[10px] text-slate-500">
+                Capacity: {openPositionsCount}/{maxConcurrentTarget} open · slots left {remainingSlots}
+              </p>
               {isRiskCapped && (
                 <p className="mt-1 text-[10px] text-amber-200/80 font-medium">
-                  Margin cap applied (95% balance), so effective risk is lower than target.
+                  Dynamic margin cap applied (${maxMarginUsdt.toFixed(2)}), so effective risk is lower than target.
                 </p>
               )}
               {oneClickHighRisk && (
