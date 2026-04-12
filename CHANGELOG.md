@@ -1,5 +1,38 @@
 # Changelog
 
+## [2.1.12] — 2026-04-13 — Precision Risk Input + Non-Blocking Warning UX
+
+### 🚀 What Changed
+
+#### 1) Precision Text Input Made Explicit for Risk Controls
+- Risk input box is now more prominent and clearly labeled for precise typing.
+- Added helper text under sliders: users can type exact risk instead of dragging only.
+- Applied consistently to both:
+  - AutoTrade risk slider
+  - 1-Click risk slider
+- File:
+  - `website-frontend/src/App.jsx`
+
+#### 2) Removed Annoying Blocking Risk Popup Flow
+- Removed blocking high-risk modal confirmation from risk updates.
+- High-risk remains communicated via inline danger text, without interrupting interaction.
+- File:
+  - `website-frontend/src/App.jsx`
+
+#### 3) Hard Guard Against Native Browser Dialogs
+- Added startup-level dialog patch (`alert/confirm/prompt`) to prevent native browser popups from appearing.
+- Dialog messages are routed to in-web notice event flow.
+- File:
+  - `website-frontend/src/App.jsx`
+
+### ✅ Deploy/State Safety Notes
+
+- Frontend-only deployment performed (no backend route/service restart).
+- Reloaded `nginx` only.
+- Verified trading engine state untouched:
+  - `cryptomentor.service` still `active`
+  - `ExecMainPID=457177` unchanged
+
 ## [2.1.11] — 2026-04-13 — Effective 1-Click Risk Display Per Signal
 
 ### 🚀 What Changed

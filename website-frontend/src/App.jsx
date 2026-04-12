@@ -15,6 +15,26 @@ const _CONFIGURED_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const _FALLBACK_BASE = '/api';
 const ONE_CLICK_RISK_STORAGE_KEY = 'cm_one_click_risk';
 
+if (typeof window !== 'undefined' && !window.__cmDialogPatched) {
+  window.__cmDialogPatched = true;
+  const pushNotice = (title, message) => {
+    try {
+      window.dispatchEvent(new CustomEvent('cm:ui_notice', { detail: { title, message } }));
+    } catch {}
+  };
+  window.alert = (message) => {
+    pushNotice('Notice', String(message ?? ''));
+  };
+  window.confirm = (message) => {
+    pushNotice('Confirmation', String(message ?? ''));
+    return false;
+  };
+  window.prompt = (message) => {
+    pushNotice('Input Required', String(message ?? ''));
+    return null;
+  };
+}
+
 // Tracks which base URL is confirmed working so we don't retry every call.
 // null = untested, string = confirmed working base.
 let _resolvedBase = null;
@@ -232,7 +252,7 @@ function RiskSliderControl({
           onKeyUp={(e) => { if (e.key === 'Enter') commitRisk(); }}
           className="w-full accent-amber-500 cursor-pointer disabled:opacity-50"
         />
-        <div className="flex items-center gap-1 min-w-[112px]">
+        <div className="flex items-center gap-1 min-w-[132px]">
           <input
             type="number"
             min={min}
@@ -250,11 +270,12 @@ function RiskSliderControl({
             }}
             onBlur={() => commitRisk(draftInput)}
             onKeyDown={(e) => { if (e.key === 'Enter') commitRisk(draftInput); }}
-            className="w-16 bg-white/5 border border-white/15 rounded-md px-2 py-1 text-[10px] text-white font-black focus:outline-none focus:border-cyan-500/50"
+            className="w-20 bg-white/5 border border-cyan-500/35 rounded-md px-2 py-1 text-[10px] text-white font-black focus:outline-none focus:border-cyan-400"
           />
-          <span className={`text-[10px] font-black ${getRiskValueTone(draftRisk)}`}>{formatRiskPct(draftRisk, max)}</span>
+          <span className={`text-[10px] font-black ${getRiskValueTone(draftRisk)}`}>%</span>
         </div>
       </div>
+      <p className="text-[10px] text-slate-500">Type exact risk in the box for precision input.</p>
       <p className={`text-[10px] font-medium ${draftRisk > 5 ? 'text-rose-300' : draftRisk > 1 ? 'text-amber-300' : 'text-slate-500'}`}>
         {getRiskDescription(draftRisk)}
       </p>
@@ -296,7 +317,6 @@ export default function App() {
   const [botError, setBotError] = useState(null);
   const [showBotStartModal, setShowBotStartModal] = useState(false);
   const [appNotice, setAppNotice] = useState({ open: false, title: '', message: '' });
-  const [riskWarning, setRiskWarning] = useState({ open: false, scope: 'autotrade', risk: null, previousRisk: null });
   const [verStatus, setVerStatus] = useState(null); // null = loading, object = loaded
   const [riskSettings, setRiskSettings] = useState({
     risk_per_trade: 5.0,
@@ -585,28 +605,13 @@ export default function App() {
   const openNotice = (title, message) => setAppNotice({ open: true, title, message });
   const closeNotice = () => setAppNotice({ open: false, title: '', message: '' });
 
-  // Safety net: force native browser dialogs into in-app notice UI.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const nativeAlert = window.alert;
-    const nativeConfirm = window.confirm;
-    const nativePrompt = window.prompt;
-    window.alert = (message) => {
-      openNotice('Notice', String(message ?? ''));
+    const onUiNotice = (e) => {
+      const detail = e?.detail || {};
+      openNotice(String(detail.title || 'Notice'), String(detail.message || ''));
     };
-    window.confirm = (message) => {
-      openNotice('Confirmation', String(message ?? ''));
-      return false;
-    };
-    window.prompt = (message) => {
-      openNotice('Input Required', String(message ?? ''));
-      return null;
-    };
-    return () => {
-      window.alert = nativeAlert;
-      window.confirm = nativeConfirm;
-      window.prompt = nativePrompt;
-    };
+    window.addEventListener('cm:ui_notice', onUiNotice);
+    return () => window.removeEventListener('cm:ui_notice', onUiNotice);
   }, []);
 
   const previewRiskSetting = (newRisk) => {
@@ -675,18 +680,11 @@ export default function App() {
   };
 
   // Update risk setting
-  const updateRiskSetting = async (newRisk, options = {}) => {
-    const { skipIntegratedWarning = false } = options;
+  const updateRiskSetting = async (newRisk) => {
     const normalizedRisk = Math.max(AUTOTRADE_RISK_MIN, Math.min(AUTOTRADE_RISK_MAX, Number(newRisk) || AUTOTRADE_RISK_MIN));
     const riskValue = Number(normalizedRisk.toFixed(2));
     const previousRisk = Number(riskSettings.risk_per_trade);
     const safePreviousRisk = Number.isFinite(previousRisk) ? previousRisk : 5.0;
-
-    if (riskValue > 5.0 && !skipIntegratedWarning) {
-      setRiskSettings(prev => ({ ...prev, risk_per_trade: riskValue, error: null }));
-      setRiskWarning({ open: true, scope: 'autotrade', risk: riskValue, previousRisk: safePreviousRisk });
-      return;
-    }
 
     setRiskSettings(prev => ({ ...prev, risk_per_trade: riskValue, loading: true, error: null }));
     try {
@@ -724,18 +722,9 @@ export default function App() {
     }
   };
 
-  const updateOneClickRiskSetting = async (newRisk, options = {}) => {
-    const { skipIntegratedWarning = false } = options;
+  const updateOneClickRiskSetting = async (newRisk) => {
     const normalizedRisk = Math.max(ONECLICK_RISK_MIN, Math.min(ONECLICK_RISK_MAX, Number(newRisk) || ONECLICK_RISK_MIN));
     const riskValue = Number(normalizedRisk.toFixed(2));
-    const previousRisk = Number(riskSettings.one_click_risk_per_trade);
-    const safePreviousRisk = Number.isFinite(previousRisk) ? previousRisk : ONECLICK_RISK_MIN;
-
-    if (riskValue > 5.0 && !skipIntegratedWarning) {
-      setRiskSettings(prev => ({ ...prev, one_click_risk_per_trade: riskValue, error: null }));
-      setRiskWarning({ open: true, scope: 'one_click', risk: riskValue, previousRisk: safePreviousRisk });
-      return;
-    }
 
     try { localStorage.setItem(ONE_CLICK_RISK_STORAGE_KEY, String(riskValue)); } catch {}
     setRiskSettings(prev => ({ ...prev, one_click_risk_per_trade: riskValue, loading: true, error: null }));
@@ -770,27 +759,6 @@ export default function App() {
     }
   };
 
-  const confirmRiskWarning = async () => {
-    const riskToApply = Number(riskWarning.risk);
-    const warningScope = riskWarning.scope;
-    setRiskWarning({ open: false, scope: 'autotrade', risk: null, previousRisk: null });
-    if (!Number.isFinite(riskToApply)) return;
-    if (warningScope === 'one_click') await updateOneClickRiskSetting(riskToApply, { skipIntegratedWarning: true });
-    else await updateRiskSetting(riskToApply, { skipIntegratedWarning: true });
-  };
-
-  const cancelRiskWarning = () => {
-    const previousRisk = Number(riskWarning.previousRisk);
-    const warningScope = riskWarning.scope;
-    setRiskSettings(prev => ({
-      ...prev,
-      risk_per_trade: warningScope === 'autotrade' && Number.isFinite(previousRisk) ? previousRisk : prev.risk_per_trade,
-      one_click_risk_per_trade: warningScope === 'one_click' && Number.isFinite(previousRisk) ? previousRisk : prev.one_click_risk_per_trade,
-      loading: false,
-      error: null,
-    }));
-    setRiskWarning({ open: false, scope: 'autotrade', risk: null, previousRisk: null });
-  };
 
   // Update leverage setting
   const updateLeverageSetting = async (newLeverage) => {
@@ -1238,13 +1206,6 @@ export default function App() {
           title={appNotice.title}
           message={appNotice.message}
           onClose={closeNotice}
-        />
-      )}
-      {riskWarning.open && (
-        <RiskWarningModal
-          risk={riskWarning.risk}
-          onConfirm={confirmRiskWarning}
-          onCancel={cancelRiskWarning}
         />
       )}
 
@@ -3373,47 +3334,6 @@ function NoticeModal({ title, message, onClose }) {
         >
           OK
         </button>
-      </div>
-    </div>
-  );
-}
-
-function RiskWarningModal({ risk, onConfirm, onCancel }) {
-  const riskValue = Number(risk) || 0;
-  const isAllIn = riskValue >= 100;
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-[#0a0a0a]/95 border border-rose-500/35 rounded-2xl p-6 shadow-[0_20px_60px_rgba(244,63,94,0.25)]">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/35 flex items-center justify-center shrink-0">
-            <AlertCircle className="w-5 h-5 text-rose-300" />
-          </div>
-          <div>
-            <h3 className="text-white text-lg font-black leading-tight">High Risk Warning</h3>
-            <p className="text-rose-200/90 text-sm mt-1">
-              Selected risk: <span className="font-black">{formatRiskPct(riskValue)}</span>
-            </p>
-          </div>
-        </div>
-        <div className="bg-rose-500/10 border border-rose-500/25 rounded-xl p-4 text-sm text-rose-100 leading-relaxed">
-          {isAllIn
-            ? "ALL IN means 100% concentration on a single trade idea. One bad move can cause severe account damage."
-            : "Anything above 5% risk is dangerous and can cause heavy drawdown. This is putting too many eggs in one basket."}
-        </div>
-        <div className="flex gap-3 mt-5">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/15 text-slate-200 font-bold hover:bg-white/10 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 py-2.5 rounded-xl bg-rose-500/20 border border-rose-400/45 text-rose-200 font-black hover:bg-rose-500/30 transition-colors"
-          >
-            I Understand, Continue
-          </button>
-        </div>
       </div>
     </div>
   );
