@@ -1,5 +1,106 @@
 # Changelog
 
+## [2.1.6] — 2026-04-13 — Risk Slider Sync + In-App Warning Modal (No Browser Popup)
+
+### 🚀 What Changed
+
+#### 1) Fixed Risk/Slider Reflection Drift
+- Risk selection now updates UI immediately (optimistic sync) so all risk displays and sliders stay aligned while editing.
+- Added rollback safety if risk API update fails, so UI returns to the last confirmed risk.
+- Normalized numeric parsing from API responses to avoid stale/incorrect slider values.
+- File:
+  - `website-frontend/src/App.jsx`
+
+#### 2) High-Risk Warning Flow Hardened
+- Kept high-risk guard (`>5%`) in web UI and improved state handling:
+  - Stores previous risk before warning.
+  - Restores previous value if user cancels.
+  - Applies selected risk only after confirmation.
+- File:
+  - `website-frontend/src/App.jsx`
+
+#### 3) Replaced Browser Warning Popup With Web Modal (API Bridge Disconnect)
+- Removed native browser `confirm()` flow for API Bridge disconnect.
+- Added integrated in-app warning modal for disconnect confirmation.
+- Added in-app success message for key test/connection status (removing native popup dependency).
+- File:
+  - `website-frontend/src/App.jsx`
+
+### ✅ Deploy/State Safety Notes
+
+- Frontend rebuilt and deployed to VPS dist path:
+  - `/root/cryptomentor-bot/website-frontend/dist`
+- Reloaded `nginx` successfully.
+- No trading engine service restart performed for this frontend-only patch.
+
+## [2.1.5] — 2026-04-13 — Risk Slider Reflection Hotfix (Live Sync While Sliding)
+
+### 🚀 What Changed
+
+#### 1) Fixed Risk Not Reflecting in Dashboard Summary
+- Resolved mismatch where slider draft value (e.g., `56%`) could display while `Risk/Trade` still showed previous persisted risk.
+- Root cause: commit timing on some touch/mobile interactions.
+- Hotfix:
+  - Added auto-commit while slider moves (short debounce).
+  - Added robust commit triggers (`mouse`, `touch`, `pointer`, `enter`).
+- File:
+  - `website-frontend/src/App.jsx`
+
+#### 2) Re-verified Backend Acceptance for Extended Risk Range
+- Confirmed live backend routes are aligned for risk updates beyond legacy `5%` cap:
+  - `website-backend/app/routes/dashboard.py`
+  - `website-backend/app/routes/signals.py`
+
+### ✅ Deploy/State Safety Notes
+
+- Performed **state-safe deploy**:
+  - Restarted `cryptomentor-web.service` only
+  - Reloaded `nginx`
+  - **Did not restart `cryptomentor.service` (trading bot engine)**
+- Verified bot engine process continuity:
+  - `ExecMainPID` unchanged before/after deploy (`457177`)
+  - Active enter timestamp unchanged
+
+## [2.1.4] — 2026-04-13 — Risk Slider Upgrade (0.5% → ALL IN 100%) + High-Risk Safeguards
+
+### 🚀 What Changed
+
+#### 1) Unified Risk Slider Across Web
+- Replaced fixed risk buttons with a real slider in:
+  - Engine Controls risk management
+  - Signals risk control bar
+  - Per-signal 1-click risk control
+  - Onboarding risk configuration step
+- New range: **0.5% to 100% (ALL IN)**.
+- File:
+  - `website-frontend/src/App.jsx`
+
+#### 2) Mandatory High-Risk Warning Pop-up
+- Added confirmation pop-up for any risk selection **above 5%**.
+- Added stronger warning text for **100% ALL IN** selection.
+- Warning is enforced in shared risk update flow so it applies consistently from all UI entry points.
+- File:
+  - `website-frontend/src/App.jsx`
+
+#### 3) Backend Risk Range Expanded
+- Updated dashboard/API validation and normalization to support **0.5% - 100%**:
+  - `website-backend/app/routes/dashboard.py`
+  - `website-backend/app/routes/signals.py`
+
+#### 4) Bot/Engine Risk Clamp Alignment
+- Updated bot-side persistence and risk clamps to the same range to avoid web/bot mismatch:
+  - `Bismillah/app/supabase_repo.py`
+  - `Bismillah/app/autotrade_engine.py`
+  - `Bismillah/app/scalping_engine.py`
+
+### ✅ Deploy/State Safety Notes
+
+- Deployed with **state-safe policy**:
+  - Updated frontend static bundle + website backend routes
+  - Reloaded/restarted web-facing services only
+  - **Did not restart active trading engine service** during this deployment step
+- Goal: preserve currently running user autotrade sessions while applying web risk UX and API changes.
+
 ## [2.1.3] — 2026-04-12 — V4.0 Branding Sync (Bot + Web)
 
 ### 🚀 What Changed

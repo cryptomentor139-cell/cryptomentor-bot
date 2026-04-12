@@ -109,7 +109,15 @@ const MOCK_COURSES = [
   { id: 3, title: "Institutional Order Flow", category: "Masterclass", progress: 0, lessons: 12, locked: true },
 ];
 
-const RISK_OPTIONS = [0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0, 5.0];
+const UI_RISK_MIN = 0.5;
+const UI_RISK_MAX = 100.0;
+const UI_RISK_STEP = 0.5;
+
+const formatRiskPct = (risk) => {
+  const r = Number(risk) || 0;
+  if (r >= UI_RISK_MAX) return 'ALL IN (100%)';
+  return `${Number.isInteger(r) ? r.toFixed(0) : r.toFixed(1)}%`;
+};
 
 const getRiskButtonTone = (risk) => {
   const r = Number(risk) || 0;
@@ -131,12 +139,85 @@ const getRiskValueTone = (risk) => {
 
 const getRiskDescription = (risk) => {
   const r = Number(risk) || 0;
-  if (r <= 0.25) return '🟢 Conservative — fewer signals, tighter targets, smaller positions';
   if (r <= 0.5) return '🔵 Moderate — balanced risk-reward ratio (recommended)';
   if (r <= 0.75) return '🟡 Aggressive — more signals, wider targets, larger positions';
   if (r <= 1.0) return '🟠 Very Aggressive — higher signal frequency and exposure';
-  return '🟠 Amber-Red Risk Zone (>1%) — high exposure and drawdown sensitivity';
+  if (r <= 5.0) return '🟠 Amber-Red Risk Zone (>1%) — high exposure and drawdown sensitivity';
+  if (r < 100.0) return '🔴 Danger Zone (>5%) — drawdown risk rises sharply';
+  return '☠️ ALL IN (100%) — single-trade concentration risk is extreme';
 };
+
+function RiskSliderControl({ value, onCommit, loading, title = 'Risk Per Trade', compact = false }) {
+  const [draftRisk, setDraftRisk] = useState(Number(value) || UI_RISK_MIN);
+  const commitTimerRef = useRef(null);
+
+  useEffect(() => {
+    const next = Number(value);
+    if (Number.isFinite(next)) setDraftRisk(next);
+  }, [value]);
+
+  const commitRisk = () => {
+    const normalized = Math.max(UI_RISK_MIN, Math.min(UI_RISK_MAX, Number(draftRisk) || UI_RISK_MIN));
+    const next = Number(normalized.toFixed(2));
+    const current = Number(value);
+    if (!Number.isFinite(current) || Math.abs(current - next) >= 0.001) onCommit?.(next);
+  };
+
+  const scheduleCommitRisk = (nextValue) => {
+    const next = Math.max(UI_RISK_MIN, Math.min(UI_RISK_MAX, Number(nextValue) || UI_RISK_MIN));
+    setDraftRisk(next);
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = setTimeout(() => {
+      const rounded = Number(next.toFixed(2));
+      const current = Number(value);
+      if (!Number.isFinite(current) || Math.abs(current - rounded) >= 0.001) onCommit?.(rounded);
+    }, 220);
+  };
+
+  useEffect(() => () => {
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+  }, []);
+
+  return (
+    <div className={compact ? "space-y-2" : "space-y-3"}>
+      <div className="flex items-center justify-between gap-3">
+        <p className={`text-[10px] text-slate-500 font-bold uppercase tracking-wider ${compact ? '' : 'mb-0.5'}`}>{title}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setDraftRisk(UI_RISK_MAX);
+            onCommit?.(UI_RISK_MAX);
+          }}
+          disabled={loading}
+          className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
+        >
+          All In
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-[10px] text-slate-500 font-bold">0.5%</span>
+        <input
+          type="range"
+          min={UI_RISK_MIN}
+          max={UI_RISK_MAX}
+          step={UI_RISK_STEP}
+          value={draftRisk}
+          disabled={loading}
+          onChange={(e) => scheduleCommitRisk(Number(e.target.value))}
+          onMouseUp={commitRisk}
+          onTouchEnd={commitRisk}
+          onPointerUp={commitRisk}
+          onKeyUp={(e) => { if (e.key === 'Enter') commitRisk(); }}
+          className="w-full accent-amber-500 cursor-pointer disabled:opacity-50"
+        />
+        <span className={`text-[10px] font-black min-w-[84px] text-right ${getRiskValueTone(draftRisk)}`}>{formatRiskPct(draftRisk)}</span>
+      </div>
+      <p className={`text-[10px] font-medium ${draftRisk > 5 ? 'text-rose-300' : draftRisk > 1 ? 'text-amber-300' : 'text-slate-500'}`}>
+        {getRiskDescription(draftRisk)}
+      </p>
+    </div>
+  );
+}
 
 export default function App() {
   const [user, setUser] = useState(() => {
@@ -171,6 +252,7 @@ export default function App() {
   const [botBusy, setBotBusy] = useState(false);
   const [botError, setBotError] = useState(null);
   const [showBotStartModal, setShowBotStartModal] = useState(false);
+  const [riskWarning, setRiskWarning] = useState({ open: false, risk: null, previousRisk: null });
   const [verStatus, setVerStatus] = useState(null); // null = loading, object = loaded
   const [riskSettings, setRiskSettings] = useState({
     risk_per_trade: 0.5,
@@ -480,8 +562,9 @@ export default function App() {
       const resp = await apiFetch('/dashboard/settings');
       if (resp.ok) {
         const data = await resp.json();
+        const parsedRisk = Number(data.risk_per_trade);
         setRiskSettings({
-          risk_per_trade: data.risk_per_trade || 0.5,
+          risk_per_trade: Number.isFinite(parsedRisk) ? parsedRisk : UI_RISK_MIN,
           leverage: data.leverage || 10,
           equity: data.equity || 0,
           balance: data.balance || 0,        // free/available only
@@ -500,19 +583,32 @@ export default function App() {
   };
 
   // Update risk setting
-  const updateRiskSetting = async (newRisk) => {
-    setRiskSettings(prev => ({ ...prev, loading: true, error: null }));
+  const updateRiskSetting = async (newRisk, options = {}) => {
+    const { skipIntegratedWarning = false } = options;
+    const normalizedRisk = Math.max(UI_RISK_MIN, Math.min(UI_RISK_MAX, Number(newRisk) || UI_RISK_MIN));
+    const riskValue = Number(normalizedRisk.toFixed(2));
+    const previousRisk = Number(riskSettings.risk_per_trade);
+    const safePreviousRisk = Number.isFinite(previousRisk) ? previousRisk : UI_RISK_MIN;
+
+    if (riskValue > 5.0 && !skipIntegratedWarning) {
+      setRiskSettings(prev => ({ ...prev, risk_per_trade: riskValue, error: null }));
+      setRiskWarning({ open: true, risk: riskValue, previousRisk: safePreviousRisk });
+      return;
+    }
+
+    setRiskSettings(prev => ({ ...prev, risk_per_trade: riskValue, loading: true, error: null }));
     try {
       const resp = await apiFetch('/dashboard/settings/risk', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ risk_per_trade: newRisk }),
+        body: JSON.stringify({ risk_per_trade: riskValue }),
       });
       const data = await resp.json().catch(() => ({}));
       if (resp.ok) {
+        const appliedRisk = Number(data.risk_per_trade);
         setRiskSettings(prev => ({
           ...prev,
-          risk_per_trade: data.risk_per_trade ?? newRisk,
+          risk_per_trade: Number.isFinite(appliedRisk) ? appliedRisk : riskValue,
           loading: false,
           error: null,
         }));
@@ -520,14 +616,38 @@ export default function App() {
         console.error('Failed to update risk setting:', resp.status, data);
         setRiskSettings(prev => ({
           ...prev,
+          risk_per_trade: safePreviousRisk,
           loading: false,
           error: data.detail || `Error ${resp.status}`,
         }));
       }
     } catch (e) {
       console.error('Error updating risk setting:', e);
-      setRiskSettings(prev => ({ ...prev, loading: false, error: e.message }));
+      setRiskSettings(prev => ({
+        ...prev,
+        risk_per_trade: safePreviousRisk,
+        loading: false,
+        error: e.message,
+      }));
     }
+  };
+
+  const confirmRiskWarning = async () => {
+    const riskToApply = Number(riskWarning.risk);
+    setRiskWarning({ open: false, risk: null, previousRisk: null });
+    if (!Number.isFinite(riskToApply)) return;
+    await updateRiskSetting(riskToApply, { skipIntegratedWarning: true });
+  };
+
+  const cancelRiskWarning = () => {
+    const previousRisk = Number(riskWarning.previousRisk);
+    setRiskSettings(prev => ({
+      ...prev,
+      risk_per_trade: Number.isFinite(previousRisk) ? previousRisk : prev.risk_per_trade,
+      loading: false,
+      error: null,
+    }));
+    setRiskWarning({ open: false, risk: null, previousRisk: null });
   };
 
   // Update leverage setting
@@ -940,7 +1060,7 @@ export default function App() {
           <p className="text-cyan-400 font-bold tracking-[0.2em] uppercase text-[10px] md:text-xs mb-8 drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]">V4.0 Unified Trading System</p>
           <div className="bg-[#050505]/80 p-5 md:p-6 rounded-2xl md:rounded-3xl border border-white/5 mb-8 text-xs md:text-sm text-left space-y-4 shadow-inner">
             <div className="flex items-start gap-3"><div className="p-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 mt-0.5 shrink-0"><Layers size={14} className="text-cyan-400" /></div><p className="text-slate-300 font-medium leading-relaxed">Unified <strong className="text-white">Bot + Web</strong> control for AutoTrade and 1-Click execution.</p></div>
-            <div className="flex items-start gap-3"><div className="p-1.5 rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/20 mt-0.5 shrink-0"><RefreshCw size={14} className="text-fuchsia-400" /></div><p className="text-slate-300 font-medium leading-relaxed">Adaptive risk engine with position sizing up to <strong className="text-white">5%</strong> equity risk.</p></div>
+            <div className="flex items-start gap-3"><div className="p-1.5 rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/20 mt-0.5 shrink-0"><RefreshCw size={14} className="text-fuchsia-400" /></div><p className="text-slate-300 font-medium leading-relaxed">Adaptive risk engine with slider control from <strong className="text-white">0.5%</strong> up to <strong className="text-white">ALL IN (100%)</strong>.</p></div>
             <div className="flex items-start gap-3"><div className="p-1.5 rounded-xl bg-lime-500/10 border border-lime-500/20 mt-0.5 shrink-0"><CheckCircle2 size={14} className="text-lime-400" /></div><p className="text-slate-300 font-medium leading-relaxed">Professional trade lifecycle alerts: open, close, and live position status.</p></div>
           </div>
           {/* Telegram Login Widget */}
@@ -971,6 +1091,13 @@ export default function App() {
       </div>
 
       {showBotStartModal && <BotStartModal onStart={handleStartBot} onCancel={handleCancelStart} />}
+      {riskWarning.open && (
+        <RiskWarningModal
+          risk={riskWarning.risk}
+          onConfirm={confirmRiskWarning}
+          onCancel={cancelRiskWarning}
+        />
+      )}
 
       <div className="flex flex-1 overflow-x-hidden relative z-10">
         {isMobileMenuOpen && <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
@@ -1050,28 +1177,12 @@ function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUp
       <div className="space-y-6 relative z-10">
         {/* Risk Level */}
         <div>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Risk Per Trade (0.25% - 5%)</p>
-          <div className="grid grid-cols-4 gap-2">
-            {RISK_OPTIONS.map(risk => (
-              <button
-                key={risk}
-                onClick={() => onUpdateRisk(risk)}
-                disabled={riskSettings.loading}
-                className={`py-2 px-1 rounded-lg font-bold text-[10px] md:text-xs transition-all ${
-                  riskSettings.risk_per_trade === risk
-                    ? getRiskButtonTone(risk)
-                    : risk > 1.0
-                      ? 'bg-[#090505] text-amber-300/70 border border-amber-500/15 hover:border-rose-500/35 hover:text-amber-200'
-                      : 'bg-[#050505] text-slate-400 border border-white/5 hover:border-amber-500/30 hover:text-amber-300'
-                } disabled:opacity-50`}
-              >
-                {risk}%
-              </button>
-            ))}
-          </div>
-          <p className={`text-[10px] mt-2 font-medium ${riskSettings.risk_per_trade > 1.0 ? 'text-amber-300' : 'text-slate-500'}`}>
-            {getRiskDescription(riskSettings.risk_per_trade)}
-          </p>
+          <RiskSliderControl
+            value={riskSettings.risk_per_trade}
+            onCommit={onUpdateRisk}
+            loading={riskSettings.loading}
+            title="Risk Per Trade (0.5% - ALL IN 100%)"
+          />
         </div>
 
         {/* Leverage & Margin Mode Row */}
@@ -1542,6 +1653,8 @@ function SettingsTab({ onBotConnected }) {
   const [apiSecret, setApiSecret] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
 
   useEffect(() => {
     apiFetch('/bitunix/status')
@@ -1555,11 +1668,14 @@ function SettingsTab({ onBotConnected }) {
 
   const handleConnect = () => {
     setIsConfiguring(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
   };
 
   const handleSave = async () => {
     setLoading(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
     try {
       const resp = await apiFetch('/bitunix/keys', {
         method: 'POST',
@@ -1573,6 +1689,7 @@ function SettingsTab({ onBotConnected }) {
       setIsConfiguring(false);
       setApiKey('');
       setApiSecret('');
+      setSuccessMsg('API Bridge connected successfully.');
       if (onBotConnected) onBotConnected();
     } catch (e) {
       setErrorMsg(e.message);
@@ -1584,6 +1701,7 @@ function SettingsTab({ onBotConnected }) {
   const handleTest = async () => {
     setLoading(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
     try {
       const resp = await apiFetch('/bitunix/keys/test', {
         method: 'POST',
@@ -1592,8 +1710,7 @@ function SettingsTab({ onBotConnected }) {
       });
       const data = await resp.json();
       if (!resp.ok || !data.success) throw new Error(data.message || data.detail || 'Test failed.');
-      
-      alert('✅ Connection successful! Keys are valid.');
+      setSuccessMsg('Connection successful. Keys are valid.');
     } catch (e) {
       setErrorMsg(e.message);
     } finally {
@@ -1601,14 +1718,22 @@ function SettingsTab({ onBotConnected }) {
     }
   };
 
+  const requestDisconnect = () => {
+    setShowDisconnectModal(true);
+  };
+
   const handleDisconnect = async () => {
-    if (!confirm('Are you sure you want to decouple this API Bridge? AutoTrade will halt.')) return;
+    setShowDisconnectModal(false);
     setLoading(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
     try {
       await apiFetch('/bitunix/keys', { method: 'DELETE' });
       setStatus('disconnected');
+      setSuccessMsg('API Bridge disconnected. AutoTrade is now halted.');
     } catch (e) {
       console.error(e);
+      setErrorMsg(e.message || 'Failed to disconnect API Bridge.');
     } finally {
       setLoading(false);
     }
@@ -1649,6 +1774,7 @@ function SettingsTab({ onBotConnected }) {
                 />
               </div>
               {errorMsg && <p className="text-rose-400 text-xs font-bold bg-rose-500/10 p-3 rounded-lg border border-rose-500/20">{errorMsg}</p>}
+              {successMsg && <p className="text-lime-300 text-xs font-bold bg-lime-500/10 p-3 rounded-lg border border-lime-500/20">{successMsg}</p>}
               <div className="flex flex-col sm:flex-row gap-3 pt-4">
                 <button 
                   onClick={handleTest} 
@@ -1682,12 +1808,24 @@ function SettingsTab({ onBotConnected }) {
               logoSrc={bitunixLogo}
               colors="from-blue-500 to-indigo-600" 
               onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
+              onDisconnect={requestDisconnect}
               loading={loading}
             />
+            {errorMsg && <p className="text-rose-400 text-xs font-bold bg-rose-500/10 p-3 rounded-lg border border-rose-500/20">{errorMsg}</p>}
+            {successMsg && <p className="text-lime-300 text-xs font-bold bg-lime-500/10 p-3 rounded-lg border border-lime-500/20">{successMsg}</p>}
           </div>
         )}
       </div>
+      {showDisconnectModal && (
+        <ConfirmActionModal
+          title="Disconnect API Bridge?"
+          message="Decoupling this API Bridge will halt AutoTrade until you reconnect."
+          confirmLabel="Yes, Disconnect"
+          cancelLabel="Keep Connected"
+          onConfirm={handleDisconnect}
+          onCancel={() => setShowDisconnectModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1768,19 +1906,13 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
         <div className="bg-[#0a0a0a]/60 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 md:p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">⚡ Risk Level Per Trade</p>
-              <div className="flex flex-wrap gap-2">
-                {RISK_OPTIONS.map(risk => (
-                  <button key={risk} onClick={() => onUpdateRisk(risk)} disabled={riskSettings?.loading}
-                    className={`px-4 py-2 rounded-xl font-bold text-xs transition-all ${
-                      riskSettings?.risk_per_trade === risk
-                        ? getRiskButtonTone(risk)
-                        : risk > 1.0
-                          ? 'bg-[#090505] text-amber-300/70 border border-amber-500/15 hover:border-rose-500/35 hover:text-amber-200'
-                          : 'bg-white/5 text-slate-500 border border-white/5 hover:border-white/20 hover:text-slate-300'
-                    } disabled:opacity-50`}>{risk}%</button>
-                ))}
-              </div>
+              <RiskSliderControl
+                value={riskSettings?.risk_per_trade}
+                onCommit={onUpdateRisk}
+                loading={riskSettings?.loading}
+                title="⚡ Risk Level Per Trade (0.5% - ALL IN 100%)"
+                compact
+              />
             </div>
             {riskSettings?.equity > 0 && (
               <div className="flex items-center gap-4 text-sm">
@@ -1796,9 +1928,6 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
               </div>
             )}
           </div>
-          <p className={`text-[10px] mt-2 ${riskSettings?.risk_per_trade > 1.0 ? 'text-amber-300' : 'text-slate-600'}`}>
-            {getRiskDescription(riskSettings?.risk_per_trade)}
-          </p>
         </div>
       )}
 
@@ -2293,7 +2422,7 @@ function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
   const remainingMs = Math.max(0, windowMs - ageMs);
   const windowExpired = remainingMs <= 0;
   const oneClickRiskPct = Number(riskSettings?.risk_per_trade || 1.0);
-  const oneClickHighRisk = oneClickRiskPct > 1.0;
+  const oneClickHighRisk = oneClickRiskPct > 5.0;
   const remainingLabel = windowExpired
     ? 'Entry window closed'
     : `${Math.floor(remainingMs / 60000)}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')} left`;
@@ -2396,31 +2525,19 @@ function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
               </span>
               </div>
               {oneClickHighRisk && (
-                <p className="mt-1 text-[10px] text-amber-300 font-medium">Amber-Red Risk Zone active for this 1-click trade (&gt;1%).</p>
+                <p className="mt-1 text-[10px] text-rose-300 font-medium">Danger Zone active for this 1-click trade (&gt;5%).</p>
               )}
             </div>
           )}
           {!isPlaced && !windowExpired && riskSettings && onUpdateRisk && (
             <div className="bg-white/5 rounded-lg p-2.5">
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Risk Slider (1-Click, 0.25% - 5%)</p>
-              <div className="grid grid-cols-4 gap-1.5">
-                {RISK_OPTIONS.map((risk) => (
-                  <button
-                    key={risk}
-                    onClick={() => onUpdateRisk(risk)}
-                    disabled={riskSettings?.loading}
-                    className={`py-1.5 rounded-lg text-[10px] font-black transition-all ${
-                      riskSettings?.risk_per_trade === risk
-                        ? getRiskButtonTone(risk)
-                        : risk > 1.0
-                          ? 'bg-[#090505] text-amber-300/70 border border-amber-500/15 hover:border-rose-500/35 hover:text-amber-200'
-                          : "bg-[#050505] text-slate-500 border border-white/10 hover:text-slate-300"
-                    }`}
-                  >
-                    {risk}%
-                  </button>
-                ))}
-              </div>
+              <RiskSliderControl
+                value={riskSettings?.risk_per_trade}
+                onCommit={onUpdateRisk}
+                loading={riskSettings?.loading}
+                title="Risk Slider (1-Click, 0.5% - ALL IN 100%)"
+                compact
+              />
             </div>
           )}
           <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest mt-1">
@@ -2747,22 +2864,14 @@ function OnboardingWizard({ onComplete, onLogout }) {
           <>
             <h2 className="text-xl font-bold text-white mb-2">Configure Risk Management</h2>
             <p className="text-slate-400 text-sm mb-6">Set your trading preferences. You can change these anytime from the Engine tab.</p>
-            <label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Risk Per Trade</label>
-            <div className="grid grid-cols-4 gap-2 mb-2">
-              {RISK_OPTIONS.map(risk => (
-                <button key={risk} onClick={() => setRiskPerTrade(risk)}
-                  className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
-                    riskPerTrade === risk
-                      ? getRiskButtonTone(risk)
-                      : risk > 1.0
-                        ? 'bg-[#090505] text-amber-300/70 border border-amber-500/15 hover:border-rose-500/35 hover:text-amber-200'
-                        : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                  }`}>{risk}%</button>
-              ))}
+            <div className="mb-6">
+              <RiskSliderControl
+                value={riskPerTrade}
+                onCommit={setRiskPerTrade}
+                loading={false}
+                title="Risk Per Trade (0.5% - ALL IN 100%)"
+              />
             </div>
-            <p className={`text-xs mb-6 ${riskPerTrade > 1.0 ? 'text-amber-300' : 'text-slate-500'}`}>
-              {getRiskDescription(riskPerTrade)}
-            </p>
             <label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Leverage</label>
             <div className="flex gap-2 mb-6 flex-wrap">
               {LEVERAGE_OPTIONS.map(lev => (
@@ -3002,6 +3111,86 @@ function ProfitTicker() {
           100% { transform: translateX(calc(-100% / 3)); }
         }
       `}</style>
+    </div>
+  );
+}
+
+function RiskWarningModal({ risk, onConfirm, onCancel }) {
+  const riskValue = Number(risk) || 0;
+  const isAllIn = riskValue >= 100;
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md bg-[#0a0a0a]/95 border border-rose-500/35 rounded-2xl p-6 shadow-[0_20px_60px_rgba(244,63,94,0.25)]">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/35 flex items-center justify-center shrink-0">
+            <AlertCircle className="w-5 h-5 text-rose-300" />
+          </div>
+          <div>
+            <h3 className="text-white text-lg font-black leading-tight">High Risk Warning</h3>
+            <p className="text-rose-200/90 text-sm mt-1">
+              Selected risk: <span className="font-black">{formatRiskPct(riskValue)}</span>
+            </p>
+          </div>
+        </div>
+        <div className="bg-rose-500/10 border border-rose-500/25 rounded-xl p-4 text-sm text-rose-100 leading-relaxed">
+          {isAllIn
+            ? "ALL IN means 100% concentration on a single trade idea. One bad move can cause severe account damage."
+            : "Anything above 5% risk is dangerous and can cause heavy drawdown. This is putting too many eggs in one basket."}
+        </div>
+        <div className="flex gap-3 mt-5">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/15 text-slate-200 font-bold hover:bg-white/10 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-2.5 rounded-xl bg-rose-500/20 border border-rose-400/45 text-rose-200 font-black hover:bg-rose-500/30 transition-colors"
+          >
+            I Understand, Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  onConfirm,
+  onCancel,
+}) {
+  return (
+    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md bg-[#0a0a0a]/95 border border-amber-500/35 rounded-2xl p-6 shadow-[0_20px_60px_rgba(245,158,11,0.2)]">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/35 flex items-center justify-center shrink-0">
+            <AlertCircle className="w-5 h-5 text-amber-300" />
+          </div>
+          <div>
+            <h3 className="text-white text-lg font-black leading-tight">{title}</h3>
+            <p className="text-amber-100/80 text-sm mt-1">{message}</p>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-5">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/15 text-slate-200 font-bold hover:bg-white/10 transition-colors"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-2.5 rounded-xl bg-amber-500/20 border border-amber-400/45 text-amber-100 font-black hover:bg-amber-500/30 transition-colors"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
