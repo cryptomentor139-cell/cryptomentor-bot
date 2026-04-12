@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.1.14] — 2026-04-13 — Dynamic 1-Click Risk Sizing With Leverage-Concurrency Headroom
+
+### 🚀 What Changed
+
+#### 1) 1-Click Sizing Now Accounts for Leverage to Improve Concurrent Trade Capacity
+- Enhanced `/dashboard/signals/execute` sizing logic so leverage increases practical concurrency:
+  - Added dynamic per-trade margin budget based on leverage tier and current open positions.
+  - Added reserved margin headroom when AutoTrade is running, to reduce contention between AutoTrade and 1-click.
+  - Added clean rejection when no per-trade budget remains (actionable message).
+- This makes risk selection more dynamic for users while preventing one trade from consuming too much available margin.
+- File:
+  - `website-backend/app/routes/signals.py`
+
+#### 2) Added Rich Sizing Telemetry in Execute Response
+- Response now includes effective risk and capacity fields:
+  - `effective_risk_amount`, `effective_risk_pct`
+  - `open_positions_count`, `max_concurrent_target`
+  - `autotrade_running`
+  - `margin_cap_dynamic`, `margin_cap_hard`, `effective_margin_cap`
+- File:
+  - `website-backend/app/routes/signals.py`
+
+### ✅ Deploy/State Safety Notes
+
+- Backend route deployed and `cryptomentor-web.service` restarted successfully.
+- `nginx` reloaded.
+- Verified trading engine untouched:
+  - `cryptomentor.service` stayed `active`
+  - `ExecMainPID=457177` unchanged
+
 ## [2.1.13] — 2026-04-13 — Production Web Root Deployment Fix (Reflection Issue Resolved)
 
 ### 🚀 What Changed

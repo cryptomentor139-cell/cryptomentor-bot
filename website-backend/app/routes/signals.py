@@ -740,13 +740,64 @@ async def execute_signal(
     margin_required = position_size_usdt / leverage
     risk_zone = "amber_red" if risk_pct > 1.0 else "normal"
 
-    # Cap margin at 95% of available balance (not equity) to ensure we have buffer
-    if margin_required > balance * 0.95:
-        margin_required = balance * 0.95
+    # Dynamic concurrency-aware margin budget:
+    # Higher leverage should allow more simultaneous positions, so we reserve
+    # only a per-trade slice of available margin based on leverage and current
+    # open positions.
+    try:
+        live_pos_res = await bsvc.fetch_positions(tg_id)
+        live_positions = live_pos_res.get("positions", []) if live_pos_res.get("success") else []
+    except Exception:
+        live_positions = []
+
+    open_positions_count = len(live_positions)
+    if leverage >= 20:
+        max_concurrent_target = 8
+    elif leverage >= 15:
+        max_concurrent_target = 6
+    elif leverage >= 10:
+        max_concurrent_target = 5
+    elif leverage >= 5:
+        max_concurrent_target = 4
+    else:
+        max_concurrent_target = 3
+
+    # Keep room for AutoTrade whenever its engine is active.
+    try:
+        sess_state_res = s.table("autotrade_sessions").select(
+            "status, engine_active"
+        ).eq("telegram_id", tg_id).limit(1).execute()
+        sess_state = (sess_state_res.data or [{}])[0]
+        status = str(sess_state.get("status") or "").lower()
+        engine_active = bool(sess_state.get("engine_active"))
+        autotrade_running = (status in ("active", "uid_verified")) or engine_active
+    except Exception:
+        autotrade_running = False
+
+    tradable_ratio = 0.60 if autotrade_running else 0.90
+    remaining_slots = max(1, max_concurrent_target - open_positions_count)
+    margin_cap_dynamic = (balance * tradable_ratio) / remaining_slots
+    margin_cap_hard = balance * 0.95
+    effective_margin_cap = max(0.0, min(margin_cap_hard, margin_cap_dynamic))
+
+    # Cap margin by effective per-trade budget.
+    if margin_required > effective_margin_cap:
+        margin_required = effective_margin_cap
         position_size_usdt = margin_required * leverage
         logger.warning(
-            f"[Risk] Position capped: margin required ${margin_required:.2f} "
-            f"> balance ${balance:.2f}. Position size reduced."
+            f"[Risk] Position capped for concurrency: required>${effective_margin_cap:.2f}. "
+            f"leverage={leverage}x open_positions={open_positions_count} "
+            f"target={max_concurrent_target} autotrade_running={autotrade_running}"
+        )
+
+    # If no budget remains, reject cleanly with actionable reason.
+    if margin_required <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No free per-trade margin budget left at current leverage/open positions. "
+                "Close a position or increase leverage to open more concurrent trades."
+            ),
         )
 
     qty = position_size_usdt / entry_price
@@ -795,10 +846,18 @@ async def execute_signal(
             "margin_required": round(margin_required, 2),
             "risk_amount": round(risk_amount, 2),
             "risk_pct": risk_pct,
+            "effective_risk_amount": round(position_size_usdt * sl_distance_pct, 2),
+            "effective_risk_pct": round(((position_size_usdt * sl_distance_pct) / equity) * 100, 4) if equity > 0 else 0.0,
             "risk_zone": risk_zone,
             "high_risk": risk_pct > 1.0,
             "sl_distance_pct": round(sl_distance_pct * 100, 3),
             "leverage": leverage,
+            "open_positions_count": open_positions_count,
+            "max_concurrent_target": max_concurrent_target,
+            "autotrade_running": autotrade_running,
+            "margin_cap_dynamic": round(margin_cap_dynamic, 2),
+            "margin_cap_hard": round(margin_cap_hard, 2),
+            "effective_margin_cap": round(effective_margin_cap, 2),
             "signal_age_seconds": int(age),
         },
     }
