@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.1.7] — 2026-04-13 — Instant Risk Reflection + Full Web Modal Migration
+
+### 🚀 What Changed
+
+#### 1) Risk/Trade Now Reflects During Slider Drag
+- Added live risk preview path (`onPreview`) so `risk_per_trade` and all derived `Risk/Trade` values update immediately while dragging, before API commit returns.
+- Applied across Engine, Signals top bar, and per-signal 1-click slider.
+- Files:
+  - `website-frontend/src/App.jsx`
+
+#### 2) Removed Remaining Native Browser Popups
+- Replaced Telegram login flow `alert()` errors with in-app modal (`NoticeModal`).
+- Result: warning/error prompts are now rendered inside the web UI, not native browser dialogs.
+- Files:
+  - `website-frontend/src/App.jsx`
+
+### ✅ Deploy/State Safety Notes
+
+- Frontend rebuilt and deployed to VPS dist path:
+  - `/root/cryptomentor-bot/website-frontend/dist`
+- Reloaded `nginx` successfully.
+- No trading engine restart performed.
+
 ## [2.1.6] — 2026-04-13 — Risk Slider Sync + In-App Warning Modal (No Browser Popup)
 
 ### 🚀 What Changed

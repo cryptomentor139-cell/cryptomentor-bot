@@ -147,7 +147,7 @@ const getRiskDescription = (risk) => {
   return '☠️ ALL IN (100%) — single-trade concentration risk is extreme';
 };
 
-function RiskSliderControl({ value, onCommit, loading, title = 'Risk Per Trade', compact = false }) {
+function RiskSliderControl({ value, onPreview, onCommit, loading, title = 'Risk Per Trade', compact = false }) {
   const [draftRisk, setDraftRisk] = useState(Number(value) || UI_RISK_MIN);
   const commitTimerRef = useRef(null);
 
@@ -166,6 +166,7 @@ function RiskSliderControl({ value, onCommit, loading, title = 'Risk Per Trade',
   const scheduleCommitRisk = (nextValue) => {
     const next = Math.max(UI_RISK_MIN, Math.min(UI_RISK_MAX, Number(nextValue) || UI_RISK_MIN));
     setDraftRisk(next);
+    onPreview?.(Number(next.toFixed(2)));
     if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
     commitTimerRef.current = setTimeout(() => {
       const rounded = Number(next.toFixed(2));
@@ -186,6 +187,7 @@ function RiskSliderControl({ value, onCommit, loading, title = 'Risk Per Trade',
           type="button"
           onClick={() => {
             setDraftRisk(UI_RISK_MAX);
+            onPreview?.(UI_RISK_MAX);
             onCommit?.(UI_RISK_MAX);
           }}
           disabled={loading}
@@ -252,6 +254,7 @@ export default function App() {
   const [botBusy, setBotBusy] = useState(false);
   const [botError, setBotError] = useState(null);
   const [showBotStartModal, setShowBotStartModal] = useState(false);
+  const [appNotice, setAppNotice] = useState({ open: false, title: '', message: '' });
   const [riskWarning, setRiskWarning] = useState({ open: false, risk: null, previousRisk: null });
   const [verStatus, setVerStatus] = useState(null); // null = loading, object = loaded
   const [riskSettings, setRiskSettings] = useState({
@@ -440,12 +443,12 @@ export default function App() {
           setIsLoggedIn(true);
         } else {
           console.error('[Auth] Login failed: no token received');
-          alert('Login gagal: tidak mendapat token. Coba lagi.');
+          openNotice('Login Failed', 'Login gagal: tidak mendapat token. Coba lagi.');
         }
       } else {
         const errText = await resp.text().catch(() => '');
         console.error('[Auth] Backend auth failed:', resp.status, errText);
-        alert(`Login gagal (${resp.status}). Coba lagi.`);
+        openNotice('Login Failed', `Login gagal (${resp.status}). Coba lagi.`);
       }
     } catch (err) {
       console.error('[Auth] Network error:', err);
@@ -475,7 +478,7 @@ export default function App() {
           }
         }
       } catch {}
-      alert('Login gagal: tidak dapat terhubung ke server. Coba lagi.');
+      openNotice('Network Error', 'Login gagal: tidak dapat terhubung ke server. Coba lagi.');
     }
   };
 
@@ -537,6 +540,14 @@ export default function App() {
   };
   const handleCancelStart = () => setShowBotStartModal(false);
   const handleToggleBot = () => callEngine(botRunning ? 'stop' : 'start');
+  const openNotice = (title, message) => setAppNotice({ open: true, title, message });
+  const closeNotice = () => setAppNotice({ open: false, title: '', message: '' });
+
+  const previewRiskSetting = (newRisk) => {
+    const normalizedRisk = Math.max(UI_RISK_MIN, Math.min(UI_RISK_MAX, Number(newRisk) || UI_RISK_MIN));
+    const riskValue = Number(normalizedRisk.toFixed(2));
+    setRiskSettings(prev => ({ ...prev, risk_per_trade: riskValue }));
+  };
 
   const closeOneClickPosition = async (position) => {
     const symbol = String(position?.symbol || '').replace('/', '');
@@ -1091,6 +1102,13 @@ export default function App() {
       </div>
 
       {showBotStartModal && <BotStartModal onStart={handleStartBot} onCancel={handleCancelStart} />}
+      {appNotice.open && (
+        <NoticeModal
+          title={appNotice.title}
+          message={appNotice.message}
+          onClose={closeNotice}
+        />
+      )}
       {riskWarning.open && (
         <RiskWarningModal
           risk={riskWarning.risk}
@@ -1150,9 +1168,9 @@ export default function App() {
         {/* MAIN CONTENT */}
         <main className="flex-1 min-w-0 overflow-y-auto p-4 md:p-8 lg:p-10 w-full relative z-0 pb-20 md:pb-10 custom-scrollbar">
           {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : []} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} botBusy={botBusy} connectorStatus={connectorStatus} onCloseOneClickPosition={closeOneClickPosition} />}
-          {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} onUpdateLeverage={updateLeverageSetting} onUpdateMarginMode={updateMarginModeSetting} />}
+          {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} riskSettings={riskSettings} onPreviewRisk={previewRiskSetting} onUpdateRisk={updateRiskSetting} onUpdateLeverage={updateLeverageSetting} onUpdateMarginMode={updateMarginModeSetting} />}
           {activeTab === 'settings' && <SettingsTab onBotConnected={handleBotConnected} />}
-          {activeTab === 'signals' && <SignalsTab user={user} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} />}
+          {activeTab === 'signals' && <SignalsTab user={user} riskSettings={riskSettings} onPreviewRisk={previewRiskSetting} onUpdateRisk={updateRiskSetting} />}
           {activeTab === 'referral' && <ReferralTab user={user} />}
         </main>
       </div>
@@ -1160,7 +1178,7 @@ export default function App() {
   );
 }
 
-function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUpdateMarginMode }) {
+function RiskManagementCard({ riskSettings, onPreviewRisk, onUpdateRisk, onUpdateLeverage, onUpdateMarginMode }) {
   if (!riskSettings) return null;
   
   return (
@@ -1179,6 +1197,7 @@ function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUp
         <div>
           <RiskSliderControl
             value={riskSettings.risk_per_trade}
+            onPreview={onPreviewRisk}
             onCommit={onUpdateRisk}
             loading={riskSettings.loading}
             title="Risk Per Trade (0.5% - ALL IN 100%)"
@@ -1424,6 +1443,7 @@ function EngineTab({
     error: null,
   },
   onUpdateRisk,
+  onPreviewRisk,
   onUpdateLeverage,
   onUpdateMarginMode,
   liveEquity,
@@ -1509,7 +1529,7 @@ function EngineTab({
 
       {/* Risk Management Card */}
 
-      <RiskManagementCard riskSettings={riskSettings} onUpdateRisk={onUpdateRisk} onUpdateLeverage={onUpdateLeverage} onUpdateMarginMode={onUpdateMarginMode} />
+      <RiskManagementCard riskSettings={riskSettings} onPreviewRisk={onPreviewRisk} onUpdateRisk={onUpdateRisk} onUpdateLeverage={onUpdateLeverage} onUpdateMarginMode={onUpdateMarginMode} />
     </div>
   );
 }
@@ -1830,7 +1850,7 @@ function SettingsTab({ onBotConnected }) {
   );
 }
 
-function SignalsTab({ user, riskSettings, onUpdateRisk }) {
+function SignalsTab({ user, riskSettings, onPreviewRisk, onUpdateRisk }) {
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1908,6 +1928,7 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
             <div>
               <RiskSliderControl
                 value={riskSettings?.risk_per_trade}
+                onPreview={onPreviewRisk}
                 onCommit={onUpdateRisk}
                 loading={riskSettings?.loading}
                 title="⚡ Risk Level Per Trade (0.5% - ALL IN 100%)"
@@ -1935,7 +1956,7 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {sortedSignals.map((signal, idx) => (
           <div key={signal.id || signal.pair} className="animate-in fade-in slide-in-from-bottom-8" style={{ animationDelay: `${idx * 100}ms`, animationFillMode: 'both' }}>
-            <SignalCard signal={signal} userIsPremium={user?.is_premium} riskSettings={riskSettings} onUpdateRisk={onUpdateRisk} />
+            <SignalCard signal={signal} userIsPremium={user?.is_premium} riskSettings={riskSettings} onPreviewRisk={onPreviewRisk} onUpdateRisk={onUpdateRisk} />
           </div>
         ))}
         {!loading && !signals.length && !error && <div className="col-span-full text-center text-slate-500 text-sm py-10">No signals available right now.</div>}
@@ -2402,7 +2423,7 @@ function BridgeCard({ name, status, logo, logoSrc, colors, onConnect, onDisconne
   );
 }
 
-function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
+function SignalCard({ signal, userIsPremium, riskSettings, onPreviewRisk, onUpdateRisk }) {
   const [isPlaced, setIsPlaced] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState(null);
@@ -2533,6 +2554,7 @@ function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
             <div className="bg-white/5 rounded-lg p-2.5">
               <RiskSliderControl
                 value={riskSettings?.risk_per_trade}
+                onPreview={onPreviewRisk}
                 onCommit={onUpdateRisk}
                 loading={riskSettings?.loading}
                 title="Risk Slider (1-Click, 0.5% - ALL IN 100%)"
@@ -3111,6 +3133,30 @@ function ProfitTicker() {
           100% { transform: translateX(calc(-100% / 3)); }
         }
       `}</style>
+    </div>
+  );
+}
+
+function NoticeModal({ title, message, onClose }) {
+  return (
+    <div className="fixed inset-0 z-[82] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md bg-[#0a0a0a]/95 border border-cyan-500/30 rounded-2xl p-6 shadow-[0_20px_60px_rgba(6,182,212,0.2)]">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/35 flex items-center justify-center shrink-0">
+            <AlertCircle className="w-5 h-5 text-cyan-300" />
+          </div>
+          <div>
+            <h3 className="text-white text-lg font-black leading-tight">{title || 'Notice'}</h3>
+            <p className="text-slate-300 text-sm mt-1">{message}</p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-400/45 text-cyan-100 font-black hover:bg-cyan-500/30 transition-colors"
+        >
+          OK
+        </button>
+      </div>
     </div>
   );
 }
