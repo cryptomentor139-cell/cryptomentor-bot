@@ -257,7 +257,7 @@ async def generate_confluence_signals(
 
     # 2. Support/Resistance Analysis
     try:
-        from Bismillah.app.range_analyzer import RangeAnalyzer
+        from range_analyzer import RangeAnalyzer
         ra = RangeAnalyzer()
         sr_result = ra.analyze(candles[-50:], current_price)
 
@@ -281,7 +281,7 @@ async def generate_confluence_signals(
 
     # 3. RSI Extremes
     try:
-        from Bismillah.app.rsi_divergence_detector import RSIDivergenceDetector
+        from rsi_divergence_detector import RSIDivergenceDetector
         rsi_detector = RSIDivergenceDetector()
         rsi_values = rsi_detector._calculate_rsi_series(closes)
 
@@ -303,7 +303,7 @@ async def generate_confluence_signals(
 
     # 5. Market Regime (Sideways Detection)
     try:
-        from Bismillah.app.sideways_detector import SidewaysDetector
+        from sideways_detector import SidewaysDetector
         sd = SidewaysDetector()
         # SidewaysDetector needs 5m candles (at least 20) and 15m candles (at least 50)
         # We only have 1h data, so we'll do a simpler volatility check instead
@@ -626,9 +626,6 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
             else:
                 signal_response["expired"] = False
                 signal_response["trade_status"] = "pending"
-
-            if signal:
-                _CONFLUENCE_CACHE[cache_key] = (now + 60, signal)
 
             return signal_response
 

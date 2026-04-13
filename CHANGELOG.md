@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.1.28] — 2026-04-13 — Restore 1-Click Signals Rendering On Dashboard
+
+### 🛠️ Backend Hotfix
+
+#### 1) Fixed Live Signals Endpoint Returning Empty Signal List
+- Root cause:
+  - website signal generation still had stale imports pointing to `Bismillah.app...`
+  - the route also contained a stray cache write using undefined variables inside `process_one_symbol()`
+- Impact:
+  - `/dashboard/signals` kept erroring per-symbol and the frontend showed no 1-click opportunities
+- Fix:
+  - switched imports to the bot app modules already exposed on `sys.path`
+  - removed the invalid cache write from the per-symbol response builder
+- Result:
+  - live `/api/dashboard/signals` returns signal cards again
+  - 1-click signals can render on the website again
+- File:
+  - `website-backend/app/routes/signals.py`
+
 ## [2.1.27] — 2026-04-13 — Restore Website Login After API Crash Loop
 
 ### 🛠️ Backend Hotfix
