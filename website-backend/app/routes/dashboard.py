@@ -488,10 +488,10 @@ async def update_risk_setting(    payload: dict,
     except Exception:
         pass # fallback to old logic if fetch fails
     
-    if equity > 0 and equity < 100 and risk != 3.0:
+    if equity > 0 and equity < 100 and risk < 3.0:
          raise HTTPException(
             status_code=400,
-            detail=f"Small accounts (<$100) are locked to 3.0% risk for safety. Current equity: ${equity:.2f}"
+            detail=f"Small accounts (<$100) require at least 3.0% risk to meet exchange minimum order sizes. Your equity: ${equity:.2f}"
         )
 
     s = _client()

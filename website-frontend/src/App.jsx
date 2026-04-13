@@ -1359,7 +1359,7 @@ function RiskManagementCard({ riskSettings, onPreviewRisk, onUpdateRisk, onUpdat
               const rVal = Number(risk);
               const isSelected = Math.abs(Number(riskSettings.risk_per_trade) - rVal) < 0.01;
               const isSmallAccount = Number(riskSettings.equity || 0) < 100;
-              const isDisabled = isSmallAccount && rVal !== 3.0;
+              const isDisabled = isSmallAccount && rVal < 3.0;
               const isHighRisk = rVal > 5.0;
 
               let btnClass = "px-3 py-2 rounded-xl font-bold text-[10px] transition-all border ";
@@ -1375,7 +1375,7 @@ function RiskManagementCard({ riskSettings, onPreviewRisk, onUpdateRisk, onUpdat
               }
 
               if (isDisabled) {
-                btnClass += " opacity-20 cursor-not-allowed grayscale";
+                btnClass += " opacity-20 cursor-not-allowed grayscale pointer-events-none";
               }
 
               return (
@@ -1394,7 +1394,7 @@ function RiskManagementCard({ riskSettings, onPreviewRisk, onUpdateRisk, onUpdat
             <div className="mt-3 flex items-start gap-2 p-2.5 bg-amber-500/5 border border-amber-500/20 rounded-xl">
               <Shield size={12} className="text-amber-400 shrink-0 mt-0.5" />
               <p className="text-[10px] text-slate-400 font-medium leading-tight">
-                <span className="text-amber-300 font-bold">Execution Safety Floor:</span> Accounts below $100 are locked to 3% risk to ensure orders meet exchange minimum quantity.
+                <span className="text-amber-300 font-bold">Execution Safety Floor:</span> Accounts below $100 must use at least <span className="text-white font-bold">3% risk</span> to ensure orders meet the exchange minimum quantity.
               </p>
             </div>
           )}
