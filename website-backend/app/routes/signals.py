@@ -628,9 +628,9 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
                 signal_response["trade_status"] = "pending"
 
             if signal:
-        _CONFLUENCE_CACHE[cache_key] = (now + 60, signal)
-    
-    return signal_response
+                _CONFLUENCE_CACHE[cache_key] = (now + 60, signal)
+
+            return signal_response
 
         except Exception as e:
             logger.error(f"Failed to generate signal for {sym}: {e}")

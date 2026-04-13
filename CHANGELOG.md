@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.1.27] — 2026-04-13 — Restore Website Login After API Crash Loop
+
+### 🛠️ Backend Hotfix
+
+#### 1) Fixed Dashboard Login Stall Caused By Website API Startup Failure
+- Root cause: `website-backend/app/routes/signals.py` had a malformed indentation block around signal cache handling.
+- Impact:
+  - `cryptomentor-web` failed to boot
+  - nginx returned `502 Bad Gateway` for `/api/`
+  - dashboard login appeared to do nothing because the frontend could not reach the backend
+- Fix:
+  - repaired the broken `if signal:` block and restored valid module import on startup
+- Result:
+  - `cryptomentor-web` starts normally again
+  - `https://cryptomentor.id/api/` returns `200 OK`
+  - dashboard login can respond again
+- File:
+  - `website-backend/app/routes/signals.py`
+
 ## [2.1.26] — 2026-04-13 — 🚀 Performance: Parallel Execution & Lower Latency
 
 ### 🚀 Performance & UX Optimization
