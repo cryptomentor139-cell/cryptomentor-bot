@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.1.25] — 2026-04-13 — Smart Risk Tiering: Safety Floor for Small Accounts
+
+### 🚀 Risk Management Upgrade
+
+#### 1) Automatic 3% Risk Floor for Accounts < $100
+- **Root cause:** Users with small balances (e.g., $30) using conservative risk settings (0.5%) generated orders smaller than Bitunix's minimum quantity limits (e.g., 0.01 ETH).
+- **Result:** Trades were silently skipped or failed with exchange "min qty" errors.
+- **Fix:**
+  - Implemented real-time balance checks in both **Scalping** and **Swing** engines.
+  - If Account Balance (or Equity) is below $100, the engine automatically forces **3% risk per trade** regardless of the user's setting.
+  - This ensures positions are large enough to meet exchange requirements while still providing protection.
+- **Files:**
+  - `Bismillah/app/scalping_engine.py`
+  - `Bismillah/app/autotrade_engine.py`
+
+#### 2) Enhanced Risk Range for Unified Dashboard (0.5% - 10%)
+- Enabled support for **0.5%** (ultra-conservative) and **10%** (aggressive) risk tiers for accounts over $100.
+- Updated `set_risk_per_trade` validation in Supabase repo to enforce these new balance-dependent limits.
+- **Files:**
+  - `Bismillah/app/supabase_repo.py`
+
+#### 3) Dynamic Risk Settings Menu in Telegram
+- The `/risk` settings menu now adaptively labels and restricts options based on the user's live balance.
+- Users under $100 now see a clear explanation of why their risk is locked at 3% for execution safety.
+- **Files:**
+  - `Bismillah/app/handlers_autotrade.py`
+
+
 ## [2.1.24] — 2026-04-13 — Remove Duplicate AutoRestore Startup Cards
 
 ### 🛠️ Telegram Bot Fix

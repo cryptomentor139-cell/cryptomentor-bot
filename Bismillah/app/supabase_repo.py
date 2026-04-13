@@ -442,7 +442,24 @@ def set_risk_per_trade(telegram_id: int, risk_pct: float) -> Dict[str, Any]:
     """
     try:
         # Validate risk percentage
-        if risk_pct < 0.5 or risk_pct > 100.0:
+        s = _client()
+        # Fetch current session to check balance
+        session_res = s.table("autotrade_sessions").select("current_balance").eq("telegram_id", int(telegram_id)).limit(1).execute()
+        balance = 0.0
+        if session_res.data:
+            balance = float(session_res.data[0].get("current_balance", 0))
+
+        # Enforce rule: Below $100 -> Auto 3% risk
+        if balance < 100:
+            if float(risk_pct) != 3.0:
+                return {
+                    'success': False,
+                    'error': 'Accounts below $100 are locked to 3% risk for execution safety.',
+                    'risk_per_trade': 3.0
+                }
+        else:
+            # Above $100 -> Allow down to 0.5%
+            if risk_pct < 0.5 or risk_pct > 100.0:
             return {
                 'success': False,
                 'error': 'Risk must be between 0.5% and 100%',

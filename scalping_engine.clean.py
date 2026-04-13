@@ -239,11 +239,35 @@ class ScalpingEngine:
                                 
                             signals_validated += 1
                             logger.info(f"[Scalping:{self.user_id}] {signal.symbol} - Signal validated! Placing order...")
+                            await self._notify_admins_engine_error(
+                                dedupe_key=f"validated:{signal.symbol}:{scan_count}",
+                                ttl_sec=30,
+                                message=(
+                                    f"<b>Event:</b> Signal validated\n"
+                                    f"<b>Symbol:</b> {escape(signal.symbol)}\n"
+                                    f"<b>Side:</b> {escape(signal.side)}\n"
+                                    f"<b>Confidence:</b> {signal.confidence:.0f}%\n"
+                                    f"<b>Scan:</b> #{scan_count}"
+                                ),
+                            )
+                            
                             success = await self.place_scalping_order(signal)
                             
                             if success:
                                 self.mark_cooldown(signal.symbol)
                                 logger.info(f"[Scalping:{self.user_id}] {signal.symbol} - Order placed successfully!")
+                                await self._notify_admins_engine_error(
+                                    dedupe_key=f"order_success:{signal.symbol}:{scan_count}",
+                                    ttl_sec=30,
+                                    message=(
+                                        f"<b>Event:</b> Order placed successfully\n"
+                                        f"<b>Symbol:</b> {escape(signal.symbol)}\n"
+                                        f"<b>Side:</b> {escape(signal.side)}\n"
+                                        f"<b>Entry:</b> {_fmt_price(signal.entry_price)}\n"
+                                        f"<b>TP:</b> {_fmt_price(signal.tp_price)}\n"
+                                        f"<b>SL:</b> {_fmt_price(signal.sl_price)}"
+                                    ),
+                                )
                             else:
                                 logger.warning(f"[Scalping:{self.user_id}] {signal.symbol} - Order placement failed")
                                 await self._notify_admins_engine_error(
@@ -261,6 +285,18 @@ class ScalpingEngine:
                         f"[Scalping:{self.user_id}] Scan #{scan_count} complete: "
                         f"{signals_found} signals found, {signals_validated} validated"
                     )
+                    if signals_found == 0 and (scan_count in (1, 10) or scan_count % 50 == 0):
+                        await self._notify_admins_engine_error(
+                            dedupe_key=f"zero_scan:{self.user_id}:{scan_count}",
+                            ttl_sec=60,
+                            message=(
+                                f"<b>Event:</b> No signals found\n"
+                                f"<b>Scan:</b> #{scan_count}\n"
+                                f"<b>Pairs:</b> {len(self.config.pairs)}\n"
+                                f"<b>Open positions:</b> {len(self.positions)}"
+                            ),
+                        )
+                    
                     # Wait for next scan
                     logger.debug(f"[Scalping:{self.user_id}] Sleeping for {self.config.scan_interval}s...")
                     await asyncio.sleep(self.config.scan_interval)
@@ -711,8 +747,8 @@ class ScalpingEngine:
             from app.supabase_repo import get_risk_per_trade
             risk_pct = get_risk_per_trade(self.user_id)
             
-            # Cap risk for scalping to global supported maximum.
-            risk_pct = min(risk_pct, 100.0)
+            # CRITICAL: Cap risk at 5% maximum for scalping
+            risk_pct = min(risk_pct, 5.0)
             
             # Get current balance from exchange
             bal_result = self.client.get_balance()
@@ -720,12 +756,6 @@ class ScalpingEngine:
                 raise Exception(f"Balance fetch failed: {bal_result.get('error')}")
             
             balance = bal_result.get('balance', 0)
-            
-            # Enforce rule: Below $100 -> Auto 3% risk for execution safety
-            if balance < 100:
-                if risk_pct != 3.0:
-                    logger.info(f"[Scalping:{self.user_id}] Balance ${balance:.2f} < $100. Overriding risk {risk_pct}% -> 3.0% for execution safety.")
-                    risk_pct = 3.0
             if balance <= 0:
                 raise Exception(f"Invalid balance: {balance}")
             
@@ -759,7 +789,7 @@ class ScalpingEngine:
             
             logger.info(
                 f"[Scalping:{self.user_id}] RISK-BASED sizing: "
-                f"Balance=${balance:.2f}, Risk={risk_pct}% (capped at 100%), "
+                f"Balance=${balance:.2f}, Risk={risk_pct}% (capped at 5%), "
                 f"Leverage={leverage}x (capped at 10x), "
                 f"Entry=${entry_price:.2f}, SL=${sl_price:.2f}, "
                 f"SL_Dist={sizing['sl_distance_pct']:.2f}%, "
@@ -1780,4 +1810,5 @@ class ScalpingEngine:
             return
         self._recent_close_notifications[dedupe_key] = now
         await self._notify_user(message)
+
 

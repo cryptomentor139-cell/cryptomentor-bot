@@ -1218,6 +1218,12 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             # Equity = Total Balance + Unrealized P&L
             equity = balance + unrealized_pnl
 
+            # Enforce rule: Below $100 -> Auto 3% risk for execution safety
+            if equity < 100:
+                if risk_pct != 3.0:
+                    logger.info(f"[RiskCalc:{user_id}] Equity ${equity:.2f} < $100. Overriding risk {risk_pct}% -> 3.0% for execution safety.")
+                    risk_pct = 3.0
+
             if equity <= 0:
                 raise Exception(
                     f"Invalid equity: available={available:.2f} + frozen={frozen:.2f} + "
