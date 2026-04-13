@@ -272,6 +272,129 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
 
 
+async def callback_start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle reminder CTA and reuse the main /autotrade gatekeeper flow."""
+    query = update.callback_query
+    await query.answer()
+
+    user = query.from_user
+    user_id = user.id
+
+    try:
+        from app.chat_store import remember_chat
+        remember_chat(user_id, query.message.chat_id)
+    except Exception:
+        pass
+
+    import asyncio
+
+    async def _register_user():
+        try:
+            from app.supabase_repo import upsert_user_with_welcome
+            await asyncio.to_thread(
+                upsert_user_with_welcome,
+                user_id,
+                user.username,
+                user.first_name,
+                user.last_name,
+                100,
+            )
+        except Exception:
+            pass
+
+    asyncio.create_task(_register_user())
+
+    try:
+        snap = _load_verification_snapshot(user_id)
+    except Exception as e:
+        logger.warning("Verification lookup failed for %s: %s", user_id, e)
+        snap = {"status": VER_NONE, "uid": "", "source": "none"}
+
+    status = snap.get("status", VER_NONE)
+    uid = snap.get("uid") or ""
+    dash_url = generate_dashboard_url(user_id, user.username, user.first_name)
+
+    if status == VER_APPROVED:
+        text = (
+            f"✅ <b>Identity Verified</b>\n\n"
+            f"UID: <code>{uid or '-'}</code>\n"
+            f"Status: <b>APPROVED</b>\n\n"
+            f"Your account is verified. You can now manage all trading operations, "
+            f"API keys, and risk settings directly from the web dashboard."
+        )
+        keyboard = [[InlineKeyboardButton("🌐 Dashboard", url=dash_url)]]
+    elif status == VER_PENDING:
+        text = (
+            f"⏳ <b>Verification Pending</b>\n\n"
+            f"UID: <code>{uid or '-'}</code>\n\n"
+            f"Your UID is currently being verified by our team. "
+            f"Once approved, you will be notified here and can start trading on the dashboard."
+        )
+        keyboard = [[InlineKeyboardButton("🌐 Dashboard", url=dash_url)]]
+    elif status == VER_REJECTED:
+        text = (
+            "❌ <b>Verification Rejected</b>\n\n"
+            f"UID: <code>{uid or '-'}</code>\n\n"
+            "Please submit a valid Bitunix UID again from the dashboard or directly in this bot."
+        )
+        keyboard = [
+            [InlineKeyboardButton("🌐 Dashboard", url=dash_url)],
+            [InlineKeyboardButton("🆔 Submit UID", callback_data="submit_uid_bot")],
+            [InlineKeyboardButton("🔗 Bitunix", url=BITUNIX_REFERRAL_URL)],
+        ]
+    else:
+        text = (
+            f"🚀 <b>Welcome to CryptoMentor AI</b>\n\n"
+            f"To start trading, verify your Bitunix account:\n\n"
+            f"1️⃣ Register on Bitunix\n"
+            f"2️⃣ Submit your UID\n"
+            f"3️⃣ Configure API on dashboard\n\n"
+            f"Choose an option:"
+        )
+        keyboard = [
+            [InlineKeyboardButton("🌐 Dashboard", url=dash_url)],
+            [InlineKeyboardButton("🆔 Submit UID", callback_data="submit_uid_bot")],
+            [InlineKeyboardButton("🔗 Bitunix", url=BITUNIX_REFERRAL_URL)],
+        ]
+
+    await query.message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='HTML'
+    )
+    return ConversationHandler.END
+
+
+async def callback_learn_more(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Explain AutoTrade from the reminder card and offer a direct next step."""
+    query = update.callback_query
+    await query.answer()
+
+    user = query.from_user
+    dash_url = generate_dashboard_url(user.id, user.username, user.first_name)
+
+    await query.message.reply_text(
+        "🤖 <b>About AutoTrade</b>\n\n"
+        "AutoTrade connects to your exchange using API keys with <b>trade-only</b> permission.\n\n"
+        "What it does:\n"
+        "• scans the market continuously\n"
+        "• opens trades only when the setup passes strategy rules\n"
+        "• manages stop loss and take profit automatically\n"
+        "• lets you stop or adjust settings anytime\n\n"
+        "What you need:\n"
+        "• a supported exchange account\n"
+        "• your exchange UID for verification\n"
+        "• API key with trading enabled and withdrawal disabled\n\n"
+        "You can start from the dashboard or submit your UID directly here.",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🤖 Register AutoTrade Now", callback_data="at_start_onboarding")],
+            [InlineKeyboardButton("🌐 Open Dashboard", url=dash_url)],
+        ])
+    )
+    return ConversationHandler.END
+
+
 # ------------------------------------------------------------------ #
 #  UID Submission Flow (Manual via Bot)                               #
 # ------------------------------------------------------------------ #
@@ -419,6 +542,7 @@ async def callback_uid_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Notify user — send dashboard link after approval
     try:
+        dash_url = generate_dashboard_url(target_user_id)
         await context.bot.send_message(
             chat_id=target_user_id,
             text=(
@@ -430,7 +554,7 @@ async def callback_uid_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🌐 Dashboard", url=WEB_DASHBOARD_URL)]
+                [InlineKeyboardButton("🌐 Dashboard", url=dash_url)]
             ])
         )
     except Exception as e:
@@ -1569,6 +1693,8 @@ def register_autotrade_handlers(application):
             CommandHandler("autotrade", cmd_autotrade),
             CommandHandler("start", cmd_autotrade),
             CallbackQueryHandler(handle_submit_uid_bot, pattern="^submit_uid_bot$"),
+            CallbackQueryHandler(callback_start_onboarding, pattern="^at_start_onboarding$"),
+            CallbackQueryHandler(callback_learn_more, pattern="^at_learn_more$"),
         ],
         states={
             WAITING_BITUNIX_UID: [

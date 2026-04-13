@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.1.22] — 2026-04-13 — Fix Telegram AutoTrade Reminder Buttons
+
+### 🛠️ Bot Fix
+
+#### 1) Wired Reminder CTA Buttons Into Live AutoTrade Handlers
+- Root cause: the reminder message rendered `at_start_onboarding` and `at_learn_more` callback buttons, but those callback patterns were never registered in the bot.
+- Fix:
+  - Added a callback handler for `at_start_onboarding` that reuses the main AutoTrade gatekeeper flow.
+  - Added a callback handler for `at_learn_more` with a short explainer and direct next-step buttons.
+- Result:
+  - Telegram reminder buttons now respond instead of appearing dead.
+- File:
+  - `Bismillah/app/handlers_autotrade.py`
+
 ## [2.1.21] — 2026-04-13 — Admin Telegram Notifications For Trade Engine Logs
 
 ### 🔔 Monitoring
