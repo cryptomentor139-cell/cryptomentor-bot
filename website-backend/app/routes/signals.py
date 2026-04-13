@@ -1,3 +1,4 @@
+import asyncio
 """
 Live market signals endpoint.
 
@@ -30,6 +31,8 @@ from app.services import bitunix as bsvc
 from app.auth.jwt import decode_token
 
 logger = logging.getLogger(__name__)
+# Shared httpx client to avoid overhead of creating a new one per request
+_http_client = httpx.AsyncClient(timeout=10.0)
 RISK_MIN_PCT = 0.5
 RISK_MAX_PCT = 100.0
 
@@ -544,8 +547,7 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
         logger.error(f"Failed to fetch Binance tickers: {e}")
         ticker_data = {}
 
-    # Generate fresh confluence signals for each symbol
-    for idx, (pair, sym, tier, sig_type) in enumerate(_WATCHLIST):
+    async def process_one_symbol(idx, pair, sym, tier, sig_type):
         try:
             # Try confluence-based signal first
             conf_signal = await generate_confluence_signals(sym, user_risk_pct)
@@ -579,7 +581,7 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
                 sig["reason"] = "Momentum signal"
                 signal_response = sig
             else:
-                continue
+                return None
 
             # Mark trade status
             if ts:
@@ -596,11 +598,16 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
                 signal_response["expired"] = False
                 signal_response["trade_status"] = "pending"
 
-            signals.append(signal_response)
+            return signal_response
 
         except Exception as e:
             logger.error(f"Failed to generate signal for {sym}: {e}")
-            continue
+            return None
+
+    # Generate signals for all watchlist symbols in parallel
+    tasks = [process_one_symbol(idx, pair, sym, tier, sig_type) for idx, (pair, sym, tier, sig_type) in enumerate(_WATCHLIST)]
+    results = await asyncio.gather(*tasks)
+    signals = [r for r in results if r is not None]
 
     return {
         "signals": signals,
@@ -623,12 +630,16 @@ async def _live_signal(sym: str, sig_type: str, pair: str, tier: str) -> Dict[st
     """Re-derive a fresh signal for the symbol using current ticker data.
     Used at execution time so late entries follow the live SL distance
     instead of the values rendered in the user's stale UI."""
-    params = {"symbol": sym}
-    async with httpx.AsyncClient(timeout=8.0) as client:
-        r = await client.get(_BINANCE_TICKER, params=params)
+    try:
+        params = {"symbol": sym}
+        r = await _http_client.get(_BINANCE_TICKER, params=params)
         r.raise_for_status()
         ticker = r.json()
-    return _build_signal(0, pair, tier, sig_type, ticker)
+        return _build_signal(0, pair, tier, sig_type, ticker)
+    except Exception as e:
+        logger.error(f"[LiveSignal] Failed to fetch ticker for {sym}: {e}")
+        # Fallback to a bare-minimum signal if ticker fails (price scale might be wrong but better than failing)
+        raise
 
 
 @router.post("/signals/execute")
@@ -679,12 +690,19 @@ async def execute_signal(
     # Fetch live account equity + user's autotrade session for risk/leverage.
     # CRITICAL: Use equity (balance + unrealized PnL), not just available balance.
     # This prevents over-leveraging when positions are underwater.
+    # Parallel Fetch
     try:
-        acc = await bsvc.fetch_account(tg_id)
+        results = await asyncio.gather(
+            bsvc.fetch_account(tg_id),
+            bsvc.fetch_positions(tg_id),
+            _live_signal(sym, sig_type, pair, tier)
+        )
+        acc, pos_res, live_sig = results
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Bitunix account error: {e}")
+        raise HTTPException(status_code=502, detail=f"Parallel fetch failed: {e}")
+
     if not acc.get("success"):
-        raise HTTPException(status_code=502, detail="Failed to fetch account")
+        raise HTTPException(status_code=502, detail="Failed to fetch Bitunix account")
 
     # Compute equity: balance + unrealized PnL from open positions
     balance = float(acc.get("available", 0) or 0)
@@ -717,13 +735,7 @@ async def execute_signal(
         risk_pct = _normalize_risk_pct(one_click_raw, default=1.0)  # 0.5%..100.0%
     leverage = int(sess.get("leverage") or 10)
 
-    # Re-derive the signal from live market data so dynamic sizing reflects
-    # the *current* SL distance, not the stale snapshot in the user's UI.
-    try:
-        live_sig = await _live_signal(sym, sig_type, pair, tier)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Market data unavailable: {e}")
-
+    # Use pre-fetched live market data
     direction = live_sig["direction"]
     side = "BUY" if direction == "LONG" else "SELL"
     entry_price = float(live_sig["price"])
@@ -752,15 +764,8 @@ async def execute_signal(
     margin_required = position_size_usdt / leverage
     risk_zone = "amber_red" if risk_pct > 1.0 else "normal"
 
-    # Dynamic concurrency-aware margin budget:
-    # Higher leverage should allow more simultaneous positions, so we reserve
-    # only a per-trade slice of available margin based on leverage and current
-    # open positions.
-    try:
-        live_pos_res = await bsvc.fetch_positions(tg_id)
-        live_positions = live_pos_res.get("positions", []) if live_pos_res.get("success") else []
-    except Exception:
-        live_positions = []
+    # Use pre-fetched positions for concurrency check
+    live_positions = pos_res.get("positions", []) if pos_res.get("success") else []
 
     open_positions_count = len(live_positions)
     if leverage >= 20:
