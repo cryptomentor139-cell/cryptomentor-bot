@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.1.24] — 2026-04-13 — Remove Duplicate AutoRestore Startup Cards
+
+### 🛠️ Telegram Bot Fix
+
+#### 1) AutoTrade Engine Startup Message Now Comes From One Source
+- Root cause: users could receive two startup cards on engine restore:
+  - one from `scheduler.py`
+  - one from the engine itself
+- This also caused inconsistent details like old hardcoded `10 pairs` text while the live scalping config uses `16 pairs`.
+- Fix:
+  - Removed the duplicate restore-time startup notification from the scheduler.
+  - The engine is now the single source of truth for startup messaging.
+- Result:
+  - Users should only receive one startup card, with live config values instead of stale hardcoded text.
+- File:
+  - `Bismillah/app/scheduler.py`
+
 ## [2.1.23] — 2026-04-13 — Limit Admin Telegram Alerts To Actual Trade Engine Errors
 
 ### 🛠️ Bot Noise Reduction

@@ -421,59 +421,9 @@ def start_scheduler(application):
                     restored += 1
                     logger.info(f"[AutoRestore] User {user_id} - ✅ Engine started successfully")
 
-                    # Send detailed startup notification with full config (await directly)
-                    try:
-                        # Get trading mode details
-                        from app.trading_mode_manager import TradingMode
-                        is_scalping = trading_mode == "scalping"
-                        
-                        if is_scalping:
-                            # Scalping mode notification
-                            await application.bot.send_message(
-                                chat_id=user_id,
-                                text=(
-                                    "⚡ <b>Scalping Engine Active!</b>\n\n"
-                                    "Mode: <b>Scalping (5M)</b>\n\n"
-                                    "<b>Configuration:</b>\n"
-                                    "• Timeframe: <b>5m</b>\n"
-                                    "• Scan interval: <b>15s</b>\n"
-                                    "• Min confidence: <b>80%</b>\n"
-                                    "• Min R:R: <b>1:1.5</b>\n"
-                                    "• Max hold time: <b>30 minutes</b>\n"
-                                    f"• Max concurrent: <b>4 positions</b>\n"
-                                    "• Trading pairs: <b>10 pairs</b>\n\n"
-                                    f"💰 Capital: <b>{amount} USDT</b>\n"
-                                    f"⚡ Leverage: <b>{leverage}x</b>\n\n"
-                                    "Bot will scan for high-probability setups every 15 seconds.\n"
-                                    "Patience = profit. 🎯"
-                                ),
-                                parse_mode='HTML'
-                            )
-                            logger.info(f"[AutoRestore] User {user_id} - ✅ Scalping notification sent")
-                        else:
-                            # Swing mode notification
-                            await application.bot.send_message(
-                                chat_id=user_id,
-                                text=(
-                                    "📊 <b>Swing Engine Active!</b>\n\n"
-                                    "Mode: <b>Swing (15M)</b>\n\n"
-                                    "<b>Configuration:</b>\n"
-                                    "• Timeframe: <b>15m</b>\n"
-                                    "• Scan interval: <b>45s</b>\n"
-                                    "• Min confidence: <b>68%</b>\n"
-                                    "• Min R:R: <b>1:2</b>\n"
-                                    f"• Max concurrent: <b>4 positions</b>\n"
-                                    "• Trading pairs: <b>10 pairs</b>\n\n"
-                                    f"💰 Capital: <b>{amount} USDT</b>\n"
-                                    f"⚡ Leverage: <b>{leverage}x</b>\n\n"
-                                    "Bot will scan for high-quality setups every 45 seconds.\n"
-                                    "Professional trading = patience. 🎯"
-                                ),
-                                parse_mode='HTML'
-                            )
-                            logger.info(f"[AutoRestore] User {user_id} - ✅ Swing notification sent")
-                    except Exception as e:
-                        logger.error(f"[AutoRestore] Failed to notify user {user_id}: {e}")
+                    # Startup notification is sent by the engine itself.
+                    # Avoid duplicate restore-time cards with stale hardcoded config text.
+                    logger.info(f"[AutoRestore] User {user_id} - Startup notification delegated to engine")
 
                 except Exception as e:
                     logger.error(f"[AutoRestore] User {user_id} - ❌ Failed to restore: {e}")
