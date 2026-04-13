@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlencode
 
 from dotenv import dotenv_values
 from jose import jwt
@@ -49,7 +50,11 @@ def create_access_token(telegram_id: int, username: str = "", first_name: str = 
 
 
 def generate_dashboard_url(telegram_id: int, username: str = "", first_name: str = "", photo_url: str = "") -> str:
-    """Generate compact dashboard URL with token-only auto-login."""
+    """Generate dashboard URL with token auto-login and cache-busting query params."""
     token = create_access_token(telegram_id, username, first_name)
-    return f"{_resolve_frontend_url()}/?t={token}"
-
+    qs = urlencode({
+        "t": token,
+        "app": "v4",
+        "ts": int(datetime.now(timezone.utc).timestamp()),
+    })
+    return f"{_resolve_frontend_url()}/?{qs}"

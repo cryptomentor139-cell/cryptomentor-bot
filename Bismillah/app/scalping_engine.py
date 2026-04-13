@@ -711,8 +711,8 @@ class ScalpingEngine:
             from app.supabase_repo import get_risk_per_trade
             risk_pct = get_risk_per_trade(self.user_id)
             
-            # CRITICAL: Cap risk at 5% maximum for scalping
-            risk_pct = min(risk_pct, 5.0)
+            # Cap risk for scalping to global supported maximum.
+            risk_pct = min(risk_pct, 100.0)
             
             # Get current balance from exchange
             bal_result = self.client.get_balance()
@@ -753,7 +753,7 @@ class ScalpingEngine:
             
             logger.info(
                 f"[Scalping:{self.user_id}] RISK-BASED sizing: "
-                f"Balance=${balance:.2f}, Risk={risk_pct}% (capped at 5%), "
+                f"Balance=${balance:.2f}, Risk={risk_pct}% (capped at 100%), "
                 f"Leverage={leverage}x (capped at 10x), "
                 f"Entry=${entry_price:.2f}, SL=${sl_price:.2f}, "
                 f"SL_Dist={sizing['sl_distance_pct']:.2f}%, "
@@ -1774,5 +1774,4 @@ class ScalpingEngine:
             return
         self._recent_close_notifications[dedupe_key] = now
         await self._notify_user(message)
-
 

@@ -317,7 +317,7 @@ def get_risk_per_trade(telegram_id: int) -> float:
     Get user's risk percentage per trade from database.
 
     Returns:
-        Risk percentage as float in range 0.25 - 5.0.
+        Risk percentage as float in range 0.5 - 100.0.
         Default: 1.0 if not set
     """
     try:
@@ -331,7 +331,7 @@ def get_risk_per_trade(telegram_id: int) -> float:
             if stored_value is not None:
                 risk_value = float(stored_value)
                 # Safety clamp: enforce dashboard/autotrade supported range.
-                risk_value = max(0.25, min(5.0, risk_value))
+                risk_value = max(0.5, min(100.0, risk_value))
                 # Log to help debug
                 import logging
                 logger = logging.getLogger(__name__)
@@ -431,7 +431,7 @@ def set_risk_per_trade(telegram_id: int, risk_pct: float) -> Dict[str, Any]:
     
     Args:
         telegram_id: User's Telegram ID
-        risk_pct: Risk percentage (0.25 - 5.0)
+        risk_pct: Risk percentage (0.5 - 100.0)
     
     Returns:
         {
@@ -442,10 +442,10 @@ def set_risk_per_trade(telegram_id: int, risk_pct: float) -> Dict[str, Any]:
     """
     try:
         # Validate risk percentage
-        if risk_pct < 0.25 or risk_pct > 5.0:
+        if risk_pct < 0.5 or risk_pct > 100.0:
             return {
                 'success': False,
-                'error': 'Risk must be between 0.25% and 5%',
+                'error': 'Risk must be between 0.5% and 100%',
                 'risk_per_trade': 0
             }
         

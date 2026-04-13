@@ -14,11 +14,12 @@ import os
 MAIN_MENU = "main_menu"
 
 WEB_DASHBOARD_URL = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
+WEB_DASHBOARD_URL_V4 = f"{WEB_DASHBOARD_URL.rstrip('/')}/?app=v4"
 
 # Redirect message for retired features
 REDIRECT_MESSAGE = "📊 This feature is now available on the web dashboard.\n\nTap below to open it:"
 REDIRECT_KEYBOARD = InlineKeyboardMarkup([
-    [InlineKeyboardButton("🌐 Open Dashboard", url=WEB_DASHBOARD_URL)]
+    [InlineKeyboardButton("🌐 Open Dashboard", url=WEB_DASHBOARD_URL_V4)]
 ])
 
 # Legacy constants kept for backward compatibility

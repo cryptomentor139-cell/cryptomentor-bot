@@ -109,12 +109,12 @@ QTY_PRECISION = {
     "DOTUSDT": 1, "MATICUSDT": 0,
 }
 
-RISK_MIN_PCT = 0.25
-RISK_MAX_PCT = 5.0
+RISK_MIN_PCT = 0.5
+RISK_MAX_PCT = 100.0
 
 
 def _normalize_risk_pct(raw_value: Any, default: float = 1.0) -> float:
-    """Clamp incoming risk to supported autotrade range [0.25, 5.0]."""
+    """Clamp incoming risk to supported autotrade range [0.5, 100.0]."""
     try:
         risk = float(raw_value)
     except Exception:
@@ -128,8 +128,6 @@ def _risk_profile(user_risk_pct: float) -> Dict[str, float]:
     Risk > 1% is intentionally treated as high-risk mode.
     """
     risk = _normalize_risk_pct(user_risk_pct, default=1.0)
-    if risk <= 0.25:
-        return {"min_confidence": 60, "atr_multiplier": 0.5}
     if risk <= 0.5:
         return {"min_confidence": 50, "atr_multiplier": 1.0}
     if risk <= 0.75:

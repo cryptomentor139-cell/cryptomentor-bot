@@ -187,7 +187,12 @@ class TelegramBot:
 
     async def redirect_to_web(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Generic redirect handler for retired commands."""
-        web_url = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
+        try:
+            from app.lib.auth import generate_dashboard_url
+            user = update.effective_user
+            web_url = generate_dashboard_url(user.id, user.username, user.first_name)
+        except Exception:
+            web_url = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
         await update.message.reply_text(
             "📊 This feature is now available on the web dashboard.\n\nTap below to open it:",
             parse_mode='HTML',
@@ -197,6 +202,12 @@ class TelegramBot:
         )
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            from app.lib.auth import generate_dashboard_url
+            user = update.effective_user
+            web_url = generate_dashboard_url(user.id, user.username, user.first_name)
+        except Exception:
+            web_url = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
         await update.message.reply_text(
             "📚 <b>CryptoMentor AI</b>\n\n"
             "The bot is now a <b>gatekeeper</b> — use the web dashboard for all trading features.\n\n"
@@ -213,7 +224,7 @@ class TelegramBot:
             "👑 <b>Admin:</b> /admin, /set_premium, /signal_on, /signal_off",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🌐 Open Dashboard", url=os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id"))]
+                [InlineKeyboardButton("🌐 Open Dashboard", url=web_url)]
             ])
         )
 
