@@ -324,6 +324,9 @@ export default function App() {
     one_click_risk_per_trade: 0.5,
     leverage: 10,
     leverage_mode: 'auto_max_safe',
+    leverage_reference_symbol: 'ETHUSDT',
+    exchange_max_leverage: 20,
+    safe_leverage_preview: 20,
     equity: 0,
     balance: 0,
     frozen: 0,
@@ -704,6 +707,9 @@ export default function App() {
           one_click_risk_per_trade: Number.isFinite(parsedOneClickRisk) ? parsedOneClickRisk : storedOneClickRisk,
           leverage: data.leverage || 10,
           leverage_mode: data.leverage_mode || 'auto_max_safe',
+          leverage_reference_symbol: data.leverage_reference_symbol || 'ETHUSDT',
+          exchange_max_leverage: Number(data.exchange_max_leverage || 20),
+          safe_leverage_preview: Number(data.safe_leverage_preview || 20),
           equity: data.equity || 0,
           balance: data.balance || 0,        // free/available only
           frozen: data.frozen || 0,          // locked in positions
@@ -1417,7 +1423,13 @@ function RiskManagementCard({ riskSettings, onPreviewRisk, onUpdateRisk, onUpdat
                 Engine uses exchange max leverage with safety bound from SL distance.
               </p>
               <p className="text-[10px] text-slate-500">
-                Session baseline: <span className="text-slate-300 font-bold">{riskSettings.leverage || 10}x</span>
+                Safe preview ({riskSettings.leverage_reference_symbol || 'ETHUSDT'}): <span className="text-amber-300 font-black">{riskSettings.safe_leverage_preview || 20}x</span>
+              </p>
+              <p className="text-[10px] text-slate-500">
+                Exchange max ({riskSettings.leverage_reference_symbol || 'ETHUSDT'}): <span className="text-slate-300 font-bold">{riskSettings.exchange_max_leverage || 20}x</span>
+              </p>
+              <p className="text-[10px] text-slate-600">
+                Legacy baseline setting: {riskSettings.leverage || 10}x (reference only)
               </p>
             </div>
           </div>
@@ -1633,6 +1645,9 @@ function EngineTab({
     one_click_risk_per_trade: 0.5,
     leverage: 10,
     leverage_mode: 'auto_max_safe',
+    leverage_reference_symbol: 'ETHUSDT',
+    exchange_max_leverage: 20,
+    safe_leverage_preview: 20,
     equity: 0,
     balance: 0,
     frozen: 0,

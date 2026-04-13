@@ -424,12 +424,32 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
         one_click_risk = float(raw_one_click_risk or ALLOWED_RISK_MIN)
     one_click_risk = max(ALLOWED_RISK_MIN, min(ALLOWED_ONE_CLICK_RISK_MAX, one_click_risk))
 
+    # Auto max-safe leverage reference for UI (symbol-dependent preview).
+    leverage_reference_symbol = "ETHUSDT"
+    exchange_max_leverage = int(row.get("leverage") or 20)
+    safe_leverage_preview = exchange_max_leverage
+    try:
+        if hasattr(bsvc, "_client_for"):
+            exchange_max_leverage = int(
+                await asyncio.to_thread(lambda: bsvc._client_for(tg_id).get_max_leverage(leverage_reference_symbol))
+            )
+        # Preview assumes a typical 0.5% SL distance + 0.5% maintenance buffer.
+        # safe_max ≈ 0.9 / (0.005 + 0.005) = 90x.
+        safe_bound = 90
+        safe_leverage_preview = max(1, min(exchange_max_leverage, safe_bound))
+    except Exception:
+        exchange_max_leverage = int(row.get("leverage") or 20)
+        safe_leverage_preview = exchange_max_leverage
+
     return {
         "success": True,
         "risk_per_trade": autotrade_risk,
         "one_click_risk_per_trade": one_click_risk,
         "leverage": int(row.get("leverage") or 10),
         "leverage_mode": "auto_max_safe",
+        "leverage_reference_symbol": leverage_reference_symbol,
+        "exchange_max_leverage": exchange_max_leverage,
+        "safe_leverage_preview": safe_leverage_preview,
         "trading_mode": row.get("trading_mode") or "auto",
         "risk_mode": row.get("risk_mode") or "moderate",
         "equity": round(equity, 2),           # available + frozen + unrealized (for risk sizing)
