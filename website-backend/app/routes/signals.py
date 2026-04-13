@@ -39,6 +39,9 @@ _BISMILLAH_PATH = os.path.abspath(
 )
 if _BISMILLAH_PATH not in sys.path:
     sys.path.insert(0, _BISMILLAH_PATH)
+_BISMILLAH_APP_PATH = os.path.join(_BISMILLAH_PATH, "app")
+if _BISMILLAH_APP_PATH not in sys.path:
+    sys.path.insert(0, _BISMILLAH_APP_PATH)
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -141,7 +144,7 @@ async def _get_candles_1h(symbol: str, limit: int = 100) -> List[Dict[str, Any]]
     Returns list of candle dicts: {open, high, low, close, volume, time, ...}
     """
     try:
-        from app.providers.alternative_klines_provider import alternative_klines_provider
+        from providers.alternative_klines_provider import alternative_klines_provider
         klines = alternative_klines_provider.get_klines(symbol, interval='1h', limit=limit)
 
         # Convert Binance format [ts, open, high, low, close, vol, ...] to dict
