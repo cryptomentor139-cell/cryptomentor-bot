@@ -99,9 +99,9 @@ class BitunixAutoTradeClient:
           digest = SHA256(nonce + timestamp + api_key + queryParams + body)
           sign   = SHA256(digest + secretKey)
         """
-        digest_input = nonce + timestamp + self.api_key + query_params + body
+        digest_input = str(nonce) + str(timestamp) + str(self.api_key) + str(query_params) + str(body)
         digest = hashlib.sha256(digest_input.encode('utf-8')).hexdigest()
-        sign_input = digest + self.api_secret
+        sign_input = digest + str(self.api_secret)
         return hashlib.sha256(sign_input.encode('utf-8')).hexdigest()
 
     def _build_query_string(self, params: Dict) -> str:

@@ -1363,15 +1363,20 @@ function RiskManagementCard({ riskSettings, onPreviewRisk, onUpdateRisk, onUpdat
               const isHighRisk = rVal > 5.0;
 
               let btnClass = "px-3 py-2 rounded-xl font-bold text-[10px] transition-all border ";
+              
               if (isSelected) {
                 if (isHighRisk) {
                   // Amber-Red for > 5%
-                  btnClass += "bg-orange-600 text-white border-orange-500 shadow-[0_0_15px_rgba(234,88,12,0.4)]";
+                  btnClass += "bg-gradient-to-tr from-orange-600 to-red-600 text-white border-orange-400 shadow-[0_0_20px_rgba(234,88,12,0.5)] scale-105";
                 } else {
                   btnClass += "bg-amber-500 text-white border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]";
                 }
               } else {
-                btnClass += "bg-white/5 text-slate-400 border-white/5 hover:bg-white/10 hover:text-slate-200";
+                if (isHighRisk) {
+                  btnClass += "bg-orange-500/5 text-slate-400 border-orange-500/20 hover:bg-orange-500/15 hover:text-orange-300";
+                } else {
+                  btnClass += "bg-white/5 text-slate-400 border-white/5 hover:bg-white/10 hover:text-slate-200";
+                }
               }
 
               if (isDisabled) {
