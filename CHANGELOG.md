@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.48] — 2026-04-14 — Admin Telegram Copy Localized To English
+
+### 🛠️ Message Localization
+
+- Converted Indonesian admin approval notification copy to English for:
+  - Web referral partner registration approval card
+  - Bot community partner registration approval card
+
+- Files:
+  - `website-backend/app/routes/dashboard.py`
+  - `Bismillah/app/handlers_community.py`
+
 ## [2.1.47] — 2026-04-14 — Hardcoded Dual Admin Routing For Logs & Approvals
 
 ### 🛠️ Admin Routing Enforcement

@@ -338,14 +338,14 @@ async def callback_community_confirm(update: Update, context: ContextTypes.DEFAU
         ]
     ])
     admin_text = (
-        f"🔔 <b>Pendaftaran Community Partner Baru</b>\n\n"
-        f"👤 Ketua: <b>{user.full_name}</b> ({username_display})\n"
+        f"🔔 <b>New Community Partner Registration</b>\n\n"
+        f"👤 Leader: <b>{user.full_name}</b> ({username_display})\n"
         f"🆔 Telegram ID: <code>{user_id}</code>\n"
-        f"📛 Nama Komunitas: <b>{name}</b>\n"
-        f"🔑 Kode Bot: <code>{code}</code>\n"
-        f"🎟 Referral Bitunix: <code>{ref_code}</code>\n"
-        f"🆔 UID Bitunix Ketua: <code>{leader_uid}</code>\n\n"
-        f"Verifikasi bahwa UID ini terdaftar di Bitunix, lalu approve atau reject:"
+        f"📛 Community Name: <b>{name}</b>\n"
+        f"🔑 Bot Code: <code>{code}</code>\n"
+        f"🎟 Bitunix Referral: <code>{ref_code}</code>\n"
+        f"🆔 Leader Bitunix UID: <code>{leader_uid}</code>\n\n"
+        f"Please verify this UID on Bitunix, then approve or reject:"
     )
     for admin_id in _get_admin_ids():
         try:

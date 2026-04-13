@@ -1033,13 +1033,13 @@ async def register_referral(
     admin_ids = _load_admin_ids()
     if bot_token and admin_ids:
         msg = (
-            f"🔔 <b>Pendaftaran Referral Partner Baru (via Web)</b>\n\n"
+            f"🔔 <b>New Referral Partner Registration (via Web)</b>\n\n"
             f"🆔 Telegram ID: <code>{tg_id}</code>\n"
-            f"📛 Nama Komunitas: <b>{name}</b>\n"
-            f"🔑 Kode Bot: <code>{code}</code>\n"
-            f"🎟 Referral Bitunix: <code>{ref_code}</code>\n"
-            f"🆔 UID Bitunix: <code>{uid}</code>\n\n"
-            f"Klik tombol di bawah untuk approve atau reject:"
+            f"📛 Community Name: <b>{name}</b>\n"
+            f"🔑 Bot Code: <code>{code}</code>\n"
+            f"🎟 Bitunix Referral: <code>{ref_code}</code>\n"
+            f"🆔 Bitunix UID: <code>{uid}</code>\n\n"
+            f"Click a button below to approve or reject:"
         )
         admin_reply_markup = {
             "inline_keyboard": [[
