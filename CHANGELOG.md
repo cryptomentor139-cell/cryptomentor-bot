@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.1.44] — 2026-04-14 — Referral-Aware Bitunix Registration Link In Gatekeeper
+
+### 🛠️ Referral Routing Enhancement
+
+#### 1) Added public referral resolver endpoint for onboarding
+- New endpoint: `GET /dashboard/referral/resolve?code=<community_code>`
+- Behavior:
+  - returns active community partner `bitunix_referral_url` when valid
+  - safely falls back to default `https://www.bitunix.com/register?vipCode=sq45`
+
+#### 2) Gatekeeper and rejection flow now support `?ref=` links
+- Web app now reads `?ref=<community_code>` from URL and resolves referral metadata via backend.
+- Step 1 register CTA and rejected-state re-register CTA now use resolved partner URL/code.
+- If no `ref` is provided (or code invalid/inactive), UI uses default `sq45` referral link.
+
+- Files:
+  - `website-backend/app/routes/dashboard.py`
+  - `website-frontend/src/App.jsx`
+
 ## [2.1.43] — 2026-04-14 — Apply Auto Max-Safe Leverage Logic To 1-Click Execution
 
 ### 🛠️ 1-Click Sizing Upgrade

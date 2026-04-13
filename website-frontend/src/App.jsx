@@ -15,6 +15,9 @@ const _CONFIGURED_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const _FALLBACK_BASE = '/api';
 const AUTOTRADE_RISK_STORAGE_KEY = 'cm_autotrade_risk';
 const ONE_CLICK_RISK_STORAGE_KEY = 'cm_one_click_risk';
+const REF_CODE_STORAGE_KEY = 'cm_ref_code_session';
+const DEFAULT_BITUNIX_REFERRAL_CODE = 'sq45';
+const DEFAULT_BITUNIX_REFERRAL_URL = `https://www.bitunix.com/register?vipCode=${DEFAULT_BITUNIX_REFERRAL_CODE}`;
 
 if (typeof window !== 'undefined' && !window.__cmDialogPatched) {
   window.__cmDialogPatched = true;
@@ -285,6 +288,13 @@ function RiskSliderControl({
 }
 
 export default function App() {
+  const [resolvedReferral, setResolvedReferral] = useState({
+    source: 'default',
+    bitunix_referral_code: DEFAULT_BITUNIX_REFERRAL_CODE,
+    bitunix_referral_url: DEFAULT_BITUNIX_REFERRAL_URL,
+    community_code: null,
+    community_name: null,
+  });
   const [user, setUser] = useState(() => {
     try {
       const raw = localStorage.getItem('cm_user');
@@ -389,6 +399,70 @@ export default function App() {
   useEffect(() => {
     document.body.style.overflow = isMobileMenuOpen ? 'hidden' : 'unset';
   }, [isMobileMenuOpen]);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = (params.get('ref') || '').trim().toLowerCase();
+      if (ref) sessionStorage.setItem(REF_CODE_STORAGE_KEY, ref);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveReferral = async () => {
+      let refCode = '';
+      try {
+        const params = new URLSearchParams(window.location.search);
+        refCode = (params.get('ref') || '').trim().toLowerCase();
+        if (!refCode) refCode = (sessionStorage.getItem(REF_CODE_STORAGE_KEY) || '').trim().toLowerCase();
+      } catch {}
+
+      const endpoint = `${_CONFIGURED_BASE}/dashboard/referral/resolve${refCode ? `?code=${encodeURIComponent(refCode)}` : ''}`;
+      const fallbackEndpoint = `${_FALLBACK_BASE}/dashboard/referral/resolve${refCode ? `?code=${encodeURIComponent(refCode)}` : ''}`;
+      const toState = (payload) => ({
+        source: payload?.source || 'default',
+        community_code: payload?.community_code || null,
+        community_name: payload?.community_name || null,
+        bitunix_referral_code: payload?.bitunix_referral_code || DEFAULT_BITUNIX_REFERRAL_CODE,
+        bitunix_referral_url: payload?.bitunix_referral_url || DEFAULT_BITUNIX_REFERRAL_URL,
+      });
+
+      try {
+        const res = await fetch(endpoint);
+        if (res.ok) {
+          const payload = await res.json();
+          if (!cancelled) setResolvedReferral(toState(payload));
+          return;
+        }
+      } catch {}
+
+      if (_CONFIGURED_BASE !== _FALLBACK_BASE) {
+        try {
+          const res = await fetch(fallbackEndpoint);
+          if (res.ok) {
+            const payload = await res.json();
+            if (!cancelled) setResolvedReferral(toState(payload));
+            return;
+          }
+        } catch {}
+      }
+
+      if (!cancelled) {
+        setResolvedReferral({
+          source: 'default',
+          community_code: null,
+          community_name: null,
+          bitunix_referral_code: DEFAULT_BITUNIX_REFERRAL_CODE,
+          bitunix_referral_url: DEFAULT_BITUNIX_REFERRAL_URL,
+        });
+      }
+    };
+
+    resolveReferral();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -1139,6 +1213,8 @@ export default function App() {
     if (!verStatus || verStatus.status === 'none') {
       return <GatekeeperScreen
         user={user}
+        bitunixReferralUrl={resolvedReferral.bitunix_referral_url}
+        bitunixReferralCode={resolvedReferral.bitunix_referral_code}
         onSubmitUID={async (uid) => {
           try {
             const resp = await apiFetch('/user/submit-uid', {
@@ -1164,6 +1240,7 @@ export default function App() {
     }
     if (verStatus.status === 'rejected' || verStatus.status === 'uid_rejected') {
       return <RejectedScreen
+        bitunixReferralUrl={resolvedReferral.bitunix_referral_url}
         onResubmit={async (uid) => {
           try {
             const resp = await apiFetch('/user/submit-uid', {
@@ -2910,7 +2987,7 @@ function CourseCard({ course }) {
 
 // ── Verification & Onboarding Screens ────────────────────────────────────────
 
-function GatekeeperScreen({ user, onSubmitUID, onLogout }) {
+function GatekeeperScreen({ user, bitunixReferralUrl, bitunixReferralCode, onSubmitUID, onLogout }) {
   const [step, setStep] = useState(1);
   const [uid, setUID] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -2966,11 +3043,11 @@ function GatekeeperScreen({ user, onSubmitUID, onLogout }) {
           <>
             <h2 className="text-xl font-bold text-white mb-2">Step 1: Register on Bitunix</h2>
             <p className="text-slate-300 text-sm mb-4">Create a Bitunix account using our referral link. This is required to enable AI-powered trading.</p>
-            <a href="https://www.bitunix.com/register?vipCode=sq45" target="_blank" rel="noopener noreferrer"
+            <a href={bitunixReferralUrl || DEFAULT_BITUNIX_REFERRAL_URL} target="_blank" rel="noopener noreferrer"
               className="block w-full text-center bg-cyan-500 text-white font-bold py-3 rounded-xl mb-4 hover:bg-cyan-600 transition-colors">
               Open Bitunix Registration
             </a>
-            <p className="text-xs text-slate-500 mb-6">Referral Code: <code className="text-cyan-400">sq45</code> (auto-applied via link)</p>
+            <p className="text-xs text-slate-500 mb-6">Referral Code: <code className="text-cyan-400">{bitunixReferralCode || DEFAULT_BITUNIX_REFERRAL_CODE}</code> (auto-applied via link)</p>
             <button onClick={() => setStep(2)} className="w-full bg-white/10 text-white font-bold py-3 rounded-xl hover:bg-white/20 transition-colors">
               I've Already Registered &rarr; Continue
             </button>
@@ -3034,7 +3111,7 @@ function VerificationPendingScreen({ onRefresh, onLogout }) {
   );
 }
 
-function RejectedScreen({ onResubmit, onLogout }) {
+function RejectedScreen({ bitunixReferralUrl, onResubmit, onLogout }) {
   const [uid, setUid] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -3054,7 +3131,7 @@ function RejectedScreen({ onResubmit, onLogout }) {
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-6 text-sm text-amber-200/80">
           Make sure you registered on Bitunix using our referral link before submitting your UID.
         </div>
-        <a href="https://www.bitunix.com/register?vipCode=sq45" target="_blank" rel="noopener noreferrer"
+        <a href={bitunixReferralUrl || DEFAULT_BITUNIX_REFERRAL_URL} target="_blank" rel="noopener noreferrer"
           className="block w-full text-center bg-fuchsia-500/15 border border-fuchsia-500/30 text-fuchsia-400 font-bold py-3 rounded-xl mb-6 hover:bg-fuchsia-500/25 transition-colors">
           Re-register on Bitunix with Referral →
         </a>

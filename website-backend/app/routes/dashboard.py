@@ -896,6 +896,8 @@ async def get_portfolio(tg_id: int = Depends(get_current_user)):
 # ─────────────────────────────────────────────────────────────────────────────
 
 import re as _re
+DEFAULT_BITUNIX_REFERRAL_CODE = "sq45"
+DEFAULT_BITUNIX_REFERRAL_URL = f"https://www.bitunix.com/register?vipCode={DEFAULT_BITUNIX_REFERRAL_CODE}"
 
 def _slugify(name: str) -> str:
     slug = _re.sub(r'[^a-zA-Z0-9]', '', name.lower())
@@ -931,6 +933,51 @@ async def get_referral(tg_id: int = Depends(get_current_user)):
         "member_count": row.get("member_count", 0),
         "invite_link": invite_link,
         "created_at": row.get("created_at"),
+    }
+
+
+@router.get("/referral/resolve")
+async def resolve_referral(code: str | None = None):
+    """Resolve community ref code to active Bitunix referral URL with safe default fallback."""
+    clean_code = _re.sub(r"[^a-z0-9]", "", str(code or "").lower())[:20]
+    if not clean_code:
+        return {
+            "source": "default",
+            "community_code": None,
+            "community_name": None,
+            "bitunix_referral_code": DEFAULT_BITUNIX_REFERRAL_CODE,
+            "bitunix_referral_url": DEFAULT_BITUNIX_REFERRAL_URL,
+        }
+
+    s = _client()
+    try:
+        res = (
+            s.table("community_partners")
+            .select("community_code,community_name,bitunix_referral_code,bitunix_referral_url,status")
+            .eq("community_code", clean_code)
+            .eq("status", "active")
+            .limit(1)
+            .execute()
+        )
+        row = (res.data or [None])[0]
+    except Exception:
+        row = None
+
+    if row and row.get("bitunix_referral_url"):
+        return {
+            "source": "community",
+            "community_code": row.get("community_code"),
+            "community_name": row.get("community_name"),
+            "bitunix_referral_code": row.get("bitunix_referral_code"),
+            "bitunix_referral_url": row.get("bitunix_referral_url"),
+        }
+
+    return {
+        "source": "default",
+        "community_code": clean_code,
+        "community_name": None,
+        "bitunix_referral_code": DEFAULT_BITUNIX_REFERRAL_CODE,
+        "bitunix_referral_url": DEFAULT_BITUNIX_REFERRAL_URL,
     }
 
 
