@@ -379,7 +379,8 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
     Returns:
     - risk_per_trade: AutoTrade risk percentage (0.5% to 10.0%)
     - one_click_risk_per_trade: 1-Click risk percentage (0.5% to 100.0%)
-    - leverage: Current leverage setting
+    - leverage: Session leverage baseline (legacy compatibility)
+    - leverage_mode: "auto_max_safe" (execution uses max-safe leverage)
     - trading_mode: Current mode (auto, scalping, swing)
     - risk_mode: Risk profile (conservative, moderate, aggressive)
     - equity: LIVE equity from Bitunix (balance + unrealized PnL) — used for risk calcs
@@ -428,6 +429,7 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
         "risk_per_trade": autotrade_risk,
         "one_click_risk_per_trade": one_click_risk,
         "leverage": int(row.get("leverage") or 10),
+        "leverage_mode": "auto_max_safe",
         "trading_mode": row.get("trading_mode") or "auto",
         "risk_mode": row.get("risk_mode") or "moderate",
         "equity": round(equity, 2),           # available + frozen + unrealized (for risk sizing)

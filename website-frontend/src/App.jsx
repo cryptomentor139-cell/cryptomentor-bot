@@ -323,6 +323,7 @@ export default function App() {
     risk_per_trade: 5.0,
     one_click_risk_per_trade: 0.5,
     leverage: 10,
+    leverage_mode: 'auto_max_safe',
     equity: 0,
     balance: 0,
     frozen: 0,
@@ -702,6 +703,7 @@ export default function App() {
           risk_per_trade: Number.isFinite(parsedRisk) ? parsedRisk : storedAutotradeRisk,
           one_click_risk_per_trade: Number.isFinite(parsedOneClickRisk) ? parsedOneClickRisk : storedOneClickRisk,
           leverage: data.leverage || 10,
+          leverage_mode: data.leverage_mode || 'auto_max_safe',
           equity: data.equity || 0,
           balance: data.balance || 0,        // free/available only
           frozen: data.frozen || 0,          // locked in positions
@@ -1345,7 +1347,7 @@ function RiskManagementCard({ riskSettings, onPreviewRisk, onUpdateRisk, onUpdat
       <div className="flex items-start justify-between mb-6 relative z-10">
         <div>
           <h3 className="text-xl md:text-2xl font-black text-white mb-2">Risk Management</h3>
-          <p className="text-slate-400 text-xs md:text-sm font-medium leading-relaxed">Position sizes scale inversely with stop loss distance.</p>
+          <p className="text-slate-400 text-xs md:text-sm font-medium leading-relaxed">Loss is fixed by equity × risk %. Leverage is auto-optimized to the highest safe value per setup.</p>
         </div>
         <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20"><Target className="text-amber-400 w-6 h-6" /></div>
       </div>
@@ -1408,22 +1410,15 @@ function RiskManagementCard({ riskSettings, onPreviewRisk, onUpdateRisk, onUpdat
         {/* Leverage & Margin Mode Row */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Leverage</p>
-            <div className="flex gap-1.5 bg-[#050505] p-1 rounded-lg border border-white/5">
-              {[5, 10, 20].map(lev => (
-                <button
-                  key={lev}
-                  onClick={() => onUpdateLeverage(lev)}
-                  disabled={autoRiskBusy}
-                  className={`flex-1 py-1.5 rounded-md font-bold text-[10px] transition-all ${
-                    riskSettings.leverage === lev
-                      ? 'bg-amber-500 text-white'
-                      : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  {lev}x
-                </button>
-              ))}
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Leverage Execution</p>
+            <div className="bg-[#050505] p-3 rounded-lg border border-white/5 space-y-1">
+              <p className="text-xs font-black text-amber-300">AUTO MAX-SAFE</p>
+              <p className="text-[10px] text-slate-400">
+                Engine uses exchange max leverage with safety bound from SL distance.
+              </p>
+              <p className="text-[10px] text-slate-500">
+                Session baseline: <span className="text-slate-300 font-bold">{riskSettings.leverage || 10}x</span>
+              </p>
             </div>
           </div>
           <div>
@@ -1637,6 +1632,7 @@ function EngineTab({
     risk_per_trade: 5.0,
     one_click_risk_per_trade: 0.5,
     leverage: 10,
+    leverage_mode: 'auto_max_safe',
     equity: 0,
     balance: 0,
     frozen: 0,
@@ -3075,11 +3071,8 @@ function OnboardingWizard({ onComplete, onLogout }) {
   const [saving, setSaving] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [riskPerTrade, setRiskPerTrade] = useState(5.0);
-  const [leverage, setLeverage] = useState(10);
   const [marginMode, setMarginMode] = useState('cross');
   const [starting, setStarting] = useState(false);
-
-  const LEVERAGE_OPTIONS = [1, 2, 3, 5, 10, 15, 20];
 
   const handleTestConnection = async () => {
     setTestResult(null);
@@ -3111,7 +3104,6 @@ function OnboardingWizard({ onComplete, onLogout }) {
   const handleSaveRisk = async () => {
     await Promise.all([
       apiFetch('/dashboard/settings/risk', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ risk_per_trade: riskPerTrade }) }),
-      apiFetch('/dashboard/settings/leverage', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leverage }) }),
       apiFetch('/dashboard/settings/margin-mode', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ margin_mode: marginMode }) }),
     ]);
     setStep(3);
@@ -3199,14 +3191,10 @@ function OnboardingWizard({ onComplete, onLogout }) {
                 title="AutoTrade Risk Per Trade (0.5% - 10%)"
               />
             </div>
-            <label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Leverage</label>
-            <div className="flex gap-2 mb-6 flex-wrap">
-              {LEVERAGE_OPTIONS.map(lev => (
-                <button key={lev} onClick={() => setLeverage(lev)}
-                  className={`px-4 py-2 rounded-xl font-bold text-sm ${
-                    leverage === lev ? 'bg-cyan-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                  }`}>{lev}x</button>
-              ))}
+            <div className="mb-6 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Leverage Execution</p>
+              <p className="text-xs text-amber-300 font-bold">Auto Max-Safe</p>
+              <p className="text-[11px] text-slate-400">Engine automatically uses the highest safe leverage based on SL distance and exchange limits.</p>
             </div>
             <label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Margin Mode</label>
             <div className="flex gap-2 mb-8">
@@ -3233,7 +3221,7 @@ function OnboardingWizard({ onComplete, onLogout }) {
               <div className="flex justify-between"><span className="text-slate-400">Exchange</span><span className="text-white font-bold">Bitunix</span></div>
               <div className="flex justify-between"><span className="text-slate-400">API Key</span><span className="text-white font-mono">...{apiKey.slice(-4)}</span></div>
               <div className="flex justify-between"><span className="text-slate-400">Risk Per Trade</span><span className="text-white font-bold">{riskPerTrade}%</span></div>
-              <div className="flex justify-between"><span className="text-slate-400">Leverage</span><span className="text-white font-bold">{leverage}x</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Leverage</span><span className="text-white font-bold">Auto Max-Safe</span></div>
               <div className="flex justify-between"><span className="text-slate-400">Margin Mode</span><span className="text-white font-bold">{marginMode === 'cross' ? 'Cross' : 'Isolated'}</span></div>
             </div>
             <button onClick={handleStartEngine} disabled={starting}

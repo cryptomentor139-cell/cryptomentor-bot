@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.1.42] — 2026-04-13 — AutoTrade Risk UI Aligned With Live Execution Logic
+
+### 🛠️ Web Risk Management Alignment
+
+#### 1) Risk panel now reflects actual engine behavior
+- Updated Engine Risk Management copy to match live logic:
+  - fixed loss by `equity × risk%`
+  - leverage is auto-optimized to max-safe value per setup
+
+#### 2) Replaced fixed leverage selector in Engine tab
+- Removed clickable fixed leverage choices from AutoTrade risk card UI
+- Added read-only execution model display:
+  - `AUTO MAX-SAFE` leverage execution
+  - session leverage baseline shown as reference only
+
+#### 3) Onboarding flow now mirrors execution model
+- Removed leverage selection from onboarding Step 2
+- Onboarding summary now states leverage as `Auto Max-Safe`
+- Risk save call no longer writes manual leverage during onboarding
+
+#### 4) Backend settings payload enriched for frontend mapping
+- `/dashboard/settings` now includes:
+  - `leverage_mode: "auto_max_safe"`
+
+- Files:
+  - `website-frontend/src/App.jsx`
+  - `website-backend/app/routes/dashboard.py`
+
 ## [2.1.41] — 2026-04-13 — Unified Max-Leverage Risk Sizing Across AutoTrade Engines
 
 ### 🛠️ Leverage + Risk Consistency Update
