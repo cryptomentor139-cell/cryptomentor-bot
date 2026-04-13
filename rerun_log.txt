@@ -1,22 +1,139 @@
 🔄 STARTING GLOBAL RERUN SYSTEM...
 Updating all users to 3% risk per trade...
+✅ All sessions updated to 3.0%.
+Found 20 active users to process.
+Scanning 16 pairs for valid signals...
+✅ Got 50 candles from Binance for BTC
+✅ Got 60 candles from Bitunix for BTCUSDT
+✅ Got 30 candles from Bitunix for BTCUSDT
+❌ Failed to get klines for BTC from all sources
+✅ Got 100 candles from Bitunix for BTCUSDT
+✅ Got 60 candles from Bitunix for BTCUSDT
+✅ Got 50 candles from Binance for ETH
+✅ Got 60 candles from Binance for ETH
+✅ Got 30 candles from Bitunix for ETHUSDT
+❌ Failed to get klines for ETH from all sources
+✅ Got 100 candles from Bitunix for ETHUSDT
+✅ Got 60 candles from Bitunix for ETHUSDT
+✅ Got 50 candles from Bitunix for SOLUSDT
+✅ Got 60 candles from Bitunix for SOLUSDT
+🔥 VALID SIGNAL: SOLUSDT LONG (Confidence: 70%)
+✅ Got 50 candles from Bitunix for BNBUSDT
+✅ Got 60 candles from Bitunix for BNBUSDT
+✅ Got 100 candles from Bitunix for BNBUSDT
+✅ Got 60 candles from Bitunix for BNBUSDT
+✅ Got 50 candles from Bitunix for XRPUSDT
+✅ Got 60 candles from Bitunix for XRPUSDT
+✅ Got 30 candles from Bitunix for XRPUSDT
+❌ Failed to get klines for XRP from all sources
+✅ Got 100 candles from Bitunix for XRPUSDT
+✅ Got 60 candles from Bitunix for XRPUSDT
+✅ Got 50 candles from Bitunix for DOGEUSDT
+✅ Got 60 candles from Bitunix for DOGEUSDT
+🔥 VALID SIGNAL: DOGEUSDT LONG (Confidence: 70%)
+✅ Got 50 candles from Bitunix for ADAUSDT
+✅ Got 60 candles from Bitunix for ADAUSDT
+✅ Got 30 candles from Bitunix for ADAUSDT
+❌ Failed to get klines for ADA from all sources
+✅ Got 100 candles from Bitunix for ADAUSDT
+✅ Got 60 candles from Bitunix for ADAUSDT
+✅ Got 50 candles from Bitunix for AVAXUSDT
+✅ Got 60 candles from Bitunix for AVAXUSDT
+✅ Got 30 candles from Bitunix for AVAXUSDT
+❌ Failed to get klines for AVAX from all sources
+✅ Got 100 candles from Bitunix for AVAXUSDT
+✅ Got 60 candles from Bitunix for AVAXUSDT
+✅ Got 50 candles from Bitunix for DOTUSDT
+✅ Got 60 candles from Bitunix for DOTUSDT
+✅ Got 100 candles from Bitunix for DOTUSDT
+✅ Got 60 candles from Bitunix for DOTUSDT
+✅ Got 50 candles from Binance for MATIC
+✅ Got 60 candles from Binance for MATIC
+✅ Got 30 candles from Binance for MATIC
+❌ Failed to get klines for MATIC from all sources
+✅ Got 100 candles from Binance for MATIC
+✅ Got 60 candles from Binance for MATIC
+✅ Got 50 candles from Bitunix for LINKUSDT
+✅ Got 60 candles from Bitunix for LINKUSDT
+✅ Got 30 candles from Bitunix for LINKUSDT
+❌ Failed to get klines for LINK from all sources
+✅ Got 100 candles from Bitunix for LINKUSDT
+✅ Got 60 candles from Bitunix for LINKUSDT
+✅ Got 50 candles from Bitunix for UNIUSDT
+✅ Got 60 candles from Bitunix for UNIUSDT
+✅ Got 30 candles from Bitunix for UNIUSDT
+❌ Failed to get klines for UNI from all sources
+✅ Got 100 candles from Bitunix for UNIUSDT
+✅ Got 60 candles from Bitunix for UNIUSDT
+✅ Got 50 candles from Bitunix for ATOMUSDT
+✅ Got 60 candles from Bitunix for ATOMUSDT
+✅ Got 30 candles from Bitunix for ATOMUSDT
+❌ Failed to get klines for ATOM from all sources
+✅ Got 100 candles from Bitunix for ATOMUSDT
+✅ Got 60 candles from Bitunix for ATOMUSDT
+✅ Got 50 candles from Bitunix for XAUUSDT
+✅ Got 60 candles from Bitunix for XAUUSDT
+✅ Got 30 candles from Bitunix for XAUUSDT
+❌ Failed to get klines for XAU from all sources
+✅ Got 100 candles from Bitunix for XAUUSDT
+✅ Got 60 candles from Bitunix for XAUUSDT
+✅ Got 50 candles from Bitunix for CLUSDT
+✅ Got 60 candles from Bitunix for CLUSDT
+✅ Got 30 candles from Bitunix for CLUSDT
+❌ Failed to get klines for CL from all sources
+✅ Got 100 candles from Bitunix for CLUSDT
+✅ Got 60 candles from Bitunix for CLUSDT
+✅ Got 50 candles from Bitunix for QQQUSDT
+✅ Got 60 candles from Bitunix for QQQUSDT
+✅ Got 30 candles from Bitunix for QQQUSDT
+❌ Failed to get klines for QQQ from all sources
+✅ Got 100 candles from Bitunix for QQQUSDT
+✅ Got 60 candles from Bitunix for QQQUSDT
+
+🚀 Executing SOLUSDT LONG for all eligible users...
+  [User:1969755249] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1265990951] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:7338184122] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:5874734020] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1156155004] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:8030312242] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1187119989] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:2107355248] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1087836223] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:7972497694] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1766523174] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:5366384434] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:312485564] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:7582955848] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:6954315669] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1306878013] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:5187148337] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:8429733088] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:985106924] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:7675185179] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+
+🚀 Executing DOGEUSDT LONG for all eligible users...
+  [User:1969755249] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1265990951] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:7338184122] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:5874734020] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1156155004] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:8030312242] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1187119989] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:2107355248] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1087836223] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:7972497694] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1766523174] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:5366384434] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:312485564] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:7582955848] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:6954315669] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1306878013] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:5187148337] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:8429733088] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:985106924] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:7675185179] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+
+✅ Global rerun complete.
 
 --- ERRORS ---
-Traceback (most recent call last):
-  File "/root/cryptomentor-bot/global_rerun.py", line 104, in <module>
-    asyncio.run(global_rerun())
-  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
-    return runner.run(main)
-           ^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
-    return self._loop.run_until_complete(task)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "/root/cryptomentor-bot/global_rerun.py", line 33, in global_rerun
-    }).execute()
-       ^^^^^^^^^
-  File "/root/cryptomentor-bot/venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 78, in execute
-    raise APIError(r.json())
-postgrest.exceptions.APIError: {'code': '21000', 'details': None, 'hint': None, 'message': 'UPDATE requires a WHERE clause'}

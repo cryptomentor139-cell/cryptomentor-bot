@@ -75,27 +75,29 @@ async def global_rerun():
         for uid in users:
             try:
                 u_client = BitunixAutoTradeClient(uid)
-                # Check position
-                pos_resp = await u_client._bitunix_request("POST", "/api/v1/futures/position", {"symbol": symbol})
-                if pos_resp.get("success") and pos_resp.get("data"):
-                    if isinstance(pos_resp["data"], list) and len(pos_resp["data"]) > 0:
-                        print(f"  [User:{uid}] Already in {symbol}. Skipping.")
-                        continue
-                    if isinstance(pos_resp["data"], dict) and float(pos_resp["data"].get("size", 0)) != 0:
+                # Check position (using the sync get_positions wrapped in thread)
+                pos_resp = await asyncio.to_thread(u_client.get_positions)
+                
+                if pos_resp.get("success"):
+                    # result has 'positions' list
+                    positions = pos_resp.get("positions", [])
+                    if any(p.get("symbol") == symbol for p in positions):
                         print(f"  [User:{uid}] Already in {symbol}. Skipping.")
                         continue
 
                 # Place order
                 u_engine = ScalpingEngine(uid, u_client, None, 0, ScalpingConfig())
-                # Ensure the engine instance also has the 3% risk (in case it's hardcoded somewhere)
                 u_engine.config.risk_per_trade = 3.0
                 
+                # place_scalping_order is async
                 success = await u_engine.place_scalping_order(signal)
                 if success:
                     print(f"  [User:{uid}] ✅ ORDER PLACED at 3% risk.")
                 else:
                     print(f"  [User:{uid}] ❌ FAILED (Qty or Margin).")
             except Exception as ue:
+                import traceback
+                traceback.print_exc()
                 print(f"  [User:{uid}] ⚠️ ERROR: {ue}")
 
     print("\n✅ Global rerun complete.")
