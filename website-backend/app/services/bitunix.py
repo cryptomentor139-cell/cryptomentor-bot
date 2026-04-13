@@ -42,7 +42,7 @@ except ImportError as e:
     _BITUNIX_AVAILABLE = False
 
 
-# ---------------------------------------------------------------- keys ---- #
+_CLIENT_CACHE: Dict[int, BitunixAutoTradeClient] = {}
 
 def get_user_api_keys(telegram_id: int) -> Optional[Dict[str, str]]:
     """Fetch + decrypt the user's stored exchange API keys (bitunix only for now)."""
@@ -86,23 +86,36 @@ def save_user_api_keys(telegram_id: int, api_key: str, api_secret: str, exchange
         "updated_at": datetime.utcnow().isoformat(),
     }
     s.table("user_api_keys").upsert(row, on_conflict="telegram_id,exchange").execute()
+    # Invalidate cache
+    if telegram_id in _CLIENT_CACHE:
+        del _CLIENT_CACHE[telegram_id]
 
 
 def delete_user_api_keys(telegram_id: int, exchange: str = "bitunix"):
     """Remove stored API keys for a user."""
     s = _client()
     s.table("user_api_keys").delete().eq("telegram_id", int(telegram_id)).eq("exchange", exchange).execute()
+    # Invalidate cache
+    if telegram_id in _CLIENT_CACHE:
+        del _CLIENT_CACHE[telegram_id]
 
 
 def _client_for(telegram_id: int) -> "BitunixAutoTradeClient":
     if not _BITUNIX_AVAILABLE or BitunixAutoTradeClient is None:
         raise PermissionError("Bitunix client not available on this server")
+    
+    if telegram_id in _CLIENT_CACHE:
+        return _CLIENT_CACHE[telegram_id]
+        
     keys = get_user_api_keys(telegram_id)
     if not keys:
         raise PermissionError("Bitunix API keys not configured for this user")
-    return BitunixAutoTradeClient(
+    
+    client = BitunixAutoTradeClient(
         api_key=keys["api_key"], api_secret=keys["api_secret"]
     )
+    _CLIENT_CACHE[telegram_id] = client
+    return client
 
 
 # -------------------------------------------------------- read helpers ---- #

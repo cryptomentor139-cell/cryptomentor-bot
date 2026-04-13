@@ -508,44 +508,48 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
     signals: List[Dict[str, Any]] = []
     now_utc = datetime.now(timezone.utc)
 
-    # Fetch user's risk preference (for adaptive signal confidence threshold)
-    user_risk_pct = 1.0  # Default: 1% risk
-    if tg_id:
-        try:
-            s = _client()
-            res = s.table("autotrade_sessions").select(
-                "risk_per_trade"
-            ).eq("telegram_id", tg_id).limit(1).execute()
-            sess = (res.data or [{}])[0]
-            user_risk_pct = _normalize_risk_pct(sess.get("risk_per_trade"), default=1.0)
-        except Exception as e:
-            logger.warning(f"Failed to fetch user risk setting: {e}")
-            user_risk_pct = 1.0
-
-    # Get trade status (for in-position or closed trade tracking)
+    # Parallel setup fetches
     try:
-        trade_status = _trade_status_by_symbol(tg_id) if tg_id else {}
+        symbols = [w[1] for w in _WATCHLIST]
+        ticker_params = {"symbols": '["' + '","'.join(symbols) + '"]'}
+        
+        async def fetch_user_risk():
+            try:
+                s = _client()
+                res = await asyncio.to_thread(lambda: s.table("autotrade_sessions").select(
+                    "risk_per_trade"
+                ).eq("telegram_id", tg_id).limit(1).execute())
+                sess = (res.data or [{}])[0]
+                return _normalize_risk_pct(sess.get("risk_per_trade"), default=1.0)
+            except Exception:
+                return 1.0
+
+        async def fetch_ticker_data():
+            try:
+                r = await _http_client.get(_BINANCE_TICKER, params=ticker_params)
+                r.raise_for_status()
+                return {row["symbol"]: row for row in r.json()}
+            except Exception:
+                return {}
+
+        results = await asyncio.gather(
+            fetch_user_risk() if tg_id else asyncio.sleep(0, result=1.0),
+            asyncio.to_thread(lambda: _trade_status_by_symbol(tg_id)) if tg_id else asyncio.sleep(0, result={}),
+            fetch_ticker_data()
+        )
+        user_risk_pct, trade_status, ticker_data = results
+        
     except Exception as e:
-        logger.warning(f"Failed to fetch trade status: {e}")
+        logger.warning(f"Parallel setup failed in get_signals: {e}")
+        user_risk_pct = 1.0
         trade_status = {}
+        ticker_data = {}
 
     status_label_map = {
         "in_position": "In Position",
         "tp_hit": "Take Profit Hit",
         "sl_hit": "Stop Loss Hit",
     }
-
-    # Fetch Binance tickers for all symbols (used as fallback)
-    symbols = [w[1] for w in _WATCHLIST]
-    try:
-        params = {"symbols": '["' + '","'.join(symbols) + '"]'}
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            r = await client.get(_BINANCE_TICKER, params=params)
-            r.raise_for_status()
-            ticker_data = {row["symbol"]: row for row in r.json()}
-    except Exception as e:
-        logger.error(f"Failed to fetch Binance tickers: {e}")
-        ticker_data = {}
 
     async def process_one_symbol(idx, pair, sym, tier, sig_type):
         try:
