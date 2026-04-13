@@ -460,11 +460,11 @@ def set_risk_per_trade(telegram_id: int, risk_pct: float) -> Dict[str, Any]:
         else:
             # Above $100 -> Allow down to 0.5%
             if risk_pct < 0.5 or risk_pct > 100.0:
-            return {
-                'success': False,
-                'error': 'Risk must be between 0.5% and 100%',
-                'risk_per_trade': 0
-            }
+                return {
+                    'success': False,
+                    'error': 'Risk must be between 0.5% and 100%',
+                    'risk_per_trade': 0
+                }
         
         # Ensure user exists
         ensure_user_exists_no_credit(int(telegram_id))
