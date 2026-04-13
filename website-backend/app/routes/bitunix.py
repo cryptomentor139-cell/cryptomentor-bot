@@ -104,7 +104,8 @@ def _annotate_position_sources(tg_id: int, positions: list[dict]) -> list[dict]:
     try:
         s = _client()
         db_res = s.table("autotrade_trades").select(
-            "id, symbol, side, qty, quantity, entry_price, status"
+            "id, symbol, side, qty, quantity, entry_price, status, strategy, "
+            "tp1_price, tp2_price, tp3_price, tp1_hit, tp2_hit, tp3_hit"
         ).eq("telegram_id", int(tg_id)).eq("status", "open").execute()
         db_open = db_res.data or []
     except Exception:
@@ -130,6 +131,13 @@ def _annotate_position_sources(tg_id: int, positions: list[dict]) -> list[dict]:
             if _is_same_position(enriched, db_trade):
                 source = "autotrade"
                 matched_trade_id = db_trade.get("id")
+                enriched["strategy"] = db_trade.get("strategy")
+                enriched["tp1_price"] = db_trade.get("tp1_price")
+                enriched["tp2_price"] = db_trade.get("tp2_price")
+                enriched["tp3_price"] = db_trade.get("tp3_price")
+                enriched["tp1_hit"] = bool(db_trade.get("tp1_hit"))
+                enriched["tp2_hit"] = bool(db_trade.get("tp2_hit"))
+                enriched["tp3_hit"] = bool(db_trade.get("tp3_hit"))
                 remaining_db.pop(idx)
                 break
         enriched["source"] = source
@@ -197,7 +205,8 @@ async def bitunix_positions(tg_id: int = Depends(get_current_user)):
         tasks = [
             bsvc.fetch_positions(tg_id),
             asyncio.to_thread(lambda: s.table("autotrade_trades").select(
-                "id, symbol, side, qty, quantity, entry_price, status"
+                "id, symbol, side, qty, quantity, entry_price, status, strategy, "
+                "tp1_price, tp2_price, tp3_price, tp1_hit, tp2_hit, tp3_hit"
             ).eq("telegram_id", int(tg_id)).eq("status", "open").execute())
         ]
         results = await asyncio.gather(*tasks)
@@ -222,6 +231,13 @@ async def bitunix_positions(tg_id: int = Depends(get_current_user)):
             if _is_same_position(enriched, db_trade):
                 source = "autotrade"
                 matched_trade_id = db_trade.get("id")
+                enriched["strategy"] = db_trade.get("strategy")
+                enriched["tp1_price"] = db_trade.get("tp1_price")
+                enriched["tp2_price"] = db_trade.get("tp2_price")
+                enriched["tp3_price"] = db_trade.get("tp3_price")
+                enriched["tp1_hit"] = bool(db_trade.get("tp1_hit"))
+                enriched["tp2_hit"] = bool(db_trade.get("tp2_hit"))
+                enriched["tp3_hit"] = bool(db_trade.get("tp3_hit"))
                 remaining_db.pop(idx)
                 break
         enriched["source"] = source

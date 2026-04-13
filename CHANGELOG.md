@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.1.38] — 2026-04-13 — StackMentor Fields Reflected In Web Positions API
+
+### 🛠️ Website Reflection Fix
+
+#### 1) Exposed StackMentor TP tiers in `/bitunix/positions`
+- Root cause:
+  - position source tagging worked, but API response did not include DB TP tier metadata for matched autotrade rows
+- Fix:
+  - `/bitunix/positions` now enriches matched autotrade positions with:
+    - `strategy`
+    - `tp1_price`, `tp2_price`, `tp3_price`
+    - `tp1_hit`, `tp2_hit`, `tp3_hit`
+- Result:
+  - website position cards can render StackMentor tier targets/hit status from live backend response.
+
+- File:
+  - `website-backend/app/routes/bitunix.py`
+
 ## [2.1.37] — 2026-04-13 — StackMentor RR Ladder Extended To 1:10
 
 ### 🛠️ Strategy Profile Update
