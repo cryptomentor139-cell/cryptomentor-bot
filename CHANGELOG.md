@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.1.40] — 2026-04-13 — Leverage Application Bugfix + Safe Admin Mock Signal
+
+### 🛠️ Execution Bugfix
+
+#### 1) Apply optimized leverage for every valid PRO sizing result
+- Root cause:
+  - runtime only replaced trade leverage when `_last_sizing.is_dynamic == True`
+  - non-dynamic flows kept stale session leverage (e.g. remained at `20x`)
+- Fix:
+  - engine now always applies `_last_sizing['leverage']` when sizing is valid
+  - dynamic SL log remains separated for dynamic-only path
+
+#### 2) Respect exchange-reported leverage ceiling directly in PRO sizing
+- Removed local symbol hard-cap in `calculate_position_size_pro`
+- Final leverage bound is now driven by:
+  - exchange `max_leverage`
+  - liquidation safety bound (`safe_max_leverage`)
+
+#### 3) Secure mock signal script for admin testing
+- Replaced hardcoded token usage with env-based config:
+  - `TELEGRAM_BOT_TOKEN` / `BOT_TOKEN`
+  - `ADMIN_TELEGRAM_ID`
+
+- Files:
+  - `Bismillah/app/autotrade_engine.py`
+  - `Bismillah/app/position_sizing.py`
+  - `Bismillah/scratch/send_mock_signal.py`
+
 ## [2.1.39] — 2026-04-13 — 🚀 Max Leverage Efficiency Strategy (Full Deploy)
 
 ### 🚀 Capital Efficiency Optimization

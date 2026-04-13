@@ -1165,7 +1165,8 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     trades_today      = 0
     last_trade_date   = date.today()
     had_open_position = False
-    daily_pnl_usdt    = 0.0   # track realized PnL for circuit breaker`r`n    _last_sizing      = None  # track dynamic sizing result
+    daily_pnl_usdt    = 0.0   # track realized PnL for circuit breaker
+    _last_sizing      = None  # track dynamic sizing result
     daily_loss_limit  = amount * cfg["daily_loss_limit"]
 
     # Init TP1 tracker untuk user ini
@@ -1903,15 +1904,22 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             # Try risk-based position sizing first, fallback to fixed margin if fails
             qty, used_risk_sizing = await calc_qty_with_risk(symbol, entry, sl, leverage)
             # ── Log which method was used ─────────────────────────────────
-            if _last_sizing and _last_sizing.get('is_dynamic'):
+            if _last_sizing:
                 qty = _last_sizing['qty']
-                leverage = _last_sizing['leverage']
+                optimized_leverage = int(_last_sizing.get('leverage', leverage) or leverage)
                 sl = _last_sizing['sl_price']
-                logger.info(
-                    f"🚀 [Engine:{user_id}] DYNAMIC SCALE applied to {symbol}: "
-                    f"Leverage hiked to {leverage}x, SL adjusted to {sl:.8f} "
-                    f"({_last_sizing.get('sl_distance_pct'):.2f}% dist)"
-                )
+                if optimized_leverage != leverage:
+                    logger.info(
+                        f"🚀 [Engine:{user_id}] LEVERAGE OPTIMIZED for {symbol}: "
+                        f"{leverage}x → {optimized_leverage}x "
+                        f"(SL dist {_last_sizing.get('sl_distance_pct'):.2f}%)"
+                    )
+                leverage = optimized_leverage
+                if _last_sizing.get('is_dynamic'):
+                    logger.info(
+                        f"📐 [Engine:{user_id}] DYNAMIC SL applied to {symbol}: "
+                        f"SL adjusted to {sl:.8f}"
+                    )
 
             if qty <= 0:
                 logger.warning(f"[Engine:{user_id}] qty=0 for {symbol}, skip")

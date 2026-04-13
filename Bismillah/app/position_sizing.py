@@ -332,9 +332,9 @@ def calculate_position_size_pro(
     maintenance_buffer = 0.005 
     safe_max_leverage = int(0.9 / (sl_dist_pct + maintenance_buffer))
     
-    # Cap by asset limit (default 50 for alts, 100 for BTC/ETH)
-    symbol_cap = 100 if symbol.upper().startswith("BTC") or symbol.upper().startswith("ETH") else 50
-    final_max_leverage = min(max_leverage, safe_max_leverage, symbol_cap)
+    # Respect exchange-reported max leverage for the symbol.
+    # Keep safety bound via safe_max_leverage.
+    final_max_leverage = min(max_leverage, safe_max_leverage)
     
     # Target the maximum possible leverage to maximize efficiency
     # (user said: "Add this into all logic to max out all leverage when possible")
