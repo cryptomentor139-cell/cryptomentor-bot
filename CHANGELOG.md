@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.1.30] — 2026-04-13 — Decouple AutoTrade vs 1-Click Risk Settings
+
+### 🛠️ Settings Separation Fix
+
+#### 1) Stopped 1-Click Risk From Inheriting AutoTrade Risk By Default
+- Root cause: when `one_click_risk_per_trade` was missing, the dashboard API silently fell back to `risk_per_trade`.
+- Impact:
+  - AutoTrade and 1-click could appear linked even though they are meant to be separate controls
+  - users could see incorrect segregation between both trading modes
+- Fix:
+  - `one_click_risk_per_trade` now defaults independently to `0.5%`
+  - Signals tab and signal-card handlers were renamed to explicit 1-click props for clearer separation
+  - UI copy now states that 1-click risk is separate from AutoTrade risk
+- Files:
+  - `website-backend/app/routes/dashboard.py`
+  - `website-frontend/src/App.jsx`
+
 ## [2.1.29] — 2026-04-13 — Add Website Favicon
 
 ### 🎨 Frontend Polish

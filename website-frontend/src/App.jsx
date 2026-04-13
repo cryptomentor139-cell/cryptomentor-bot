@@ -1327,7 +1327,7 @@ export default function App() {
           {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : []} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} botBusy={botBusy} connectorStatus={connectorStatus} onCloseOneClickPosition={closeOneClickPosition} />}
           {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} riskSettings={riskSettings} onPreviewRisk={previewRiskSetting} onUpdateRisk={updateRiskSetting} onUpdateLeverage={updateLeverageSetting} onUpdateMarginMode={updateMarginModeSetting} />}
           {activeTab === 'settings' && <SettingsTab onBotConnected={handleBotConnected} />}
-          {activeTab === 'signals' && <SignalsTab user={user} riskSettings={riskSettings} realPositions={realPositions} botRunning={botRunning} onPreviewRisk={previewOneClickRiskSetting} onUpdateRisk={updateOneClickRiskSetting} />}
+          {activeTab === 'signals' && <SignalsTab user={user} riskSettings={riskSettings} realPositions={realPositions} botRunning={botRunning} onPreviewOneClickRisk={previewOneClickRiskSetting} onUpdateOneClickRisk={updateOneClickRiskSetting} />}
           {activeTab === 'referral' && <ReferralTab user={user} />}
         </main>
       </div>
@@ -2054,7 +2054,7 @@ function SettingsTab({ onBotConnected }) {
   );
 }
 
-function SignalsTab({ user, riskSettings, realPositions = [], botRunning = false, onPreviewRisk, onUpdateRisk }) {
+function SignalsTab({ user, riskSettings, realPositions = [], botRunning = false, onPreviewOneClickRisk, onUpdateOneClickRisk }) {
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -2134,22 +2134,25 @@ function SignalsTab({ user, riskSettings, realPositions = [], botRunning = false
         </div>
       </header>
       {/* Risk Level Quick Switch */}
-      {riskSettings && onUpdateRisk && (
+      {riskSettings && onUpdateOneClickRisk && (
         <div className="bg-[#0a0a0a]/60 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 md:p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <RiskSliderControl
                 value={riskSettings?.one_click_risk_per_trade}
-                onPreview={onPreviewRisk}
-                onCommit={onUpdateRisk}
+                onPreview={onPreviewOneClickRisk}
+                onCommit={onUpdateOneClickRisk}
                 loading={riskSettings?.loading_one_click}
                 min={ONECLICK_RISK_MIN}
                 max={ONECLICK_RISK_MAX}
                 step={ONECLICK_RISK_STEP}
                 showAllIn
-                title="⚡ 1-Click Risk Per Trade (0.5% - ALL IN 100%)"
+                title="⚡ 1-Click Trade Risk (Separate from AutoTrade)"
                 compact
               />
+              <p className="mt-2 text-[11px] text-slate-500 font-medium">
+                Applies only to manual 1-click entries from signal cards. AutoTrade risk is managed in Engine Controls.
+              </p>
             </div>
             {riskSettings?.equity > 0 && (
               <div className="flex items-center gap-4 text-sm">
@@ -2172,7 +2175,7 @@ function SignalsTab({ user, riskSettings, realPositions = [], botRunning = false
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {sortedSignals.map((signal, idx) => (
           <div key={signal.id || signal.pair} className="animate-in fade-in slide-in-from-bottom-8" style={{ animationDelay: `${idx * 100}ms`, animationFillMode: 'both' }}>
-            <SignalCard signal={signal} userIsPremium={user?.is_premium} riskSettings={riskSettings} realPositions={realPositions} botRunning={botRunning} onPreviewRisk={onPreviewRisk} onUpdateRisk={onUpdateRisk} />
+            <SignalCard signal={signal} userIsPremium={user?.is_premium} riskSettings={riskSettings} realPositions={realPositions} botRunning={botRunning} onPreviewOneClickRisk={onPreviewOneClickRisk} onUpdateOneClickRisk={onUpdateOneClickRisk} />
           </div>
         ))}
         {!loading && !signals.length && !error && <div className="col-span-full text-center text-slate-500 text-sm py-10">No signals available right now.</div>}
@@ -2639,7 +2642,7 @@ function BridgeCard({ name, status, logo, logoSrc, colors, onConnect, onDisconne
   );
 }
 
-function SignalCard({ signal, userIsPremium, riskSettings, realPositions = [], botRunning = false, onPreviewRisk, onUpdateRisk }) {
+function SignalCard({ signal, userIsPremium, riskSettings, realPositions = [], botRunning = false, onPreviewOneClickRisk, onUpdateOneClickRisk }) {
   const [isPlaced, setIsPlaced] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState(null);
@@ -2844,18 +2847,18 @@ function SignalCard({ signal, userIsPremium, riskSettings, realPositions = [], b
               )}
             </div>
           )}
-          {!isPlaced && !windowExpired && riskSettings && onUpdateRisk && (
+          {!isPlaced && !windowExpired && riskSettings && onUpdateOneClickRisk && (
             <div className="bg-white/5 rounded-lg p-2.5">
               <RiskSliderControl
                 value={riskSettings?.one_click_risk_per_trade}
-                onPreview={onPreviewRisk}
-                onCommit={onUpdateRisk}
+                onPreview={onPreviewOneClickRisk}
+                onCommit={onUpdateOneClickRisk}
                 loading={riskSettings?.loading_one_click}
                 min={ONECLICK_RISK_MIN}
                 max={ONECLICK_RISK_MAX}
                 step={ONECLICK_RISK_STEP}
                 showAllIn
-                title="Risk Slider (1-Click, 0.5% - ALL IN 100%)"
+                title="1-Click Trade Risk Only"
                 compact
               />
             </div>

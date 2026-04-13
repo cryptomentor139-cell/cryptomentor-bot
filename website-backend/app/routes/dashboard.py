@@ -418,9 +418,9 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
     autotrade_risk = max(ALLOWED_RISK_MIN, min(ALLOWED_AUTOTRADE_RISK_MAX, autotrade_risk))
     raw_one_click_risk = row.get("one_click_risk_per_trade")
     if raw_one_click_risk is None:
-        one_click_risk = autotrade_risk
+        one_click_risk = ALLOWED_RISK_MIN
     else:
-        one_click_risk = float(raw_one_click_risk or autotrade_risk)
+        one_click_risk = float(raw_one_click_risk or ALLOWED_RISK_MIN)
     one_click_risk = max(ALLOWED_RISK_MIN, min(ALLOWED_ONE_CLICK_RISK_MAX, one_click_risk))
 
     return {
