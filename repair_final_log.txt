@@ -1,0 +1,13 @@
+Starting ETHUSDT Signal Repair (Fixed Path)...
+Checking 20 potentially affected users...
+Scanning for current ETHUSDT signal...
+✅ Got 50 candles from Bitunix for ETHUSDT
+✅ Got 60 candles from Bitunix for ETHUSDT
+✅ Got 30 candles from Bitunix for ETHUSDT
+❌ Failed to get klines for ETH from all sources
+✅ Got 100 candles from Bitunix for ETHUSDT
+✅ Got 60 candles from Bitunix for ETHUSDT
+ETHUSDT is currently not signaling a valid entry in the scanner.
+The market might have moved or the signal is no longer optimal. No action taken.
+
+--- ERRORS ---
