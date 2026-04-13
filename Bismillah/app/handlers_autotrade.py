@@ -207,7 +207,7 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 1. Check unified verification status from Supabase
     try:
-        snap = _load_verification_snapshot(user_id)
+        snap = await asyncio.to_thread(_load_verification_snapshot, user_id)
     except Exception as e:
         logger.warning("Verification lookup failed for %s: %s", user_id, e)
         snap = {"status": VER_NONE, "uid": "", "source": "none"}

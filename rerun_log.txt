@@ -3,8 +3,8 @@ Updating all users to 3% risk per trade...
 ✅ All sessions updated to 3.0%.
 Found 20 active users to process.
 Scanning 16 pairs for valid signals...
-✅ Got 50 candles from Binance for BTC
-✅ Got 60 candles from Binance for BTC
+✅ Got 50 candles from Bitunix for BTCUSDT
+✅ Got 60 candles from Bitunix for BTCUSDT
 ✅ Got 30 candles from Bitunix for BTCUSDT
 ❌ Failed to get klines for BTC from all sources
 ✅ Got 100 candles from Bitunix for BTCUSDT
@@ -17,7 +17,10 @@ Scanning 16 pairs for valid signals...
 ✅ Got 60 candles from Bitunix for ETHUSDT
 ✅ Got 50 candles from Bitunix for SOLUSDT
 ✅ Got 60 candles from Bitunix for SOLUSDT
-🔥 VALID SIGNAL: SOLUSDT LONG (Confidence: 70%)
+✅ Got 30 candles from Bitunix for SOLUSDT
+❌ Failed to get klines for SOL from all sources
+✅ Got 100 candles from Bitunix for SOLUSDT
+✅ Got 60 candles from Bitunix for SOLUSDT
 ✅ Got 50 candles from Bitunix for BNBUSDT
 ✅ Got 60 candles from Bitunix for BNBUSDT
 ✅ Got 100 candles from Bitunix for BNBUSDT
@@ -34,15 +37,15 @@ Scanning 16 pairs for valid signals...
 ✅ Got 60 candles from Bitunix for DOGEUSDT
 ✅ Got 50 candles from Bitunix for ADAUSDT
 ✅ Got 60 candles from Bitunix for ADAUSDT
+✅ Got 30 candles from Bitunix for ADAUSDT
+❌ Failed to get klines for ADA from all sources
 ✅ Got 100 candles from Bitunix for ADAUSDT
-✅ Got 60 candles from Binance for ADA
+✅ Got 60 candles from Bitunix for ADAUSDT
 ✅ Got 50 candles from Bitunix for AVAXUSDT
-✅ Got 60 candles from Binance for AVAX
-✅ Got 30 candles from Bitunix for AVAXUSDT
-❌ Failed to get klines for AVAX from all sources
+✅ Got 60 candles from Bitunix for AVAXUSDT
 ✅ Got 100 candles from Bitunix for AVAXUSDT
-✅ Got 60 candles from Binance for AVAX
-✅ Got 50 candles from Binance for DOT
+✅ Got 60 candles from Bitunix for AVAXUSDT
+✅ Got 50 candles from Bitunix for DOTUSDT
 ✅ Got 60 candles from Bitunix for DOTUSDT
 ✅ Got 100 candles from Bitunix for DOTUSDT
 ✅ Got 60 candles from Bitunix for DOTUSDT
@@ -66,19 +69,18 @@ Scanning 16 pairs for valid signals...
 ✅ Got 60 candles from Bitunix for UNIUSDT
 ✅ Got 50 candles from Bitunix for ATOMUSDT
 ✅ Got 60 candles from Bitunix for ATOMUSDT
-✅ Got 30 candles from Bitunix for ATOMUSDT
-❌ Failed to get klines for ATOM from all sources
 ✅ Got 100 candles from Bitunix for ATOMUSDT
 ✅ Got 60 candles from Bitunix for ATOMUSDT
 ✅ Got 50 candles from Bitunix for XAUUSDT
 ✅ Got 60 candles from Bitunix for XAUUSDT
-✅ Got 30 candles from Binance for XAU
+✅ Got 30 candles from Bitunix for XAUUSDT
 ❌ Failed to get klines for XAU from all sources
 ✅ Got 100 candles from Bitunix for XAUUSDT
-✅ Got 60 candles from Binance for XAU
+✅ Got 60 candles from Bitunix for XAUUSDT
 ✅ Got 50 candles from Bitunix for CLUSDT
 ✅ Got 60 candles from Bitunix for CLUSDT
-🔥 VALID SIGNAL: CLUSDT LONG (Confidence: 70%)
+✅ Got 100 candles from Bitunix for CLUSDT
+✅ Got 60 candles from Bitunix for CLUSDT
 ✅ Got 50 candles from Bitunix for QQQUSDT
 ✅ Got 60 candles from Bitunix for QQQUSDT
 ✅ Got 30 candles from Bitunix for QQQUSDT
@@ -86,290 +88,6 @@ Scanning 16 pairs for valid signals...
 ✅ Got 100 candles from Bitunix for QQQUSDT
 ✅ Got 60 candles from Bitunix for QQQUSDT
 
-🚀 Executing SOLUSDT LONG for all eligible users...
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1969755249] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1265990951] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=10003 msg=Token invalid
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=10003 msg=Token invalid
-  [User:7338184122] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:5874734020] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1156155004] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:8030312242] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1187119989] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:2107355248] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1087836223] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=10003 msg=Token invalid
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=10003 msg=Token invalid
-  [User:7972497694] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1766523174] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:5366384434] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:312485564] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:7582955848] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:6954315669] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1306878013] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:5187148337] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:8429733088] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:985106924] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:7675185179] Already in SOLUSDT. Skipping.
-
-🚀 Executing CLUSDT LONG for all eligible users...
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1969755249] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1265990951] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=10003 msg=Token invalid
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=10003 msg=Token invalid
-  [User:7338184122] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:5874734020] Already in CLUSDT. Skipping.
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1156155004] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:8030312242] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1187119989] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:2107355248] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1087836223] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=10003 msg=Token invalid
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=10003 msg=Token invalid
-  [User:7972497694] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1766523174] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:5366384434] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:312485564] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:7582955848] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:6954315669] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:1306878013] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:5187148337] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:8429733088] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:985106924] ❌ FAILED (Qty or Margin).
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/position/get_pending_positions => code=0 msg=Success
-[Bitunix] curl_cffi version: 0.15.0
-[Bitunix] curl_cffi response: 200, html=False
-[Bitunix] GET /api/v1/futures/trade/get_pending_orders => code=0 msg=Success
-  [User:7675185179] ❌ FAILED (Qty or Margin).
-
-✅ Global rerun complete.
+❌ No valid signals found in the market right now.
 
 --- ERRORS ---
