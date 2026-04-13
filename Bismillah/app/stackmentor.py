@@ -20,10 +20,10 @@ STACKMENTOR_CONFIG = {
     "tp1_pct": 0.60,            # Close 60% at TP1
     "tp2_pct": 0.30,            # Close 30% at TP2
     "tp3_pct": 0.10,            # Close 10% at TP3
-    "target_rr": 3.0,           # Average risk:reward around 1:3
-    "tp1_rr": 2.0,
-    "tp2_rr": 3.0,
-    "tp3_rr": 5.0,
+    "target_rr": 10.0,          # Stretch final target risk:reward 1:10
+    "tp1_rr": 3.0,
+    "tp2_rr": 6.0,
+    "tp3_rr": 10.0,
     "breakeven_after_tp1": True,
 }
 
@@ -45,9 +45,9 @@ def calculate_stackmentor_levels(
     # Calculate SL distance
     sl_distance = abs(entry_price - sl_price)
     
-    rr1 = float(cfg.get("tp1_rr", 2.0))
-    rr2 = float(cfg.get("tp2_rr", 3.0))
-    rr3 = float(cfg.get("tp3_rr", 5.0))
+    rr1 = float(cfg.get("tp1_rr", 3.0))
+    rr2 = float(cfg.get("tp2_rr", 6.0))
+    rr3 = float(cfg.get("tp3_rr", 10.0))
     if side == "LONG":
         tp1 = entry_price + (sl_distance * rr1)
         tp2 = entry_price + (sl_distance * rr2)
@@ -404,7 +404,7 @@ async def handle_tp1_hit(bot, user_id: int, client, notify_chat_id: int,
             text=(
                 f"🎯 <b>Take Profit Hit! — {symbol}</b>\n\n"
                 f"✅ Closed 100% position @ <code>{mark_price:.4f}</code>\n"
-                f"⚖️ Fixed R:R: <b>1:3</b>\n"
+                f"⚖️ Fixed R:R: <b>up to 1:10</b>\n"
                 f"💰 Profit: <b>+${profit_tp1:.2f} USDT</b> (+{profit_pct:.1f}%)\n\n"
                 f"✅ Trade completed."
             ),
@@ -489,7 +489,7 @@ async def handle_tp2_hit(bot, user_id: int, client, notify_chat_id: int,
             f"✅ Closed 30% position @ <code>{mark_price:.4f}</code>\n"
             f"💰 Additional profit: <b>+${profit_tp2:.2f} USDT</b> (+{profit_pct:.1f}%)\n\n"
             f"🔒 SL remains at breakeven (entry price)\n"
-            f"⏳ Final 10% still running to TP3 (target 1:5)...\n\n"
+            f"⏳ Final 10% still running to TP3 (target 1:10)...\n\n"
             f"💡 <b>Status:</b>\n"
             f"✅ 90% of position closed with profit\n"
             f"✅ Last 10% = bonus if market continues\n"

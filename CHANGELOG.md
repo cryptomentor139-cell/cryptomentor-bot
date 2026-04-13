@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.1.37] — 2026-04-13 — StackMentor RR Ladder Extended To 1:10
+
+### 🛠️ Strategy Profile Update
+
+#### 1) Increased StackMentor TP risk:reward ladder
+- Updated staged TP RR profile to:
+  - TP1: `1:3`
+  - TP2: `1:6`
+  - TP3: `1:10`
+- Position split remains:
+  - TP1 `60%`, TP2 `30%`, TP3 `10%`
+- Breakeven behavior after TP1 remains enabled.
+
+- File:
+  - `Bismillah/app/stackmentor.py`
+
 ## [2.1.36] — 2026-04-13 — StackMentor Force TP/SL Watchdog + Breakeven Restore
 
 ### 🛠️ Runtime Protection Hotfix
