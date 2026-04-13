@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.1.31] — 2026-04-13 — Fix 1-Click Positions Misclassified As AutoTrade
+
+### 🛠️ Portfolio Classification Fix
+
+#### 1) `/bitunix/positions` Now Returns Annotated Position Sources Correctly
+- Root cause:
+  - the route computed annotated `source` values but returned the raw unannotated exchange positions instead
+  - the frontend then defaulted missing `source` to `autotrade`
+- Impact:
+  - 1-click positions could appear under the AutoTrade section/card label
+- Fix:
+  - return the annotated position list from the API
+  - compute position counts from the annotated list
+  - remove the overly-loose symbol+side fallback match that could falsely tag manual positions as autotrade
+- File:
+  - `website-backend/app/routes/bitunix.py`
+
 ## [2.1.30] — 2026-04-13 — Decouple AutoTrade vs 1-Click Risk Settings
 
 ### 🛠️ Settings Separation Fix

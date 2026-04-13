@@ -90,8 +90,9 @@ def _is_same_position(live_pos: dict, db_trade: dict) -> bool:
     except Exception:
         pass
 
-    # Final fallback: symbol+side already match.
-    return True
+    # Do not classify on symbol+side alone; that over-matches manual 1-click
+    # positions when users hold multiple entries in the same direction.
+    return False
 
 
 def _annotate_position_sources(tg_id: int, positions: list[dict]) -> list[dict]:
@@ -230,11 +231,11 @@ async def bitunix_positions(tg_id: int = Depends(get_current_user)):
 
     total_upnl = sum(float(p.get("pnl") or 0) for p in annotated)
     return {
-        "total_positions": len(positions),
-        "autotrade_positions": sum(1 for p in positions if p.get("source") == "autotrade"),
-        "one_click_positions": sum(1 for p in positions if p.get("source") == "1_click"),
+        "total_positions": len(annotated),
+        "autotrade_positions": sum(1 for p in annotated if p.get("source") == "autotrade"),
+        "one_click_positions": sum(1 for p in annotated if p.get("source") == "1_click"),
         "total_unrealized_pnl": round(total_upnl, 4),
-        "positions": positions,
+        "positions": annotated,
     }
 
 
