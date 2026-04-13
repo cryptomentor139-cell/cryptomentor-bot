@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.1.33] — 2026-04-13 — Fix Bitunix API Key Onboarding 500 Error
+
+### 🛠️ Website Backend Hotfix
+
+#### 1) Fixed `/bitunix/keys` + `/bitunix/keys/test` crashing during onboarding
+- Root cause:
+  - route-level import used `from app.bitunix_autotrade_client import BitunixAutoTradeClient`
+  - module does not exist under `website-backend/app`, causing `ModuleNotFoundError` and HTTP 500
+- Impact:
+  - approved users saw generic `Connection failed` on Step 1 while testing/saving valid keys
+- Fix:
+  - reused shared client loader from `app.services.bitunix` (`bsvc.BitunixAutoTradeClient`)
+  - added explicit server-side availability guard with clear error if connector is unavailable
+- File:
+  - `website-backend/app/routes/bitunix.py`
+
 ## [2.1.32] — 2026-04-13 — Fix Frequent Market-Data Klines Failures
 
 ### 🛠️ AutoTrade/Scalping Data Reliability

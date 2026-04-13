@@ -415,10 +415,11 @@ async def bitunix_save_keys(
     """
     Test and save Bitunix API Keys for the user.
     """
-    from app.bitunix_autotrade_client import BitunixAutoTradeClient
+    if not getattr(bsvc, "_BITUNIX_AVAILABLE", False) or getattr(bsvc, "BitunixAutoTradeClient", None) is None:
+        raise HTTPException(status_code=500, detail="Bitunix connector unavailable on server")
     
     # 1. Test connection first
-    client = BitunixAutoTradeClient(api_key=keys.api_key, api_secret=keys.api_secret)
+    client = bsvc.BitunixAutoTradeClient(api_key=keys.api_key, api_secret=keys.api_secret)
     conn = client.check_connection()
     if not conn.get("online"):
         raise HTTPException(
@@ -442,9 +443,10 @@ async def bitunix_test_keys(
     """
     Dry-run test for Bitunix API Keys without saving them.
     """
-    from app.bitunix_autotrade_client import BitunixAutoTradeClient
+    if not getattr(bsvc, "_BITUNIX_AVAILABLE", False) or getattr(bsvc, "BitunixAutoTradeClient", None) is None:
+        raise HTTPException(status_code=500, detail="Bitunix connector unavailable on server")
     
-    client = BitunixAutoTradeClient(api_key=keys.api_key, api_secret=keys.api_secret)
+    client = bsvc.BitunixAutoTradeClient(api_key=keys.api_key, api_secret=keys.api_secret)
     conn = client.check_connection()
     
     if not conn.get("online"):
