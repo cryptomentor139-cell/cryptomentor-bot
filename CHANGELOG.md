@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.1.19] — 2026-04-13 — Fix 1-Click All-In Sizing + Harden AutoTrade Risk Persistence
+
+### 🛠️ Bug Fix
+
+#### 1) 1-Click `All In` Now Targets Full Equity Loss At Stop Loss
+- Root cause: the `All In` path sized `position_size_usdt = equity`, which only used wallet size once and did not honor `100%` loss-at-SL intent.
+- Fix:
+  - `All In` now uses the same SL-distance risk formula without the normal per-trade margin cap:
+    - `position_size_usdt = risk_amount / sl_distance_pct`
+  - Response payload now safely handles uncapped margin metadata for `All In`.
+- Result:
+  - `100%` 1-click risk now behaves like true full-risk sizing instead of a capped wallet-sized position.
+- File:
+  - `website-backend/app/routes/signals.py`
+
+#### 2) AutoTrade Risk Saving No Longer Depends On A Pre-Existing Session Row
+- Root cause: dashboard risk save used `update(...)` only, so users without a matching `autotrade_sessions` row could appear to save risk but then reload back to the previous value.
+- Fix:
+  - Switched AutoTrade risk and 1-click risk persistence to `upsert(..., on_conflict="telegram_id")`.
+- Result:
+  - Risk values persist more reliably and stop snapping back after refresh/load for affected users.
+- File:
+  - `website-backend/app/routes/dashboard.py`
+
+#### 3) Frontend Keeps AutoTrade Risk Reflected Between Refreshes
+- Added a dedicated local fallback key for AutoTrade risk, matching the already-separated 1-click storage approach.
+- This keeps the typed/selected AutoTrade risk reflected in the UI while backend state is being reloaded.
+- File:
+  - `website-frontend/src/App.jsx`
+
 ## [2.1.18] — 2026-04-13 — Fix AutoTrade Risk Slider Reseting to 0.5%
 
 ### 🛠️ Bug Fix

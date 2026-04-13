@@ -480,10 +480,11 @@ async def update_risk_setting(    payload: dict,
     try:
         # Ensure we're storing as a float for consistency
         risk_value = float(risk)
-        s.table("autotrade_sessions").update({
+        s.table("autotrade_sessions").upsert({
+            "telegram_id": int(tg_id),
             "risk_per_trade": risk_value,
             "updated_at": datetime.utcnow().isoformat(),
-        }).eq("telegram_id", tg_id).execute()
+        }, on_conflict="telegram_id").execute()
 
         logger.info(f"[RiskSetting:{tg_id}] Updated risk_per_trade to {risk_value}%")
     except Exception as e:
@@ -518,10 +519,11 @@ async def update_one_click_risk_setting(
     s = _client()
     try:
         risk_value = float(risk)
-        s.table("autotrade_sessions").update({
+        s.table("autotrade_sessions").upsert({
+            "telegram_id": int(tg_id),
             "one_click_risk_per_trade": risk_value,
             "updated_at": datetime.utcnow().isoformat(),
-        }).eq("telegram_id", tg_id).execute()
+        }, on_conflict="telegram_id").execute()
         logger.info(f"[OneClickRisk:{tg_id}] Updated one_click_risk_per_trade to {risk_value}%")
         note = f"1-click risk updated to {risk_value}% per trade"
     except Exception as e:

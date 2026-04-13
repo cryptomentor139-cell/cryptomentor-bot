@@ -13,6 +13,7 @@ import bitunixLogo from './assets/bitunix.jpg';
 
 const _CONFIGURED_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const _FALLBACK_BASE = '/api';
+const AUTOTRADE_RISK_STORAGE_KEY = 'cm_autotrade_risk';
 const ONE_CLICK_RISK_STORAGE_KEY = 'cm_one_click_risk';
 
 if (typeof window !== 'undefined' && !window.__cmDialogPatched) {
@@ -650,6 +651,7 @@ export default function App() {
   const previewRiskSetting = (newRisk) => {
     const normalizedRisk = Math.max(AUTOTRADE_RISK_MIN, Math.min(AUTOTRADE_RISK_MAX, Number(newRisk) || AUTOTRADE_RISK_MIN));
     const riskValue = Number(normalizedRisk.toFixed(2));
+    try { localStorage.setItem(AUTOTRADE_RISK_STORAGE_KEY, String(riskValue)); } catch {}
     setRiskSettings(prev => ({ ...prev, risk_per_trade: riskValue }));
   };
 
@@ -686,14 +688,18 @@ export default function App() {
         const data = await resp.json();
         const parsedRisk = Number(data.risk_per_trade);
         const parsedOneClickRisk = Number(data.one_click_risk_per_trade);
+        let storedAutotradeRisk = 5.0;
         let storedOneClickRisk = ONECLICK_RISK_MIN;
         try {
+          const rawAuto = localStorage.getItem(AUTOTRADE_RISK_STORAGE_KEY);
+          const parsedAuto = Number(rawAuto);
+          if (Number.isFinite(parsedAuto)) storedAutotradeRisk = parsedAuto;
           const raw = localStorage.getItem(ONE_CLICK_RISK_STORAGE_KEY);
           const parsed = Number(raw);
           if (Number.isFinite(parsed)) storedOneClickRisk = parsed;
         } catch {}
         setRiskSettings({
-          risk_per_trade: Number.isFinite(parsedRisk) ? parsedRisk : 5.0,
+          risk_per_trade: Number.isFinite(parsedRisk) ? parsedRisk : storedAutotradeRisk,
           one_click_risk_per_trade: Number.isFinite(parsedOneClickRisk) ? parsedOneClickRisk : storedOneClickRisk,
           leverage: data.leverage || 10,
           equity: data.equity || 0,
@@ -721,6 +727,7 @@ export default function App() {
     const previousRisk = Number(riskSettings.risk_per_trade);
     const safePreviousRisk = Number.isFinite(previousRisk) ? previousRisk : 5.0;
 
+    try { localStorage.setItem(AUTOTRADE_RISK_STORAGE_KEY, String(riskValue)); } catch {}
     setRiskSettings(prev => ({ ...prev, risk_per_trade: riskValue, loading_autotrade: true, error: null }));
     try {
       const resp = await apiFetch('/dashboard/settings/risk', {

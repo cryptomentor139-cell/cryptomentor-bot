@@ -774,21 +774,41 @@ async def execute_signal(
     except Exception:
         autotrade_running = False
 
-    tradable_ratio = 0.60 if autotrade_running else 0.90
-    remaining_slots = max(1, max_concurrent_target - open_positions_count)
-    margin_cap_dynamic = (balance * tradable_ratio) / remaining_slots
-    margin_cap_hard = balance * 0.95
-    effective_margin_cap = max(0.0, min(margin_cap_hard, margin_cap_dynamic))
+    # Special handling for "All In" (100% risk): use entire equity without margin cap
+    is_all_in = risk_pct >= 99.5  # Treat 100% as All In
 
-    # Cap margin by effective per-trade budget.
-    if margin_required > effective_margin_cap:
-        margin_required = effective_margin_cap
-        position_size_usdt = margin_required * leverage
-        logger.warning(
-            f"[Risk] Position capped for concurrency: required>${effective_margin_cap:.2f}. "
-            f"leverage={leverage}x open_positions={open_positions_count} "
-            f"target={max_concurrent_target} autotrade_running={autotrade_running}"
+    margin_cap_dynamic = None
+    margin_cap_hard = None
+    effective_margin_cap = None
+
+    if is_all_in:
+        # For All In: preserve the 100% loss-at-SL intent and skip the
+        # normal per-trade margin cap. This can still be rejected by the
+        # exchange if current leverage is insufficient for the requested size.
+        position_size_usdt = risk_amount / sl_distance_pct
+        margin_required = position_size_usdt / leverage
+        logger.info(
+            f"[AllIn:{tg_id}] 100% risk mode: equity=${equity:.2f}, "
+            f"risk_amount=${risk_amount:.2f}, sl_distance_pct={sl_distance_pct:.4f}, "
+            f"position_size=${position_size_usdt:.2f}, margin=${margin_required:.2f}"
         )
+    else:
+        # Normal risk-based sizing with margin cap
+        tradable_ratio = 0.60 if autotrade_running else 0.90
+        remaining_slots = max(1, max_concurrent_target - open_positions_count)
+        margin_cap_dynamic = (balance * tradable_ratio) / remaining_slots
+        margin_cap_hard = balance * 0.95
+        effective_margin_cap = max(0.0, min(margin_cap_hard, margin_cap_dynamic))
+
+        # Cap margin by effective per-trade budget.
+        if margin_required > effective_margin_cap:
+            margin_required = effective_margin_cap
+            position_size_usdt = margin_required * leverage
+            logger.warning(
+                f"[Risk] Position capped for concurrency: required>${effective_margin_cap:.2f}. "
+                f"leverage={leverage}x open_positions={open_positions_count} "
+                f"target={max_concurrent_target} autotrade_running={autotrade_running}"
+            )
 
     # If no budget remains, reject cleanly with actionable reason.
     if margin_required <= 0:
@@ -850,14 +870,15 @@ async def execute_signal(
             "effective_risk_pct": round(((position_size_usdt * sl_distance_pct) / equity) * 100, 4) if equity > 0 else 0.0,
             "risk_zone": risk_zone,
             "high_risk": risk_pct > 1.0,
+            "is_all_in": is_all_in,
             "sl_distance_pct": round(sl_distance_pct * 100, 3),
             "leverage": leverage,
             "open_positions_count": open_positions_count,
             "max_concurrent_target": max_concurrent_target,
             "autotrade_running": autotrade_running,
-            "margin_cap_dynamic": round(margin_cap_dynamic, 2),
-            "margin_cap_hard": round(margin_cap_hard, 2),
-            "effective_margin_cap": round(effective_margin_cap, 2),
+            "margin_cap_dynamic": round(margin_cap_dynamic, 2) if margin_cap_dynamic is not None else None,
+            "margin_cap_hard": round(margin_cap_hard, 2) if margin_cap_hard is not None else None,
+            "effective_margin_cap": round(effective_margin_cap, 2) if effective_margin_cap is not None else None,
             "signal_age_seconds": int(age),
         },
     }
