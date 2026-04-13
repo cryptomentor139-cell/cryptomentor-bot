@@ -25,6 +25,52 @@ class AlternativeKlinesProvider:
         self.coingecko_api    = "https://api.coingecko.com/api/v3"
         self.cryptocompare_api = "https://min-api.cryptocompare.com/data/v2"
         self.cryptocompare_key = os.getenv('CRYPTOCOMPARE_API_KEY', '')
+        self.session = requests.Session()
+        self.session.headers.update({
+            "User-Agent": "CryptoMentorAI/4.0 market-data",
+            "Accept": "application/json",
+        })
+        self._source_fail_count: Dict[str, int] = {}
+        self._source_backoff_until: Dict[str, float] = {}
+
+    def _is_source_available(self, source: str) -> bool:
+        until = self._source_backoff_until.get(source, 0)
+        return time.time() >= until
+
+    def _mark_source_success(self, source: str):
+        self._source_fail_count[source] = 0
+        self._source_backoff_until[source] = 0
+
+    def _mark_source_failure(self, source: str):
+        fails = int(self._source_fail_count.get(source, 0)) + 1
+        self._source_fail_count[source] = fails
+        # Exponential cooldown to reduce API hammering during outages.
+        cooldown = min(90, 3 * (2 ** min(fails, 5)))
+        self._source_backoff_until[source] = time.time() + cooldown
+
+    def _http_get(self, source: str, url: str, params: Dict, timeout: int = 10, retries: int = 2):
+        if not self._is_source_available(source):
+            return None
+
+        for attempt in range(retries + 1):
+            try:
+                resp = self.session.get(url, params=params, timeout=timeout)
+                if resp.status_code == 200:
+                    self._mark_source_success(source)
+                    return resp
+                # Retry transient statuses.
+                if resp.status_code in (408, 425, 429, 500, 502, 503, 504) and attempt < retries:
+                    time.sleep(0.35 * (attempt + 1))
+                    continue
+                break
+            except requests.RequestException:
+                if attempt < retries:
+                    time.sleep(0.35 * (attempt + 1))
+                    continue
+                break
+
+        self._mark_source_failure(source)
+        return None
         
     def get_klines(self, symbol: str, interval: str = '1h', limit: int = 100) -> List:
         """
@@ -42,23 +88,23 @@ class AlternativeKlinesProvider:
         # 2. Binance Futures (fallback terbaik — gratis, reliable, semua pair)
         klines = self._get_from_binance(full_symbol, interval, limit)
         if klines:
-            print(f"✅ Got {len(klines)} candles from Binance for {symbol}")
+            print(f"[OK] Got {len(klines)} candles from Binance for {symbol}")
             return klines
 
         # 3. CryptoCompare
         if self.cryptocompare_key:
             klines = self._get_from_cryptocompare(clean_symbol, interval, limit)
             if klines:
-                print(f"✅ Got {len(klines)} candles from CryptoCompare for {symbol}")
+                print(f"[OK] Got {len(klines)} candles from CryptoCompare for {symbol}")
                 return klines
 
         # 4. CoinGecko
         klines = self._get_from_coingecko(clean_symbol, interval, limit)
         if klines:
-            print(f"✅ Got {len(klines)} candles from CoinGecko for {symbol}")
+            print(f"[OK] Got {len(klines)} candles from CoinGecko for {symbol}")
             return klines
 
-        print(f"❌ Failed to get klines for {symbol} from all sources")
+        print(f"[ERR] Failed to get klines for {symbol} [{interval}] from all sources")
         return []
 
     def _get_from_bitunix(self, symbol: str, interval: str, limit: int) -> List:
@@ -85,8 +131,8 @@ class AlternativeKlinesProvider:
                 'limit':    fetch_limit,
             }
 
-            resp = requests.get(url, params=params, timeout=10)
-            if resp.status_code != 200:
+            resp = self._http_get("bitunix", url, params, timeout=10, retries=1)
+            if resp is None:
                 return []
 
             data = resp.json()
@@ -112,8 +158,9 @@ class AlternativeKlinesProvider:
                     ts + 1, qvol, 0, "0", "0", "0"
                 ])
 
-            if len(klines) >= 10:
-                print(f"✅ Got {len(klines)} candles from Bitunix for {symbol}")
+            min_required = min(10, fetch_limit)
+            if len(klines) >= min_required:
+                print(f"[OK] Got {len(klines)} candles from Bitunix for {symbol}")
                 return klines
 
             return []
@@ -131,7 +178,7 @@ class AlternativeKlinesProvider:
             # Binance interval mapping (sudah standar)
             # Supported: 1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d 3d 1w 1M
             interval_map = {
-                '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m',
+                '1m': '1m', '3m': '3m', '5m': '5m', '15m': '15m', '30m': '30m',
                 '1h': '1h', '2h': '2h', '4h': '4h', '6h': '6h',
                 '8h': '8h', '12h': '12h', '1d': '1d', '1w': '1w',
             }
@@ -149,15 +196,16 @@ class AlternativeKlinesProvider:
                 'limit':    fetch_limit,
             }
 
-            resp = requests.get(url, params=params, timeout=10)
-            if resp.status_code != 200:
+            resp = self._http_get("binance", url, params, timeout=10, retries=2)
+            if resp is None:
                 return []
 
             klines = resp.json()
             
             # Binance response sudah dalam format yang kita butuhkan:
             # [timestamp, open, high, low, close, volume, close_time, quote_volume, ...]
-            if isinstance(klines, list) and len(klines) >= 10:
+            min_required = min(10, fetch_limit)
+            if isinstance(klines, list) and len(klines) >= min_required:
                 # Convert all values to string for consistency
                 formatted_klines = []
                 for k in klines:
@@ -188,6 +236,7 @@ class AlternativeKlinesProvider:
         try:
             # Map interval to CryptoCompare format
             interval_map = {
+                '3m': ('histominute', 3),
                 '1h': ('histohour', 1),
                 '4h': ('histohour', 4),
                 '1d': ('histoday', 1),
@@ -211,9 +260,8 @@ class AlternativeKlinesProvider:
             if self.cryptocompare_key:
                 params['api_key'] = self.cryptocompare_key
             
-            response = requests.get(url, params=params, timeout=10)
-            
-            if response.status_code == 200:
+            response = self._http_get("cryptocompare", url, params, timeout=10, retries=1)
+            if response is not None:
                 data = response.json()
                 
                 if data.get('Response') == 'Success' and 'Data' in data:
@@ -249,6 +297,10 @@ class AlternativeKlinesProvider:
     def _get_from_coingecko(self, symbol: str, interval: str, limit: int) -> List:
         """Get OHLCV from CoinGecko"""
         try:
+            # CoinGecko OHLC is not suitable for sub-15m trading intervals.
+            if interval in ('1m', '3m', '5m'):
+                return []
+
             # Map symbol to CoinGecko ID
             symbol_map = {
                 'BTC': 'bitcoin',
@@ -280,6 +332,7 @@ class AlternativeKlinesProvider:
             
             # Calculate days based on interval and limit
             interval_hours = {
+                '3m': 0.05,
                 '1h': 1,
                 '4h': 4,
                 '1d': 24,
@@ -296,9 +349,8 @@ class AlternativeKlinesProvider:
                 'days': min(days, 90)  # CoinGecko limit
             }
             
-            response = requests.get(url, params=params, timeout=10)
-            
-            if response.status_code == 200:
+            response = self._http_get("coingecko", url, params, timeout=10, retries=1)
+            if response is not None:
                 ohlc_data = response.json()
                 
                 if isinstance(ohlc_data, list) and len(ohlc_data) > 0:
