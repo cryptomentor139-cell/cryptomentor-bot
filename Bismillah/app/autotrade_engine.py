@@ -6,7 +6,7 @@ Strategy: Multi-timeframe confluence + SMC + Risk Management
 - Volatility filter (no trade in low-volatility ranging market)
 - Confidence threshold >= 68 (only high-quality setups)
 - Max 1 position per symbol, max 3 concurrent positions
-- StackMentor: 3-tier TP strategy (50%/40%/10% at R:R 1:2/1:3/1:10)
+- StackMentor: 3-tier TP strategy (60%/30%/10% at R:R 1:3/1:6/1:10)
 """
 import asyncio
 import logging

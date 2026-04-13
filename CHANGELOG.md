@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.1.41] — 2026-04-13 — Unified Max-Leverage Risk Sizing Across AutoTrade Engines
+
+### 🛠️ Leverage + Risk Consistency Update
+
+#### 1) Enforced max-safe leverage sizing in Scalping AutoTrade path
+- Removed legacy `10x` leverage cap in scalping sizing.
+- Scalping now uses unified PRO sizing logic with exchange max leverage + liquidation safety bound.
+- If exchange client supports `get_max_leverage(symbol)`, that limit is used directly.
+
+#### 2) Risk remains equity-based and stop-loss anchored
+- Position sizing continues to target:
+  - `Loss at SL = Equity × user risk %`
+- Equity source:
+  - `available + frozen + unrealized PnL`
+- High leverage is used for margin efficiency only; SL/risk budget remains fixed by sizing.
+
+#### 3) Execution leverage is propagated into actual order placement
+- Scalping execution now uses the computed effective leverage from risk sizing.
+- If sizing falls back, baseline leverage is kept.
+
+- File:
+  - `Bismillah/app/scalping_engine.py`
+
 ## [2.1.40] — 2026-04-13 — Leverage Application Bugfix + Safe Admin Mock Signal
 
 ### 🛠️ Execution Bugfix

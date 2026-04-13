@@ -687,26 +687,24 @@ class ScalpingEngine:
         self.signal_streaks.pop(symbol, None)
         return True
 
-    def calculate_position_size_pro(self, entry_price: float, sl_price: float, 
+    def calculate_position_size_pro(self, symbol: str, entry_price: float, sl_price: float,
                                     capital: float, leverage: int) -> tuple:
         """
         Calculate position size based on risk % per trade (PRO TRADER METHOD)
         
-        SCALPING MODE: MAXIMUM 5% RISK PER TRADE (SAFETY FIRST!)
+        SCALPING MODE: Risk-based sizing from account equity with max-safe leverage.
         
         Args:
             entry_price: Entry price
             sl_price: Stop loss price
             capital: Total trading capital
-            leverage: Leverage multiplier (will be capped at 10x for scalping)
+            leverage: User/session leverage baseline (used as minimum target)
             
         Returns:
-            (position_size, used_risk_sizing): tuple of (quantity, whether risk sizing was used)
+            (position_size, used_risk_sizing, effective_leverage):
+            tuple of (quantity, whether risk sizing was used, leverage used)
         """
         try:
-            # CRITICAL: Cap leverage at 10x for scalping (safety)
-            leverage = min(leverage, 10)
-            
             # Get risk percentage from database
             from app.supabase_repo import get_risk_per_trade
             risk_pct = get_risk_per_trade(self.user_id)
@@ -714,53 +712,50 @@ class ScalpingEngine:
             # Cap risk for scalping to global supported maximum.
             risk_pct = min(risk_pct, 100.0)
             
-            # Get current balance from exchange
-            bal_result = self.client.get_balance()
-            if not bal_result.get('success'):
-                raise Exception(f"Balance fetch failed: {bal_result.get('error')}")
-            
-            balance = bal_result.get('balance', 0)
+            # Get current equity from exchange (available + frozen + unrealized PnL)
+            acc_result = self.client.get_account_info()
+            if not acc_result.get('success'):
+                raise Exception(f"Account fetch failed: {acc_result.get('error')}")
+            available = float(acc_result.get('available', 0) or 0)
+            frozen = float(acc_result.get('frozen', 0) or 0)
+            unrealized = float(acc_result.get('total_unrealized_pnl', 0) or 0)
+            equity = available + frozen + unrealized
             
             # Enforce rule: Below $100 -> Auto 3% risk for execution safety
-            if balance < 100:
+            if equity < 100:
                 if risk_pct != 3.0:
-                    logger.info(f"[Scalping:{self.user_id}] Balance ${balance:.2f} < $100. Overriding risk {risk_pct}% -> 3.0% for execution safety.")
+                    logger.info(f"[Scalping:{self.user_id}] Equity ${equity:.2f} < $100. Overriding risk {risk_pct}% -> 3.0% for execution safety.")
                     risk_pct = 3.0
-            if balance <= 0:
-                raise Exception(f"Invalid balance: {balance}")
+            if equity <= 0:
+                raise Exception(f"Invalid equity: {equity}")
             
-            # Calculate position size using risk-based formula
-            from app.position_sizing import calculate_position_size
-            sizing = calculate_position_size(
-                balance=balance,
+            # Use unified PRO sizing logic with exchange max leverage.
+            from app.position_sizing import calculate_position_size_pro as _calc_size_pro
+            if hasattr(self.client, "get_max_leverage"):
+                max_leverage_allowed = self.client.get_max_leverage(symbol)
+            else:
+                max_leverage_allowed = leverage
+            sizing = _calc_size_pro(
+                balance=equity,
                 risk_pct=risk_pct,
                 entry_price=entry_price,
                 sl_price=sl_price,
                 leverage=leverage,
-                symbol=f"BTCUSDT"  # Default symbol for precision
+                symbol=symbol,
+                max_leverage=max_leverage_allowed,
+                min_sl_dist_pct=0.002,
             )
             
             if not sizing['valid']:
                 raise Exception(f"Position sizing invalid: {sizing['error']}")
             
             qty = sizing['qty']
-            
-            # SAFETY CHECK: Ensure position size is reasonable
-            position_value = qty * entry_price
-            max_position_value = balance * 0.5  # Max 50% of balance per trade
-            
-            if position_value > max_position_value:
-                logger.warning(
-                    f"[Scalping:{self.user_id}] Position too large! "
-                    f"${position_value:.2f} > ${max_position_value:.2f} (50% of balance). "
-                    f"Reducing to safe size."
-                )
-                qty = (max_position_value / entry_price) * 0.9  # 90% of max for safety margin
+            effective_leverage = int(sizing.get('leverage', leverage) or leverage)
             
             logger.info(
                 f"[Scalping:{self.user_id}] RISK-BASED sizing: "
-                f"Balance=${balance:.2f}, Risk={risk_pct}% (capped at 100%), "
-                f"Leverage={leverage}x (capped at 10x), "
+                f"Equity=${equity:.2f}, Risk={risk_pct}% (capped at 100%), "
+                f"Leverage={effective_leverage}x (max-safe optimized), "
                 f"Entry=${entry_price:.2f}, SL=${sl_price:.2f}, "
                 f"SL_Dist={sizing['sl_distance_pct']:.2f}%, "
                 f"Position=${sizing['position_size_usdt']:.2f}, "
@@ -768,7 +763,7 @@ class ScalpingEngine:
                 f"Qty={qty}, Risk_Amt=${sizing['risk_amount']:.2f}"
             )
             
-            return qty, True  # Success - used risk-based sizing
+            return qty, True, effective_leverage  # Success - used risk-based sizing
             
         except Exception as e:
             logger.warning(
@@ -806,7 +801,7 @@ class ScalpingEngine:
                 f"Quantity={position_size:.6f}"
             )
             
-            return position_size, False  # Fallback used
+            return position_size, False, leverage  # Fallback used
     
     def is_optimal_trading_time(self) -> tuple:
         """
@@ -1037,7 +1032,8 @@ class ScalpingEngine:
                 leverage = int(session.data[0].get("leverage", 10))
                 
                 # CRITICAL: Calculate position size based on risk (Phase 2)
-                quantity, used_risk_sizing = self.calculate_position_size_pro(
+                quantity, used_risk_sizing, effective_leverage = self.calculate_position_size_pro(
+                    symbol=signal.symbol,
                     entry_price=signal.entry_price,
                     sl_price=signal.sl_price,
                     capital=capital,
@@ -1058,7 +1054,7 @@ class ScalpingEngine:
                         f"{size_multiplier:.0%} position size (hour={datetime.utcnow().hour} UTC)"
                     )
                 
-                # ── Minimum qty validation (NO AUTO-LEVERAGE for risk management) ──
+                # ── Minimum qty validation ───────────────────────────────────────────
                 # Minimum qty per pair (Bitunix standard minimums)
                 MIN_QTY_MAP = {
                     "BTCUSDT": 0.001, "ETHUSDT": 0.01, "SOLUSDT": 0.1,
@@ -1068,10 +1064,8 @@ class ScalpingEngine:
                     "ATOMUSDT": 0.1,  "XAUUSDT": 0.01, "CLUSDT": 0.01, "QQQUSDT": 0.1
                 }
                 min_qty = MIN_QTY_MAP.get(signal.symbol, 0.001)
-                effective_leverage = leverage
-                
-                # CRITICAL: Skip trade if qty too small - NEVER auto-raise leverage
-                # Auto-raising leverage breaks risk management (user set leverage for specific risk %)
+
+                # If qty is still below minimum after max-safe leverage sizing, skip trade.
                 if quantity_adjusted < min_qty:
                     logger.warning(
                         f"[Scalping:{self.user_id}] {signal.symbol} qty={quantity_adjusted:.6f} "
