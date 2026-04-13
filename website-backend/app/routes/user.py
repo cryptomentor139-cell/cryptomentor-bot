@@ -151,7 +151,10 @@ async def get_verification_status(tg_id: int = Depends(get_current_user)):
     s = _client()
     res = (
         s.table("user_verifications")
-        .select("status, bitunix_uid, submitted_via, reviewed_at, reviewed_by_admin_id")
+        .select(
+            "status, bitunix_uid, submitted_via, reviewed_at, reviewed_by_admin_id,"
+            "reviewed_by_actor_type,reviewed_by_telegram_id,reviewed_by_partner_code,reviewed_by_partner_name"
+        )
         .eq("telegram_id", tg_id)
         .limit(1)
         .execute()
@@ -168,6 +171,10 @@ async def get_verification_status(tg_id: int = Depends(get_current_user)):
         "submitted_via": row.get("submitted_via"),
         "reviewed_at": row.get("reviewed_at"),
         "reviewed_by_admin_id": row.get("reviewed_by_admin_id"),
+        "reviewed_by_actor_type": row.get("reviewed_by_actor_type"),
+        "reviewed_by_telegram_id": row.get("reviewed_by_telegram_id"),
+        "reviewed_by_partner_code": row.get("reviewed_by_partner_code"),
+        "reviewed_by_partner_name": row.get("reviewed_by_partner_name"),
     }
 
 @router.post("/submit-uid")
@@ -202,6 +209,10 @@ async def submit_uid(payload: SubmitUIDRequest, tg_id: int = Depends(get_current
             "submitted_at": now_iso,
             "reviewed_at": None,
             "reviewed_by_admin_id": None,
+            "reviewed_by_actor_type": None,
+            "reviewed_by_telegram_id": None,
+            "reviewed_by_partner_code": None,
+            "reviewed_by_partner_name": None,
             "rejection_reason": None,
             "updated_at": now_iso,
         },

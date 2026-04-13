@@ -463,6 +463,10 @@ async def callback_community_member_acc(update: Update, context: ContextTypes.DE
     await query.answer("✅ Anggota di-approve")
 
     target_user_id = int(query.data.split("_")[-1])
+    leader_id = query.from_user.id
+    leader_community = get_community_by_leader(leader_id) or {}
+    leader_code = leader_community.get("community_code")
+    leader_name = leader_community.get("community_name")
 
     # Update status di autotrade_sessions
     try:
@@ -473,10 +477,52 @@ async def callback_community_member_acc(update: Update, context: ContextTypes.DE
     except Exception as e:
         logger.error(f"[Community] approve member error: {e}")
 
-    # Update member count
-    leader_id = query.from_user.id
+    # Update central verification table with partner reviewer metadata
     try:
-        community = get_community_by_leader(leader_id)
+        existing = (
+            _db().table("user_verifications")
+            .select("bitunix_uid,submitted_via,submitted_at")
+            .eq("telegram_id", target_user_id)
+            .limit(1)
+            .execute()
+        )
+        row = (existing.data or [None])[0] or {}
+        bitunix_uid = row.get("bitunix_uid")
+        if not bitunix_uid:
+            legacy = (
+                _db().table("autotrade_sessions")
+                .select("bitunix_uid")
+                .eq("telegram_id", target_user_id)
+                .limit(1)
+                .execute()
+            )
+            bitunix_uid = ((legacy.data or [None])[0] or {}).get("bitunix_uid")
+
+        now_iso = datetime.utcnow().isoformat()
+        _db().table("user_verifications").upsert(
+            {
+                "telegram_id": int(target_user_id),
+                "bitunix_uid": bitunix_uid,
+                "status": "approved",
+                "submitted_via": row.get("submitted_via") or "telegram",
+                "submitted_at": row.get("submitted_at") or now_iso,
+                "reviewed_at": now_iso,
+                "reviewed_by_admin_id": None,
+                "reviewed_by_actor_type": "partner",
+                "reviewed_by_telegram_id": int(leader_id),
+                "reviewed_by_partner_code": leader_code,
+                "reviewed_by_partner_name": leader_name,
+                "rejection_reason": None,
+                "updated_at": now_iso,
+            },
+            on_conflict="telegram_id",
+        ).execute()
+    except Exception as e:
+        logger.error(f"[Community] failed writing user_verifications approve metadata: {e}")
+
+    # Update member count
+    try:
+        community = leader_community or get_community_by_leader(leader_id)
         if community:
             new_count = (community.get("member_count") or 0) + 1
             _db().table("community_partners").update({
@@ -530,6 +576,10 @@ async def callback_community_member_reject(update: Update, context: ContextTypes
     await query.answer("❌ Anggota ditolak")
 
     target_user_id = int(query.data.split("_")[-1])
+    leader_id = query.from_user.id
+    leader_community = get_community_by_leader(leader_id) or {}
+    leader_code = leader_community.get("community_code")
+    leader_name = leader_community.get("community_name")
 
     try:
         _db().table("autotrade_sessions").update({
@@ -538,6 +588,48 @@ async def callback_community_member_reject(update: Update, context: ContextTypes
         }).eq("telegram_id", target_user_id).execute()
     except Exception:
         pass
+
+    # Update central verification table with partner reviewer metadata
+    try:
+        existing = (
+            _db().table("user_verifications")
+            .select("bitunix_uid,submitted_via,submitted_at")
+            .eq("telegram_id", target_user_id)
+            .limit(1)
+            .execute()
+        )
+        row = (existing.data or [None])[0] or {}
+        bitunix_uid = row.get("bitunix_uid")
+        if not bitunix_uid:
+            legacy = (
+                _db().table("autotrade_sessions")
+                .select("bitunix_uid")
+                .eq("telegram_id", target_user_id)
+                .limit(1)
+                .execute()
+            )
+            bitunix_uid = ((legacy.data or [None])[0] or {}).get("bitunix_uid")
+
+        now_iso = datetime.utcnow().isoformat()
+        _db().table("user_verifications").upsert(
+            {
+                "telegram_id": int(target_user_id),
+                "bitunix_uid": bitunix_uid,
+                "status": "rejected",
+                "submitted_via": row.get("submitted_via") or "telegram",
+                "submitted_at": row.get("submitted_at") or now_iso,
+                "reviewed_at": now_iso,
+                "reviewed_by_admin_id": None,
+                "reviewed_by_actor_type": "partner",
+                "reviewed_by_telegram_id": int(leader_id),
+                "reviewed_by_partner_code": leader_code,
+                "reviewed_by_partner_name": leader_name,
+                "updated_at": now_iso,
+            },
+            on_conflict="telegram_id",
+        ).execute()
+    except Exception as e:
+        logger.error(f"[Community] failed writing user_verifications reject metadata: {e}")
 
     await query.edit_message_text(
         query.message.text + f"\n\n❌ <b>Rejected</b>",

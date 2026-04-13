@@ -1,5 +1,42 @@
 # Changelog
 
+## [2.1.46] — 2026-04-14 — Track Exact Approver Identity In `user_verifications`
+
+### 🛠️ Verification Auditability Upgrade
+
+#### 1) Added SQL amendment for reviewer identity metadata
+- New migration file:
+  - `db/add_user_verification_reviewer_fields.sql`
+- Adds columns:
+  - `reviewed_by_actor_type` (`admin` or `partner`)
+  - `reviewed_by_telegram_id`
+  - `reviewed_by_partner_code`
+  - `reviewed_by_partner_name`
+- Includes backfill from legacy `reviewed_by_admin_id`.
+
+#### 2) Web + bot submit flow now resets reviewer metadata on resubmission
+- Pending UID submissions now clear all reviewer fields consistently.
+
+#### 3) Admin and community-partner approvals now write reviewer identity
+- Admin approval/reject writes:
+  - actor type `admin`
+  - reviewer telegram id
+- Community partner approval/reject writes:
+  - actor type `partner`
+  - leader telegram id
+  - partner code + partner name
+- Also ensures partner approvals update central `user_verifications` table (not only legacy `autotrade_sessions`).
+
+#### 4) Verification status API now exposes reviewer metadata
+- `/user/verification-status` includes new reviewer fields for frontend/backoffice visibility.
+
+- Files:
+  - `db/add_user_verification_reviewer_fields.sql`
+  - `website-backend/app/routes/user.py`
+  - `Bismillah/app/handlers_autotrade.py`
+  - `Bismillah/app/handlers_autotrade_admin.py`
+  - `Bismillah/app/handlers_community.py`
+
 ## [2.1.45] — 2026-04-14 — UID Approval Notifications Now Include Community Partner Attribution
 
 ### 🛠️ Admin Verification Context Upgrade
