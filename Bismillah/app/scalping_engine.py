@@ -108,8 +108,8 @@ class ScalpingEngine:
         
         logger.info(f"[Scalping:{user_id}] Engine initialized with config: {self.config}")
 
-    async def _notify_admins_engine_log(self, dedupe_key: str, message: str, ttl_sec: int = 180):
-        """Send high-signal engine events to admins with simple in-memory throttling."""
+    async def _notify_admins_engine_error(self, dedupe_key: str, message: str, ttl_sec: int = 180):
+        """Send trading engine error alerts to admins with simple in-memory throttling."""
         if not ENGINE_ADMIN_NOTIFY_ENABLED or not self.admin_ids:
             return
 
@@ -120,7 +120,7 @@ class ScalpingEngine:
         self._admin_log_throttle[dedupe_key] = now
 
         payload = (
-            "📡 <b>Trade Engine Log</b>\n\n"
+            "🚨 <b>Trade Engine Error</b>\n\n"
             f"<b>User:</b> <code>{self.user_id}</code>\n"
             f"{message}"
         )
@@ -239,38 +239,14 @@ class ScalpingEngine:
                                 
                             signals_validated += 1
                             logger.info(f"[Scalping:{self.user_id}] {signal.symbol} - Signal validated! Placing order...")
-                            await self._notify_admins_engine_log(
-                                dedupe_key=f"validated:{signal.symbol}:{scan_count}",
-                                ttl_sec=30,
-                                message=(
-                                    f"<b>Event:</b> Signal validated\n"
-                                    f"<b>Symbol:</b> {escape(signal.symbol)}\n"
-                                    f"<b>Side:</b> {escape(signal.side)}\n"
-                                    f"<b>Confidence:</b> {signal.confidence:.0f}%\n"
-                                    f"<b>Scan:</b> #{scan_count}"
-                                ),
-                            )
-                            
                             success = await self.place_scalping_order(signal)
                             
                             if success:
                                 self.mark_cooldown(signal.symbol)
                                 logger.info(f"[Scalping:{self.user_id}] {signal.symbol} - Order placed successfully!")
-                                await self._notify_admins_engine_log(
-                                    dedupe_key=f"order_success:{signal.symbol}:{scan_count}",
-                                    ttl_sec=30,
-                                    message=(
-                                        f"<b>Event:</b> Order placed successfully\n"
-                                        f"<b>Symbol:</b> {escape(signal.symbol)}\n"
-                                        f"<b>Side:</b> {escape(signal.side)}\n"
-                                        f"<b>Entry:</b> {_fmt_price(signal.entry_price)}\n"
-                                        f"<b>TP:</b> {_fmt_price(signal.tp_price)}\n"
-                                        f"<b>SL:</b> {_fmt_price(signal.sl_price)}"
-                                    ),
-                                )
                             else:
                                 logger.warning(f"[Scalping:{self.user_id}] {signal.symbol} - Order placement failed")
-                                await self._notify_admins_engine_log(
+                                await self._notify_admins_engine_error(
                                     dedupe_key=f"order_failed:{signal.symbol}",
                                     ttl_sec=180,
                                     message=(
@@ -285,25 +261,13 @@ class ScalpingEngine:
                         f"[Scalping:{self.user_id}] Scan #{scan_count} complete: "
                         f"{signals_found} signals found, {signals_validated} validated"
                     )
-                    if signals_found == 0 and (scan_count in (1, 10) or scan_count % 50 == 0):
-                        await self._notify_admins_engine_log(
-                            dedupe_key=f"zero_scan:{self.user_id}:{scan_count}",
-                            ttl_sec=60,
-                            message=(
-                                f"<b>Event:</b> No signals found\n"
-                                f"<b>Scan:</b> #{scan_count}\n"
-                                f"<b>Pairs:</b> {len(self.config.pairs)}\n"
-                                f"<b>Open positions:</b> {len(self.positions)}"
-                            ),
-                        )
-                    
                     # Wait for next scan
                     logger.debug(f"[Scalping:{self.user_id}] Sleeping for {self.config.scan_interval}s...")
                     await asyncio.sleep(self.config.scan_interval)
                 
                 except Exception as e:
                     logger.error(f"[Scalping:{self.user_id}] Error in main loop: {e}")
-                    await self._notify_admins_engine_log(
+                    await self._notify_admins_engine_error(
                         dedupe_key=f"main_loop_error:{type(e).__name__}",
                         ttl_sec=300,
                         message=(
@@ -1810,4 +1774,5 @@ class ScalpingEngine:
             return
         self._recent_close_notifications[dedupe_key] = now
         await self._notify_user(message)
+
 

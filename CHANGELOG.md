@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.1.23] — 2026-04-13 — Limit Admin Telegram Alerts To Actual Trade Engine Errors
+
+### 🛠️ Bot Noise Reduction
+
+#### 1) Removed Normal Scan/Event Spam From Admin Alerts
+- Root cause: admin Telegram notifications were also firing for normal runtime events such as:
+  - no signals found
+  - signal validated
+  - successful order placement
+- Fix:
+  - Admin engine notifications now only send for actual error/failure conditions.
+  - Current live error alerts include:
+    - order placement failures
+    - main engine loop errors
+- Result:
+  - Admin Telegram receives only actionable trading-bot error messages instead of routine engine chatter.
+- File:
+  - `Bismillah/app/scalping_engine.py`
+
 ## [2.1.22] — 2026-04-13 — Fix Telegram AutoTrade Reminder Buttons
 
 ### 🛠️ Bot Fix
