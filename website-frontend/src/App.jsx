@@ -1351,19 +1351,53 @@ function RiskManagementCard({ riskSettings, onPreviewRisk, onUpdateRisk, onUpdat
       </div>
 
       <div className="space-y-6 relative z-10">
-        {/* Risk Level */}
+        {/* Risk Level Buttons */}
         <div>
-          <RiskSliderControl
-            value={riskSettings.risk_per_trade}
-            onPreview={onPreviewRisk}
-            onCommit={onUpdateRisk}
-            loading={autoRiskBusy}
-            min={AUTOTRADE_RISK_MIN}
-            max={AUTOTRADE_RISK_MAX}
-            step={AUTOTRADE_RISK_STEP}
-            showAllIn={false}
-            title="AutoTrade Risk Per Trade (0.5% - 10%)"
-          />
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">AutoTrade Risk Per Trade</p>
+          <div className="flex flex-wrap gap-2">
+            {[0.5, 1, 1.5, 2, 3, 5, 7, 10].map(risk => {
+              const rVal = Number(risk);
+              const isSelected = Math.abs(Number(riskSettings.risk_per_trade) - rVal) < 0.01;
+              const isSmallAccount = Number(riskSettings.equity || 0) < 100;
+              const isDisabled = isSmallAccount && rVal !== 3.0;
+              const isHighRisk = rVal > 5.0;
+
+              let btnClass = "px-3 py-2 rounded-xl font-bold text-[10px] transition-all border ";
+              if (isSelected) {
+                if (isHighRisk) {
+                  // Amber-Red for > 5%
+                  btnClass += "bg-orange-600 text-white border-orange-500 shadow-[0_0_15px_rgba(234,88,12,0.4)]";
+                } else {
+                  btnClass += "bg-amber-500 text-white border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]";
+                }
+              } else {
+                btnClass += "bg-white/5 text-slate-400 border-white/5 hover:bg-white/10 hover:text-slate-200";
+              }
+
+              if (isDisabled) {
+                btnClass += " opacity-20 cursor-not-allowed grayscale";
+              }
+
+              return (
+                <button
+                  key={risk}
+                  onClick={() => !isDisabled && onUpdateRisk(rVal)}
+                  disabled={isDisabled || autoRiskBusy}
+                  className={btnClass}
+                >
+                  {rVal}%
+                </button>
+              );
+            })}
+          </div>
+          {Number(riskSettings.equity || 0) < 100 && (
+            <div className="mt-3 flex items-start gap-2 p-2.5 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+              <Shield size={12} className="text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-[10px] text-slate-400 font-medium leading-tight">
+                <span className="text-amber-300 font-bold">Execution Safety Floor:</span> Accounts below $100 are locked to 3% risk to ensure orders meet exchange minimum quantity.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Leverage & Margin Mode Row */}
