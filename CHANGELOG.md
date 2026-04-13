@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.1.21] — 2026-04-13 — Admin Telegram Notifications For Trade Engine Logs
+
+### 🔔 Monitoring
+
+#### 1) Added High-Signal Admin Notifications For Scalping/AutoTrade Engine Events
+- Admins now receive Telegram notifications for:
+  - validated trade signals
+  - successful order placements
+  - order placement failures
+  - repeated zero-signal scan milestones
+  - engine loop errors
+- Notifications are throttled in-memory to reduce spam while still surfacing runtime problems quickly.
+- File:
+  - `Bismillah/app/scalping_engine.py`
+
 ## [2.1.20] — 2026-04-13 — Reduce AutoTrade Candle Fetch Stampede
 
 ### 🛠️ Runtime Fix
