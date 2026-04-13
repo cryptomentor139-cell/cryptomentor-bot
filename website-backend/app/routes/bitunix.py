@@ -190,14 +190,45 @@ async def bitunix_account(tg_id: int = Depends(get_current_user)):
 async def bitunix_positions(tg_id: int = Depends(get_current_user)):
     _require_keys(tg_id)
     try:
-        res = await bsvc.fetch_positions(tg_id)
+        # Parallel fetch live positions and DB trades for annotation
+        import asyncio
+        s = _client()
+        tasks = [
+            bsvc.fetch_positions(tg_id),
+            asyncio.to_thread(lambda: s.table("autotrade_trades").select(
+                "id, symbol, side, qty, quantity, entry_price, status"
+            ).eq("telegram_id", int(tg_id)).eq("status", "open").execute())
+        ]
+        results = await asyncio.gather(*tasks)
+        res, db_res = results
+        
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Bitunix error: {e}")
     if not res.get("success"):
         raise HTTPException(status_code=502, detail=res.get("message") or "Bitunix positions fetch failed")
 
-    positions = _annotate_position_sources(tg_id, res.get("positions", []))
-    total_upnl = sum(float(p.get("pnl") or 0) for p in positions)
+    # Use the pre-fetched db_res for annotation (speed up)
+    db_open = db_res.data or []
+    remaining_db = list(db_open)
+    annotated: list[dict] = []
+    positions = res.get("positions", [])
+
+    for pos in positions:
+        enriched = dict(pos)
+        source = "1_click"
+        matched_trade_id = None
+        for idx, db_trade in enumerate(remaining_db):
+            if _is_same_position(enriched, db_trade):
+                source = "autotrade"
+                matched_trade_id = db_trade.get("id")
+                remaining_db.pop(idx)
+                break
+        enriched["source"] = source
+        enriched["source_label"] = "AutoTrade" if source == "autotrade" else "1-Click"
+        enriched["autotrade_trade_id"] = matched_trade_id
+        annotated.append(enriched)
+
+    total_upnl = sum(float(p.get("pnl") or 0) for p in annotated)
     return {
         "total_positions": len(positions),
         "autotrade_positions": sum(1 for p in positions if p.get("source") == "autotrade"),
@@ -308,8 +339,13 @@ async def bitunix_trade_history(
 async def bitunix_portfolio(tg_id: int = Depends(get_current_user)):
     _require_keys(tg_id)
     try:
-        acc = await bsvc.fetch_account(tg_id)
-        pos = await bsvc.fetch_positions(tg_id)
+        import asyncio
+        tasks = [
+            bsvc.fetch_account(tg_id),
+            bsvc.fetch_positions(tg_id)
+        ]
+        results = await asyncio.gather(*tasks)
+        acc, pos = results
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Bitunix error: {e}")
 

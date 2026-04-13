@@ -32,6 +32,10 @@ def _normalize_verification_status(raw_status: str) -> str:
     if status in _REJECTED_ALIASES:
         return REJECTED_STATUS
     return status or "none"
+    
+import time as _time
+_VERIFICATION_CACHE = {} # tg_id: (status, expiry)
+_CACHE_TTL = 120 # 2 minutes
 
 # Routes that do NOT require exchange verification
 # (Always allowed even if user is not verified on Bitunix)
@@ -127,6 +131,15 @@ class VerificationGuardMiddleware(BaseHTTPMiddleware):
                 },
             )
 
+        # Check cache first
+        now = _time.time()
+        cached_status, expiry = _VERIFICATION_CACHE.get(tg_id, (None, 0))
+        if cached_status and now < expiry:
+            if cached_status != APPROVED_STATUS:
+                logger.info(f"[Guard:Cache:{tg_id}] Blocked — status: {cached_status}")
+                return JSONResponse(status_code=403, content={"error": "verification_required", "status": cached_status})
+            return await call_next(request)
+
         # Check verification status from the central table.
         try:
             s = _client()
@@ -140,6 +153,9 @@ class VerificationGuardMiddleware(BaseHTTPMiddleware):
             row = (res.data or [None])[0]
             raw_status = row.get("status") if row else "none"
             status = _normalize_verification_status(raw_status)
+            
+            # Update cache
+            _VERIFICATION_CACHE[tg_id] = (status, now + _CACHE_TTL)
 
             if status != APPROVED_STATUS:
                 logger.info(f"[Guard:{tg_id}] Blocked access to {path} — status: {status}")

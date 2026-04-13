@@ -12,8 +12,18 @@ import os
 import threading
 from collections import deque
 import hmac
+import json
+import random
+import re
 from typing import Dict, Optional, List
 from datetime import datetime
+
+try:
+    from curl_cffi import requests as cffi_requests
+    _CURL_CFFI_AVAILABLE = True
+except ImportError:
+    cffi_requests = None
+    _CURL_CFFI_AVAILABLE = False
 
 class RateLimiter:
     def __init__(self, rate_limit: int = 10, period: float = 1.0):
@@ -68,7 +78,6 @@ class BitunixAutoTradeClient:
     def _get_healthy_proxy(self) -> Optional[str]:
         if not self.proxy_list:
             return None
-        import time, random
         now = time.time()
         expired = [p for p, expiry in self.penalized_proxies.items() if now > expiry]
         for p in expired:
@@ -138,7 +147,6 @@ class BitunixAutoTradeClient:
         if signed:
             query_str = self._build_query_string(params)
             if body:
-                import json
                 body_str = json.dumps(body, separators=(',', ':'))
             headers = self._auth_headers(query_str, body_str)
         else:
@@ -158,7 +166,6 @@ class BitunixAutoTradeClient:
             params = None  # already in URL — don't pass again
 
         # Smart Proxy rotation
-        import re
         proxy_url = self._get_healthy_proxy()
         
         # Apply 10req/sec per IP rate limits BEFORE calling
@@ -173,30 +180,25 @@ class BitunixAutoTradeClient:
         last_error = None
 
         # Strategy: curl_cffi dengan browser impersonation + proxy (paling reliable)
-        try:
-            from curl_cffi import requests as cffi_requests
-            import curl_cffi
-            print(f"[Bitunix] curl_cffi version: {curl_cffi.__version__}")
-            kwargs = dict(params=params, headers=headers, timeout=15, impersonate="chrome124")
-            if proxy_url:
-                kwargs['proxies'] = {'http': proxy_url, 'https': proxy_url}
-            if method.upper() == 'GET':
-                r = cffi_requests.get(url, **kwargs)
-            else:
-                r = cffi_requests.post(url, data=body_str, **kwargs)
-            print(f"[Bitunix] curl_cffi response: {r.status_code}, html={('<html' in r.text[:100].lower())}")
-            if r.status_code == 403 and '<html' in r.text[:100].lower():
-                print(f"[Bitunix] curl_cffi got HTML 403")
-                self._penalize_proxy(proxy_url, 600)
+        if _CURL_CFFI_AVAILABLE:
+            try:
+                # print(f"[Bitunix] curl_cffi version: {curl_cffi.__version__}")
+                kwargs = dict(params=params, headers=headers, timeout=15, impersonate="chrome124")
+                if proxy_url:
+                    kwargs['proxies'] = {'http': proxy_url, 'https': proxy_url}
+                if method.upper() == 'GET':
+                    r = cffi_requests.get(url, **kwargs)
+                else:
+                    r = cffi_requests.post(url, data=body_str, **kwargs)
+                if r.status_code == 403 and '<html' in r.text[:100].lower():
+                    self._penalize_proxy(proxy_url, 600)
+                    r = None
+            except Exception as e:
+                last_error = e
+                print(f"[Bitunix] curl_cffi failed: {e}")
+                if proxy_url and ("timeout" in str(e).lower() or "connect" in str(e).lower() or "proxy" in str(e).lower()):
+                    self._penalize_proxy(proxy_url, 300)
                 r = None
-        except ImportError:
-            pass
-        except Exception as e:
-            last_error = e
-            print(f"[Bitunix] curl_cffi failed: {e}")
-            if proxy_url and ("timeout" in str(e).lower() or "connect" in str(e).lower() or "proxy" in str(e).lower()):
-                self._penalize_proxy(proxy_url, 300)
-            r = None
 
         # Fallback: requests biasa
         if r is None:
