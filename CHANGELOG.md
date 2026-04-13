@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.1.43] — 2026-04-14 — Apply Auto Max-Safe Leverage Logic To 1-Click Execution
+
+### 🛠️ 1-Click Sizing Upgrade
+
+#### 1) 1-click order sizing now uses max-safe leverage automatically
+- `/dashboard/signals/execute` now computes leverage from:
+  - exchange symbol max leverage
+  - SL-distance safety bound
+- No longer tied to legacy session leverage for execution.
+
+#### 2) Risk remains fixed vs equity
+- Position sizing keeps loss anchored to:
+  - `equity × configured risk %`
+- Supports dynamic SL adjustment when minimum quantity constraints require it.
+
+#### 3) API response now includes leverage diagnostics
+- Added sizing fields:
+  - `leverage_mode=auto_max_safe`
+  - `leverage_baseline`
+  - `exchange_max_leverage`
+  - `is_dynamic`, `is_clamped`
+
+- File:
+  - `website-backend/app/routes/signals.py`
+
 ## [2.1.42] — 2026-04-13 — AutoTrade Risk UI Aligned With Live Execution Logic
 
 ### 🛠️ Web Risk Management Alignment

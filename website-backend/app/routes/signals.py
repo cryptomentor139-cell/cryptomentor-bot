@@ -92,6 +92,82 @@ _signal_cache: Dict[str, Dict[str, Any]] = {}
 _CONFLUENCE_CACHE = {} # (sym, risk): (expiry, sig)
 
 
+def _size_oneclick_max_safe(
+    *,
+    symbol: str,
+    equity: float,
+    risk_pct: float,
+    entry_price: float,
+    sl_price: float,
+    exchange_max_leverage: int,
+    min_sl_dist_pct: float = 0.002,
+) -> Dict[str, Any]:
+    """
+    Max-safe one-click sizing:
+    - fixed loss budget by equity*risk%
+    - leverage auto-optimized to highest safe bound
+    - dynamic SL adjust when qty is below minimum precision step
+    """
+    precision = _QTY_PRECISION.get(symbol, 3)
+    min_qty = 10 ** (-precision) if precision > 0 else 1
+
+    sl_dist_abs = abs(entry_price - sl_price)
+    if sl_dist_abs <= 0:
+        return {"valid": False, "error": "Invalid SL distance"}
+    sl_dist_pct = sl_dist_abs / entry_price
+
+    maintenance_buffer = 0.005
+    safe_max_leverage = int(0.9 / (sl_dist_pct + maintenance_buffer))
+    leverage = max(1, min(int(exchange_max_leverage or 20), safe_max_leverage))
+
+    risk_amount = equity * (risk_pct / 100.0)
+    qty = round(risk_amount / sl_dist_abs, precision)
+    adjusted_sl = sl_price
+    is_dynamic = False
+    is_clamped = False
+
+    if qty < min_qty:
+        is_dynamic = True
+        qty = min_qty
+        new_sl_dist = risk_amount / qty
+        new_sl_dist_pct = new_sl_dist / entry_price
+        if new_sl_dist_pct < min_sl_dist_pct:
+            new_sl_dist_pct = min_sl_dist_pct
+            new_sl_dist = entry_price * new_sl_dist_pct
+            is_clamped = True
+
+        if sl_price < entry_price:  # LONG
+            adjusted_sl = entry_price - new_sl_dist
+        else:  # SHORT
+            adjusted_sl = entry_price + new_sl_dist
+
+        sl_dist_abs = abs(entry_price - adjusted_sl)
+        sl_dist_pct = sl_dist_abs / entry_price
+        safe_max_leverage = int(0.9 / (sl_dist_pct + maintenance_buffer))
+        leverage = max(1, min(int(exchange_max_leverage or 20), safe_max_leverage))
+
+    position_size_usdt = qty * entry_price
+    margin_required = position_size_usdt / leverage
+    effective_risk_amount = qty * sl_dist_abs
+    effective_risk_pct = (effective_risk_amount / equity * 100.0) if equity > 0 else 0.0
+
+    return {
+        "valid": True,
+        "qty": qty,
+        "leverage": leverage,
+        "sl_price": adjusted_sl,
+        "risk_amount": risk_amount,
+        "position_size_usdt": position_size_usdt,
+        "margin_required": margin_required,
+        "effective_risk_amount": effective_risk_amount,
+        "effective_risk_pct": effective_risk_pct,
+        "sl_distance_pct": sl_dist_pct,
+        "is_dynamic": is_dynamic,
+        "is_clamped": is_clamped,
+        "exchange_max_leverage": int(exchange_max_leverage or 20),
+    }
+
+
 def _normalize_risk_pct(raw_value: Any, default: float = 1.0) -> float:
     """Clamp incoming risk setting to supported range [0.5, 100.0]."""
     try:
@@ -833,7 +909,7 @@ async def execute_signal(
         if one_click_raw is None:
             one_click_raw = sess.get("risk_per_trade")
         risk_pct = _normalize_risk_pct(one_click_raw, default=1.0)  # 0.5%..100.0%
-    leverage = int(sess.get("leverage") or 10)
+    leverage_baseline = int(sess.get("leverage") or 10)
 
     # Use pre-fetched live market data
     direction = str(payload.get("direction") or live_sig.get("direction") or "").upper()
@@ -868,11 +944,40 @@ async def execute_signal(
     if sl_distance_pct > 0.15:
         raise HTTPException(status_code=400, detail="Stop loss too wide (>15%)")
 
-    # Risk-based sizing: qty such that loss-at-SL == equity * risk%.
-    # Uses equity (not balance) to account for unrealized PnL from open positions.
-    risk_amount = equity * (risk_pct / 100.0)
-    position_size_usdt = risk_amount / sl_distance_pct
-    margin_required = position_size_usdt / leverage
+    # Max-safe leverage sizing for 1-click:
+    # - fixed loss budget by equity*risk%
+    # - auto leverage optimized to highest safe value
+    # - dynamic SL adjustment for minimum qty when needed
+    exchange_max_leverage = leverage_baseline
+    try:
+        if hasattr(bsvc, "_client_for"):
+            exchange_max_leverage = int(
+                await asyncio.to_thread(lambda: bsvc._client_for(tg_id).get_max_leverage(sym))
+            )
+    except Exception as _lev_err:
+        logger.warning(f"[1Click:{tg_id}] max leverage fetch failed for {sym}: {_lev_err}")
+        exchange_max_leverage = leverage_baseline
+
+    sizing = _size_oneclick_max_safe(
+        symbol=sym,
+        equity=equity,
+        risk_pct=risk_pct,
+        entry_price=entry_price,
+        sl_price=sl_price,
+        exchange_max_leverage=exchange_max_leverage,
+        min_sl_dist_pct=0.002,
+    )
+    if not sizing.get("valid"):
+        raise HTTPException(status_code=400, detail=f"Sizing invalid: {sizing.get('error')}")
+
+    leverage = int(sizing["leverage"])
+    sl_price = float(sizing["sl_price"])
+    risk_amount = float(sizing["risk_amount"])
+    position_size_usdt = float(sizing["position_size_usdt"])
+    margin_required = float(sizing["margin_required"])
+    effective_risk_amount = float(sizing["effective_risk_amount"])
+    effective_risk_pct = float(sizing["effective_risk_pct"])
+    sl_distance_pct = float(sizing["sl_distance_pct"])
     risk_zone = "amber_red" if risk_pct > 1.0 else "normal"
 
     # Use pre-fetched positions for concurrency check
@@ -910,11 +1015,8 @@ async def execute_signal(
     effective_margin_cap = None
 
     if is_all_in:
-        # For All In: preserve the 100% loss-at-SL intent and skip the
-        # normal per-trade margin cap. This can still be rejected by the
-        # exchange if current leverage is insufficient for the requested size.
-        position_size_usdt = risk_amount / sl_distance_pct
-        margin_required = position_size_usdt / leverage
+        # For All In: keep max-safe sizing result and skip margin-cap throttling.
+        # Exchange may still reject if account constraints are hit in real time.
         logger.info(
             f"[AllIn:{tg_id}] 100% risk mode: equity=${equity:.2f}, "
             f"risk_amount=${risk_amount:.2f}, sl_distance_pct={sl_distance_pct:.4f}, "
@@ -948,15 +1050,7 @@ async def execute_signal(
             ),
         )
 
-    qty = position_size_usdt / entry_price
-    precision = _QTY_PRECISION.get(sym, 3)
-    qty = round(qty, precision)
-    min_qty = 10 ** (-precision) if precision > 0 else 1
-    if qty < min_qty:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Computed qty {qty} below exchange minimum {min_qty}",
-        )
+    qty = float(sizing["qty"])
 
     try:
         result = await bsvc.place_market_with_tpsl(
@@ -995,13 +1089,18 @@ async def execute_signal(
             "margin_required": round(margin_required, 2),
             "risk_amount": round(risk_amount, 2),
             "risk_pct": risk_pct,
-            "effective_risk_amount": round(position_size_usdt * sl_distance_pct, 2),
-            "effective_risk_pct": round(((position_size_usdt * sl_distance_pct) / equity) * 100, 4) if equity > 0 else 0.0,
+            "effective_risk_amount": round(effective_risk_amount, 2),
+            "effective_risk_pct": round(effective_risk_pct, 4) if equity > 0 else 0.0,
             "risk_zone": risk_zone,
             "high_risk": risk_pct > 1.0,
             "is_all_in": is_all_in,
             "sl_distance_pct": round(sl_distance_pct * 100, 3),
             "leverage": leverage,
+            "leverage_mode": "auto_max_safe",
+            "leverage_baseline": leverage_baseline,
+            "exchange_max_leverage": exchange_max_leverage,
+            "is_dynamic": bool(sizing.get("is_dynamic")),
+            "is_clamped": bool(sizing.get("is_clamped")),
             "open_positions_count": open_positions_count,
             "max_concurrent_target": max_concurrent_target,
             "autotrade_running": autotrade_running,
