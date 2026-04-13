@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.1.45] — 2026-04-14 — UID Approval Notifications Now Include Community Partner Attribution
+
+### 🛠️ Admin Verification Context Upgrade
+
+#### 1) UID approval cards now show partner ownership context
+- Admin Telegram UID verification messages now append:
+  - community partner name
+  - community code
+  - partner `telegram_id`
+  - partner Bitunix referral code
+- If no partner mapping is found, message explicitly shows default/direct flow (`sq45`).
+
+#### 2) Partner mapping resolution added in both web + bot UID submission paths
+- Resolution priority:
+  - `autotrade_sessions.community_code`
+  - `users.referred_by` mapped to `community_partners.telegram_id` or `community_code`
+
+- Files:
+  - `website-backend/app/routes/user.py`
+  - `Bismillah/app/handlers_autotrade.py`
+
 ## [2.1.44] — 2026-04-14 — Referral-Aware Bitunix Registration Link In Gatekeeper
 
 ### 🛠️ Referral Routing Enhancement

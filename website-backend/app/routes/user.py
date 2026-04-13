@@ -61,6 +61,79 @@ def _load_admin_ids() -> list[int]:
                 ids.add(int(token))
     return sorted(ids)
 
+
+def _resolve_community_partner_for_user(s, tg_id: int):
+    """
+    Resolve community partner attribution for a user.
+    Priority:
+    1) autotrade_sessions.community_code
+    2) users.referred_by mapped to community_partners.telegram_id or community_code
+    """
+    try:
+        sess_res = (
+            s.table("autotrade_sessions")
+            .select("community_code")
+            .eq("telegram_id", int(tg_id))
+            .limit(1)
+            .execute()
+        )
+        sess_row = (sess_res.data or [None])[0]
+        community_code = str((sess_row or {}).get("community_code") or "").strip().lower()
+        if community_code:
+            comm_res = (
+                s.table("community_partners")
+                .select("telegram_id,community_name,community_code,bitunix_referral_code,bitunix_referral_url,status")
+                .eq("community_code", community_code)
+                .limit(1)
+                .execute()
+            )
+            comm_row = (comm_res.data or [None])[0]
+            if comm_row:
+                return comm_row
+    except Exception:
+        pass
+
+    try:
+        user_res = (
+            s.table("users")
+            .select("referred_by")
+            .eq("telegram_id", int(tg_id))
+            .limit(1)
+            .execute()
+        )
+        user_row = (user_res.data or [None])[0]
+        referred_by = (user_row or {}).get("referred_by")
+    except Exception:
+        referred_by = None
+
+    if referred_by is None:
+        return None
+
+    ref_text = str(referred_by).strip()
+    if not ref_text:
+        return None
+
+    try:
+        if ref_text.isdigit():
+            comm_res = (
+                s.table("community_partners")
+                .select("telegram_id,community_name,community_code,bitunix_referral_code,bitunix_referral_url,status")
+                .eq("telegram_id", int(ref_text))
+                .limit(1)
+                .execute()
+            )
+        else:
+            comm_res = (
+                s.table("community_partners")
+                .select("telegram_id,community_name,community_code,bitunix_referral_code,bitunix_referral_url,status")
+                .eq("community_code", ref_text.lower())
+                .limit(1)
+                .execute()
+            )
+        return (comm_res.data or [None])[0]
+    except Exception:
+        return None
+
 @router.get("/me")
 async def get_me(tg_id: int = Depends(get_current_user)):
     user = get_user_by_tid(tg_id)
@@ -154,6 +227,20 @@ async def submit_uid(payload: SubmitUIDRequest, tg_id: int = Depends(get_current
     user = get_user_by_tid(tg_id)
     username = user.get("username") or user.get("first_name") or str(tg_id) if user else str(tg_id)
     resubmit_note = " (resubmission after rejection)" if current_status == VER_REJECTED else ""
+    partner = _resolve_community_partner_for_user(s, tg_id)
+    if partner:
+        partner_name = partner.get("community_name") or "-"
+        partner_code = partner.get("community_code") or "-"
+        partner_tg_id = partner.get("telegram_id")
+        partner_ref_code = partner.get("bitunix_referral_code") or "-"
+        partner_block = (
+            f"🧩 Community Partner: <b>{partner_name}</b>\n"
+            f"🔑 Partner Code: <code>{partner_code}</code>\n"
+            f"🆔 Partner Telegram ID: <code>{partner_tg_id}</code>\n"
+            f"🎟 Partner Referral Code: <code>{partner_ref_code}</code>"
+        )
+    else:
+        partner_block = "🧩 Community Partner: <i>Direct/default flow (sq45)</i>"
 
     # Admin notification
     admin_ids = _load_admin_ids()
@@ -172,7 +259,7 @@ async def submit_uid(payload: SubmitUIDRequest, tg_id: int = Depends(get_current
                                 f"🔔 <b>New UID Verification{resubmit_note}</b>\n\n"
                                 f"👤 User: @{username} (ID: <code>{tg_id}</code>)\n"
                                 f"🔑 Bitunix UID: <code>{uid}</code>\n"
-                                f"🔗 Referral: sq45"
+                                f"{partner_block}"
                             ),
                             "parse_mode": "HTML",
                             "reply_markup": {"inline_keyboard": [[

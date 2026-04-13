@@ -181,6 +181,81 @@ def _load_verification_snapshot(telegram_id: int) -> Dict[str, str]:
     }
 
 
+def _resolve_community_partner_for_user(telegram_id: int) -> Optional[Dict]:
+    """
+    Resolve community partner attribution for UID approval notification.
+    Priority:
+    1) autotrade_sessions.community_code
+    2) users.referred_by mapped to community_partners.telegram_id or community_code
+    """
+    s = _client()
+
+    try:
+        sess = (
+            s.table("autotrade_sessions")
+            .select("community_code")
+            .eq("telegram_id", int(telegram_id))
+            .limit(1)
+            .execute()
+        )
+        sess_row = (sess.data or [None])[0]
+        community_code = str((sess_row or {}).get("community_code") or "").strip().lower()
+        if community_code:
+            comm = (
+                s.table("community_partners")
+                .select("telegram_id,community_name,community_code,bitunix_referral_code,bitunix_referral_url,status")
+                .eq("community_code", community_code)
+                .limit(1)
+                .execute()
+            )
+            row = (comm.data or [None])[0]
+            if row:
+                return row
+    except Exception:
+        pass
+
+    try:
+        user_res = (
+            s.table("users")
+            .select("referred_by")
+            .eq("telegram_id", int(telegram_id))
+            .limit(1)
+            .execute()
+        )
+        user_row = (user_res.data or [None])[0]
+        referred_by = (user_row or {}).get("referred_by")
+    except Exception:
+        referred_by = None
+
+    if referred_by is None:
+        return None
+
+    ref_text = str(referred_by).strip()
+    if not ref_text:
+        return None
+
+    try:
+        if ref_text.isdigit():
+            comm = (
+                s.table("community_partners")
+                .select("telegram_id,community_name,community_code,bitunix_referral_code,bitunix_referral_url,status")
+                .eq("telegram_id", int(ref_text))
+                .limit(1)
+                .execute()
+            )
+        else:
+            comm = (
+                s.table("community_partners")
+                .select("telegram_id,community_name,community_code,bitunix_referral_code,bitunix_referral_url,status")
+                .eq("community_code", ref_text.lower())
+                .limit(1)
+                .execute()
+            )
+        return (comm.data or [None])[0]
+    except Exception:
+        return None
+
+
 # ------------------------------------------------------------------ #
 #  Conversation: /autotrade entry                                     #
 # ------------------------------------------------------------------ #
@@ -489,10 +564,22 @@ async def notify_admins_of_uid(bot, user_id: int, uid: str):
                 part = part.strip()
                 if part.isdigit(): admin_ids.append(int(part))
     
+    partner = _resolve_community_partner_for_user(user_id)
+    if partner:
+        partner_block = (
+            f"Community Partner: <b>{partner.get('community_name') or '-'}</b>\n"
+            f"Partner Code: <code>{partner.get('community_code') or '-'}</code>\n"
+            f"Partner Telegram ID: <code>{partner.get('telegram_id')}</code>\n"
+            f"Partner Referral Code: <code>{partner.get('bitunix_referral_code') or '-'}</code>\n\n"
+        )
+    else:
+        partner_block = "Community Partner: <i>Direct/default flow (sq45)</i>\n\n"
+
     msg = (
         f"🔔 <b>New UID Verification Request</b>\n\n"
         f"User ID: <code>{user_id}</code>\n"
-        f"Bitunix UID: <code>{uid}</code>\n\n"
+        f"Bitunix UID: <code>{uid}</code>\n"
+        f"{partner_block}"
         f"Approving this will allow the user to start trading on the dashboard."
     )
     keyboard = InlineKeyboardMarkup(
