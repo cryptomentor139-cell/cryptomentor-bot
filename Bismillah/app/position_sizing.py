@@ -336,9 +336,8 @@ def calculate_position_size_pro(
     # Keep safety bound via safe_max_leverage.
     final_max_leverage = min(max_leverage, safe_max_leverage)
     
-    # Target the maximum possible leverage to maximize efficiency
-    # (user said: "Add this into all logic to max out all leverage when possible")
-    actual_leverage = max(leverage, final_max_leverage)
+    # Use the highest safe leverage allowed for this setup.
+    actual_leverage = max(1, final_max_leverage)
 
     # ── 3. Initial qty calculation ──
     # Formula: Qty = Risk_Amount / SL_Dist_Abs
