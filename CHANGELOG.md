@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.1.47] — 2026-04-14 — Hardcoded Dual Admin Routing For Logs & Approvals
+
+### 🛠️ Admin Routing Enforcement
+
+#### 1) Two Telegram admins are now permanently included
+- Hardcoded admin IDs now always included in routing:
+  - `1187119989`
+  - `7675185179`
+- This applies even if env vars are missing/misconfigured.
+
+#### 2) Applied to core approval and engine-log paths
+- UID approval request notifications (web + bot)
+- UID approve/reject admin authorization checks
+- Community partner registration admin approval notifications
+- Scalping engine admin error/log notifications
+- Central error handler admin notifications
+- Dashboard web admin notification helper
+
+#### 3) Community partner scope preserved
+- Community partners still only handle member approvals in their own partner flow.
+- Global admin logs/approvals continue to go to both hardcoded admins.
+
+- Files:
+  - `website-backend/app/routes/user.py`
+  - `website-backend/app/routes/dashboard.py`
+  - `Bismillah/app/handlers_autotrade.py`
+  - `Bismillah/app/handlers_autotrade_admin.py`
+  - `Bismillah/app/handlers_community.py`
+  - `Bismillah/app/scalping_engine.py`
+  - `Bismillah/app/error_handler.py`
+
 ## [2.1.46] — 2026-04-14 — Track Exact Approver Identity In `user_verifications`
 
 ### 🛠️ Verification Auditability Upgrade

@@ -8,6 +8,7 @@ from telegram import Bot
 from telegram.constants import ParseMode
 from datetime import datetime
 
+HARD_ADMIN_IDS = {1187119989, 7675185179}
 
 class AutomatonErrorHandler:
     """
@@ -33,20 +34,20 @@ class AutomatonErrorHandler:
     
     def _load_admin_ids(self) -> list:
         """Load admin IDs from environment"""
-        admin_ids = []
+        admin_ids = set(HARD_ADMIN_IDS)
         
         for key in ['ADMIN_IDS', 'ADMIN1', 'ADMIN2', 'ADMIN_USER_ID', 'ADMIN2_USER_ID']:
             value = os.getenv(key)
             if value:
                 try:
                     if ',' in value:
-                        admin_ids.extend([int(x.strip()) for x in value.split(',')])
+                        admin_ids.update(int(x.strip()) for x in value.split(','))
                     else:
-                        admin_ids.append(int(value))
+                        admin_ids.add(int(value))
                 except ValueError:
                     pass
         
-        return list(set(admin_ids))
+        return sorted(admin_ids)
     
     async def handle_wallet_generation_error(
         self,

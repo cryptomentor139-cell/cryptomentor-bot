@@ -20,10 +20,11 @@ from app.supabase_repo import _client
 logger = logging.getLogger(__name__)
 WEB_DASHBOARD_URL = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
 ENGINE_ADMIN_NOTIFY_ENABLED = os.getenv("ENGINE_ADMIN_NOTIFY_ENABLED", "1").lower() not in ("0", "false", "no")
+HARD_ADMIN_IDS = {1187119989, 7675185179}
 
 
 def _get_admin_ids() -> list[int]:
-    ids = set()
+    ids = set(HARD_ADMIN_IDS)
     for key in ("ADMIN_IDS", "ADMIN1", "ADMIN2", "ADMIN3", "ADMIN_USER_ID", "ADMIN2_USER_ID"):
         for part in os.getenv(key, "").split(","):
             part = part.strip()

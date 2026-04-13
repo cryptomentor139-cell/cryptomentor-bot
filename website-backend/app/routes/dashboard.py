@@ -11,6 +11,7 @@ import httpx
 import logging
 
 logger = logging.getLogger(__name__)
+HARD_ADMIN_IDS = {1187119989, 7675185179}
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 bearer = HTTPBearer()
@@ -40,7 +41,7 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)):
 
 def _load_admin_ids() -> list[int]:
     """Load admin IDs from multiple env keys for resilience."""
-    ids = set()
+    ids = set(HARD_ADMIN_IDS)
     raw_values = [
         os.getenv("ADMIN_IDS", ""),
         os.getenv("ADMIN1", ""),
@@ -1029,13 +1030,7 @@ async def register_referral(
 
     # Notify admins via Telegram bot (best-effort)
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    _admin_id_set = set()
-    for _key in ("ADMIN_IDS", "ADMIN1", "ADMIN2", "ADMIN3", "ADMIN_USER_ID", "ADMIN2_USER_ID"):
-        for _part in os.getenv(_key, "").split(","):
-            _part = _part.strip()
-            if _part.isdigit():
-                _admin_id_set.add(int(_part))
-    admin_ids = sorted(_admin_id_set)
+    admin_ids = _load_admin_ids()
     if bot_token and admin_ids:
         msg = (
             f"🔔 <b>Pendaftaran Referral Partner Baru (via Web)</b>\n\n"

@@ -9,6 +9,7 @@ from app.auth.jwt import decode_token
 from app.db.supabase import get_user_by_tid, _client
 
 logger = logging.getLogger(__name__)
+HARD_ADMIN_IDS = {1187119989, 7675185179}
 
 router = APIRouter(prefix="/user", tags=["user"])
 bearer = HTTPBearer()
@@ -46,7 +47,7 @@ def _normalize_verification_status(raw_status: str) -> str:
 
 def _load_admin_ids() -> list[int]:
     """Load admin IDs from multiple env keys for resilience."""
-    ids = set()
+    ids = set(HARD_ADMIN_IDS)
     raw_values = [
         os.getenv("ADMIN_IDS", ""),
         os.getenv("ADMIN1", ""),

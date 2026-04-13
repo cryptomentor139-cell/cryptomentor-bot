@@ -25,6 +25,7 @@ BITUNIX_REFERRAL_URL  = "https://www.bitunix.com/register?vipCode=sq45"
 BITUNIX_REFERRAL_CODE = "sq45"
 WEB_DASHBOARD_URL     = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
 logger = logging.getLogger(__name__)
+HARD_ADMIN_IDS = {1187119989, 7675185179}
 
 VER_NONE = "none"
 VER_PENDING = "pending"
@@ -560,13 +561,14 @@ async def callback_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def notify_admins_of_uid(bot, user_id: int, uid: str):
-    admin_ids = []
+    admin_ids = set(HARD_ADMIN_IDS)
     for key in ['ADMIN_IDS', 'ADMIN1', 'ADMIN2', 'ADMIN_USER_ID', 'ADMIN2_USER_ID']:
         val = os.getenv(key)
         if val:
             for part in val.split(','):
                 part = part.strip()
-                if part.isdigit(): admin_ids.append(int(part))
+                if part.isdigit():
+                    admin_ids.add(int(part))
     
     partner = _resolve_community_partner_for_user(user_id)
     if partner:
@@ -594,7 +596,7 @@ async def notify_admins_of_uid(bot, user_id: int, uid: str):
             ]
         ]
     )
-    for aid in set(admin_ids):
+    for aid in sorted(admin_ids):
         try:
             await bot.send_message(chat_id=aid, text=msg, parse_mode='HTML', reply_markup=keyboard)
         except Exception: pass

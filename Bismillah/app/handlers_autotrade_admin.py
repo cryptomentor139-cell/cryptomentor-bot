@@ -10,10 +10,11 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
+HARD_ADMIN_IDS = {1187119989, 7675185179}
 
 
 def _is_admin(user_id: int) -> bool:
-    admin_ids = set()
+    admin_ids = set(HARD_ADMIN_IDS)
     for key in ("ADMIN_IDS", "ADMIN1", "ADMIN2", "ADMIN3", "ADMIN_USER_ID", "ADMIN2_USER_ID"):
         raw = os.getenv(key, "")
         for token in str(raw).split(","):
