@@ -476,6 +476,24 @@ async def update_risk_setting(    payload: dict,
             detail=f"Invalid AutoTrade risk: {risk}. Must be between {ALLOWED_RISK_MIN}% and {ALLOWED_AUTOTRADE_RISK_MAX}%"
         )
 
+    # Force 3% for accounts < $100
+    equity = 0.0
+    try:
+        acc = await bsvc.fetch_account(tg_id)
+        if acc.get("success"):
+            available = float(acc.get("available", 0) or 0)
+            frozen = float(acc.get("frozen", 0) or 0)
+            unrealized_pnl = float(acc.get("total_unrealized_pnl", 0) or 0)
+            equity = available + frozen + unrealized_pnl
+    except Exception:
+        pass # fallback to old logic if fetch fails
+    
+    if equity > 0 and equity < 100 and risk != 3.0:
+         raise HTTPException(
+            status_code=400,
+            detail=f"Small accounts (<$100) are locked to 3.0% risk for safety. Current equity: ${equity:.2f}"
+        )
+
     s = _client()
     try:
         # Ensure we're storing as a float for consistency
