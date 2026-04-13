@@ -20,6 +20,7 @@ import sys
 TZ_UTC8 = timezone(timedelta(hours=8))
 from typing import List, Dict, Any, Optional
 import logging
+import time as _v_time
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -88,6 +89,7 @@ router = APIRouter(prefix="/dashboard", tags=["signals"])
 # A cached signal is reused until it expires (>= SIGNAL_ENTRY_WINDOW_SECONDS old),
 # at which point a fresh signal is generated with a new generated_at timestamp.
 _signal_cache: Dict[str, Dict[str, Any]] = {}
+_CONFLUENCE_CACHE = {} # (sym, risk): (expiry, sig)
 
 
 def _normalize_risk_pct(raw_value: Any, default: float = 1.0) -> float:
@@ -141,14 +143,23 @@ _BINANCE_TICKER = "https://api.binance.com/api/v3/ticker/24hr"
 # ── Confluence Signal Generation ────────────────────────────────────────────
 # Replaces momentum-only signals with confluence-validated multi-factor detection.
 
+_CANDLE_CACHE: Dict[str, tuple[float, List[Dict]]] = {} # symbol: (expiry, candles)
+_CANDLE_TTL = 300 # 5 minutes
+
 async def _get_candles_1h(symbol: str, limit: int = 100) -> List[Dict[str, Any]]:
     """
     Fetch last N 1-hour candles from alternative provider.
     Returns list of candle dicts: {open, high, low, close, volume, time, ...}
+    Includes a 5-minute in-memory cache to avoid redundant network overhead.
     """
+    now = datetime.now(timezone.utc).timestamp()
+    exp, cached = _CANDLE_CACHE.get(symbol, (0, []))
+    if cached and now < exp:
+        return cached
+
     try:
         from providers.alternative_klines_provider import alternative_klines_provider
-        klines = alternative_klines_provider.get_klines(symbol, interval='1h', limit=limit)
+        klines = await asyncio.to_thread(lambda: alternative_klines_provider.get_klines(symbol, interval='1h', limit=limit))
 
         # Convert Binance format [ts, open, high, low, close, vol, ...] to dict
         candles = []
@@ -161,10 +172,13 @@ async def _get_candles_1h(symbol: str, limit: int = 100) -> List[Dict[str, Any]]
                 'close': float(kline[4]),
                 'volume': float(kline[5]),
             })
+        
+        if candles:
+            _CANDLE_CACHE[symbol] = (now + _CANDLE_TTL, candles)
         return candles
     except Exception as e:
         logger.warning(f"Failed to fetch candles for {symbol}: {e}")
-        return []
+        return cached # Return stale cache if fetch fails
 
 
 def _calculate_atr(candles: List[Dict], period: int = 14) -> float:
@@ -217,9 +231,17 @@ async def generate_confluence_signals(
     Returns: signal dict if confluent, or None if weak setup
     """
     symbol_upper = symbol.upper()
+    user_risk_pct = _normalize_risk_pct(user_risk_pct, default=1.0)
+    
+    # Check cache
+    now = _v_time.time()
+    risk_bucket = round(user_risk_pct, 2)
+    cache_key = (symbol_upper, risk_bucket)
+    exp, cached_sig = _CONFLUENCE_CACHE.get(cache_key, (0, None))
+    if cached_sig is not None and now < exp:
+        return cached_sig
 
     # Get config for user's risk level (clamped to [0.5, 100.0])
-    user_risk_pct = _normalize_risk_pct(user_risk_pct, default=1.0)
     config = _risk_profile(user_risk_pct)
     min_confidence = config["min_confidence"]
     atr_multiplier = config["atr_multiplier"]
@@ -379,6 +401,9 @@ async def generate_confluence_signals(
         f"sl={sl_price:.4f} conf={score}/{min_confidence} [{signal['reason']}]"
     )
 
+    if signal:
+        _CONFLUENCE_CACHE[cache_key] = (now + 60, signal)
+    
     return signal
 
 
@@ -602,7 +627,10 @@ async def get_signals(tg_id: int | None = Depends(_optional_user)):
                 signal_response["expired"] = False
                 signal_response["trade_status"] = "pending"
 
-            return signal_response
+            if signal:
+        _CONFLUENCE_CACHE[cache_key] = (now + 60, signal)
+    
+    return signal_response
 
         except Exception as e:
             logger.error(f"Failed to generate signal for {sym}: {e}")
