@@ -1,8 +1,10 @@
 """
-StackMentor System - Unified Single-Target Strategy
+StackMentor System - staged TP strategy with bot-side fail-safe execution.
 
-All trades use a fixed risk:reward target of 1:3.
-The entire position is closed at TP (no staged 3-tier exits).
+Design goals:
+1) Use staged exits (TP1/TP2/TP3) with breakeven after TP1.
+2) Force-close positions at TP/SL from bot-side when exchange trigger fails.
+3) Recover monitoring after process restarts by hydrating open DB trades.
 """
 
 import asyncio
@@ -15,14 +17,14 @@ logger = logging.getLogger(__name__)
 # StackMentor Configuration
 STACKMENTOR_CONFIG = {
     "enabled": True,            # Enable for all users
-    "tp1_pct": 1.00,            # Close 100% at target
-    "tp2_pct": 0.00,
-    "tp3_pct": 0.00,
-    "target_rr": 3.0,           # Fixed R:R 1:3 for all trades
-    "tp1_rr": 3.0,              # Keep compatibility with existing callers
+    "tp1_pct": 0.60,            # Close 60% at TP1
+    "tp2_pct": 0.30,            # Close 30% at TP2
+    "tp3_pct": 0.10,            # Close 10% at TP3
+    "target_rr": 3.0,           # Average risk:reward around 1:3
+    "tp1_rr": 2.0,
     "tp2_rr": 3.0,
-    "tp3_rr": 3.0,
-    "breakeven_after_tp1": False,
+    "tp3_rr": 5.0,
+    "breakeven_after_tp1": True,
 }
 
 # Track StackMentor positions: user_id → {symbol: position_data}
@@ -35,32 +37,32 @@ def calculate_stackmentor_levels(
     side: str
 ) -> Tuple[float, float, float]:
     """
-    Calculate TP levels based on SL distance.
-    In unified mode all TP levels are the same 1:3 target.
-
-    Returns: (tp1, tp2, tp3) for backward compatibility.
+    Calculate staged TP levels based on SL distance.
+    Returns: (tp1, tp2, tp3)
     """
     cfg = STACKMENTOR_CONFIG
     
     # Calculate SL distance
     sl_distance = abs(entry_price - sl_price)
     
-    rr = float(cfg.get("target_rr", 3.0))
+    rr1 = float(cfg.get("tp1_rr", 2.0))
+    rr2 = float(cfg.get("tp2_rr", 3.0))
+    rr3 = float(cfg.get("tp3_rr", 5.0))
     if side == "LONG":
-        tp = entry_price + (sl_distance * rr)
+        tp1 = entry_price + (sl_distance * rr1)
+        tp2 = entry_price + (sl_distance * rr2)
+        tp3 = entry_price + (sl_distance * rr3)
     else:  # SHORT
-        tp = entry_price - (sl_distance * rr)
-    tp1 = tp
-    tp2 = tp
-    tp3 = tp
+        tp1 = entry_price - (sl_distance * rr1)
+        tp2 = entry_price - (sl_distance * rr2)
+        tp3 = entry_price - (sl_distance * rr3)
     
     return (tp1, tp2, tp3)
 
 
 def calculate_qty_splits(total_qty: float, min_qty: float = 0.0, precision: int = 3) -> Tuple[float, float, float]:
     """
-    Split quantity for execution.
-    Unified mode closes 100% at TP1 and keeps TP2/TP3 at 0 for compatibility.
+    Split quantity for staged execution.
 
     Returns: (qty_tp1, qty_tp2, qty_tp3)
     """
@@ -72,9 +74,9 @@ def calculate_qty_splits(total_qty: float, min_qty: float = 0.0, precision: int 
         actual_prec = len(qty_str.split('.')[1])
         precision = max(precision, actual_prec)
     
-    qty_tp1 = round(total_qty, precision)
-    qty_tp2 = 0.0
-    qty_tp3 = 0.0
+    qty_tp1 = round(total_qty * cfg["tp1_pct"], precision)
+    qty_tp2 = round(total_qty * cfg["tp2_pct"], precision)
+    qty_tp3 = round(total_qty - qty_tp1 - qty_tp2, precision)
     
     # Collapse small fragments safely to avoid MIN_QTY Bitunix Limit exceptions
     if min_qty > 0:
@@ -154,12 +156,114 @@ def remove_stackmentor_position(user_id: int, symbol: str):
         logger.info(f"[StackMentor:{user_id}] Removed {symbol} from monitoring")
 
 
+def _remaining_qty(pos_data: Dict) -> float:
+    """Get remaining quantity that should still be open."""
+    qty = float(pos_data.get("total_qty") or 0)
+    if pos_data.get("tp1_hit"):
+        qty -= float(pos_data.get("qty_tp1") or 0)
+    if pos_data.get("tp2_hit"):
+        qty -= float(pos_data.get("qty_tp2") or 0)
+    if pos_data.get("tp3_hit"):
+        qty -= float(pos_data.get("qty_tp3") or 0)
+    return max(0.0, qty)
+
+
+def _normalize_side(raw_side: str) -> str:
+    side = str(raw_side or "").upper()
+    if side in ("BUY", "LONG"):
+        return "LONG"
+    if side in ("SELL", "SHORT"):
+        return "SHORT"
+    return "LONG"
+
+
+def _hydrate_stackmentor_positions(user_id: int):
+    """
+    Reload in-memory StackMentor map from open DB trades.
+    This protects monitoring continuity after service restarts.
+    """
+    try:
+        from app.supabase_repo import _client
+        s = _client()
+        rows = s.table("autotrade_trades").select(
+            "symbol, side, entry_price, sl_price, tp1_price, tp2_price, tp3_price, "
+            "qty, quantity, leverage, qty_tp1, qty_tp2, qty_tp3, strategy, status, "
+            "tp1_hit, tp2_hit, tp3_hit, tp1_hit_at, tp2_hit_at, tp3_hit_at, breakeven_mode, opened_at"
+        ).eq("telegram_id", int(user_id)).eq("status", "open").execute().data or []
+    except Exception as e:
+        logger.warning(f"[StackMentor:{user_id}] Hydration query failed: {e}")
+        return
+
+    if user_id not in _stackmentor_positions:
+        _stackmentor_positions[user_id] = {}
+
+    hydrated = 0
+    for row in rows:
+        symbol = str(row.get("symbol") or "").upper()
+        if not symbol or symbol in _stackmentor_positions[user_id]:
+            continue
+
+        strategy = str(row.get("strategy") or "").lower()
+        if strategy == "legacy":
+            continue
+
+        total_qty = float(row.get("qty") or row.get("quantity") or 0)
+        if total_qty <= 0:
+            continue
+
+        side = _normalize_side(row.get("side"))
+        entry = float(row.get("entry_price") or 0)
+        sl = float(row.get("sl_price") or 0)
+        if entry <= 0 or sl <= 0:
+            continue
+
+        tp1 = float(row.get("tp1_price") or 0)
+        tp2 = float(row.get("tp2_price") or 0)
+        tp3 = float(row.get("tp3_price") or 0)
+        if tp1 <= 0 or tp2 <= 0 or tp3 <= 0:
+            tp1, tp2, tp3 = calculate_stackmentor_levels(entry, sl, side)
+
+        qty_tp1 = float(row.get("qty_tp1") or 0)
+        qty_tp2 = float(row.get("qty_tp2") or 0)
+        qty_tp3 = float(row.get("qty_tp3") or 0)
+        if qty_tp1 <= 0 and qty_tp2 <= 0 and qty_tp3 <= 0:
+            qty_tp1, qty_tp2, qty_tp3 = calculate_qty_splits(total_qty, precision=3)
+
+        _stackmentor_positions[user_id][symbol] = {
+            "entry_price": entry,
+            "sl_price": sl,
+            "tp1": tp1,
+            "tp2": tp2,
+            "tp3": tp3,
+            "total_qty": total_qty,
+            "qty_tp1": qty_tp1,
+            "qty_tp2": qty_tp2,
+            "qty_tp3": qty_tp3,
+            "side": side,
+            "leverage": int(row.get("leverage") or 1),
+            "tp1_hit": bool(row.get("tp1_hit")),
+            "tp2_hit": bool(row.get("tp2_hit")),
+            "tp3_hit": bool(row.get("tp3_hit")),
+            "tp1_hit_at": row.get("tp1_hit_at"),
+            "tp2_hit_at": row.get("tp2_hit_at"),
+            "tp3_hit_at": row.get("tp3_hit_at"),
+            "breakeven_mode": bool(row.get("breakeven_mode")),
+            "opened_at": datetime.utcnow(),
+        }
+        hydrated += 1
+
+    if hydrated > 0:
+        logger.info(f"[StackMentor:{user_id}] Hydrated {hydrated} open position(s) from DB")
+
+
 async def monitor_stackmentor_positions(bot, user_id: int, client, notify_chat_id: int):
     """
     Monitor StackMentor positions for TP hits
     Called from main trade loop every scan interval
     """
-    if user_id not in _stackmentor_positions:
+    if user_id not in _stackmentor_positions or not _stackmentor_positions.get(user_id):
+        _hydrate_stackmentor_positions(user_id)
+    if user_id not in _stackmentor_positions or not _stackmentor_positions.get(user_id):
         return
     
     positions = _stackmentor_positions[user_id].copy()
@@ -176,6 +280,13 @@ async def monitor_stackmentor_positions(bot, user_id: int, client, notify_chat_i
                 continue
             
             side = pos_data['side']
+
+            # Bot-side SL watchdog (fail-safe if exchange SL did not trigger).
+            sl_hit = (side == "LONG" and mark_price <= pos_data['sl_price']) or \
+                     (side == "SHORT" and mark_price >= pos_data['sl_price'])
+            if sl_hit:
+                await handle_sl_hit(bot, user_id, client, notify_chat_id, symbol, pos_data, mark_price)
+                continue
             
             # Check TP1 hit (trigger breakeven)
             if not pos_data['tp1_hit']:
@@ -208,7 +319,7 @@ async def monitor_stackmentor_positions(bot, user_id: int, client, notify_chat_i
 async def handle_tp1_hit(bot, user_id: int, client, notify_chat_id: int, 
                         symbol: str, pos_data: Dict, mark_price: float):
     """
-    TP Hit: Close full position at fixed 1:3 R:R
+    TP1 Hit: close partial and move SL to breakeven for remaining size.
     """
     logger.warning(f"[StackMentor:{user_id}] TP1 HIT {symbol} @ {mark_price:.4f}")
     
@@ -216,8 +327,11 @@ async def handle_tp1_hit(bot, user_id: int, client, notify_chat_id: int,
     side = pos_data['side']
     qty_tp1 = pos_data['qty_tp1']
     
-    # 1. Close full position via reduce-only close_partial
-    # Pass position_side for hedge mode compatibility
+    if qty_tp1 <= 0:
+        logger.error(f"[StackMentor:{user_id}] TP1 qty=0 for {symbol} — skipping")
+        return
+
+    # 1) Close TP1 tranche via reduce-only.
     close_side = "SELL" if side == "LONG" else "BUY"
     close_result = await asyncio.to_thread(
         client.close_partial,
@@ -231,56 +345,83 @@ async def handle_tp1_hit(bot, user_id: int, client, notify_chat_id: int,
         logger.error(f"[StackMentor:{user_id}] TP1 close failed: {close_result.get('error')}")
         return
     
-    logger.info(f"[StackMentor:{user_id}] TP hit, full close @ {mark_price:.4f}")
-    
-    # 3. Update position data
+    logger.info(f"[StackMentor:{user_id}] TP1 closed tranche @ {mark_price:.4f}")
+
+    # 2) Update in-memory state.
     pos_data['tp1_hit'] = True
     pos_data['tp1_hit_at'] = datetime.utcnow()
-    pos_data['tp2_hit'] = True
-    pos_data['tp2_hit_at'] = datetime.utcnow()
-    pos_data['tp3_hit'] = True
-    pos_data['tp3_hit_at'] = datetime.utcnow()
-    pos_data['breakeven_mode'] = False
-    
-    # 4. Update database
+    profit_tp1 = abs(mark_price - entry) * qty_tp1
+
+    remaining_qty = _remaining_qty(pos_data)
+    moved_to_be = False
+    if STACKMENTOR_CONFIG.get("breakeven_after_tp1", True) and remaining_qty > 0:
+        # 3) Move SL to breakeven for remaining qty.
+        try:
+            be_result = await asyncio.to_thread(client.set_position_sl, symbol, entry)
+            moved_to_be = bool(be_result.get("success"))
+        except Exception as e:
+            logger.warning(f"[StackMentor:{user_id}] Breakeven SL update failed: {e}")
+            moved_to_be = False
+        if moved_to_be:
+            pos_data["sl_price"] = entry
+            pos_data["breakeven_mode"] = True
+
+    # 4) Persist DB state.
     try:
         from app.supabase_repo import _client
-        profit_tp1 = abs(mark_price - entry) * qty_tp1
-        
-        _client().table("autotrade_trades").update({
+        update_payload = {
             "tp1_hit": True,
             "tp1_hit_at": datetime.utcnow().isoformat(),
-            "tp2_hit": True,
-            "tp2_hit_at": datetime.utcnow().isoformat(),
-            "tp3_hit": True,
-            "tp3_hit_at": datetime.utcnow().isoformat(),
-            "breakeven_mode": False,
+            "breakeven_mode": moved_to_be,
             "profit_tp1": profit_tp1,
-            "pnl_usdt": profit_tp1,
-            "status": "closed_tp",
-            "closed_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
-        }).eq("telegram_id", user_id).eq("symbol", symbol).eq("status", "open").execute()
+        }
+        if moved_to_be:
+            update_payload["sl_price"] = entry
+
+        # If no remainder, close as TP immediately.
+        if remaining_qty <= 0:
+            now_iso = datetime.utcnow().isoformat()
+            update_payload.update({
+                "tp2_hit": True,
+                "tp2_hit_at": now_iso,
+                "tp3_hit": True,
+                "tp3_hit_at": now_iso,
+                "pnl_usdt": profit_tp1,
+                "status": "closed_tp",
+                "closed_at": now_iso,
+            })
+        _client().table("autotrade_trades").update(update_payload).eq("telegram_id", user_id).eq("symbol", symbol).eq("status", "open").execute()
     except Exception as e:
         logger.error(f"[StackMentor:{user_id}] DB update failed: {e}")
     
-    # 5. Notify user
-    profit_tp1 = abs(mark_price - entry) * qty_tp1
+    # 5) Notify user.
     profit_pct = abs(mark_price - entry) / entry * 100 * pos_data['leverage']
-    
-    remove_stackmentor_position(user_id, symbol)
-
-    await bot.send_message(
-        chat_id=notify_chat_id,
-        text=(
-            f"🎯 <b>Take Profit Hit! — {symbol}</b>\n\n"
-            f"✅ Closed 100% position @ <code>{mark_price:.4f}</code>\n"
-            f"⚖️ Fixed R:R: <b>1:3</b>\n"
-            f"💰 Profit: <b>+${profit_tp1:.2f} USDT</b> (+{profit_pct:.1f}%)\n\n"
-            f"✅ Trade completed with unified StackMentor target."
-        ),
-        parse_mode='HTML'
-    )
+    if remaining_qty <= 0:
+        remove_stackmentor_position(user_id, symbol)
+        await bot.send_message(
+            chat_id=notify_chat_id,
+            text=(
+                f"🎯 <b>Take Profit Hit! — {symbol}</b>\n\n"
+                f"✅ Closed 100% position @ <code>{mark_price:.4f}</code>\n"
+                f"⚖️ Fixed R:R: <b>1:3</b>\n"
+                f"💰 Profit: <b>+${profit_tp1:.2f} USDT</b> (+{profit_pct:.1f}%)\n\n"
+                f"✅ Trade completed."
+            ),
+            parse_mode='HTML'
+        )
+    else:
+        await bot.send_message(
+            chat_id=notify_chat_id,
+            text=(
+                f"🎯 <b>TP1 Hit — {symbol}</b>\n\n"
+                f"✅ Closed TP1 tranche @ <code>{mark_price:.4f}</code>\n"
+                f"💰 Locked: <b>+${profit_tp1:.2f} USDT</b> (+{profit_pct:.1f}%)\n"
+                + (f"🔒 SL moved to breakeven: <code>{entry:.4f}</code>\n" if moved_to_be else "⚠️ Breakeven SL update failed — will retry via monitor\n")
+                + f"\n⏳ Remaining position continues to TP2/TP3."
+            ),
+            parse_mode='HTML'
+        )
 
 
 async def handle_tp2_hit(bot, user_id: int, client, notify_chat_id: int,
@@ -354,6 +495,64 @@ async def handle_tp2_hit(bot, user_id: int, client, notify_chat_id: int,
             f"✅ Last 10% = bonus if market continues\n"
             f"✅ Zero loss risk (SL at breakeven)\n\n"
             f"🎯 StackMentor: Profit secured, bonus trade still running!"
+        ),
+        parse_mode='HTML'
+    )
+
+
+async def handle_sl_hit(bot, user_id: int, client, notify_chat_id: int,
+                        symbol: str, pos_data: Dict, mark_price: float):
+    """
+    Force-close remaining quantity when mark crosses SL.
+    This acts as bot-side fail-safe if exchange SL trigger misses.
+    """
+    logger.error(f"[StackMentor:{user_id}] SL HIT watchdog for {symbol} @ {mark_price:.4f} — forcing close")
+
+    entry = float(pos_data.get("entry_price") or 0)
+    side = pos_data.get("side", "LONG")
+    remaining_qty = _remaining_qty(pos_data)
+    if remaining_qty <= 0:
+        remove_stackmentor_position(user_id, symbol)
+        return
+
+    close_side = "SELL" if side == "LONG" else "BUY"
+    close_result = await asyncio.to_thread(
+        client.close_partial,
+        symbol,
+        close_side,
+        remaining_qty,
+        side,
+    )
+    if not close_result.get("success"):
+        logger.error(f"[StackMentor:{user_id}] SL force-close failed: {close_result.get('error')}")
+        return
+
+    pnl_force = abs(mark_price - entry) * remaining_qty
+    if side == "LONG":
+        pnl_force = (mark_price - entry) * remaining_qty
+    else:
+        pnl_force = (entry - mark_price) * remaining_qty
+
+    try:
+        from app.supabase_repo import _client
+        _client().table("autotrade_trades").update({
+            "pnl_usdt": pnl_force,
+            "close_reason": "stackmentor_force_sl",
+            "status": "closed_sl",
+            "closed_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("telegram_id", user_id).eq("symbol", symbol).eq("status", "open").execute()
+    except Exception as e:
+        logger.error(f"[StackMentor:{user_id}] SL DB update failed: {e}")
+
+    remove_stackmentor_position(user_id, symbol)
+    await bot.send_message(
+        chat_id=notify_chat_id,
+        text=(
+            f"🛑 <b>Stop Loss Triggered — {symbol}</b>\n\n"
+            f"⚠️ Exchange SL was not confirmed in time, bot executed force close.\n"
+            f"📍 Exit: <code>{mark_price:.4f}</code>\n"
+            f"💵 PnL: <b>{pnl_force:+.2f} USDT</b>"
         ),
         parse_mode='HTML'
     )

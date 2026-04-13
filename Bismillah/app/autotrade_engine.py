@@ -1957,7 +1957,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             else:
                 logger.info(f"[Engine:{user_id}] Using FIXED MARGIN position sizing for {symbol} (fallback)")
 
-            # ── StackMentor: Calculate unified TP level (1:3) ─────────
+            # ── StackMentor: Calculate staged TP levels ───────────────
             # All users are eligible for StackMentor (no minimum equity)
             from app.supabase_repo import is_stackmentor_eligible_by_balance
 
@@ -1987,7 +1987,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             
             precision  = QTY_PRECISION.get(symbol, 3)
             if stackmentor_enabled:
-                # StackMentor: unified single-target strategy (100% @ TP1)
+                # StackMentor: staged strategy (TP1/TP2/TP3)
                 tp1_sm, tp2_sm, tp3_sm = calculate_stackmentor_levels(
                     entry_price=entry,
                     sl_price=sl,
@@ -2003,7 +2003,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
                 logger.info(
                     f"[StackMentor:{user_id}] {symbol} {side} — "
-                    f"TP1={tp1:.4f}(100%) TP2={tp2:.4f}(0%) TP3={tp3:.4f}(0%) "
+                    f"TP1={tp1:.4f}(60%) TP2={tp2:.4f}(30%) TP3={tp3:.4f}(10%) "
                     f"qty_splits={qty_tp1}/{qty_tp2}/{qty_tp3}"
                 )
             elif _dual_tp_enabled:

@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.1.36] — 2026-04-13 — StackMentor Force TP/SL Watchdog + Breakeven Restore
+
+### 🛠️ Runtime Protection Hotfix
+
+#### 1) Added bot-side SL watchdog force-close
+- Root cause:
+  - exchange TP/SL can occasionally fail to trigger in time during volatility
+- Fix:
+  - StackMentor monitor now checks mark price against SL every cycle and force-closes remaining position size when crossed
+  - writes `close_reason=stackmentor_force_sl` with `status=closed_sl`
+
+#### 2) Restored staged StackMentor behavior with breakeven
+- StackMentor config switched back to staged exits:
+  - TP1 60% (RR 1:2), TP2 30% (RR 1:3), TP3 10% (RR 1:5)
+- After TP1 hit, bot now moves SL to entry (breakeven) for remaining size.
+
+#### 3) Added restart-safe StackMentor hydration
+- Root cause:
+  - in-memory StackMentor map can be empty after restart, so TP/SL monitoring pauses
+- Fix:
+  - monitor now hydrates open StackMentor trades from DB before checks.
+
+- Files:
+  - `Bismillah/app/stackmentor.py`
+  - `Bismillah/app/autotrade_engine.py`
+
 ## [2.1.35] — 2026-04-13 — StackMentor Reliability + Trade-State Consistency Fix
 
 ### 🛠️ Engine/DB Hotfix
