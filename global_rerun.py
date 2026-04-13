@@ -33,20 +33,29 @@ async def global_rerun():
     }).neq("telegram_id", 0).execute()
     print("✅ All sessions updated to 3.0%.")
 
-    # 2. Get active users
-    res = s.table("autotrade_sessions").select("telegram_id, current_balance").eq("engine_active", True).execute()
-    users = [r["telegram_id"] for r in res.data]
-    print(f"Found {len(users)} active users to process.")
+    # 2. Get active users with their keys
+    res = s.table("autotrade_sessions").select("telegram_id, current_balance, bitunix_api_key, bitunix_api_secret").eq("engine_active", True).execute()
+    user_rows = res.data
+    print(f"Found {len(user_rows)} active users to process.")
     
-    if not users:
+    if not user_rows:
         print("No active users. Exiting.")
         return
 
     # 3. SCAN SYMBOLS (Global Cache)
-    # We use a sample user to run the scanner logic
-    sample_uid = users[0]
-    sample_client = BitunixAutoTradeClient(sample_uid)
-    scanner = ScalpingEngine(sample_uid, sample_client, None, 0, ScalpingConfig())
+    # Use keys from first valid user found
+    valid_user_row = None
+    for r in user_rows:
+        if r.get("bitunix_api_key") and r.get("bitunix_api_secret"):
+            valid_user_row = r
+            break
+            
+    if not valid_user_row:
+        print("No users with configured API keys found. Exiting.")
+        return
+
+    sample_client = BitunixAutoTradeClient(valid_user_row["bitunix_api_key"], valid_user_row["bitunix_api_secret"])
+    scanner = ScalpingEngine(valid_user_row["telegram_id"], sample_client, None, 0, ScalpingConfig())
     
     signals_found = {}
     print(f"Scanning {len(PAIRS)} pairs for valid signals...")
@@ -58,28 +67,31 @@ async def global_rerun():
             if signal:
                 print(f"🔥 VALID SIGNAL: {symbol} {signal.side} (Confidence: {signal.confidence}%)")
                 signals_found[symbol] = signal
-            else:
-                # print(f"--- {symbol}: No current signal")
-                pass
         except Exception as e:
             print(f"Error scanning {symbol}: {e}")
 
     if not signals_found:
         print("\n❌ No valid signals found in the market right now.")
-        print("Market may be ranging or signals haven't refreshed. All users are primed for next auto-scan.")
         return
 
     # 4. EXECUTE FOR ALL USERS
     for symbol, signal in signals_found.items():
         print(f"\n🚀 Executing {symbol} {signal.side} for all eligible users...")
-        for uid in users:
+        for row in user_rows:
+            uid = row["telegram_id"]
+            api_key = row.get("bitunix_api_key")
+            api_secret = row.get("bitunix_api_secret")
+            
+            if not api_key or not api_secret:
+                print(f"  [User:{uid}] Skipping: No API keys.")
+                continue
+
             try:
-                u_client = BitunixAutoTradeClient(uid)
+                u_client = BitunixAutoTradeClient(api_key, api_secret)
                 # Check position (using the sync get_positions wrapped in thread)
                 pos_resp = await asyncio.to_thread(u_client.get_positions)
                 
                 if pos_resp.get("success"):
-                    # result has 'positions' list
                     positions = pos_resp.get("positions", [])
                     if any(p.get("symbol") == symbol for p in positions):
                         print(f"  [User:{uid}] Already in {symbol}. Skipping.")
@@ -89,15 +101,12 @@ async def global_rerun():
                 u_engine = ScalpingEngine(uid, u_client, None, 0, ScalpingConfig())
                 u_engine.config.risk_per_trade = 3.0
                 
-                # place_scalping_order is async
                 success = await u_engine.place_scalping_order(signal)
                 if success:
                     print(f"  [User:{uid}] ✅ ORDER PLACED at 3% risk.")
                 else:
                     print(f"  [User:{uid}] ❌ FAILED (Qty or Margin).")
             except Exception as ue:
-                import traceback
-                traceback.print_exc()
                 print(f"  [User:{uid}] ⚠️ ERROR: {ue}")
 
     print("\n✅ Global rerun complete.")

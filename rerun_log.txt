@@ -3,14 +3,14 @@ Updating all users to 3% risk per trade...
 ✅ All sessions updated to 3.0%.
 Found 20 active users to process.
 Scanning 16 pairs for valid signals...
-✅ Got 50 candles from Binance for BTC
+✅ Got 50 candles from Bitunix for BTCUSDT
 ✅ Got 60 candles from Bitunix for BTCUSDT
 ✅ Got 30 candles from Bitunix for BTCUSDT
 ❌ Failed to get klines for BTC from all sources
 ✅ Got 100 candles from Bitunix for BTCUSDT
 ✅ Got 60 candles from Bitunix for BTCUSDT
-✅ Got 50 candles from Binance for ETH
-✅ Got 60 candles from Binance for ETH
+✅ Got 50 candles from Bitunix for ETHUSDT
+✅ Got 60 candles from Bitunix for ETHUSDT
 ✅ Got 30 candles from Bitunix for ETHUSDT
 ❌ Failed to get klines for ETH from all sources
 ✅ Got 100 candles from Bitunix for ETHUSDT
@@ -91,49 +91,969 @@ Scanning 16 pairs for valid signals...
 ✅ Got 60 candles from Bitunix for QQQUSDT
 
 🚀 Executing SOLUSDT LONG for all eligible users...
-  [User:1969755249] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1265990951] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:7338184122] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:5874734020] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1156155004] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:8030312242] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1187119989] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:2107355248] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1087836223] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:7972497694] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1766523174] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:5366384434] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:312485564] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:7582955848] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:6954315669] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1306878013] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:5187148337] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:8429733088] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:985106924] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:7675185179] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1969755249] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1265990951] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:7338184122] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:5874734020] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1156155004] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:8030312242] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1187119989] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:2107355248] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1087836223] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:7972497694] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1766523174] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:5366384434] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:312485564] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:7582955848] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:6954315669] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1306878013] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:5187148337] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:8429733088] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:985106924] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:7675185179] ⚠️ ERROR: can only concatenate str (not "int") to str
 
 🚀 Executing DOGEUSDT LONG for all eligible users...
-  [User:1969755249] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1265990951] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:7338184122] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:5874734020] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1156155004] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:8030312242] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1187119989] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:2107355248] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1087836223] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:7972497694] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1766523174] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:5366384434] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:312485564] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:7582955848] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:6954315669] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:1306878013] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:5187148337] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:8429733088] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:985106924] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
-  [User:7675185179] ⚠️ ERROR: 'BitunixAutoTradeClient' object has no attribute '_bitunix_request'
+  [User:1969755249] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1265990951] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:7338184122] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:5874734020] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1156155004] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:8030312242] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1187119989] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:2107355248] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1087836223] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:7972497694] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1766523174] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:5366384434] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:312485564] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:7582955848] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:6954315669] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:1306878013] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:5187148337] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:8429733088] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:985106924] ⚠️ ERROR: can only concatenate str (not "int") to str
+  [User:7675185179] ⚠️ ERROR: can only concatenate str (not "int") to str
 
 ✅ Global rerun complete.
 
 --- ERRORS ---
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 79, in global_rerun
+    pos_resp = await asyncio.to_thread(u_client.get_positions)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 370, in get_positions
+    result = self._request('GET', '/api/v1/futures/position/get_pending_positions',
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 143, in _request
+    headers = self._auth_headers(query_str, body_str)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 114, in _auth_headers
+    sign = self._make_sign(nonce, timestamp, query_params, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/Bismillah/app/bitunix_autotrade_client.py", line 102, in _make_sign
+    digest_input = nonce + timestamp + self.api_key + query_params + body
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+TypeError: can only concatenate str (not "int") to str
