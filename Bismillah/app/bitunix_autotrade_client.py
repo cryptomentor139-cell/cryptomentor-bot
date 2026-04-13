@@ -52,10 +52,8 @@ class RateLimiter:
                     
             self.history[proxy_ip].append(now)
 
-# Global rate limiter ensuring 10 requests per 1.0s per proxy/IP
-_bitunix_rate_limiter = RateLimiter(10, 1.0)
-# (Fixing initializer below)
-_bitunix_rate_limiter = RateLimiter(10, 1.0)
+# Global rate limiter ensuring 30 requests per 1.0s per proxy/IP
+_bitunix_rate_limiter = RateLimiter(30, 1.0)
 
 class BitunixAutoTradeClient:
     def __init__(self, api_key: str = None, api_secret: str = None):
@@ -134,9 +132,7 @@ class BitunixAutoTradeClient:
     #  Core request                                                        #
     # ------------------------------------------------------------------ #
 
-    def _request(self, method: str, endpoint: str,
-                 params: Dict = None, body: Dict = None,
-                 signed: bool = False, _retry: int = 0) -> Dict:
+    def _request(self, method: str, endpoint: str, params: Dict = None, body: Dict = None, signed: bool = False, _retry: int = 0, priority: bool = False) -> Dict:
         if signed and (not self.api_key or not self.api_secret):
             return {'success': False, 'error': 'API credentials not configured'}
 
@@ -165,12 +161,19 @@ class BitunixAutoTradeClient:
             url = f"{url}?{sorted_qs}"
             params = None  # already in URL — don't pass again
 
-        # Smart Proxy rotation
-        proxy_url = self._get_healthy_proxy()
-        
-        # Apply 10req/sec per IP rate limits BEFORE calling
-        proxy_key = proxy_url if proxy_url else "LOCAL_IP"
-        _bitunix_rate_limiter.wait(proxy_key)
+        # High-priority requests (orders) skip the rate limiter wait
+        # to ensure the fastest possible execution.
+        if not priority:
+            # Smart Proxy rotation
+            proxy_url = self._get_healthy_proxy()
+            
+            # Apply rate limits BEFORE calling
+            proxy_key = proxy_url if proxy_url else "LOCAL_IP"
+            _bitunix_rate_limiter.wait(proxy_key)
+        else:
+            # Orders always use LOCAL_IP for maximum speed unless a gateway is active
+            proxy_url = None
+            print(f"[Bitunix:Priority] {method} {endpoint} bypassing rate limiter")
         
         if proxy_url:
             safe_proxy = re.sub(r':[^:@]+@', ':***@', proxy_url)
@@ -220,7 +223,7 @@ class BitunixAutoTradeClient:
             if _retry < 2:
                 import time as _time
                 _time.sleep(2)
-                return self._request(method, endpoint, params, body, signed, _retry + 1)
+                return self._request(method, endpoint, params, body, signed, _retry + 1, priority=priority)
             return {'success': False, 'error': f'Request failed after network retries: {last_error}'}
 
         try:
@@ -233,14 +236,14 @@ class BitunixAutoTradeClient:
                     if _retry < 2:
                         import time as _time
                         _time.sleep(2)
-                        return self._request(method, endpoint, params, body, signed, _retry + 1)
+                        return self._request(method, endpoint, params, body, signed, _retry + 1, priority=priority)
                     return {'success': False, 'error': 'IP_BLOCKED: IP server diblokir Bitunix.'}
                 return {'success': False, 'error': 'HTTP 403: Akses ditolak Bitunix.'}
             if r.status_code in (500, 502, 503, 504) and _retry < 2:
                 # Server error — retry sekali lagi dengan delay
                 import time as _time
                 _time.sleep(3 * (_retry + 1))
-                return self._request(method, endpoint, params, body, signed, _retry + 1)
+                return self._request(method, endpoint, params, body, signed, _retry + 1, priority=priority)
             if r.status_code == 200:
                 data = r.json()
                 code = data.get('code')
@@ -252,13 +255,13 @@ class BitunixAutoTradeClient:
                     if _retry < 1 and signed:
                         import time as _time
                         _time.sleep(2)
-                        return self._request(method, endpoint, params, body, signed, _retry + 1)
+                        return self._request(method, endpoint, params, body, signed, _retry + 1, priority=priority)
                     return {'success': False, 'error': 'TOKEN_INVALID: API Key/Secret salah atau IP server tidak diizinkan di Bitunix.'}
                 elif code == 10007:
                     if _retry < 1 and signed:
                         import time as _time
                         _time.sleep(2)
-                        return self._request(method, endpoint, params, body, signed, _retry + 1)
+                        return self._request(method, endpoint, params, body, signed, _retry + 1, priority=priority)
                     return {'success': False, 'error': 'SIGNATURE_ERROR: Signature tidak valid.'}
                 else:
                     return {'success': False, 'error': f"API error {code}: {data.get('msg')}"}

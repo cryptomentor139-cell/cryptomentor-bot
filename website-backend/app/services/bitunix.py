@@ -43,6 +43,9 @@ except ImportError as e:
 
 
 _CLIENT_CACHE: Dict[int, BitunixAutoTradeClient] = {}
+_ACCOUNT_CACHE = {} # tg_id: (expiry, data)
+_POSITIONS_CACHE = {}
+import time as _time
 
 def get_user_api_keys(telegram_id: int) -> Optional[Dict[str, str]]:
     """Fetch + decrypt the user's stored exchange API keys (bitunix only for now)."""
@@ -123,13 +126,27 @@ def _client_for(telegram_id: int) -> "BitunixAutoTradeClient":
 # they don't block the FastAPI event loop.
 
 async def fetch_account(telegram_id: int) -> Dict[str, Any]:
+    now = _time.time()
+    exp, data = _ACCOUNT_CACHE.get(telegram_id, (0, {}))
+    if now < exp: return data
+    
     client = _client_for(telegram_id)
-    return await asyncio.to_thread(client.get_account_info)
+    res = await asyncio.to_thread(client.get_account_info)
+    if res.get("success"):
+        _ACCOUNT_CACHE[telegram_id] = (now + 3, res)
+    return res
 
 
 async def fetch_positions(telegram_id: int) -> Dict[str, Any]:
+    now = _time.time()
+    exp, data = _POSITIONS_CACHE.get(telegram_id, (0, {}))
+    if now < exp: return data
+    
     client = _client_for(telegram_id)
-    return await asyncio.to_thread(client.get_positions)
+    res = await asyncio.to_thread(client.get_positions)
+    if res.get("success"):
+        _POSITIONS_CACHE[telegram_id] = (now + 3, res)
+    return res
 
 
 async def fetch_trade_history(telegram_id: int, symbol: str = None) -> Dict[str, Any]:
