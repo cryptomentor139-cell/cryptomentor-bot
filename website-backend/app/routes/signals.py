@@ -13,6 +13,8 @@ No caching — generates fresh signals every request based on live market condit
 """
 
 from datetime import datetime, timezone, timedelta
+import os
+import sys
 
 TZ_UTC8 = timezone(timedelta(hours=8))
 from typing import List, Dict, Any, Optional
@@ -30,6 +32,13 @@ from app.auth.jwt import decode_token
 logger = logging.getLogger(__name__)
 RISK_MIN_PCT = 0.5
 RISK_MAX_PCT = 100.0
+
+# Reuse the same market-data provider module shipped with the bot.
+_BISMILLAH_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "Bismillah")
+)
+if _BISMILLAH_PATH not in sys.path:
+    sys.path.insert(0, _BISMILLAH_PATH)
 
 _bearer = HTTPBearer(auto_error=False)
 
