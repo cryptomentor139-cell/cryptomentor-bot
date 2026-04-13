@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.1.32] — 2026-04-13 — Fix Frequent Market-Data Klines Failures
+
+### 🛠️ AutoTrade/Scalping Data Reliability
+
+#### 1) Added Missing `3m` Klines Support + Hardened Fallback Fetching
+- Root causes:
+  - scalping flow requests `3m` candles for micro-momentum checks, but provider did not support `3m` mapping, causing repeated `Failed to get klines ... from all sources`
+  - transient upstream HTTP errors/timeouts immediately failed without retry/cooldown behavior
+  - low-limit fetches (e.g., `limit=2`) could be rejected by strict `>=10 candles` validation
+- Fix:
+  - added `3m` interval support in Binance fallback mapping
+  - added HTTP retry + per-source exponential cooldown/backoff in klines provider
+  - relaxed minimum-candle validation to honor small requested limits
+  - blocked CoinGecko fallback for sub-15m intervals to avoid inaccurate minute-candle substitution
+  - improved error logs to include interval for faster debugging
+- File:
+  - `Bismillah/app/providers/alternative_klines_provider.py`
+
 ## [2.1.31] — 2026-04-13 — Fix 1-Click Positions Misclassified As AutoTrade
 
 ### 🛠️ Portfolio Classification Fix
