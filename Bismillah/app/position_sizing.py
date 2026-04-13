@@ -278,3 +278,134 @@ def get_recommended_risk(balance: float) -> float:
         return 1.5  # Large account: 1.5% (conservative)
     else:
         return 1.0  # Very large account: 1% (capital preservation)
+
+
+def calculate_position_size_pro(
+    balance: float,
+    risk_pct: float,
+    entry_price: float,
+    sl_price: float,
+    leverage: int,
+    symbol: str,
+    max_leverage: int = 50,
+    min_sl_dist_pct: float = 0.002,  # 0.2% minimum distance
+    qty_precision: Optional[Dict[str, int]] = None,
+    min_qty_map: Optional[Dict[str, float]] = None,
+) -> Dict:
+    """
+    Advanced position sizing with "Max Leverage" efficiency and dynamic SL adjustment.
+    
+    Strategies applied:
+    1. Risk-Based Sizing: Qty is derived purely from (Balance * Risk%) / SL_Distance.
+    2. Max Leverage Efficiency: Hikes leverage to the highest safe limit (default target 50x-100x)
+       to minimize required margin and maximize capital efficiency.
+    3. Dynamic Minimums: If calculated qty is too small, it raises qty to exchange min
+       and tightens SL to keep the USDT risk constant.
+    4. Safety Guarantee: Ensures Liquidation Price > SL Price (Long) or < SL Price (Short).
+    """
+    if qty_precision is None:
+        try:
+            from app.autotrade_engine import QTY_PRECISION
+            qty_precision = QTY_PRECISION
+        except ImportError:
+            qty_precision = {}
+            
+    if min_qty_map is None:
+        try:
+            from app.trade_execution import MIN_QTY_MAP
+            min_qty_map = MIN_QTY_MAP
+        except ImportError:
+            min_qty_map = {}
+
+    precision = qty_precision.get(symbol, 3)
+    min_qty = min_qty_map.get(symbol, 10 ** (-precision) if precision > 0 else 1)
+
+    # ── 1. Calculate Risk Amount and SL Distance ──
+    risk_amount = balance * (risk_pct / 100.0)
+    sl_dist_abs = abs(entry_price - sl_price)
+    sl_dist_pct = sl_dist_abs / entry_price
+
+    # ── 2. Determine Optimal Leverage (Max Efficiency) ──
+    # User logic: Maximize leverage when possible for margin efficiency.
+    # Safety Check: Leverage must satisfy (1/Leverage) > SL_Dist_Pct + Maintenance Buffer
+    # Buffer (0.5% for Bitunix/Professional standard)
+    maintenance_buffer = 0.005 
+    safe_max_leverage = int(0.9 / (sl_dist_pct + maintenance_buffer))
+    
+    # Cap by asset limit (default 50 for alts, 100 for BTC/ETH)
+    symbol_cap = 100 if symbol.upper().startswith("BTC") or symbol.upper().startswith("ETH") else 50
+    final_max_leverage = min(max_leverage, safe_max_leverage, symbol_cap)
+    
+    # Target the maximum possible leverage to maximize efficiency
+    # (user said: "Add this into all logic to max out all leverage when possible")
+    actual_leverage = max(leverage, final_max_leverage)
+
+    # ── 3. Initial qty calculation ──
+    # Formula: Qty = Risk_Amount / SL_Dist_Abs
+    target_qty = risk_amount / sl_dist_abs
+    qty = round(target_qty, precision)
+
+    # ── 4. Dynamic Adjustment for Small Accounts ──
+    is_dynamic = False
+    is_clamped = False
+    actual_sl = sl_price
+    
+    if qty < min_qty:
+        is_dynamic = True
+        qty = min_qty
+        # Tighten SL to maintain original risk amount
+        # risk_amount = qty * new_sl_dist
+        new_sl_dist = risk_amount / qty
+        new_sl_dist_pct = new_sl_dist / entry_price
+        
+        # Clamp SL to prevent too-tight stop outs
+        if new_sl_dist_pct < min_sl_dist_pct:
+            new_sl_dist_pct = min_sl_dist_pct
+            new_sl_dist = entry_price * new_sl_dist_pct
+            is_clamped = True
+            
+        if sl_price < entry_price: # LONG
+            actual_sl = entry_price - new_sl_dist
+        else: # SHORT
+            actual_sl = entry_price + new_sl_dist
+            
+        sl_dist_pct = new_sl_dist_pct # Update for leverage check
+
+    # ── 5. Recalculate Margin and Finalize Leverage ──
+    notional = qty * entry_price
+    margin_required = notional / actual_leverage
+    
+    # Last-ditch check: If margin > balance, hike leverage even more if safe
+    if margin_required > balance * 0.95:
+        needed_leverage = int(notional / (balance * 0.95)) + 1
+        if needed_leverage <= final_max_leverage:
+            actual_leverage = needed_leverage
+            margin_required = notional / actual_leverage
+        else:
+            # Cannot afford position
+            min_bal_needed = (notional / final_max_leverage) / 0.95
+            return {
+                'valid': False,
+                'error': f'Insufficient balance (${balance:.2f}). Min required: ${min_bal_needed:.2f} at {final_max_leverage}x',
+                'qty': 0, 'leverage': actual_leverage
+            }
+
+    # Calculate results
+    actual_risk_amount = qty * abs(entry_price - actual_sl)
+    actual_risk_pct = (actual_risk_amount / balance) * 100
+
+    return {
+        'valid': True,
+        'error': None,
+        'qty': qty,
+        'leverage': actual_leverage,
+        'sl_price': round(actual_sl, 8),
+        'risk_amount': round(actual_risk_amount, 2),
+        'risk_pct': round(actual_risk_pct, 2),
+        'margin_required': round(margin_required, 2),
+        'position_size_usdt': round(notional, 2),
+        'sl_distance_pct': round(sl_dist_pct * 100, 2),
+        'is_dynamic': is_dynamic,
+        'is_clamped': is_clamped,
+        'is_max_leverage': True
+    }

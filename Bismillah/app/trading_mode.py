@@ -61,7 +61,7 @@ class ScalpingConfig:
     pairs: List[str] = field(default_factory=lambda: [
         "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", 
         "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT",
-        "LINKUSDT", "UNIUSDT", "ATOMUSDT", "XAUUSDT", "CLUSDT", "QQQUSDT"
+        "LINKUSDT", "UNIUSDT", "ATOMUSDT", "CLUSDT", "QQQUSDT"
     ])
     
     # ATR multipliers
@@ -75,8 +75,8 @@ class ScalpingConfig:
     signal_confirmation_max_gap_seconds: int = 45  # invalidate stale confirmation chain
     
     # Volume and volatility filters
-    min_volume_ratio: float = 2.0  # Volume must be >2x average
-    min_atr_pct: float = 0.3  # Skip if ATR < 0.3% (too flat)
+    min_volume_ratio: float = 1.4  # Volume must be >1.4x average (was 2.0)
+    min_atr_pct: float = 0.15  # Skip if ATR < 0.15% (was 0.3%)
     max_atr_pct: float = 10.0  # Skip if ATR > 10% (too volatile)
 
 

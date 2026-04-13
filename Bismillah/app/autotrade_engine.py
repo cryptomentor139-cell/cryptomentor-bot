@@ -1165,7 +1165,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     trades_today      = 0
     last_trade_date   = date.today()
     had_open_position = False
-    daily_pnl_usdt    = 0.0   # track realized PnL for circuit breaker
+    daily_pnl_usdt    = 0.0   # track realized PnL for circuit breaker`r`n    _last_sizing      = None  # track dynamic sizing result
     daily_loss_limit  = amount * cfg["daily_loss_limit"]
 
     # Init TP1 tracker untuk user ini
@@ -1198,90 +1198,48 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             (qty, used_risk_sizing): tuple of (quantity, whether risk sizing was used)
         """
         try:
-            # Get risk percentage from database (already loaded in trading loop)
-            # Use the user_risk_pct from the outer scope
-            risk_pct = user_risk_pct
-
-            # Get account info: available, frozen, and unrealized PnL
+            # 1. Get current account info
             acc_result = await asyncio.to_thread(client.get_account_info)
             if not acc_result.get('success'):
                 raise Exception(f"Account info fetch failed: {acc_result.get('error')}")
 
-            # Total balance = available (free) + frozen (in positions)
             available = float(acc_result.get('available', 0) or 0)
             frozen = float(acc_result.get('frozen', 0) or 0)
-            balance = available + frozen
-
-            # Unrealized P&L from all positions
             unrealized_pnl = float(acc_result.get('total_unrealized_pnl', 0) or 0)
+            equity = available + frozen + unrealized_pnl
 
-            # Equity = Total Balance + Unrealized P&L
-            equity = balance + unrealized_pnl
-
-            # Enforce rule: Below $100 -> Auto 3% risk for execution safety
-            if equity < 100:
-                if risk_pct != 3.0:
-                    logger.info(f"[RiskCalc:{user_id}] Equity ${equity:.2f} < $100. Overriding risk {risk_pct}% -> 3.0% for execution safety.")
-                    risk_pct = 3.0
-
-            if equity <= 0:
-                raise Exception(
-                    f"Invalid equity: available={available:.2f} + frozen={frozen:.2f} + "
-                    f"unrealized={unrealized_pnl:.2f} = {equity:.2f}"
-                )
+            # 2. Use centralized PRO sizing logic
+            from app.position_sizing import calculate_position_size_pro
             
-            # Calculate risk amount using EQUITY (not balance)
-            risk_amount = equity * (risk_pct / 100)
+            # Fetch actual max leverage for this symbol from Bitunix
+            # Using asyncio.to_thread since client is synchronous
+            max_leverage_allowed = await asyncio.to_thread(client.get_max_leverage, symbol)
 
-            # Calculate SL distance
-            sl_distance = abs(entry - sl)
-            if sl_distance <= 0:
-                raise Exception(f"Invalid SL distance: {sl_distance}")
-
-            # Calculate position size: how much can we trade if SL distance hits
-            # position_size = risk_amount / sl_distance
-            position_size = risk_amount / sl_distance
-
-            # Round to exchange precision
-            precision = QTY_PRECISION.get(symbol, 3)
-            qty = round(position_size, precision)
-
-            # Validate minimum quantity
-            min_qty = 10 ** (-precision) if precision > 0 else 1
-            if qty < min_qty:
-                raise Exception(f"Quantity {qty} below minimum {min_qty}")
-
-            # Calculate margin required for this position
-            position_value = qty * entry
-            margin_required = position_value / leverage
-
-            # Validate margin available (should not exceed 95% of balance for safety)
-            max_margin = balance * 0.95  # Keep 5% buffer
-            if margin_required > max_margin:
-                raise Exception(
-                    f"Insufficient margin: need ${margin_required:.2f}, "
-                    f"balance=${balance:.2f}, max_usable=${max_margin:.2f}. "
-                    f"Reduce risk % or increase balance."
-                )
-
-            logger.info(
-                f"[RiskCalc:{user_id}] {symbol} - "
-                f"Equity=${equity:.2f} (Available=${available:.2f} + Frozen=${frozen:.2f} + "
-                f"Unrealized=${unrealized_pnl:.2f}), "
-                f"Risk={risk_pct}% (~${risk_amount:.2f}), "
-                f"Entry=${entry:.2f}, SL=${sl:.2f} (Distance={sl_distance:.2f}), "
-                f"Position_Size={position_size:.8f}, Qty={qty}, "
-                f"Position_Value=${position_value:.2f}, "
-                f"Margin_Required=${margin_required:.2f}/{max_margin:.2f} (Leverage={leverage}x), "
-                f"Max_Loss_If_SL=${risk_amount:.2f}"
+            sizing = calculate_position_size_pro(
+                balance=equity,
+                risk_pct=user_risk_pct,
+                entry_price=entry,
+                sl_price=sl,
+                leverage=leverage,
+                symbol=symbol,
+                max_leverage=max_leverage_allowed,
+                min_sl_dist_pct=0.002
             )
-            
-            return qty, True  # Success - used risk-based sizing
-            
+
+            if not sizing['valid']:
+                raise Exception(f"Sizing invalid: {sizing.get('error')}")
+
+            # Store for the trade loop to use adjusted params
+            nonlocal _last_sizing
+            _last_sizing = sizing
+
+            return sizing['qty'], True
+
         except Exception as e:
             logger.warning(
                 f"[RiskSizing:{user_id}] FAILED: {e} - Falling back to fixed margin system"
             )
+            _last_sizing = None
             
             # FALLBACK: Use old fixed margin system for backward compatibility
             qty_fallback = calc_qty(symbol, amount * leverage, entry)
@@ -1944,14 +1902,23 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             # ── Hitung qty dengan risk-based sizing (Phase 2) ─────────────
             # Try risk-based position sizing first, fallback to fixed margin if fails
             qty, used_risk_sizing = await calc_qty_with_risk(symbol, entry, sl, leverage)
-            
+            # ── Log which method was used ─────────────────────────────────
+            if _last_sizing and _last_sizing.get('is_dynamic'):
+                qty = _last_sizing['qty']
+                leverage = _last_sizing['leverage']
+                sl = _last_sizing['sl_price']
+                logger.info(
+                    f"🚀 [Engine:{user_id}] DYNAMIC SCALE applied to {symbol}: "
+                    f"Leverage hiked to {leverage}x, SL adjusted to {sl:.8f} "
+                    f"({_last_sizing.get('sl_distance_pct'):.2f}% dist)"
+                )
+
             if qty <= 0:
                 logger.warning(f"[Engine:{user_id}] qty=0 for {symbol}, skip")
                 _cleanup_signal_queue(user_id, symbol, success=False)
                 await asyncio.sleep(cfg["scan_interval"])
                 continue
-            
-            # Log which method was used
+
             if used_risk_sizing:
                 logger.info(f"[Engine:{user_id}] Using RISK-BASED position sizing for {symbol}")
             else:
@@ -2084,6 +2051,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 # Handle SL price validation error (30029)
                 if '30029' in str(err) or 'SL price must be' in str(err):
                     logger.warning(f"[Engine:{user_id}] SL price validation error, skipping this trade")
+                    # ... [rest of existing error handling]
                     await bot.send_message(
                         chat_id=notify_chat_id,
                         text=(
@@ -2301,6 +2269,11 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     )
                     + f"<b>Order ID:</b> <code>{order_id_text}</code>\n"
                     + f"<b>Date and time:</b> {opened_at}"
+                    + (
+                        f"\n\n⚡ <b>Margin Efficiency Optimized:</b> Leverage hiked to {leverage}x "
+                        f"to minimize capital lock-up while maintaining strict SL risk."
+                        if _last_sizing and _last_sizing.get('is_max_leverage') else ""
+                    )
                 ),
                 parse_mode='HTML',
                 reply_markup=_trade_detail_keyboard(trade_id=trade_id, order_id=order_id, symbol=symbol),

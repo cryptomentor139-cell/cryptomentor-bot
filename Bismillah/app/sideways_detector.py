@@ -30,9 +30,9 @@ class SidewaysDetector:
     """Mendeteksi kondisi market sideways berdasarkan ATR, EMA spread, dan range width."""
 
     # Threshold klasifikasi
-    ATR_THRESHOLD        = 0.3   # %
-    EMA_SPREAD_THRESHOLD = 0.2   # %
-    RANGE_WIDTH_THRESHOLD = 1.5  # %
+    ATR_THRESHOLD         = 0.15  # %
+    EMA_SPREAD_THRESHOLD  = 0.1   # %
+    RANGE_WIDTH_THRESHOLD = 1.0   # %
 
     def detect(
         self,

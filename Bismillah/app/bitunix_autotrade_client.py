@@ -513,16 +513,15 @@ class BitunixAutoTradeClient:
         return {'success': True, 'leverage': leverage, 'margin_mode': margin_mode}
 
     def set_margin_mode(self, symbol: str, margin_mode: str) -> Dict:
-        """Set margin mode (CROSSED / ISOLATION) for a symbol."""
+        """Set margin mode (CROSS / ISOLATED) for a symbol."""
         mode = margin_mode.upper()
-        # Bitunix accepts CROSSED / ISOLATION
+        # Bitunix standard values
         if mode in ("CROSS", "CROSSED"):
-            mode = "CROSSED"
+            mode = "CROSS"
         elif mode in ("ISOLATED", "ISOLATION"):
-            mode = "ISOLATION"
+            mode = "ISOLATED"
         body = {
             "symbol": symbol,
-            "marginCoin": "USDT",
             "marginMode": mode,
         }
         return self._request('POST', '/api/v1/futures/account/change_margin_mode',
@@ -681,6 +680,34 @@ class BitunixAutoTradeClient:
                 'closed_qty': qty,
             }
         return result
+
+    def get_max_leverage(self, symbol: str) -> int:
+        """
+        Get the maximum available leverage for a symbol using position tiers.
+        Fallback to hardcoded defaults if API fails.
+        """
+        try:
+            # BTC/ETH Typically 100-125x, others 20-75x
+            # We fetch tiers to be exact
+            res = self._request('GET', '/api/v1/futures/position/get_position_tiers', 
+                                params={"symbol": symbol}, signed=True)
+            if res.get('success') and res.get('data'):
+                # Data is a list of tiers, usually the first tier has the max leverage
+                tiers = res['data']
+                if tiers and len(tiers) > 0:
+                    max_lev = tiers[0].get('maxLeverage')
+                    if max_lev:
+                        return int(max_lev)
+            
+            # Fallback based on asset type
+            sym = symbol.upper()
+            if sym.startswith("BTC") or sym.startswith("ETH"):
+                return 125
+            if sym.startswith("SOL") or sym.startswith("XRP"):
+                return 100
+            return 50 # Standard fallback for most alts
+        except Exception:
+            return 50
 
     def get_24h_stats(self) -> Dict:
         return {

@@ -41,7 +41,7 @@ class MicroMomentumDetector:
     EMA_FAST = 5
     EMA_SLOW = 13
     RSI_PERIOD = 9       # Shorter RSI for 1M
-    MIN_VOLUME_RATIO = 1.3
+    MIN_VOLUME_RATIO = 1.15
     MIN_ROOM_PCT = 0.15  # Minimum 0.15% room to next S/R
 
     def detect(

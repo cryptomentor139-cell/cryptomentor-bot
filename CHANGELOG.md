@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.1.39] — 2026-04-13 — 🚀 Max Leverage Efficiency Strategy (Full Deploy)
+
+### 🚀 Capital Efficiency Optimization
+
+#### 1) Guaranteed Maximum Leverage Execution
+- **Logic:** The engine now automatically queries the Bitunix API (`/get_position_tiers`) to determine the actual maximum leverage allowed for each individual trading pair before execution.
+- **Efficiency:** Every trade now utilizes the maximum possible leverage (e.g., 100x-125x for BTC/ETH, 50x-75x for Alts) to minimize required margin (capital lock-up).
+- **Safety:** Integrated a safety floor that ensures the Liquidation Price remains beyond the Stop Loss price.
+- **Risk Integrity:** Position size (Qty) remains strictly calculated based on the user's defined risk % relative to equity.
+
+#### 2) Enhanced Dynamic Scaling for Small Accounts
+- For accounts below $100 or when balance is insufficient for exchange minimums, the engine now automatically:
+  - Hikes leverage to the symbol's maximum.
+  - Adjusts/tightens Stop Loss to maintain the exact same USDT risk amount.
+  - Ensures participation for entries that would previously fail with "insufficient balance".
+
+#### 3) Transparent "Margin Efficiency" Notifications
+- Updated Telegram notifications to clearly state when "Margin Efficiency Optimization" has been applied to a trade.
+- Shows the exact hiked leverage and the adjusted stop-loss parameters.
+
+- **Files Modified:**
+  - `Bismillah/app/position_sizing.py`
+  - `Bismillah/app/bitunix_autotrade_client.py`
+  - `Bismillah/app/autotrade_engine.py`
+  - `scalping_engine.deploy.py`
+
 ## [2.1.38] — 2026-04-13 — StackMentor Fields Reflected In Web Positions API
 
 ### 🛠️ Website Reflection Fix

@@ -688,119 +688,68 @@ class ScalpingEngine:
         return True
 
     def calculate_position_size_pro(self, entry_price: float, sl_price: float, 
-                                    capital: float, leverage: int) -> tuple:
+                                    capital: float, leverage: int, symbol: str = "BTCUSDT") -> tuple:
         """
         Calculate position size based on risk % per trade (PRO TRADER METHOD)
-        
-        SCALPING MODE: MAXIMUM 5% RISK PER TRADE (SAFETY FIRST!)
-        
-        Args:
-            entry_price: Entry price
-            sl_price: Stop loss price
-            capital: Total trading capital
-            leverage: Leverage multiplier (will be capped at 10x for scalping)
-            
-        Returns:
-            (position_size, used_risk_sizing): tuple of (quantity, whether risk sizing was used)
+        Supports dynamic leverage & SL adjustment for small accounts.
         """
         try:
-            # CRITICAL: Cap leverage at 10x for scalping (safety)
-            leverage = min(leverage, 10)
-            
-            # Get risk percentage from database
+            # 1. Get risk percentage from database
             from app.supabase_repo import get_risk_per_trade
             risk_pct = get_risk_per_trade(self.user_id)
             
-            # CRITICAL: Cap risk at 5% maximum for scalping
+            # Scalping safety: Cap risk at 5.0% by default unless user is very small
             risk_pct = min(risk_pct, 5.0)
             
-            # Get current balance from exchange
-            bal_result = self.client.get_balance()
-            if not bal_result.get('success'):
-                raise Exception(f"Balance fetch failed: {bal_result.get('error')}")
+            # 2. Get current equity (for accurate risk calculation)
+            try:
+                acc_result = self.client.get_account_info()
+                if acc_result.get('success'):
+                    available = float(acc_result.get('available', 0) or 0)
+                    frozen = float(acc_result.get('frozen', 0) or 0)
+                    unrealized = float(acc_result.get('total_unrealized_pnl', 0) or 0)
+                    balance = available + frozen + unrealized
+                else:
+                    balance = capital
+            except Exception:
+                balance = capital
             
-            balance = bal_result.get('balance', 0)
-            if balance <= 0:
-                raise Exception(f"Invalid balance: {balance}")
+            # 3. Use the centralized PRO sizing logic
+            from app.position_sizing import calculate_position_size_pro
             
-            # Calculate position size using risk-based formula
-            from app.position_sizing import calculate_position_size
-            sizing = calculate_position_size(
+            # Fetch actual max leverage for this symbol from Bitunix
+            max_leverage_allowed = self.client.get_max_leverage(symbol or "BTCUSDT")
+            
+            sizing = calculate_position_size_pro(
                 balance=balance,
                 risk_pct=risk_pct,
                 entry_price=entry_price,
                 sl_price=sl_price,
                 leverage=leverage,
-                symbol=f"BTCUSDT"  # Default symbol for precision
+                symbol=symbol,
+                max_leverage=max_leverage_allowed,
+                min_sl_dist_pct=0.002
             )
             
             if not sizing['valid']:
-                raise Exception(f"Position sizing invalid: {sizing['error']}")
+                raise Exception(f"Sizing invalid: {sizing.get('error')}")
             
-            qty = sizing['qty']
+            # Store adjusted params for the caller
+            self._last_sizing = sizing
             
-            # SAFETY CHECK: Ensure position size is reasonable
-            position_value = qty * entry_price
-            max_position_value = balance * 0.5  # Max 50% of balance per trade
-            
-            if position_value > max_position_value:
-                logger.warning(
-                    f"[Scalping:{self.user_id}] Position too large! "
-                    f"${position_value:.2f} > ${max_position_value:.2f} (50% of balance). "
-                    f"Reducing to safe size."
-                )
-                qty = (max_position_value / entry_price) * 0.9  # 90% of max for safety margin
-            
-            logger.info(
-                f"[Scalping:{self.user_id}] RISK-BASED sizing: "
-                f"Balance=${balance:.2f}, Risk={risk_pct}% (capped at 5%), "
-                f"Leverage={leverage}x (capped at 10x), "
-                f"Entry=${entry_price:.2f}, SL=${sl_price:.2f}, "
-                f"SL_Dist={sizing['sl_distance_pct']:.2f}%, "
-                f"Position=${sizing['position_size_usdt']:.2f}, "
-                f"Margin=${sizing['margin_required']:.2f}, "
-                f"Qty={qty}, Risk_Amt=${sizing['risk_amount']:.2f}"
-            )
-            
-            return qty, True  # Success - used risk-based sizing
+            return sizing['qty'], True
             
         except Exception as e:
-            logger.warning(
-                f"[Scalping:{self.user_id}] Risk sizing FAILED: {e} - "
-                f"Falling back to ULTRA-SAFE 2% method"
-            )
+            logger.warning(f"[Scalping:{self.user_id}] Risk sizing FAILED: {e} - Falling back to fixed 2% risk")
+            self._last_sizing = None
             
-            # FALLBACK: Use ULTRA-SAFE 2% risk method
-            risk_per_trade_pct = 0.02  # 2% ONLY
-            risk_amount = capital * risk_per_trade_pct
+            risk_amount = capital * 0.02
+            sl_dist_pct = abs(entry_price - sl_price) / entry_price
+            qty = risk_amount / (sl_dist_pct * entry_price)
+            max_qty = (capital * 0.5) / entry_price
+            qty = min(qty, max_qty)
             
-            # Calculate SL distance in %
-            sl_distance_pct = abs(entry_price - sl_price) / entry_price
-            
-            # Position size = Risk Amount / SL Distance
-            position_size_usdt = risk_amount / sl_distance_pct
-            
-            # SAFETY: Cap at 20% of capital
-            max_position_usdt = capital * 0.2
-            if position_size_usdt > max_position_usdt:
-                logger.warning(
-                    f"[Scalping:{self.user_id}] Fallback position too large! "
-                    f"${position_size_usdt:.2f} > ${max_position_usdt:.2f}. Capping."
-                )
-                position_size_usdt = max_position_usdt
-            
-            # Convert to base currency
-            position_size = position_size_usdt / entry_price
-            
-            logger.info(
-                f"[Scalping:{self.user_id}] FALLBACK sizing: "
-                f"Capital=${capital:.2f}, Risk=${risk_amount:.2f} (2%), "
-                f"SL Distance={sl_distance_pct:.2%}, "
-                f"Position=${position_size_usdt:.2f} (capped at 20%), "
-                f"Quantity={position_size:.6f}"
-            )
-            
-            return position_size, False  # Fallback used
+            return qty, False
     
     def is_optimal_trading_time(self) -> tuple:
         """
@@ -1064,18 +1013,39 @@ class ScalpingEngine:
                 min_qty = MIN_QTY_MAP.get(signal.symbol, 0.001)
                 effective_leverage = leverage
                 
-                # CRITICAL: Skip trade if qty too small - NEVER auto-raise leverage
-                # Auto-raising leverage breaks risk management (user set leverage for specific risk %)
+                # DYNAMIC SCALE: Check leverage and SL
+                effective_leverage = leverage
+                effective_sl = signal.sl_price
+                
+                sizing = getattr(self, '_last_sizing', None)
+                if sizing and sizing.get('is_dynamic'):
+                    quantity = sizing['qty']
+                    effective_leverage = sizing['leverage']
+                    effective_sl = sizing['sl_price']
+                    
+                    logger.info(
+                        f"🚀 [Scalping:{self.user_id}] DYNAMIC SCALE applied: "
+                        f"Leverage hiked {leverage}x -> {effective_leverage}x, "
+                        f"SL adjusted to {effective_sl:.4f} "
+                        f"({sizing.get('sl_distance_pct'):.2f}% dist)"
+                    )
+                
+                # Apply time-of-day multiplier
+                quantity_adjusted = quantity * size_multiplier
+                
+                # Minimum qty validation
+                from app.trade_execution import MIN_QTY_MAP
+                min_qty = MIN_QTY_MAP.get(signal.symbol, 0.001)
+                
                 if quantity_adjusted < min_qty:
                     logger.warning(
                         f"[Scalping:{self.user_id}] {signal.symbol} qty={quantity_adjusted:.6f} "
-                        f"< min={min_qty}. Skipping - balance too small for this pair."
+                        f"< min={min_qty}. Final safety skip."
                     )
-                    return False  # Silent skip, engine will try other pairs
+                    return False
                 
                 # ═══════════════════════════════════════════════════════════
                 # Unified entry path — see app/trade_execution.py
-                # Atomic order with TP1 + SL on exchange + StackMentor register
                 # ═══════════════════════════════════════════════════════════
                 from app.trade_execution import open_managed_position
                 from app.trading_mode import MicroScalpSignal as _MicroScalpSignalCheck
@@ -1085,13 +1055,11 @@ class ScalpingEngine:
                     client=self.client,
                     user_id=self.user_id,
                     symbol=signal.symbol,
-                    side=signal.side,                # "LONG" / "SHORT"
+                    side=signal.side,
                     entry_price=signal.entry_price,
-                    sl_price=signal.sl_price,
+                    sl_price=effective_sl, # use potentially adjusted SL
                     quantity=quantity_adjusted,
-                    leverage=effective_leverage,
-                    # Sideways positions have very tight TP/SL — skip reconcile
-                    # to avoid false emergency closes. Engine monitors via max_hold.
+                    leverage=effective_leverage, # use potentially hiked leverage
                     reconcile=not _is_sideways_signal,
                 )
 
@@ -1119,14 +1087,21 @@ class ScalpingEngine:
                     if isinstance(signal, _MicroScalpSignal):
                         position.is_sideways = True
 
-                    # Save to database + notify user
-                    trade_id = await self._save_position_to_db(position, signal, order_id=exec_result.order_id or "")
+                    # Notify user with dynamic scale warning if applied
+                    notif_msg = ""
+                    if sizing and sizing.get('is_max_leverage'):
+                        notif_msg = (
+                            f"\n⚡ <b>Margin Efficiency Optimized:</b> Leverage hiked to {effective_leverage}x "
+                            f"to minimize capital requirements while maintaining strict risk."
+                        )
+
                     await self._notify_stackmentor_opened(
                         position,
                         signal,
                         levels,
                         order_id=exec_result.order_id or "-",
                         trade_id=trade_id,
+                        extra_notes=notif_msg
                     )
 
                     logger.info(
@@ -1711,6 +1686,7 @@ class ScalpingEngine:
         levels,
         order_id: str = "-",
         trade_id: Optional[int] = None,
+        extra_notes: str = ""
     ):
         """Notify user when StackMentor position opened.
 
@@ -1747,6 +1723,7 @@ class ScalpingEngine:
                     )
                     + f"<b>Order ID:</b> <code>{order_id_text}</code>\n"
                     + f"<b>Date and time:</b> {opened_at}"
+                    + extra_notes
                 ),
                 parse_mode='HTML',
                 reply_markup=_trade_detail_keyboard(trade_id=trade_id, order_id=order_id, symbol=position.symbol),

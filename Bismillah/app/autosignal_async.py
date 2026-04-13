@@ -94,33 +94,33 @@ async def compute_signal_scalping_async(base_symbol: str) -> Optional[Dict[str, 
         
         # STRONG TREND SIGNALS (Original logic - high confidence)
         if trend_strength == "STRONG":
-            if trend_15m == "LONG" and rsi_5m < 30 and vol_ratio > 2.0:
+            if trend_15m == "LONG" and rsi_5m < 30 and vol_ratio > 1.4:
                 side = "LONG"
                 confidence = 85
                 reasons.append(f"Strong 15M uptrend + 5M oversold (RSI {rsi_5m:.0f})")
                 reasons.append(f"Volume spike {vol_ratio:.1f}x")
-                if vol_ratio > 3.0:
+                if vol_ratio > 1.8:
                     confidence += 5
                     reasons.append("Exceptional volume")
-            elif trend_15m == "SHORT" and rsi_5m > 70 and vol_ratio > 2.0:
+            elif trend_15m == "SHORT" and rsi_5m > 70 and vol_ratio > 1.4:
                 side = "SHORT"
                 confidence = 85
                 reasons.append(f"Strong 15M downtrend + 5M overbought (RSI {rsi_5m:.0f})")
                 reasons.append(f"Volume spike {vol_ratio:.1f}x")
-                if vol_ratio > 3.0:
+                if vol_ratio > 1.8:
                     confidence += 5
                     reasons.append("Exceptional volume")
         
         # WEAK TREND / RANGING SIGNALS (New - for sideways market)
         elif trend_strength in ["WEAK", "RANGING"]:
             # More relaxed conditions for ranging market
-            if trend_15m == "LONG" and rsi_5m < 40 and vol_ratio > 1.5:
+            if trend_15m == "LONG" and rsi_5m < 40 and vol_ratio > 1.15:
                 side = "LONG"
                 confidence = 80
                 reasons.append(f"15M bullish bias + 5M pullback (RSI {rsi_5m:.0f})")
                 reasons.append(f"Volume increase {vol_ratio:.1f}x")
                 reasons.append("Range trading - buy support")
-            elif trend_15m == "SHORT" and rsi_5m > 60 and vol_ratio > 1.5:
+            elif trend_15m == "SHORT" and rsi_5m > 60 and vol_ratio > 1.15:
                 side = "SHORT"
                 confidence = 80
                 reasons.append(f"15M bearish bias + 5M bounce (RSI {rsi_5m:.0f})")
@@ -128,13 +128,13 @@ async def compute_signal_scalping_async(base_symbol: str) -> Optional[Dict[str, 
                 reasons.append("Range trading - sell resistance")
             elif trend_15m == "NEUTRAL":
                 # Pure ranging - trade both sides based on 5M extremes
-                if rsi_5m < 35 and vol_ratio > 1.5:
+                if rsi_5m < 35 and vol_ratio > 1.15:
                     side = "LONG"
                     confidence = 80  # Raised to pass 80% threshold
                     reasons.append(f"Ranging market + 5M oversold (RSI {rsi_5m:.0f})")
                     reasons.append(f"Volume {vol_ratio:.1f}x - buy support")
                     reasons.append("Scalping range low")
-                elif rsi_5m > 65 and vol_ratio > 1.5:
+                elif rsi_5m > 65 and vol_ratio > 1.15:
                     side = "SHORT"
                     confidence = 80  # Raised to pass 80% threshold
                     reasons.append(f"Ranging market + 5M overbought (RSI {rsi_5m:.0f})")
