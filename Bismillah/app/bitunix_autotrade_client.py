@@ -476,7 +476,7 @@ class BitunixAutoTradeClient:
             body['price'] = str(price)
 
         result = self._request('POST', '/api/v1/futures/trade/place_order',
-                               body=body, signed=True)
+                               body=body, signed=True, priority=True)
         if result['success']:
             return {'success': True, 'order_id': result['data'].get('orderId'),
                     'message': f'{side.upper()} {order_type} order placed'}
@@ -545,7 +545,7 @@ class BitunixAutoTradeClient:
             "slStopType": "MARK_PRICE",
         }
         result = self._request('POST', '/api/v1/futures/trade/place_order',
-                               body=body, signed=True)
+                               body=body, signed=True, priority=True)
         if result['success']:
             return {
                 'success': True,
@@ -599,7 +599,7 @@ class BitunixAutoTradeClient:
             "slStopType": "MARK_PRICE",
         }
         result = self._request('POST', '/api/v1/futures/tpsl/position/modify_order',
-                               body=body, signed=True)
+                               body=body, signed=True, priority=True)
         if result['success']:
             return {'success': True, 'symbol': symbol, 'new_sl': sl_price}
         return result
@@ -629,7 +629,7 @@ class BitunixAutoTradeClient:
             "slStopType": "MARK_PRICE",
         }
         result = self._request('POST', '/api/v1/futures/tpsl/position/modify_order',
-                               body=body, signed=True)
+                               body=body, signed=True, priority=True)
         if result['success']:
             return {'success': True, 'symbol': symbol, 'new_tp': tp_price, 'new_sl': sl_price}
         return result
@@ -672,7 +672,7 @@ class BitunixAutoTradeClient:
             "reduceOnly": True,
         }
         result = self._request('POST', '/api/v1/futures/trade/place_order',
-                               body=body, signed=True)
+                               body=body, signed=True, priority=True)
         if result['success']:
             return {
                 'success': True,
