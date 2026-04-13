@@ -742,11 +742,13 @@ async def _check_stale_positions(application):
             if stale_trade_ids:
                 try:
                     from app.supabase_repo import _client as _db
+                    from datetime import datetime
                     s = _db()
                     for tid in stale_trade_ids:
                         s.table("autotrade_trades").update({
-                            "status": "closed",
-                            "close_reason": "stale_startup_reconcile"
+                            "status": "closed_manual",
+                            "close_reason": "stale_startup_reconcile",
+                            "closed_at": datetime.utcnow().isoformat(),
                         }).eq("id", tid).execute()
                     logger.info(f"[StartupCheck] Closed {len(stale_trade_ids)} stale DB trades for user {user_id}")
                 except Exception as e:

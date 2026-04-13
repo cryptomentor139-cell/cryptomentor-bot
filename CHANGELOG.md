@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.1.35] — 2026-04-13 — StackMentor Reliability + Trade-State Consistency Fix
+
+### 🛠️ Engine/DB Hotfix
+
+#### 1) StackMentor close events now preserve TP hit flags
+- Root cause:
+  - profitable unified StackMentor closes were often written as generic closes without TP hit flags
+- Fix:
+  - on `closed_tp` for `strategy=stackmentor`, engine now marks `tp1_hit/tp2_hit/tp3_hit` with timestamps
+
+#### 2) Scalping trades now persist StackMentor metadata
+- Root cause:
+  - scalping DB rows did not persist `strategy=stackmentor` and TP tier fields, reducing observability
+- Fix:
+  - scalping save path now stores `strategy`, `tp1/2/3_price`, and quantity split fields from execution levels
+  - scalping close path now also marks TP hit flags on StackMentor TP closes
+
+#### 3) Startup stale-reconcile no longer writes ambiguous `status=closed`
+- Root cause:
+  - stale DB trades were marked as plain `closed` without `closed_at`, causing reporting confusion
+- Fix:
+  - stale reconciliation now writes `status=closed_manual` and sets `closed_at`
+
+- Files:
+  - `Bismillah/app/autotrade_engine.py`
+  - `Bismillah/app/scalping_engine.py`
+  - `Bismillah/app/scheduler.py`
+
 ## [2.1.34] — 2026-04-13 — Fix 1-Click TP/SL Inversion And Enforce ~1:3 RR
 
 ### 🛠️ 1-Click Risk/Reward Hotfix

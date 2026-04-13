@@ -1126,7 +1126,12 @@ class ScalpingEngine:
                         position.is_sideways = True
 
                     # Save to database + notify user
-                    trade_id = await self._save_position_to_db(position, signal, order_id=exec_result.order_id or "")
+                    trade_id = await self._save_position_to_db(
+                        position,
+                        signal,
+                        order_id=exec_result.order_id or "",
+                        levels=levels,
+                    )
                     await self._notify_stackmentor_opened(
                         position,
                         signal,
@@ -1562,7 +1567,7 @@ class ScalpingEngine:
         self.cooldown_tracker[symbol] = time.time() + self.config.cooldown_seconds
         logger.debug(f"[Scalping:{self.user_id}] Cooldown marked for {symbol} (2.5 minutes)")
     
-    async def _save_position_to_db(self, position: ScalpingPosition, signal, order_id: str = ""):
+    async def _save_position_to_db(self, position: ScalpingPosition, signal, order_id: str = "", levels=None):
         """Save position to database, including sideways metadata if applicable."""
         try:
             from app.trading_mode import MicroScalpSignal as _MicroScalpSignal
@@ -1583,7 +1588,18 @@ class ScalpingEngine:
                 "status": "open",
                 "order_id": order_id or "",
                 "opened_at": datetime.utcnow().isoformat(),
+                "strategy": "stackmentor",
             }
+
+            if levels is not None:
+                row.update({
+                    "tp1_price": float(levels.tp1),
+                    "tp2_price": float(levels.tp2),
+                    "tp3_price": float(levels.tp3),
+                    "qty_tp1": float(levels.qty_tp1),
+                    "qty_tp2": float(levels.qty_tp2),
+                    "qty_tp3": float(levels.qty_tp3),
+                })
 
             if isinstance(signal, _MicroScalpSignal):
                 # Sideways scalp metadata
@@ -1616,21 +1632,33 @@ class ScalpingEngine:
         """
         try:
             s = _client()
-            open_rows = s.table("autotrade_trades").select("id").eq(
+            open_rows = s.table("autotrade_trades").select("id,strategy").eq(
                 "telegram_id", self.user_id
             ).eq("symbol", position.symbol).eq("status", "open").order("opened_at", desc=True).limit(1).execute()
             if not open_rows.data:
                 logger.info(f"[Scalping:{self.user_id}] No open DB row to close for {position.symbol} (already closed)")
                 return False
 
-            trade_id = open_rows.data[0]["id"]
-            res = s.table("autotrade_trades").update({
+            trade_row = open_rows.data[0]
+            trade_id = trade_row["id"]
+            update_payload = {
                 "close_price": close_price,
                 "pnl_usdt": pnl,
                 "close_reason": close_reason,
                 "status": close_reason,
                 "closed_at": datetime.utcnow().isoformat(),
-            }).eq("id", trade_id).eq("status", "open").execute()
+            }
+            if close_reason == "closed_tp" and str(trade_row.get("strategy") or "").lower() == "stackmentor":
+                now_iso = datetime.utcnow().isoformat()
+                update_payload.update({
+                    "tp1_hit": True,
+                    "tp2_hit": True,
+                    "tp3_hit": True,
+                    "tp1_hit_at": now_iso,
+                    "tp2_hit_at": now_iso,
+                    "tp3_hit_at": now_iso,
+                })
+            res = s.table("autotrade_trades").update(update_payload).eq("id", trade_id).eq("status", "open").execute()
             if not getattr(res, "data", None):
                 logger.info(f"[Scalping:{self.user_id}] DB close skipped for {position.symbol} (race already closed)")
                 return False
