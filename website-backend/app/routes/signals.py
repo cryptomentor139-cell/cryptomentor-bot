@@ -377,6 +377,16 @@ async def generate_confluence_signals(
         tp3 = entry_price - (atr * 1.5 * atr_multiplier)
         sl_price = resistance + (atr * 0.5)
 
+    # Normalize levels so 1-click keeps valid geometry and ~1:3 baseline RR.
+    sl_price, tp1, rr1 = _normalize_trade_levels(direction, entry_price, sl_price, tp1, target_rr=3.0)
+    risk_distance = abs(entry_price - sl_price)
+    if direction == "LONG":
+        tp2 = entry_price + (risk_distance * 4.0)
+        tp3 = entry_price + (risk_distance * 5.0)
+    else:
+        tp2 = entry_price - (risk_distance * 4.0)
+        tp3 = entry_price - (risk_distance * 5.0)
+
     # 11. Round to symbol precision
     precision = _QTY_PRECISION.get(symbol_upper, 3)
 
@@ -393,6 +403,7 @@ async def generate_confluence_signals(
         'confidence': score,
         'generated_at': datetime.now(timezone.utc).isoformat(),
         'reason': ' + '.join(reason_list),
+        'rr_1': round(rr1, 2),
     }
 
     logger.info(
@@ -417,6 +428,65 @@ def _fmt(price: float) -> str:
     return f"{price:,.5f}"
 
 
+def _normalize_trade_levels(
+    direction: str,
+    entry_price: float,
+    sl_price: float,
+    tp_price: float | None = None,
+    target_rr: float = 3.0,
+) -> tuple[float, float, float]:
+    """
+    Enforce valid SL/TP geometry and a minimum ~1:3 R:R baseline.
+    Returns: (normalized_sl, normalized_tp, rr_ratio)
+    """
+    entry = float(entry_price)
+    sl = float(sl_price)
+    has_tp = tp_price is not None
+    tp = float(tp_price) if has_tp else 0.0
+    side = (direction or "").upper()
+
+    min_sl_pct = 0.0015  # 0.15%
+    max_sl_pct = 0.15    # 15%
+    default_sl_pct = 0.008  # 0.8%
+    min_rr = 2.8
+
+    if side == "LONG":
+        if sl >= entry:
+            sl = entry * (1.0 - default_sl_pct)
+        sl_dist = entry - sl
+        sl_pct = sl_dist / entry if entry > 0 else 0.0
+        if sl_pct < min_sl_pct:
+            sl = entry * (1.0 - min_sl_pct)
+        elif sl_pct > max_sl_pct:
+            sl = entry * (1.0 - max_sl_pct)
+
+        sl_dist = max(entry - sl, entry * min_sl_pct)
+        rr_from_tp = ((tp - entry) / sl_dist) if tp > entry else 0.0
+        if tp <= entry or tp <= sl or rr_from_tp < min_rr:
+            tp = entry + (sl_dist * target_rr)
+
+        rr = (tp - entry) / sl_dist
+        return sl, tp, rr
+
+    # SHORT
+    if sl <= entry:
+        sl = entry * (1.0 + default_sl_pct)
+    sl_dist = sl - entry
+    sl_pct = sl_dist / entry if entry > 0 else 0.0
+    if sl_pct < min_sl_pct:
+        sl = entry * (1.0 + min_sl_pct)
+    elif sl_pct > max_sl_pct:
+        sl = entry * (1.0 + max_sl_pct)
+
+    sl_dist = max(sl - entry, entry * min_sl_pct)
+    rr_from_tp = ((entry - tp) / sl_dist) if (has_tp and tp < entry) else 0.0
+    if (not has_tp) or tp >= entry or tp >= sl or rr_from_tp < min_rr:
+        tp = entry - (sl_dist * target_rr)
+
+    rr = (entry - tp) / sl_dist
+    return sl, tp, rr
+
+
 def _build_signal(idx: int, pair: str, tier: str, sig_type: str, ticker: dict, generated_at: datetime = None) -> Dict[str, Any]:
     last = float(ticker["lastPrice"])
     high = float(ticker["highPrice"])
@@ -433,17 +503,18 @@ def _build_signal(idx: int, pair: str, tier: str, sig_type: str, ticker: dict, g
     band = last * 0.002
     if direction == "LONG":
         entry_low, entry_high = last - band, last + band
-        # TPs above entry, SL just below recent low.
-        tp1 = last * 1.012
-        tp2 = last * 1.025
-        tp3 = last * 1.04
         stop = max(low * 0.998, last * 0.985)
+        stop, tp1, _ = _normalize_trade_levels(direction, last, stop, None, target_rr=3.0)
+        risk = abs(last - stop)
+        tp2 = last + (risk * 4.0)
+        tp3 = last + (risk * 5.0)
     else:
         entry_low, entry_high = last - band, last + band
-        tp1 = last * 0.988
-        tp2 = last * 0.975
-        tp3 = last * 0.96
         stop = min(high * 1.002, last * 1.015)
+        stop, tp1, _ = _normalize_trade_levels(direction, last, stop, None, target_rr=3.0)
+        risk = abs(last - stop)
+        tp2 = last - (risk * 4.0)
+        tp3 = last - (risk * 5.0)
 
     targets = [_fmt(tp1), _fmt(tp2), _fmt(tp3)] if sig_type == "Scalp" else [_fmt(tp1), _fmt(tp2)]
 
@@ -765,17 +836,28 @@ async def execute_signal(
     leverage = int(sess.get("leverage") or 10)
 
     # Use pre-fetched live market data
-    direction = live_sig["direction"]
+    direction = str(payload.get("direction") or live_sig.get("direction") or "").upper()
+    if direction not in ("LONG", "SHORT"):
+        direction = live_sig["direction"]
     side = "BUY" if direction == "LONG" else "SELL"
     entry_price = float(live_sig["price"])
 
-    # entry zone string is "low - high"; pull the SL we serialized as text.
+    # Pull levels from latest signal and normalize for safe execution geometry.
     sl_price = float(str(live_sig["stopLoss"]).replace(",", ""))
-    # First TP is also stringified — recompute numerically for safety.
-    if direction == "LONG":
-        tp_price = entry_price * 1.012
-    else:
-        tp_price = entry_price * 0.988
+    raw_targets = live_sig.get("targets") or []
+    parsed_tp = None
+    if raw_targets:
+        try:
+            parsed_tp = float(str(raw_targets[0]).replace(",", ""))
+        except Exception:
+            parsed_tp = None
+    sl_price, tp_price, rr_ratio = _normalize_trade_levels(
+        direction=direction,
+        entry_price=entry_price,
+        sl_price=sl_price,
+        tp_price=parsed_tp,
+        target_rr=3.0,
+    )
 
     sl_distance = abs(entry_price - sl_price)
     if sl_distance <= 0:
@@ -908,6 +990,7 @@ async def execute_signal(
             "entry_price": round(entry_price, 6),
             "tp_price": round(tp_price, 6),
             "sl_price": round(sl_price, 6),
+            "rr_ratio": round(rr_ratio, 3),
             "position_size_usdt": round(position_size_usdt, 2),
             "margin_required": round(margin_required, 2),
             "risk_amount": round(risk_amount, 2),

@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.1.34] — 2026-04-13 — Fix 1-Click TP/SL Inversion And Enforce ~1:3 RR
+
+### 🛠️ 1-Click Risk/Reward Hotfix
+
+#### 1) Normalized 1-click trade levels before execution
+- Root cause:
+  - execution path mixed live entry with independently-derived TP/SL sources, which could produce inconsistent geometry in edge cases
+- Fix:
+  - added a strict level normalizer that guarantees valid LONG/SHORT ordering (`SL < Entry < TP` for LONG, inverse for SHORT)
+  - enforces a minimum ~1:3 baseline RR on execution (`target_rr=3.0`)
+
+#### 2) Aligned generated signal targets with 1:3+ profile
+- Updated momentum and confluence signal builders to produce TP tiers from risk distance:
+  - TP1 ≈ 3R, TP2 ≈ 4R, TP3 ≈ 5R
+- Added `rr_ratio` in execution response sizing payload for observability.
+
+- File:
+  - `website-backend/app/routes/signals.py`
+
 ## [2.1.33] — 2026-04-13 — Fix Bitunix API Key Onboarding 500 Error
 
 ### 🛠️ Website Backend Hotfix
