@@ -1,0 +1,22 @@
+🔄 STARTING GLOBAL RERUN SYSTEM...
+Updating all users to 3% risk per trade...
+
+--- ERRORS ---
+Traceback (most recent call last):
+  File "/root/cryptomentor-bot/global_rerun.py", line 104, in <module>
+    asyncio.run(global_rerun())
+  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/root/cryptomentor-bot/global_rerun.py", line 33, in global_rerun
+    }).execute()
+       ^^^^^^^^^
+  File "/root/cryptomentor-bot/venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 78, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': '21000', 'details': None, 'hint': None, 'message': 'UPDATE requires a WHERE clause'}

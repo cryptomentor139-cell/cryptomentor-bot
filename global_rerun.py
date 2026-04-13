@@ -30,7 +30,7 @@ async def global_rerun():
     s.table("autotrade_sessions").update({
         "risk_per_trade": 3.0,
         "one_click_risk_per_trade": 3.0
-    }).execute()
+    }).neq("telegram_id", 0).execute()
     print("✅ All sessions updated to 3.0%.")
 
     # 2. Get active users
