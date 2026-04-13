@@ -16,7 +16,7 @@ load_dotenv(repo_root / "Bismillah" / ".env")
 # Pre-import relative to repo root
 from app.scalping_engine import ScalpingEngine
 from app.trading_mode import ScalpingConfig
-from app.bitunix_autotrade_client import BitunixAutotradeClient
+from app.bitunix_autotrade_client import BitunixAutoTradeClient
 from app.supabase_repo import _client
 
 async def repair_eth():
@@ -32,7 +32,7 @@ async def repair_eth():
         return
 
     # Check signal using the first user
-    client = BitunixAutotradeClient(users[0])
+    client = BitunixAutoTradeClient(users[0])
     engine = ScalpingEngine(users[0], client, None, 0, ScalpingConfig())
     
     print("Scanning for current ETHUSDT signal...")
@@ -48,7 +48,7 @@ async def repair_eth():
     for uid in users:
         print(f"\n[User:{uid}] Processing...")
         try:
-            u_client = BitunixAutotradeClient(uid)
+            u_client = BitunixAutoTradeClient(uid)
             # Check positions via direct API to avoid engine overhead
             pos_resp = await u_client._bitunix_request("POST", "/api/v1/futures/position", {"symbol": "ETHUSDT"})
             if pos_resp.get("success") and pos_resp.get("data"):
