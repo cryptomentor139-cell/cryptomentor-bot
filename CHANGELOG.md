@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.29] — 2026-04-13 — Add Website Favicon
+
+### 🎨 Frontend Polish
+
+#### 1) Added Branded Browser Tab Favicon
+- Added a new SVG favicon matching the CryptoMentor AI visual style.
+- Wired the favicon into the frontend HTML shell so browsers can show the site icon in tabs/bookmarks.
+- Files:
+  - `website-frontend/public/favicon.svg`
+  - `website-frontend/index.html`
+
 ## [2.1.28] — 2026-04-13 — Restore 1-Click Signals Rendering On Dashboard
 
 ### 🛠️ Backend Hotfix
