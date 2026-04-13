@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.1.20] — 2026-04-13 — Reduce AutoTrade Candle Fetch Stampede
+
+### 🛠️ Runtime Fix
+
+#### 1) De-duplicated Concurrent Candle Fetches Across AutoTrade Engines
+- Root cause: many active engines could request the same `(symbol, timeframe, limit)` candles at the same moment before cache was populated.
+- This caused provider bursts, repeated fallback failures, and scan cycles returning `0 signals found, 0 validated`.
+- Fix:
+  - Added in-flight request sharing in the global candle cache.
+  - Waiting callers now reuse the first live fetch instead of hammering providers again.
+  - Added stale-cache fallback if a refresh fails.
+- File:
+  - `Bismillah/app/candle_cache.py`
+
 ## [2.1.19] — 2026-04-13 — Fix 1-Click All-In Sizing + Harden AutoTrade Risk Persistence
 
 ### 🛠️ Bug Fix
