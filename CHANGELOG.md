@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.1.54] — 2026-04-14 — Fix Bitunix & BingX Execution Safety for Naked Cross-Margin Orders
+
+### 🚨 Critical Security Patch
+
+#### 1) Added TP/SL Safety Rollback for Bitunix & BingX Autotrade Clients
+- **Issue:** Similar to BingX, the `bitunix_autotrade_client.py` and `bingx_autotrade_client.py` executed Stop Loss (SL) and Take Profit (TP) conditional orders correctly but silently ignored any failures (e.g., tick size validation drops, parameter limits, string formatting rejections, floating point precision limits) returned by the `/trade/order` API execution. This resulted in naked open positions in a CROSS Margin environment without stops. A user provided a Bitunix screenshot corroborating that a single runaway naked trade could float -118% ROI (amounting to massive account drain) because the API dropped the conditional stop without reversing the Market Market.
+- **Fix:**
+  - Implemented hard checks for `sl_res["success"]` and `tpsl_res["success"]` during order placements.
+  - Added an emergency `close_partial()` rollback triggered via `reduceOnly` (or natively via `tradeSide="CLOSE"`) to immediately close the freshly opened position if the TP or SL fails to attach properly.
+  - Ensures the bot prioritizes flat equity safety over taking naked market risks on behalf of users.
+- **Files:**
+  - `Bismillah/app/bingx_autotrade_client.py`
+  - `Bismillah/app/bitunix_autotrade_client.py`
+
 ## [2.1.53] — 2026-04-14 — Force Map Raw Bitunix Side Strings in Verification
 
 ### 🛠️ Execution Engine & UI Fix

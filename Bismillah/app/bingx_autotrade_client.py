@@ -220,7 +220,7 @@ class BingXAutoTradeClient:
     def place_order_with_tpsl(self, symbol: str, side: str, qty: float,
                                tp_price: float = None,
                                sl_price: float = None) -> Dict:
-        """Place market order then set TP/SL."""
+        """Place market order then set TP/SL (with safety rollback)."""
         result = self.place_order(symbol, side, qty)
         if not result["success"]:
             return result
@@ -229,29 +229,41 @@ class BingXAutoTradeClient:
         close_side = "SELL" if side.upper() == "BUY" else "BUY"
         pos_side   = "LONG" if side.upper() == "BUY" else "SHORT"
 
+        tp_res = {"success": True}
         if tp_price:
-            self._request("POST", "/openApi/swap/v2/trade/order", params={
+            tp_res = self._request("POST", "/openApi/swap/v2/trade/order", params={
                 "symbol":       sym,
                 "side":         close_side,
                 "positionSide": pos_side,
                 "type":         "TAKE_PROFIT_MARKET",
                 "quantity":     qty,
-                "stopPrice":    tp_price,
+                "stopPrice":    round(tp_price, 6),
                 "workingType":  "MARK_PRICE",
                 "reduceOnly":   "true",
             }, signed=True)
 
+        sl_res = {"success": True}
         if sl_price:
-            self._request("POST", "/openApi/swap/v2/trade/order", params={
+            sl_res = self._request("POST", "/openApi/swap/v2/trade/order", params={
                 "symbol":       sym,
                 "side":         close_side,
                 "positionSide": pos_side,
                 "type":         "STOP_MARKET",
                 "quantity":     qty,
-                "stopPrice":    sl_price,
+                "stopPrice":    round(sl_price, 6),
                 "workingType":  "MARK_PRICE",
                 "reduceOnly":   "true",
             }, signed=True)
+
+        # If SL (crucial safety) fails, we must attempt to close the naked position
+        if not sl_res["success"] or not tp_res["success"]:
+            err_msg = f"SL: {sl_res.get('error', 'OK')} TP: {tp_res.get('error', 'OK')}"
+            # Rollback: Close the position we just opened to prevent runaway loss
+            self.close_partial(symbol, pos_side, qty)
+            return {
+                "success": False,
+                "error": f"Order opened but TP/SL failed ({err_msg}). Auto-closed naked position for safety."
+            }
 
         return result
 
