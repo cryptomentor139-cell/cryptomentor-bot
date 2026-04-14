@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.1.53] — 2026-04-14 — Force Map Raw Bitunix Side Strings in Verification
+
+### 🛠️ Execution Engine & UI Fix
+
+#### 1) Force Map `BUY`/`SELL` to `LONG`/`SHORT` for Open Position Verification
+- **Issue:** Following the order execution fix in [2.1.52], Bitunix was occasionally omitting `positionSide` and falling back to returning raw `"SELL"` or `"BUY"` strings in their `/position` endpoint. This caused the UI success check to still fail because it expected `"SHORT"` or `"LONG"`.
+- **Fix:** 
+  - `fetch_positions` now explicitly maps any raw `"SELL"` string into `"SHORT"` and `"BUY"` string into `"LONG"` immediately at the connector level.
+  - Ensures the `"Exchange position side mismatch"` error mathematically cannot trigger when the underlying order genuinely succeeded.
+- **Files:**
+  - `Bismillah/app/bitunix_autotrade_client.py`
+
+
 ## [2.1.52] — 2026-04-14 — Fix Bitunix Hedge Mode PositionSide Mismatch During Verification
 
 ### 🛠️ Execution Engine & UI Fix

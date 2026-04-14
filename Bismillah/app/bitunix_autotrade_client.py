@@ -430,7 +430,7 @@ class BitunixAutoTradeClient:
                 positions.append({
                     'symbol': pos.get('symbol'),
                     # Bitunix hedge mode returns positionSide, but one-way might return side
-                    'side': (pos.get('positionSide') or pos.get('side', '')).upper(),
+                    'side': 'LONG' if (pos.get('positionSide') or pos.get('side', '')).upper() == 'BUY' else ('SHORT' if (pos.get('positionSide') or pos.get('side', '')).upper() == 'SELL' else (pos.get('positionSide') or pos.get('side', '')).upper()),
                     'size': qty,
                     'qty': qty,
                     # Required to update TP/SL or close via tradeSide=CLOSE
