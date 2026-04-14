@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.1.49] — 2026-04-14 — Fix 1-Click Direction Discrepancy & Enhanced Notifications
+
+### 🛠️ Execution & Monitoring Upgrade
+
+#### 1) Fixed 1-Click Direction Discrepancy
+- **Issue:** 1-click trades could occasionally open in the opposite direction if market momentum flipped after the signal was generated.
+- **Fix:** 
+  - 1-click execution now honors the explicit direction (LONG/SHORT) of the signal clicked on the dashboard.
+  - Re-derivation logic at execution time now respects the source signal's direction while optimizing entry, SL, and TP for the current market price.
+  - Added `direction` payload support to `/dashboard/signals/execute` and re-built frontend to propagate it.
+
+#### 2) Centralized and Enhanced Admin Notifications
+- **Optimization:** Consolidated all Telegram admin alerts into a unified `_notify_admins` utility across Scalping and Swing (AutoTrade) engines.
+- **New Feature:** Admins now receive real-time notifications for successful events:
+  - Trade Openings (Scalp & Swing)
+  - Take Profit (TP) hits
+  - Stop Loss (SL) triggers
+  - Sideways market scalps
+- **Throttling:** Implemented deduplication and throttling to prevent Telegram API rate limits during high volatility.
+
+#### 3) Production Sync
+- All fixes deployed to live VPS.
+- Frontend built and synced to Nginx root.
+
+- **Files:**
+  - `website-frontend/src/App.jsx`
+  - `website-backend/app/routes/signals.py`
+  - `scalping_engine.deploy.py`
+  - `Bismillah/app/autotrade_engine.py`
+
+
 ## [2.1.48] — 2026-04-14 — Admin Telegram Copy Localized To English
 
 ### 🛠️ Message Localization
