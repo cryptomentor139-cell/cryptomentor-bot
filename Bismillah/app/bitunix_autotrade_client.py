@@ -429,8 +429,8 @@ class BitunixAutoTradeClient:
                     margin = round((entry_price * qty) / lev, 4)
                 positions.append({
                     'symbol': pos.get('symbol'),
-                    # Bitunix returns LONG / SHORT (not BUY / SELL)
-                    'side': pos.get('side', '').upper(),
+                    # Bitunix hedge mode returns positionSide, but one-way might return side
+                    'side': (pos.get('positionSide') or pos.get('side', '')).upper(),
                     'size': qty,
                     'qty': qty,
                     # Required to update TP/SL or close via tradeSide=CLOSE

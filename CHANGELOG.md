@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.1.52] — 2026-04-14 — Fix Bitunix Hedge Mode PositionSide Mismatch During Verification
+
+### 🛠️ Execution Engine & UI Fix
+
+#### 1) Added `positionSide` Mapping for Open Position Verification
+- **Issue:** Following the order execution fix in [2.1.51], a side mismatch error ("Exchange position side mismatch after order") would still appear in the UI after a successful order. This was caused because the post-order verification fetched position metadata checking `pos.get('side')` which returned `SELL` / `BUY` in some modes, instead of our expected `SHORT` / `LONG`.
+- **Fix:** 
+  - `fetch_positions` now extracts and cascades the side parameter correctly: `pos.get('positionSide') or pos.get('side')`.
+  - Ensures Hedge Mode `positionSide` takes priority so frontend success verification compares apples to apples.
+- **Files:**
+  - `Bismillah/app/bitunix_autotrade_client.py`
+
+
 ## [2.1.51] — 2026-04-14 — Fix Bitunix Hedge Mode PositionSide Mismatch
 
 ### 🛠️ Execution Engine Fix
