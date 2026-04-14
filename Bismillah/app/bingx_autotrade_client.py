@@ -23,6 +23,9 @@ class BingXAutoTradeClient:
         self.api_secret = api_secret or os.getenv("BINGX_API_SECRET", "")
         if not self.api_key or not self.api_secret:
             print("⚠️ BingX API credentials not configured")
+        
+        # Cache for symbol metadata (precision, etc)
+        self._symbol_cache = {}
 
     # ------------------------------------------------------------------ #
     #  Signature                                                           #
@@ -108,6 +111,29 @@ class BingXAutoTradeClient:
             price = float(res["data"].get("price", 0))
             return {"success": True, "price": price, "symbol": sym}
         return res
+
+    def get_symbol_info(self, symbol: str) -> Dict:
+        """Fetch symbol metadata (precision, tick size, etc)."""
+        sym = self._normalize_symbol(symbol)
+        if sym in self._symbol_cache:
+            return self._symbol_cache[sym]
+
+        res = self._request("GET", "/openApi/swap/v2/quote/contracts")
+        if res["success"]:
+            for item in res["data"]:
+                cached_sym = item.get("symbol")
+                self._symbol_cache[cached_sym] = item
+            return self._symbol_cache.get(sym, {})
+        return {}
+
+    def round_price(self, symbol: str, price: float) -> float:
+        """Round price to the exchange's required precision."""
+        if not price: return 0.0
+        info = self.get_symbol_info(symbol)
+        precision = info.get("pricePrecision")
+        if precision is not None:
+            return round(float(price), int(precision))
+        return round(float(price), 6)  # Default safety fallback
 
     # ------------------------------------------------------------------ #
     #  Account                                                             #
@@ -237,7 +263,7 @@ class BingXAutoTradeClient:
                 "positionSide": pos_side,
                 "type":         "TAKE_PROFIT_MARKET",
                 "quantity":     qty,
-                "stopPrice":    round(tp_price, 6),
+                "stopPrice":    self.round_price(sym, tp_price),
                 "workingType":  "MARK_PRICE",
                 "reduceOnly":   "true",
             }, signed=True)
@@ -250,7 +276,7 @@ class BingXAutoTradeClient:
                 "positionSide": pos_side,
                 "type":         "STOP_MARKET",
                 "quantity":     qty,
-                "stopPrice":    round(sl_price, 6),
+                "stopPrice":    self.round_price(sym, sl_price),
                 "workingType":  "MARK_PRICE",
                 "reduceOnly":   "true",
             }, signed=True)

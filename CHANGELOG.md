@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.1.55] — 2026-04-14 — Execution Security Hardening Phase
+
+### 🛡️ Risk Management & Safety Layers
+
+#### 1) Exchange-Specific Tick-Size & Precision Handling
+- **Issue:** Exchange APIs (Bitunix/BingX) frequently reject Stop Loss/Take Profit orders if the price does not match exact price-step/tick-size requirements, leading to "naked" trades.
+- **Fix:** 
+  - Implemented `round_price` utility in `BingXAutoTradeClient` with dynamic `pricePrecision` fetching via `/openApi/swap/v2/quote/contracts`.
+  - Implemented `round_price` in `BitunixAutoTradeClient` using a localized price-precision map for core pairs to ensure immediate compliance.
+- **Files:** `bingx_autotrade_client.py`, `bitunix_autotrade_client.py`
+
+#### 2) Multi-Pass Background Safety Auditor
+- **Fix:** Added a reconciliation loop in `autotrade_engine.py` that continuously monitors all open positions. If a position is detected as "naked" (missing Stop Loss on exchange), the auditor automatically fetches the expected SL from the database and re-attaches it. 
+- **Notification:** Sends a 🛡️ **Safety Audit: Healed Naked Position** Telegram alert when a fix is applied.
+- **Files:** `autotrade_engine.py`
+
+#### 3) Absolute Position Risk Cap (Blast Radius Protection)
+- **Problem:** Small SL distances can result in extremely high position sizes (dangerous leverage), where an SL skip could wipe out >50% of an account.
+- **Fix:** Implemented a non-bypassable `MAX_POSITION_VALUE_PCT` cap set at **20% of account balance**. No single trade position value (notional) can exceed this limit, ensuring the "blast radius" of a failed trade is strictly bounded.
+- **Files:** `position_sizing.py`
+
+
 ## [2.1.54] — 2026-04-14 — Fix Bitunix & BingX Execution Safety for Naked Cross-Margin Orders
 
 ### 🚨 Critical Security Patch

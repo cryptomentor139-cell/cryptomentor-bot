@@ -72,6 +72,13 @@ class BitunixAutoTradeClient:
         proxy_raw = os.getenv('PROXY_URL', '')
         self.proxy_list = [p.strip() for p in proxy_raw.split(',') if p.strip()]
         self.penalized_proxies = {}
+        
+        # Local map for Bitunix price precisions (fallbacks)
+        self._price_precision_map = {
+            "BTCUSDT": 1, "ETHUSDT": 2, "SOLUSDT": 3, "ADAUSDT": 5,
+            "XRPUSDT": 4, "DOGEUSDT": 5, "DOTUSDT": 3, "MATICUSDT": 4,
+            "AVAXUSDT": 3, "XAUUSDT": 2, "CLUSDT": 2, "QQQUSDT": 2
+        }
 
     def _get_healthy_proxy(self) -> Optional[str]:
         if not self.proxy_list:
@@ -114,6 +121,12 @@ class BitunixAutoTradeClient:
     def _build_query_string(self, params: Dict) -> str:
         """Sort params by key ascending, concat as key+value (Bitunix format)."""
         return "".join(f"{k}{v}" for k, v in sorted(params.items()))
+
+    def round_price(self, symbol: str, price: float) -> float:
+        """Round price to the exchange's required precision."""
+        if not price: return 0.0
+        prec = self._price_precision_map.get(symbol, 4) # Default to 4
+        return round(float(price), prec)
 
     def _auth_headers(self, query_params: str = "", body: str = "") -> Dict:
         nonce = uuid.uuid4().hex  # 32-char random
@@ -554,8 +567,8 @@ class BitunixAutoTradeClient:
             "positionSide": "LONG" if side_u == "BUY" else "SHORT",
             "tradeSide": "OPEN",
             "orderType": "MARKET",
-            "tpPrice": str(round(tp_price, 6)),
-            "slPrice": str(round(sl_price, 6)),
+            "tpPrice": str(self.round_price(symbol, tp_price)),
+            "slPrice": str(self.round_price(symbol, sl_price)),
             "tpStopType": "MARK_PRICE",
             "slStopType": "MARK_PRICE",
         }
@@ -657,8 +670,8 @@ class BitunixAutoTradeClient:
         if not position_id:
             return {'success': False, 'error': f'Cannot resolve positionId for {symbol}'}
 
-        tp_str = str(round(tp_price, 6)) if tp_price > 0 else ""
-        sl_str = str(round(sl_price, 6)) if sl_price > 0 else ""
+        tp_str = str(self.round_price(symbol, tp_price)) if tp_price > 0 else ""
+        sl_str = str(self.round_price(symbol, sl_price)) if sl_price > 0 else ""
 
         body = {
             "symbol": symbol,

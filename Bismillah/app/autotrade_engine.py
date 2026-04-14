@@ -1530,6 +1530,49 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
             if open_positions:
                 had_open_position = True
+                
+                # ── Safety Audit: Ensure every open position has an SL ────────
+                # This protects against exchange transient failures or precision rejections
+                # that previously left trades naked in CROSS margin.
+                for pos in open_positions:
+                    pos_symbol = pos.get("symbol", "")
+                    pos_tp     = float(pos.get("tp_price", 0))
+                    pos_sl     = float(pos.get("sl_price", 0))
+                    
+                    if pos_sl == 0:
+                        # Naked position detected!
+                        logger.warning(f"[SafetyAudit:{user_id}] NAKED POSITION DETECTED for {pos_symbol}. No SL found on exchange.")
+                        
+                        # 1. Fetch source of truth from DB
+                        try:
+                            from app.trade_history import get_open_trades
+                            db_trades = get_open_trades(user_id)
+                            target_trade = next((t for t in db_trades if t["symbol"] == pos_symbol), None)
+                            
+                            if target_trade:
+                                db_sl = float(target_trade.get("sl_price", 0))
+                                db_tp = float(target_trade.get("tp_price", 0))
+                                if db_sl > 0:
+                                    logger.info(f"[SafetyAudit:{user_id}] Attempting to heal naked {pos_symbol} with DB SL {db_sl}")
+                                    heal_res = await asyncio.to_thread(client.set_position_tpsl, pos_symbol, db_tp, db_sl)
+                                    
+                                    if heal_res.get("success"):
+                                        logger.info(f"[SafetyAudit:{user_id}] Successfully healed naked {pos_symbol}")
+                                        await bot.send_message(
+                                            chat_id=notify_chat_id,
+                                            text=f"🛡️ <b>Safety Audit: Healed Naked Position</b>\n\nFixed missing Stop Loss for <code>{pos_symbol}</code> on exchange. Trade is now protected." ,
+                                            parse_mode='HTML'
+                                        )
+                                    else:
+                                        # Critical failure to attach stop
+                                        logger.error(f"[SafetyAudit:{user_id}] SHUTDOWN WARNING: Failed to heal {pos_symbol}: {heal_res.get('error')}")
+                                        await bot.send_message(
+                                            chat_id=notify_chat_id,
+                                            text=f"🚨 <b>CRITICAL SAFETY ALERT</b>\n\nPosition <code>{pos_symbol}</code> is <b>NAKED</b> (No Stop Loss) and execution healing failed! \n\nError: <code>{heal_res.get('error')}</code>\n\n<b>Please close manually immediately!</b>",
+                                            parse_mode='HTML'
+                                        )
+                        except Exception as _audit_err:
+                            logger.error(f"[SafetyAudit:{user_id}] Audit logic error: {_audit_err}")
 
             # ── StackMentor Monitor: Check TP2/TP3 hits ──────────────
             if cfg.get("use_stackmentor", True):
