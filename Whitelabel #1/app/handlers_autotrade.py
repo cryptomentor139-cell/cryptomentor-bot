@@ -125,8 +125,28 @@ def update_autotrade_status(telegram_id: int, status: str):
 
 async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    keys = get_user_api_keys(user_id)
-    session = get_autotrade_session(user_id)
+    reply_target = update.message or (update.callback_query.message if update.callback_query else None)
+    if reply_target is None:
+        return ConversationHandler.END
+    try:
+        keys = get_user_api_keys(user_id)
+        session = get_autotrade_session(user_id)
+    except Exception as e:
+        try:
+            if update.message:
+                await update.message.reply_text(
+                    "⚠️ AutoTrade is temporarily unavailable (database connection issue).\n"
+                    "Please try again in 10-30 seconds."
+                )
+            elif update.callback_query and update.callback_query.message:
+                await update.callback_query.message.reply_text(
+                    "⚠️ AutoTrade is temporarily unavailable (database connection issue).\n"
+                    "Please try again in 10-30 seconds."
+                )
+        except Exception:
+            pass
+        print(f"[cmd_autotrade] database/connectivity error for user {user_id}: {e}", flush=True)
+        return ConversationHandler.END
     is_active = session and session.get("status") == "active"
 
     if keys and is_active:
@@ -171,7 +191,7 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_margin   = session.get("margin_mode", "cross")
         margin_label     = "Cross ♾️" if current_margin == "cross" else "Isolated 🔒"
 
-        await update.message.reply_text(
+        await reply_target.reply_text(
             "🤖 <b>Auto Trade Dashboard</b>\n\n"
             "✅ Status: <b>ACTIVE</b>\n\n"
             f"💵 <b>Trading Capital:</b> {session['initial_deposit']} USDT\n"
@@ -192,7 +212,7 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔑 Change API Key",  callback_data="at_change_key")],
             [InlineKeyboardButton("❌ Delete API Key",  callback_data="at_delete_key")],
         ])
-        await update.message.reply_text(
+        await reply_target.reply_text(
             "🤖 <b>Auto Trade - Bitunix</b>\n\n"
             f"✅ API Key saved: <code>...{keys['key_hint']}</code>\n"
             "⏸ Status: Not active\n\nChoose an action:",
@@ -208,7 +228,7 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("✅ Already Joined & Registered, Continue Setup", callback_data="at_confirm_referral")],
             [InlineKeyboardButton("❓ Why Referral Required?", callback_data="at_why_referral")],
         ])
-        await update.message.reply_text(
+        await reply_target.reply_text(
             "🤖 <b>Auto Trade - Bitunix</b>\n\n"
             "Before starting, there are 2 important steps:\n\n"
             "👥 <b>Step 1 — Join Exclusive Group:</b>\n"

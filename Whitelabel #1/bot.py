@@ -22,6 +22,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def on_error(update, context):
+    logger.exception("Unhandled bot error", exc_info=context.error)
+    try:
+        if update and getattr(update, "effective_message", None):
+            await update.effective_message.reply_text(
+                "⚠️ Request failed due to temporary server issue. Please retry in 10-30 seconds."
+            )
+    except Exception:
+        pass
+
+
 async def main():
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN not set in .env")
@@ -34,6 +45,7 @@ async def main():
         sys.exit(1)
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_error_handler(on_error)
 
     # ── Add license middleware to block users when suspended ────
     from app.license_middleware import LicenseMiddleware
@@ -100,8 +112,13 @@ async def main():
 
     async with app:
         await app.start()
+        # Ensure polling mode works even if webhook was set previously.
+        await app.bot.delete_webhook(drop_pending_updates=False)
+        logger.info("Webhook cleared. Starting long polling...")
         # Schedule periodic license check loop
         asyncio.create_task(license_guard.periodic_check_loop())
+        if app.updater is None:
+            raise RuntimeError("Updater is not available; cannot start polling.")
         await app.updater.start_polling()
         # Run until interrupted
         await asyncio.Event().wait()

@@ -563,14 +563,18 @@ def _normalize_trade_levels(
     return sl, tp, rr
 
 
-def _build_signal(idx: int, pair: str, tier: str, sig_type: str, ticker: dict, generated_at: datetime = None) -> Dict[str, Any]:
+def _build_signal(idx: int, pair: str, tier: str, sig_type: str, ticker: dict, generated_at: datetime = None, forced_direction: str = None) -> Dict[str, Any]:
     last = float(ticker["lastPrice"])
     high = float(ticker["highPrice"])
     low = float(ticker["lowPrice"])
     change_pct = float(ticker["priceChangePercent"])
 
     # Direction: positive 24h momentum -> LONG, negative -> SHORT.
-    direction = "LONG" if change_pct >= 0 else "SHORT"
+    if forced_direction:
+        direction = forced_direction.upper()
+    else:
+        direction = "LONG" if change_pct >= 0 else "SHORT"
+
 
     # Confidence scales with absolute momentum, capped to a reasonable band.
     confidence = int(max(60, min(95, 65 + abs(change_pct) * 2.5)))
@@ -802,7 +806,7 @@ def _watchlist_entry(symbol: str):
     return None
 
 
-async def _live_signal(sym: str, sig_type: str, pair: str, tier: str) -> Dict[str, Any]:
+async def _live_signal(sym: str, sig_type: str, pair: str, tier: str, direction: str = None) -> Dict[str, Any]:
     """Re-derive a fresh signal for the symbol using current ticker data.
     Used at execution time so late entries follow the live SL distance
     instead of the values rendered in the user's stale UI."""
@@ -811,7 +815,7 @@ async def _live_signal(sym: str, sig_type: str, pair: str, tier: str) -> Dict[st
         r = await _http_client.get(_BINANCE_TICKER, params=params)
         r.raise_for_status()
         ticker = r.json()
-        return _build_signal(0, pair, tier, sig_type, ticker)
+        return _build_signal(0, pair, tier, sig_type, ticker, forced_direction=direction)
     except Exception as e:
         logger.error(f"[LiveSignal] Failed to fetch ticker for {sym}: {e}")
         # Fallback to a bare-minimum signal if ticker fails (price scale might be wrong but better than failing)
@@ -871,7 +875,7 @@ async def execute_signal(
         results = await asyncio.gather(
             bsvc.fetch_account(tg_id),
             bsvc.fetch_positions(tg_id),
-            _live_signal(sym, sig_type, pair, tier)
+            _live_signal(sym, sig_type, pair, tier, direction=str(payload.get("direction") or "").upper() or None)
         )
         acc, pos_res, live_sig = results
     except Exception as e:

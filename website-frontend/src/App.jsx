@@ -2818,6 +2818,7 @@ function SignalCard({ signal, userIsPremium, riskSettings, realPositions = [], b
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           symbol: signal.pair.replace('/', ''),
+          direction: signal.direction,
           generated_at: signal.generated_at,
           risk_override_pct: oneClickRiskPct,
         }),

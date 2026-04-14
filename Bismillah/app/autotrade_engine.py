@@ -20,6 +20,10 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 logger = logging.getLogger(__name__)
 
 WEB_DASHBOARD_URL = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
+ENGINE_ADMIN_NOTIFY_ENABLED = os.getenv("ENGINE_ADMIN_NOTIFY_ENABLED", "1").lower() not in ("0", "false", "no")
+
+from app.admin_daily_report import _get_admin_ids
+admin_ids = _get_admin_ids()
 
 def _dashboard_keyboard():
     """Returns an InlineKeyboardMarkup with a Dashboard button."""
@@ -49,6 +53,31 @@ def _trade_detail_keyboard(trade_id: Optional[int] = None, order_id: str = "", s
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🌐 View Trade Details", url=_build_trade_url(trade_id=trade_id, order_id=order_id, symbol=symbol))]
     ])
+
+
+async def _notify_admins(bot, user_id: int, title: str, message: str, dedupe_key: str = ""):
+    """Send trade alerts to admins (shared with scalping engine style)."""
+    if not ENGINE_ADMIN_NOTIFY_ENABLED or not admin_ids:
+        return
+
+    # In swing engine, we don't have a class instance to store throttle,
+    # but we can use a global if needed. For now, we'll just send without throttle
+    # since swing trades are much less frequent than scalping.
+    payload = (
+        f"{title}\n\n"
+        f"<b>User:</b> <code>{user_id}</code>\n"
+        f"{message}"
+    )
+    for aid in admin_ids:
+        try:
+            await bot.send_message(
+                chat_id=aid,
+                text=payload,
+                parse_mode='HTML',
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            pass
 
 
 def _fmt_price(v: float) -> str:
@@ -1479,15 +1508,24 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
                 except Exception as _he:
                     logger.warning(f"[Engine:{user_id}] trade_history close failed: {_he}")
+                notif_text = (
+                    f"🔔 <b>Position Closed</b> (TP/SL hit)\n\n"
+                    f"📊 Trades today: <b>{trades_today}</b>\n"
+                    f"🔄 Looking for next setup..."
+                )
                 await bot.send_message(
                     chat_id=notify_chat_id,
-                    text=(
-                        f"🔔 <b>Position Closed</b> (TP/SL hit)\n\n"
-                        f"📊 Trades today: <b>{trades_today}</b>\n"
-                        f"🔄 Looking for next setup..."
-                    ),
+                    text=notif_text,
                     parse_mode='HTML',
                     reply_markup=_dashboard_keyboard()
+                )
+
+                # Admin copy
+                await _notify_admins(
+                    bot=bot,
+                    user_id=user_id,
+                    title="💰 <b>Swing Trade Closed</b>",
+                    message=notif_text
                 )
 
             if open_positions:

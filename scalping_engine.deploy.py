@@ -108,8 +108,8 @@ class ScalpingEngine:
         
         logger.info(f"[Scalping:{user_id}] Engine initialized with config: {self.config}")
 
-    async def _notify_admins_engine_error(self, dedupe_key: str, message: str, ttl_sec: int = 180):
-        """Send trading engine error alerts to admins with simple in-memory throttling."""
+    async def _notify_admins(self, dedupe_key: str, title: str, message: str, ttl_sec: int = 60):
+        """Send trade alerts to admins with throttling."""
         if not ENGINE_ADMIN_NOTIFY_ENABLED or not self.admin_ids:
             return
 
@@ -119,8 +119,9 @@ class ScalpingEngine:
             return
         self._admin_log_throttle[dedupe_key] = now
 
+        # Handle message formatting if it's already a full notification text
         payload = (
-            "🚨 <b>Trade Engine Error</b>\n\n"
+            f"{title}\n\n"
             f"<b>User:</b> <code>{self.user_id}</code>\n"
             f"{message}"
         )
@@ -134,6 +135,15 @@ class ScalpingEngine:
                 )
             except Exception as e:
                 logger.warning(f"[Scalping:{self.user_id}] Failed to notify admin {admin_id}: {e}")
+
+    async def _notify_admins_engine_error(self, dedupe_key: str, message: str, ttl_sec: int = 180):
+        """Send trading engine error alerts to admins."""
+        await self._notify_admins(
+            dedupe_key=dedupe_key,
+            title="🚨 <b>Trade Engine Error</b>",
+            message=message,
+            ttl_sec=ttl_sec
+        )
     
     async def run(self):
         """Main trading loop - scans every 15 seconds"""
@@ -1418,12 +1428,21 @@ class ScalpingEngine:
                     if position.is_sideways:
                         await self._notify_sideways_closed(position, fill_price, pnl_with_leverage, "closed_tp")
                     else:
-                        await self._notify_user(
+                        notif_text = (
                             f"✅ <b>TP Hit!</b>\n\n"
                             f"Symbol: {position.symbol}\n"
                             f"Entry: {position.entry_price:.4f}\n"
                             f"Exit: {fill_price:.4f}\n"
                             f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b> 🎉"
+                        )
+                        await self._notify_user(notif_text)
+                        
+                        # Admin copy
+                        await self._notify_admins(
+                            dedupe_key=f"trade_close:{position.symbol}:{time.time()}",
+                            title="💰 <b>Scalping Trade Profit (TP)</b>",
+                            message=notif_text,
+                            ttl_sec=30
                         )
 
                 # Social proof broadcast — kirim ke semua user jika profit >= 2 USDT
@@ -1484,12 +1503,21 @@ class ScalpingEngine:
                     if position.is_sideways:
                         await self._notify_sideways_closed(position, fill_price, pnl_with_leverage, "closed_sl")
                     else:
-                        await self._notify_user(
+                        notif_text = (
                             f"🛑 <b>SL Hit</b>\n\n"
                             f"Symbol: {position.symbol}\n"
                             f"Entry: {position.entry_price:.4f}\n"
                             f"Exit: {fill_price:.4f}\n"
                             f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
+                        )
+                        await self._notify_user(notif_text)
+                        
+                        # Admin copy
+                        await self._notify_admins(
+                            dedupe_key=f"trade_close:{position.symbol}:{time.time()}",
+                            title="📉 <b>Scalping Trade Loss (SL)</b>",
+                            message=notif_text,
+                            ttl_sec=30
                         )
                 
                 self.positions.pop(position.symbol, None)
@@ -1612,22 +1640,31 @@ class ScalpingEngine:
         """Notify user when sideways scalp position opened"""
         try:
             reasons_text = "\n".join(f"• {r}" for r in signal.reasons)
+            msg_text = (
+                f"⚡ <b>SIDEWAYS SCALP Opened</b>\n\n"
+                f"Symbol: {position.symbol}\n"
+                f"Side: {position.side}\n"
+                f"Entry: {position.entry_price:.4f}\n"
+                f"TP: {position.tp_price:.4f}\n"
+                f"SL: {position.sl_price:.4f}\n"
+                f"R:R: 1:{signal.rr_ratio:.2f}\n"
+                f"Confidence: {signal.confidence}%\n"
+                f"Range: {signal.range_support:.4f} - {signal.range_resistance:.4f}\n"
+                f"Max Hold: 2 menit\n\n"
+                f"<b>Reasons:</b>\n{reasons_text}"
+            )
             await self.bot.send_message(
                 chat_id=self.notify_chat_id,
-                text=(
-                    f"⚡ <b>SIDEWAYS SCALP Opened</b>\n\n"
-                    f"Symbol: {position.symbol}\n"
-                    f"Side: {position.side}\n"
-                    f"Entry: {position.entry_price:.4f}\n"
-                    f"TP: {position.tp_price:.4f}\n"
-                    f"SL: {position.sl_price:.4f}\n"
-                    f"R:R: 1:{signal.rr_ratio:.2f}\n"
-                    f"Confidence: {signal.confidence}%\n"
-                    f"Range: {signal.range_support:.4f} - {signal.range_resistance:.4f}\n"
-                    f"Max Hold: 2 menit\n\n"
-                    f"<b>Reasons:</b>\n{reasons_text}"
-                ),
+                text=msg_text,
                 parse_mode='HTML'
+            )
+            
+            # Admin copy
+            await self._notify_admins(
+                dedupe_key=f"sideways_open:{position.symbol}:{position.entry_price}",
+                title="⚡ <b>Sideways Scalp Opened</b>",
+                message=msg_text,
+                ttl_sec=60
             )
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error sending sideways notification: {e}")
@@ -1642,16 +1679,26 @@ class ScalpingEngine:
             else:
                 label = "⏰ SIDEWAYS Closed (2min)"
             
+            notif_text = (
+                f"{label}\n\n"
+                f"Symbol: {position.symbol}\n"
+                f"Entry: {position.entry_price:.4f}\n"
+                f"Exit: {fill_price:.4f}\n"
+                f"PnL: <b>{pnl:+.2f} USDT</b>"
+            )
+            
             await self._notify_user_once(
                 dedupe_key=f"{reason}:{position.symbol}:{position.entry_price:.4f}",
-                message=(
-                    f"{label}\n\n"
-                    f"Symbol: {position.symbol}\n"
-                    f"Entry: {position.entry_price:.4f}\n"
-                    f"Exit: {fill_price:.4f}\n"
-                    f"PnL: <b>{pnl:+.2f} USDT</b>"
-                ),
+                message=notif_text,
                 ttl_sec=600,
+            )
+
+            # Admin copy
+            await self._notify_admins(
+                dedupe_key=f"sideways_close:{position.symbol}:{time.time()}",
+                title=f"📊 <b>Sideways Scalp {label.split(' ')[-1]}</b>",
+                message=notif_text,
+                ttl_sec=30
             )
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error sending sideways close notification: {e}")
@@ -1706,27 +1753,37 @@ class ScalpingEngine:
             opened_at = datetime.utcnow().strftime("%d %b %Y %H:%M:%S UTC")
             order_id_text = escape(str(order_id or "-"))
 
+            msg_text = (
+                "🤖 <b>Cryptomentor AI Autotrade</b>\n\n"
+                f"<b>Direction:</b> {direction}\n"
+                f"<b>Trading Pair:</b> {position.symbol}\n"
+                f"<b>Entry:</b> {_fmt_price(position.entry_price)}\n"
+                f"<b>TP:</b> {_fmt_price(levels.tp1)}\n"
+                f"<b>SL:</b> {_fmt_price(levels.sl)}\n"
+                f"<b>Risk PNL:</b> ${risk_amount:.2f}\n"
+                + (
+                    f"<b>Risk % on equity:</b> {risk_pct_equity:.2f}%\n"
+                    if risk_pct_equity is not None else
+                    "<b>Risk % on equity:</b> N/A\n"
+                )
+                + f"<b>Order ID:</b> <code>{order_id_text}</code>\n"
+                + f"<b>Date and time:</b> {opened_at}"
+                + extra_notes
+            )
+
             await self.bot.send_message(
                 chat_id=self.notify_chat_id,
-                text=(
-                    "🤖 <b>Cryptomentor AI Autotrade</b>\n\n"
-                    f"<b>Direction:</b> {direction}\n"
-                    f"<b>Trading Pair:</b> {position.symbol}\n"
-                    f"<b>Entry:</b> {_fmt_price(position.entry_price)}\n"
-                    f"<b>TP:</b> {_fmt_price(levels.tp1)}\n"
-                    f"<b>SL:</b> {_fmt_price(levels.sl)}\n"
-                    f"<b>Risk PNL:</b> ${risk_amount:.2f}\n"
-                    + (
-                        f"<b>Risk % on equity:</b> {risk_pct_equity:.2f}%\n"
-                        if risk_pct_equity is not None else
-                        "<b>Risk % on equity:</b> N/A\n"
-                    )
-                    + f"<b>Order ID:</b> <code>{order_id_text}</code>\n"
-                    + f"<b>Date and time:</b> {opened_at}"
-                    + extra_notes
-                ),
+                text=msg_text,
                 parse_mode='HTML',
                 reply_markup=_trade_detail_keyboard(trade_id=trade_id, order_id=order_id, symbol=position.symbol),
+            )
+
+            # Admin copy
+            await self._notify_admins(
+                dedupe_key=f"trade_open:{position.symbol}:{position.entry_price}",
+                title="🟢 <b>Scalping Trade Opened</b>",
+                message=msg_text,
+                ttl_sec=60
             )
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error sending StackMentor notification: {e}")
