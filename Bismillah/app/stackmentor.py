@@ -7,6 +7,7 @@ The entire position is closed at TP (no staged 3-tier exits).
 
 import asyncio
 import logging
+import time
 from typing import Dict, Optional, Tuple
 from datetime import datetime
 
@@ -267,8 +268,16 @@ async def handle_tp1_hit(bot, user_id: int, client, notify_chat_id: int,
     # 5. Notify user
     profit_tp1 = abs(mark_price - entry) * qty_tp1
     profit_pct = abs(mark_price - entry) / entry * 100 * pos_data['leverage']
-    
+
     remove_stackmentor_position(user_id, symbol)
+
+    # Confirm position closed with coordinator
+    try:
+        from app.symbol_coordinator import get_coordinator
+        coordinator = get_coordinator()
+        await coordinator.confirm_closed(user_id, symbol, time.time())
+    except Exception as e:
+        logger.warning(f"[StackMentor:{user_id}] Coordinator confirm_closed failed: {e}")
 
     await bot.send_message(
         chat_id=notify_chat_id,
