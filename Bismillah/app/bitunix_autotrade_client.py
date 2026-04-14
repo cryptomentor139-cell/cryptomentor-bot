@@ -569,7 +569,24 @@ class BitunixAutoTradeClient:
                 fallback_body.pop('positionSide', None)
                 result = self._request('POST', '/api/v1/futures/trade/place_order',
                                        body=fallback_body, signed=True, priority=True)
-        if result['success']:
+        if result.get('success'):
+            # Force verification and explicit application
+            import time
+            time.sleep(0.5) # Wait for position to register on Bitunix
+            
+            tpsl_res = self.set_position_tpsl(symbol, tp_price, sl_price)
+            if not tpsl_res.get('success'):
+                # Rollback! Naked trade detected.
+                close_side = "SELL" if side_u == "BUY" else "BUY"
+                pos_side = "LONG" if side_u == "BUY" else "SHORT"
+                # Rollback: Close the position we just opened to prevent runaway loss
+                self.close_partial(symbol, close_side, qty, pos_side)
+                
+                return {
+                    'success': False,
+                    'error': f'Order opened but SL/TP failed to attach ({tpsl_res.get("error", "Unknown ERROR")}). Auto-closed naked position for safety.'
+                }
+
             return {
                 'success': True,
                 'order_id': result['data'].get('orderId'),
