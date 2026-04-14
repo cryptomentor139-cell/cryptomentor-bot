@@ -1437,6 +1437,18 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                             close_reason=close_status,
                             loss_reasoning=loss_reason,
                         )
+
+                        # Confirm position closed with coordinator
+                        try:
+                            coordinator = _get_coordinator()
+                            await coordinator.confirm_closed(
+                                user_id=user_id,
+                                symbol=db_trade.get("symbol", ""),
+                                now_ts=time.time()
+                            )
+                        except Exception as _cc_err:
+                            logger.warning(f"[Engine:{user_id}] confirm_closed failed: {_cc_err}")
+
                         daily_pnl_usdt += pnl_usdt
 
                         # Broadcast profit besar ke semua user (social proof)
@@ -1670,6 +1682,18 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                                         close_reason="closed_flip",
                                         loss_reasoning=loss_r,
                                     )
+
+                                    # Confirm old position closed with coordinator
+                                    try:
+                                        coordinator = _get_coordinator()
+                                        await coordinator.confirm_closed(
+                                            user_id=user_id,
+                                            symbol=pos_symbol,
+                                            now_ts=time.time()
+                                        )
+                                    except Exception as _cc_err:
+                                        logger.warning(f"[Engine:{user_id}] confirm_closed (flip) failed: {_cc_err}")
+
                             # Simpan trade baru hasil flip
                             save_trade_open(
                                 telegram_id=user_id,
