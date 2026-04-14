@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.1.51] — 2026-04-14 — Fix Bitunix Hedge Mode PositionSide Mismatch
+
+### 🛠️ Execution Engine Fix
+
+#### 1) Explicit `positionSide` Mapping for Hedge Mode
+- **Issue:** Bitunix API in Hedge Mode requires explicit `positionSide`. During some orders (especially close/reduce-only operations via 1-click execution or scaling out), omitting `positionSide` could result in "Exchange position side mismatch after order" errors (`expected=SHORT seen=SELL`).
+- **Fix:** 
+  - `place_order` and `place_order_with_tpsl` in `bitunix_autotrade_client.py` now explicitly infer and map `positionSide`.
+  - Added a compatibility fallback: if an account/endpoint rejects the explicit `positionSide` payload (depending on their mode/settings), the client catches the `positionSide` error and automatically retries without the parameter.
+- **Files:**
+  - `Bismillah/app/bitunix_autotrade_client.py`
+
+
 ## [2.1.50] — 2026-04-14 — Fix Bitunix Side Mapping Mismatch (SHORT Opening LONG)
 
 ### 🛠️ 1-Click/Execution Safety Fix
