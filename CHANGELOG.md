@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.1.50] — 2026-04-14 — Fix Bitunix Side Mapping Mismatch (SHORT Opening LONG)
+
+### 🛠️ 1-Click/Execution Safety Fix
+
+#### 1) Explicit `positionSide` on Bitunix open orders
+- **Issue:** Some accounts/modes could interpret `BUY/SELL` ambiguously, causing direction mismatch.
+- **Fix:**
+  - Added explicit `positionSide` on open orders:
+    - `BUY -> LONG`
+    - `SELL -> SHORT`
+  - Applied to both regular market orders and market-with-TP/SL orders.
+  - Added compatibility fallback retry without `positionSide` only when exchange rejects that field.
+
+#### 2) Post-order side verification in backend
+- Added post-execution live position check in `/dashboard/signals/execute`.
+- If exchange side does not match expected side, backend logs an error and returns `execution_warning`.
+
+#### 3) Frontend warning surface for mismatch
+- Signal card now surfaces backend `execution_warning` after placement so mismatches are visible immediately.
+
+- **Files:**
+  - `Bismillah/app/bitunix_autotrade_client.py`
+  - `website-backend/app/routes/signals.py`
+  - `website-frontend/src/App.jsx`
+
 ## [2.1.49] — 2026-04-14 — Fix 1-Click Direction Discrepancy & Enhanced Notifications
 
 ### 🛠️ Execution & Monitoring Upgrade

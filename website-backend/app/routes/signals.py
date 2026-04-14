@@ -839,6 +839,8 @@ async def execute_signal(
     """
     symbol = (payload.get("symbol") or "").upper().replace("/", "")
     generated_at_raw = payload.get("generated_at")
+    req_direction = payload.get("direction")
+    logger.info(f"[1Click:{tg_id}] execute payload: symbol={symbol} direction={req_direction!r}")
 
     wl = _watchlist_entry(symbol)
     if not wl:
@@ -1056,6 +1058,10 @@ async def execute_signal(
 
     qty = float(sizing["qty"])
 
+    logger.info(
+        f"[1Click:{tg_id}] PLACING ORDER: symbol={sym} direction={direction} side={side} "
+        f"qty={qty} entry={entry_price:.2f} sl={sl_price:.2f} tp={tp_price:.2f} leverage={leverage}x"
+    )
     try:
         result = await bsvc.place_market_with_tpsl(
             telegram_id=tg_id,
@@ -1075,9 +1081,29 @@ async def execute_signal(
             detail=f"Order rejected by exchange: {result.get('message') or result}",
         )
 
+    execution_warning = None
+    try:
+        post_pos = await bsvc.fetch_positions(tg_id)
+        expected_side = "LONG" if side == "BUY" else "SHORT"
+        if post_pos.get("success"):
+            symbol_positions = [
+                p for p in (post_pos.get("positions") or [])
+                if str(p.get("symbol") or "").upper() == sym.upper()
+            ]
+            matched = any(str(p.get("side") or "").upper() == expected_side for p in symbol_positions)
+            if symbol_positions and not matched:
+                seen_sides = sorted({str(p.get("side") or "").upper() for p in symbol_positions})
+                execution_warning = (
+                    f"Exchange position side mismatch after order. expected={expected_side} seen={','.join(seen_sides)}"
+                )
+                logger.error(f"[1Click:{tg_id}] {execution_warning} symbol={sym}")
+    except Exception as _verify_err:
+        logger.warning(f"[1Click:{tg_id}] post-order side verification skipped: {_verify_err}")
+
     return {
         "success": True,
         "order": result,
+        "execution_warning": execution_warning,
         "account": {
             "balance": round(balance, 2),  # Free balance
             "unrealized_pnl": round(unrealized_pnl, 2),  # Open position P&L

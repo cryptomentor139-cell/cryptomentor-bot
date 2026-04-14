@@ -2825,6 +2825,9 @@ function SignalCard({ signal, userIsPremium, riskSettings, realPositions = [], b
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+      if (data.execution_warning) {
+        setPlaceError(data.execution_warning);
+      }
       setIsPlaced(true);
     } catch (e) {
       setPlaceError(e.message || 'Failed to place order');

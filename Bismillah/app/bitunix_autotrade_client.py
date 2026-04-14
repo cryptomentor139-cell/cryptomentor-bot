@@ -452,7 +452,7 @@ class BitunixAutoTradeClient:
 
     def place_order(self, symbol: str, side: str, qty: float,
                     order_type: str = 'market', price: float = None,
-                    reduce_only: bool = False) -> Dict:
+                    reduce_only: bool = False, position_side: str = None) -> Dict:
         """
         Place a futures order.
         side: BUY / SELL
@@ -460,15 +460,21 @@ class BitunixAutoTradeClient:
         """
         qty_f = float(qty)
         qty_str = str(int(qty_f)) if int(qty_f) == qty_f else str(qty)
+        side_u = side.upper()
+        # Explicit positionSide removes hedge-mode ambiguity.
+        inferred_position_side = position_side.upper() if position_side else (
+            ("LONG" if side_u == "SELL" else "SHORT") if reduce_only else ("LONG" if side_u == "BUY" else "SHORT")
+        )
         body = {
             'symbol': symbol,
             'qty': qty_str,
-            'side': side.upper(),
+            'side': side_u,
             # tradeSide=CLOSE per Bitunix doc requires positionId. Use
             # reduceOnly=true with tradeSide=OPEN instead — semantically
             # equivalent and avoids the lookup.
             'tradeSide': 'OPEN',
             'orderType': order_type.upper(),
+            'positionSide': inferred_position_side,
         }
         if reduce_only:
             body['reduceOnly'] = True
@@ -477,9 +483,17 @@ class BitunixAutoTradeClient:
 
         result = self._request('POST', '/api/v1/futures/trade/place_order',
                                body=body, signed=True, priority=True)
+        # Compatibility fallback for accounts/endpoints that reject positionSide.
+        if not result.get('success'):
+            err = str(result.get('error', '')).lower()
+            if 'positionside' in err:
+                fallback_body = dict(body)
+                fallback_body.pop('positionSide', None)
+                result = self._request('POST', '/api/v1/futures/trade/place_order',
+                                       body=fallback_body, signed=True, priority=True)
         if result['success']:
             return {'success': True, 'order_id': result['data'].get('orderId'),
-                    'message': f'{side.upper()} {order_type} order placed'}
+                    'message': f'{side_u} {order_type} order placed'}
         return result
 
     # ------------------------------------------------------------------ #
@@ -532,10 +546,12 @@ class BitunixAutoTradeClient:
         """Place market order with TP and SL attached."""
         qty_f = float(qty)
         qty_str = str(int(qty_f)) if int(qty_f) == qty_f else str(qty)
+        side_u = side.upper()
         body = {
             "symbol": symbol,
             "qty": qty_str,
-            "side": side.upper(),          # BUY / SELL
+            "side": side_u,                # BUY / SELL
+            "positionSide": "LONG" if side_u == "BUY" else "SHORT",
             "tradeSide": "OPEN",
             "orderType": "MARKET",
             "tpPrice": str(round(tp_price, 6)),
@@ -545,12 +561,20 @@ class BitunixAutoTradeClient:
         }
         result = self._request('POST', '/api/v1/futures/trade/place_order',
                                body=body, signed=True, priority=True)
+        # Compatibility fallback for accounts/endpoints that reject positionSide.
+        if not result.get('success'):
+            err = str(result.get('error', '')).lower()
+            if 'positionside' in err:
+                fallback_body = dict(body)
+                fallback_body.pop('positionSide', None)
+                result = self._request('POST', '/api/v1/futures/trade/place_order',
+                                       body=fallback_body, signed=True, priority=True)
         if result['success']:
             return {
                 'success': True,
                 'order_id': result['data'].get('orderId'),
                 'symbol': symbol,
-                'side': side,
+                'side': side_u,
                 'qty': qty,
                 'tp': tp_price,
                 'sl': sl_price,
