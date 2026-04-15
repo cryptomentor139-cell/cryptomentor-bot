@@ -1,86 +1,100 @@
 #!/bin/bash
-# Deploy script untuk dijalankan di VPS
-# Usage: ./deploy_frontend.sh [source_dir]
+# Atomic frontend deploy for VPS.
+# Usage: ./deploy_frontend.sh [source_dir] [site_url]
 
-set -e  # Exit on error
+set -euo pipefail
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 SOURCE_DIR="${1:-.}"
-DEST_DIR="/root/cryptomentor-bot/website-frontend/dist"
-BACKUP_DIR="/root/cryptomentor-bot/website-frontend/dist.backup.$(date +%Y%m%d_%H%M%S)"
+SITE_URL="${2:-https://cryptomentor.id}"
+APP_ROOT="/root/cryptomentor-bot/website-frontend"
+RELEASES_DIR="$APP_ROOT/releases"
+ARCHIVE_DIR="$APP_ROOT/releases_archive"
+CURRENT_LINK="$APP_ROOT/dist"
+KEEP_RELEASES="${KEEP_RELEASES:-5}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERIFY_SCRIPT="$SCRIPT_DIR/tools/verify_frontend_release.sh"
 
-echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}🚀 DEPLOY FRONTEND CRYPTOMENTOR${NC}"
-echo -e "${BLUE}============================================${NC}"
-echo ""
-
-# Check if source exists
 if [ ! -d "$SOURCE_DIR/dist" ]; then
-    echo -e "${RED}✗ Directory $SOURCE_DIR/dist tidak ditemukan!${NC}"
-    exit 1
+  echo -e "${RED}✗ Missing dist directory: $SOURCE_DIR/dist${NC}"
+  exit 1
 fi
 
-echo -e "${YELLOW}📁 Source: $SOURCE_DIR/dist${NC}"
-echo -e "${YELLOW}📁 Destination: $DEST_DIR${NC}"
-echo ""
-
-# Step 1: Backup existing
-if [ -d "$DEST_DIR" ]; then
-    echo -e "${YELLOW}💾 Backup existing dist...${NC}"
-    mkdir -p /root/cryptomentor-bot/website-frontend
-    cp -r "$DEST_DIR" "$BACKUP_DIR"
-    echo -e "${GREEN}✓ Backup: $BACKUP_DIR${NC}"
-    echo ""
-fi
-
-# Step 2: Deploy files
-echo -e "${YELLOW}📤 Deploying files...${NC}"
-mkdir -p "$DEST_DIR"
-
-# Copy all files with progress
-rsync -av --delete "$SOURCE_DIR/dist/" "$DEST_DIR/" 2>&1 | grep -E "(^building|^deleting|^sent|files/s)" || true
-
-FILE_COUNT=$(find "$DEST_DIR" -type f | wc -l)
-echo -e "${GREEN}✓ Deployed $FILE_COUNT files${NC}"
-echo ""
-
-# Step 3: Verify
-echo -e "${YELLOW}✅ Verifying...${NC}"
-if [ -f "$DEST_DIR/index.html" ]; then
-    echo -e "${GREEN}✓ index.html found${NC}"
-    ls -lah "$DEST_DIR/index.html"
+BUILD_TAG="$(date +%Y%m%d_%H%M%S)"
+if command -v git >/dev/null 2>&1; then
+  GIT_SHA="$(git -C "$SOURCE_DIR" rev-parse --short HEAD 2>/dev/null || true)"
 else
-    echo -e "${RED}✗ index.html NOT found!${NC}"
-    exit 1
+  GIT_SHA=""
 fi
+RELEASE_ID="${BUILD_TAG}${GIT_SHA:+_${GIT_SHA}}"
+STAGE_DIR="$RELEASES_DIR/$RELEASE_ID"
 
+echo -e "${BLUE}============================================${NC}"
+echo -e "${BLUE}Atomic Frontend Deploy${NC}"
+echo -e "${BLUE}============================================${NC}"
+echo -e "${YELLOW}Source: $SOURCE_DIR/dist${NC}"
+echo -e "${YELLOW}Release: $STAGE_DIR${NC}"
 echo ""
 
-# Step 4: Reload nginx
-echo -e "${YELLOW}🔄 Reloading nginx...${NC}"
+mkdir -p "$RELEASES_DIR" "$ARCHIVE_DIR"
+
+echo -e "${YELLOW}1) Stage release artifacts...${NC}"
+mkdir -p "$STAGE_DIR"
+rsync -a --delete "$SOURCE_DIR/dist/" "$STAGE_DIR/"
+
+if [ ! -f "$STAGE_DIR/index.html" ]; then
+  echo -e "${RED}✗ index.html missing in staged release${NC}"
+  exit 1
+fi
+if [ ! -f "$STAGE_DIR/release-meta.json" ]; then
+  echo -e "${RED}✗ release-meta.json missing in staged release${NC}"
+  exit 1
+fi
+
+echo -e "${YELLOW}2) Promote release atomically...${NC}"
+if [ -e "$CURRENT_LINK" ] && [ ! -L "$CURRENT_LINK" ]; then
+  LEGACY_BACKUP="$ARCHIVE_DIR/dist_legacy_${BUILD_TAG}"
+  mv "$CURRENT_LINK" "$LEGACY_BACKUP"
+  echo -e "${YELLOW}  archived legacy dist -> $LEGACY_BACKUP${NC}"
+fi
+ln -sfn "$STAGE_DIR" "$CURRENT_LINK"
+
+echo -e "${YELLOW}3) Archive stale releases...${NC}"
+mapfile -t release_paths < <(find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r)
+if [ "${#release_paths[@]}" -gt "$KEEP_RELEASES" ]; then
+  for old_release in "${release_paths[@]:$KEEP_RELEASES}"; do
+    target="$ARCHIVE_DIR/$(basename "$old_release")"
+    mv "$old_release" "$target"
+    echo -e "${YELLOW}  archived stale release: $target${NC}"
+  done
+fi
+
+echo -e "${YELLOW}4) Reload nginx...${NC}"
 if sudo systemctl reload nginx; then
-    echo -e "${GREEN}✓ Nginx reloaded${NC}"
+  echo -e "${GREEN}✓ nginx reload ok${NC}"
 else
-    echo -e "${YELLOW}⚠ Nginx reload failed (check status)${NC}"
+  echo -e "${RED}✗ nginx reload failed${NC}"
+  exit 1
 fi
 
-echo ""
+echo -e "${YELLOW}5) Post-deploy verification...${NC}"
+if [ -x "$VERIFY_SCRIPT" ]; then
+  "$VERIFY_SCRIPT" "$CURRENT_LINK" "$SITE_URL"
+else
+  echo -e "${YELLOW}⚠ verify script missing/executable: $VERIFY_SCRIPT${NC}"
+fi
 
-# Step 5: Clear browser cache (nginx headers)
-echo -e "${YELLOW}🗑 Cache control headers set${NC}"
-grep -i "cache-control" /etc/nginx/sites-available/www-cryptomentor.conf 2>/dev/null || echo "  (Check nginx config)"
-
+FILE_COUNT="$(find "$CURRENT_LINK" -type f | wc -l | tr -d ' ')"
 echo ""
 echo -e "${BLUE}============================================${NC}"
-echo -e "${GREEN}✅ DEPLOY SELESAI!${NC}"
+echo -e "${GREEN}✓ Deploy completed${NC}"
+echo -e "${BLUE}URL: $SITE_URL${NC}"
+echo -e "${BLUE}Release: $RELEASE_ID${NC}"
+echo -e "${BLUE}Files: $FILE_COUNT${NC}"
+echo -e "${BLUE}Current symlink: $CURRENT_LINK -> $(readlink -f "$CURRENT_LINK")${NC}"
 echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}🌐 URL: https://cryptomentor.id${NC}"
-echo -e "${BLUE}📊 Files: $FILE_COUNT${NC}"
-echo -e "${BLUE}💾 Backup: $BACKUP_DIR${NC}"
-echo ""

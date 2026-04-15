@@ -32,6 +32,7 @@ async def telegram_login(data: TelegramAuthData):
         username=data.username or "",
         first_name=data.first_name,
         last_name=data.last_name,
+        referred_by=data.referred_by,
     )
 
     # 4. Buat JWT

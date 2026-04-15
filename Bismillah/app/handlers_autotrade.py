@@ -277,6 +277,60 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ------------------------------------------------------------------ #
+#  Reminder CTA callbacks (for unregistered broadcast users)          #
+# ------------------------------------------------------------------ #
+
+async def callback_start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle reminder button: "Register AutoTrade Now".
+    This must work for users with no prior registration/session.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    user = query.from_user
+    dash_url = generate_dashboard_url(user.id, user.username, user.first_name)
+
+    await query.message.reply_text(
+        "🚀 <b>Start AutoTrade Setup</b>\n\n"
+        "Follow these quick steps:\n"
+        "1️⃣ Register on Bitunix\n"
+        "2️⃣ Submit your UID\n"
+        "3️⃣ Open dashboard to continue setup\n\n"
+        "Choose an option below:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🌐 Dashboard", url=dash_url)],
+            [InlineKeyboardButton("🆔 Submit UID", callback_data="submit_uid_bot")],
+            [InlineKeyboardButton("🔗 Bitunix", url=BITUNIX_REFERRAL_URL)],
+        ]),
+    )
+
+
+async def callback_learn_more(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle reminder button: "Learn More".
+    Sends educational summary + direct CTA.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    await query.message.reply_text(
+        "📊 <b>How AutoTrade Works</b>\n\n"
+        "• Bot scans market continuously\n"
+        "• Opens trades only on high-confidence setups\n"
+        "• Manages SL/TP automatically\n"
+        "• Sends trade notifications in real time\n\n"
+        "🔒 Funds stay in your exchange account. API key should be set to <b>Trade only</b>.\n\n"
+        "When you're ready, tap <b>Register AutoTrade Now</b>.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🤖 Register AutoTrade Now", callback_data="at_start_onboarding")],
+        ]),
+    )
+
+
+# ------------------------------------------------------------------ #
 #  UID Submission Flow (Manual via Bot)                               #
 # ------------------------------------------------------------------ #
 
@@ -1506,6 +1560,8 @@ def register_autotrade_handlers(application):
         per_user=True, per_chat=True, allow_reentry=True,
     )
     application.add_handler(conv)
+    application.add_handler(CallbackQueryHandler(callback_start_onboarding, pattern="^at_start_onboarding$"))
+    application.add_handler(CallbackQueryHandler(callback_learn_more, pattern="^at_learn_more$"))
     
 
     # Ad-hoc UID approval callbacks for admins

@@ -16,7 +16,7 @@ import math
 logger = logging.getLogger(__name__)
 
 SYMBOL_MAX_LEVERAGE = {
-    "BTCUSDT": 125,
+    "BTCUSDT": 200,
     "ETHUSDT": 100,
     "SOLUSDT": 75,
     "DOGEUSDT": 75,
@@ -36,30 +36,15 @@ SYMBOL_MAX_LEVERAGE = {
 
 def calculate_max_safe_leverage(entry_price: float, sl_price: float, symbol: str = "") -> int:
     """
-    Calculate maximum safe leverage to prevent early liquidation before Stop Loss is hit.
-    Leaves a 15% safety buffer for maintenance margin.
+    Legacy function name kept for compatibility.
+    Current behavior: return max leverage allowed for the trading pair.
     """
     try:
-        if entry_price <= 0 or sl_price <= 0 or entry_price == sl_price:
-            return 10  # Fallback baseline
-            
-        sl_distance_pct = abs(entry_price - sl_price) / entry_price
-        
-        # Determine exchange max for symbol
-        exchange_max = SYMBOL_MAX_LEVERAGE.get(symbol.upper(), 125) if symbol else 125
-        
-        # Prevent division by zero or extremely tight SLs
-        if sl_distance_pct < 0.0001:
-            return exchange_max
-            
-        # Formula: L = 1 / (SL_dist * 1.15)
-        # 1.15 multiplier provides 15% safety buffer against maintenance margin
-        calculated_leverage = int(1.0 / (sl_distance_pct * 1.15))
-        
-        return max(1, min(calculated_leverage, exchange_max))
+        exchange_max = SYMBOL_MAX_LEVERAGE.get(symbol.upper(), 200) if symbol else 200
+        return max(1, int(exchange_max))
     except Exception as e:
-        logger.error(f"[PositionSizing] Error calculating max safe leverage: {e}")
-        return 10
+        logger.error(f"[PositionSizing] Error calculating max pair leverage: {e}")
+        return 20
 
 
 

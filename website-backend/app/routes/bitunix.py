@@ -8,13 +8,19 @@ the website are in sync with what the user sees in Telegram.
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+import logging
 
 from app.auth.jwt import decode_token
 from app.db.supabase import _client
 from app.services import bitunix as bsvc
+try:
+    from Bismillah.app.symbol_coordinator import get_coordinator
+except Exception:  # pragma: no cover
+    get_coordinator = None
 
 router = APIRouter(prefix="/bitunix", tags=["bitunix"])
 bearer = HTTPBearer()
+logger = logging.getLogger(__name__)
 
 class TPSLUpdate(BaseModel):
     symbol: str
@@ -273,6 +279,13 @@ async def bitunix_close_position(
             status_code=502,
             detail=close_res.get("error") or close_res.get("message") or "Close order rejected by exchange",
         )
+
+    if get_coordinator:
+        try:
+            coordinator = get_coordinator()
+            await coordinator.confirm_closed(tg_id, symbol)
+        except Exception as e:
+            logger.warning(f"[1ClickClose:{tg_id}] Coordinator sync failed for {symbol}: {e}")
 
     return {
         "success": True,

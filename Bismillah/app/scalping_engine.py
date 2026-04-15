@@ -997,11 +997,11 @@ class ScalpingEngine:
                 capital = float(session.data[0].get("initial_deposit", 100))
                 leverage = int(session.data[0].get("leverage", 10))
                 
-                # ── Auto Max-Safe Leverage Calculation ──
+                # ── Auto Max Pair Leverage Calculation ──
                 from app.position_sizing import calculate_max_safe_leverage
                 effective_leverage = calculate_max_safe_leverage(signal.entry_price, signal.sl_price, signal.symbol)
                 
-                logger.info(f"[Scalping:{self.user_id}] Auto Max-Safe Leverage for {signal.symbol}: {effective_leverage}x (Baseline: {leverage}x)")
+                logger.info(f"[Scalping:{self.user_id}] Auto Max Pair Leverage for {signal.symbol}: {effective_leverage}x (Baseline: {leverage}x)")
                 
                 # CRITICAL: Calculate position size based on risk (Phase 2)
                 quantity, used_risk_sizing = self.calculate_position_size_pro(

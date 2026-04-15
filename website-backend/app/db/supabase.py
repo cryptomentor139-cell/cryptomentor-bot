@@ -12,7 +12,7 @@ def get_user_by_tid(tg_id: int) -> Optional[Dict[str, Any]]:
     return res.data[0] if res.data else None
 
 
-def upsert_web_login(tg_id: int, username: str, first_name: str, last_name: str = None) -> Dict[str, Any]:
+def upsert_web_login(tg_id: int, username: str, first_name: str, last_name: str = None, referred_by: str = None) -> Dict[str, Any]:
     """Update profile info saat login via website. Tidak mengubah credits."""
     s = _client()
     existing = get_user_by_tid(tg_id)
@@ -25,6 +25,11 @@ def upsert_web_login(tg_id: int, username: str, first_name: str, last_name: str 
             update["first_name"] = first_name
         if last_name:
             update["last_name"] = last_name
+        
+        # Capture referral if not already known
+        if referred_by and not existing.get("referred_by_code"):
+            update["referred_by_code"] = referred_by
+            
         s.table("users").update(update).eq("telegram_id", tg_id).execute()
         return get_user_by_tid(tg_id)
 
@@ -35,6 +40,7 @@ def upsert_web_login(tg_id: int, username: str, first_name: str, last_name: str 
         "first_name": first_name or "User",
         "last_name": last_name,
         "credits": 0,
+        "referred_by_code": referred_by,
     }
     s.table("users").insert(row).execute()
     return get_user_by_tid(tg_id) or row

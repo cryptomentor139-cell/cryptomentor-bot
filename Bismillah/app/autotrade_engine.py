@@ -1962,18 +1962,18 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             except Exception as _qst_err:
                 logger.debug(f"[Engine:{user_id}] Queue status notification failed: {_qst_err}")
 
-            # ── Auto Max-Safe Leverage Calculation ──
+            # ── Auto Max Pair Leverage Calculation ──
             from app.position_sizing import calculate_max_safe_leverage
             effective_leverage = calculate_max_safe_leverage(entry, sl, symbol)
             
-            logger.info(f"[Engine:{user_id}] Auto Max-Safe Leverage for {symbol}: {effective_leverage}x (Baseline: {leverage}x)")
+            logger.info(f"[Engine:{user_id}] Auto Max Pair Leverage for {symbol}: {effective_leverage}x (Baseline: {leverage}x)")
 
             # Sync signal execution update to Supabase including effective leverage
             try:
                 from app.supabase_repo import _client
                 s = _client()
                 s.table("signal_queue").update({
-                    "reason": f"Executed with Auto Max-Safe Leverage: {effective_leverage}x"
+                    "reason": f"Executed with Auto Max Pair Leverage: {effective_leverage}x"
                 }).eq("user_id", user_id).eq("symbol", symbol).eq("status", "executing").execute()
             except Exception:
                 pass

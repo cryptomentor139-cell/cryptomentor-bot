@@ -4,6 +4,17 @@ from pydantic import BaseModel
 from app.auth.jwt import decode_token
 from app.db.supabase import _client
 from app.services import bitunix as bsvc
+from app.services.risk_policy import (
+    AUTO_RISK_MAX_PCT,
+    AUTO_RISK_MIN_PCT,
+    HIGH_RISK_WARN_PCT,
+    LOW_EQUITY_THRESHOLD_USD,
+    LOW_EQUITY_MIN_RISK_PCT,
+    auto_risk_min_by_equity,
+    clamp_auto_risk,
+    is_high_risk,
+    risk_band,
+)
 import asyncio
 import os
 from datetime import datetime, timezone
@@ -14,8 +25,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 bearer = HTTPBearer()
-ALLOWED_RISK_MIN = 0.25
-ALLOWED_RISK_MAX = 5.0
+ALLOWED_RISK_MIN = AUTO_RISK_MIN_PCT
+ALLOWED_RISK_MAX = AUTO_RISK_MAX_PCT
+AUTOTRADE_LEVERAGE_MODE = "auto_max_pair"
+AUTOTRADE_LEVERAGE_MIN = 1
+AUTOTRADE_LEVERAGE_MAX = 200
 
 # Autotrade engines persist multiple closed variants, not only plain "closed".
 CLOSED_STATUSES = [
@@ -67,6 +81,21 @@ def _fmt_money(v: float) -> str:
         return f"{float(v):,.2f}"
     except Exception:
         return str(v)
+
+
+def _telegram_safe_text(value: str) -> str:
+    """Normalize escaped newlines/tabs so Telegram renders readable message blocks."""
+    text = str(value or "")
+    # Handle double-escaped payloads first, then regular escaped sequences.
+    return (
+        text
+        .replace("\\\\r\\\\n", "\n")
+        .replace("\\\\n", "\n")
+        .replace("\\\\t", "\t")
+        .replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\t", "\t")
+    )
 
 
 async def _send_telegram_html(
@@ -376,8 +405,9 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
     Get current trading settings (risk_per_trade, leverage, etc.)
 
     Returns:
-    - risk_per_trade: Current risk percentage (0.25% to 5.0%)
-    - leverage: Current leverage setting
+    - risk_per_trade: Current risk percentage (0.25% to 10.0%)
+    - leverage: Baseline leverage value (legacy compatibility only)
+    - leverage_mode: AutoTrade leverage policy mode
     - trading_mode: Current mode (auto, scalping, swing)
     - risk_mode: Risk profile (conservative, moderate, aggressive)
     - equity: LIVE equity from Bitunix (balance + unrealized PnL) — used for risk calcs
@@ -386,7 +416,7 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
     """
     s = _client()
     res = s.table("autotrade_sessions").select(
-        "risk_per_trade, leverage, trading_mode, risk_mode"
+        "risk_per_trade, leverage, margin_mode, trading_mode, risk_mode"
     ).eq("telegram_id", tg_id).limit(1).execute()
 
     row = (res.data or [{}])[0]
@@ -414,16 +444,41 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
     except Exception as e:
         logger.warning(f"Failed to fetch live equity for {tg_id}: {e}")
 
+    min_risk_pct = auto_risk_min_by_equity(equity)
+    risk_value = clamp_auto_risk(row.get("risk_per_trade"), default=1.0, equity=equity)
+    leverage_baseline = int(row.get("leverage") or 10)
+    leverage_baseline = max(AUTOTRADE_LEVERAGE_MIN, min(AUTOTRADE_LEVERAGE_MAX, leverage_baseline))
+    band = risk_band(risk_value, all_in=False)
     return {
         "success": True,
-        "risk_per_trade": max(ALLOWED_RISK_MIN, min(ALLOWED_RISK_MAX, float(row.get("risk_per_trade") or 1.0))),
-        "leverage": int(row.get("leverage") or 10),
+        "risk_per_trade": risk_value,
+        "leverage": leverage_baseline,
+        "leverage_baseline": leverage_baseline,
+        "leverage_mode": AUTOTRADE_LEVERAGE_MODE,
+        "leverage_range": {
+            "min": AUTOTRADE_LEVERAGE_MIN,
+            "max": AUTOTRADE_LEVERAGE_MAX,
+        },
+        "leverage_note": "AutoTrade executes with max leverage allowed for each pair.",
+        "margin_mode": row.get("margin_mode") or "cross",
         "trading_mode": row.get("trading_mode") or "auto",
         "risk_mode": row.get("risk_mode") or "moderate",
         "equity": round(equity, 2),           # available + frozen + unrealized (for risk sizing)
         "balance": round(available, 2),        # free/available balance only
         "frozen": round(frozen, 2),            # locked in open positions
         "unrealized_pnl": round(unrealized_pnl, 2),
+        "risk_policy": {
+            "mode": "autotrade",
+            "min_pct": min_risk_pct,
+            "max_pct": ALLOWED_RISK_MAX,
+            "high_risk_warn_pct": HIGH_RISK_WARN_PCT,
+            "low_equity_threshold_usd": LOW_EQUITY_THRESHOLD_USD,
+            "low_equity_min_pct": LOW_EQUITY_MIN_RISK_PCT,
+            "low_equity_guard_active": min_risk_pct > ALLOWED_RISK_MIN,
+            "band_key": band.key,
+            "band_label": band.label,
+            "high_risk": is_high_risk(risk_value),
+        },
     }
 
 
@@ -432,7 +487,7 @@ async def update_risk_setting(    payload: dict,
     tg_id: int = Depends(get_current_user)
 ):
     """
-    Update risk_per_trade for user (0.25% up to 5.0%).
+    Update risk_per_trade for user (0.25% up to 10.0%).
 
     Fixed dollar risk: position_size = (balance × risk%) / SL_distance
     - Tight SL → Larger position (same dollar risk)
@@ -446,18 +501,44 @@ async def update_risk_setting(    payload: dict,
     """
     from datetime import datetime
 
-    risk = float(payload.get("risk_per_trade") or 1.0)
-
-    if risk < ALLOWED_RISK_MIN or risk > ALLOWED_RISK_MAX:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid risk: {risk}. Must be between {ALLOWED_RISK_MIN}% and {ALLOWED_RISK_MAX}%"
-        )
+    try:
+        risk = float(payload.get("risk_per_trade") or 1.0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="risk_per_trade must be a number")
 
     s = _client()
+    row_res = (
+        s.table("autotrade_sessions")
+        .select("current_balance, initial_deposit")
+        .eq("telegram_id", tg_id)
+        .limit(1)
+        .execute()
+    )
+    row = (row_res.data or [{}])[0]
+
+    equity = 0.0
+    try:
+        acc = await bsvc.fetch_account(tg_id)
+        if acc.get("success"):
+            available = float(acc.get("available", 0) or 0)
+            frozen = float(acc.get("frozen", 0) or 0)
+            unrealized_pnl = float(acc.get("total_unrealized_pnl", 0) or 0)
+            equity = available + frozen + unrealized_pnl
+    except Exception as exc:
+        logger.warning(f"[RiskSetting:{tg_id}] Live equity fetch failed: {exc}")
+
+    if equity <= 0:
+        equity = float(row.get("current_balance") or row.get("initial_deposit") or 0)
+
+    min_risk_pct = auto_risk_min_by_equity(equity)
+    if risk < min_risk_pct or risk > ALLOWED_RISK_MAX:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid risk: {risk}. Must be between {min_risk_pct}% and {ALLOWED_RISK_MAX}%"
+        )
     try:
         # Ensure we're storing as a float for consistency
-        risk_value = float(risk)
+        risk_value = clamp_auto_risk(risk, default=1.0, equity=equity)
         s.table("autotrade_sessions").update({
             "risk_per_trade": risk_value,
             "updated_at": datetime.utcnow().isoformat(),
@@ -468,10 +549,27 @@ async def update_risk_setting(    payload: dict,
         logger.error(f"[RiskSetting:{tg_id}] Failed to update risk: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update risk: {e}")
 
+    accepted = clamp_auto_risk(risk, default=1.0, equity=equity)
+    band = risk_band(accepted, all_in=False)
     return {
         "success": True,
-        "risk_per_trade": risk,
-        "note": f"Risk updated to {risk}% per trade (stored as float: {float(risk)})"
+        "risk_per_trade": accepted,
+        "risk_policy": {
+            "mode": "autotrade",
+            "requested_pct": float(risk),
+            "accepted_pct": accepted,
+            "min_pct": min_risk_pct,
+            "max_pct": ALLOWED_RISK_MAX,
+            "high_risk_warn_pct": HIGH_RISK_WARN_PCT,
+            "low_equity_threshold_usd": LOW_EQUITY_THRESHOLD_USD,
+            "low_equity_min_pct": LOW_EQUITY_MIN_RISK_PCT,
+            "low_equity_guard_active": min_risk_pct > ALLOWED_RISK_MIN,
+            "equity_used_usd": round(float(equity), 2),
+            "band_key": band.key,
+            "band_label": band.label,
+            "high_risk": is_high_risk(accepted),
+        },
+        "note": f"Risk updated to {accepted}% per trade"
     }
 
 
@@ -481,7 +579,8 @@ async def update_leverage(
     tg_id: int = Depends(get_current_user)
 ):
     """
-    Update leverage setting (1-20x).
+    Update baseline leverage setting (1-20x).
+    Note: AutoTrade execution uses max leverage allowed for each pair.
     """
     from datetime import datetime
 
@@ -494,8 +593,11 @@ async def update_leverage(
     except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Leverage must be an integer")
 
-    if leverage < 1 or leverage > 20:
-        raise HTTPException(status_code=400, detail="Leverage must be between 1 and 20")
+    if leverage < AUTOTRADE_LEVERAGE_MIN or leverage > AUTOTRADE_LEVERAGE_MAX:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Leverage must be between {AUTOTRADE_LEVERAGE_MIN} and {AUTOTRADE_LEVERAGE_MAX}"
+        )
 
     s = _client()
     try:
@@ -503,12 +605,21 @@ async def update_leverage(
             "leverage": leverage,
             "updated_at": datetime.utcnow().isoformat(),
         }).eq("telegram_id", tg_id).execute()
-        logger.info(f"[Leverage:{tg_id}] Updated to {leverage}x")
+        logger.info(
+            f"[Leverage:{tg_id}] Updated baseline to {leverage}x "
+            f"(execution mode={AUTOTRADE_LEVERAGE_MODE})"
+        )
     except Exception as e:
         logger.error(f"[Leverage:{tg_id}] Failed to update: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update leverage: {e}")
 
-    return {"success": True, "leverage": leverage}
+    return {
+        "success": True,
+        "leverage": leverage,
+        "leverage_baseline": leverage,
+        "leverage_mode": AUTOTRADE_LEVERAGE_MODE,
+        "note": "Baseline saved. AutoTrade execution uses max leverage allowed for each pair."
+    }
 
 
 @router.put("/settings/margin-mode")
@@ -838,17 +949,17 @@ async def register_referral(
     """Register as a community partner / referral partner."""
     name = payload.community_name.strip()
     if len(name) < 3:
-        raise HTTPException(status_code=400, detail="Nama komunitas minimal 3 karakter")
+        raise HTTPException(status_code=400, detail="Community name must be at least 3 characters")
     if len(name) > 50:
-        raise HTTPException(status_code=400, detail="Nama komunitas maksimal 50 karakter")
+        raise HTTPException(status_code=400, detail="Community name must be at most 50 characters")
 
     ref_code = payload.bitunix_referral_code.strip()
     if len(ref_code) < 2:
-        raise HTTPException(status_code=400, detail="Kode referral Bitunix tidak valid")
+        raise HTTPException(status_code=400, detail="Invalid Bitunix referral code")
 
     uid = payload.bitunix_uid.strip()
     if not uid.isdigit() or len(uid) < 5:
-        raise HTTPException(status_code=400, detail="UID Bitunix tidak valid (minimal 5 digit angka)")
+        raise HTTPException(status_code=400, detail="Invalid Bitunix UID (minimum 5 digits)")
 
     s = _client()
 
@@ -874,7 +985,7 @@ async def register_referral(
             "updated_at": datetime.utcnow().isoformat(),
         }, on_conflict="telegram_id").execute()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Gagal menyimpan: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save registration: {e}")
 
     # Notify admins via Telegram bot (best-effort)
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -886,14 +997,18 @@ async def register_referral(
                 _admin_id_set.add(int(_part))
     admin_ids = sorted(_admin_id_set)
     if bot_token and admin_ids:
-        msg = (
-            f"🔔 <b>Pendaftaran Referral Partner Baru (via Web)</b>\n\n"
-            f"🆔 Telegram ID: <code>{tg_id}</code>\n"
-            f"📛 Nama Komunitas: <b>{name}</b>\n"
-            f"🔑 Kode Bot: <code>{code}</code>\n"
-            f"🎟 Referral Bitunix: <code>{ref_code}</code>\n"
-            f"🆔 UID Bitunix: <code>{uid}</code>\n\n"
-            f"Klik tombol di bawah untuk approve atau reject:"
+        msg = _telegram_safe_text(
+            (
+            "🔔 <b>New Referral Partner Registration (Web)</b>\n\n"
+            "<b>Applicant Details</b>\n"
+            f"• Telegram ID: <code>{tg_id}</code>\n"
+            f"• Community Name: <b>{name}</b>\n"
+            f"• Community Code: <code>{code}</code>\n"
+            f"• Bitunix Referral Code: <code>{ref_code}</code>\n"
+            f"• Bitunix UID: <code>{uid}</code>\n"
+            f"• Bitunix URL: <code>{ref_url}</code>\n\n"
+            "Please choose an action:"
+            )
         )
         admin_reply_markup = {
             "inline_keyboard": [[
@@ -910,6 +1025,7 @@ async def register_referral(
                             "chat_id": admin_id,
                             "text": msg,
                             "parse_mode": "HTML",
+                            "disable_web_page_preview": True,
                             "reply_markup": admin_reply_markup,
                         },
                     )
