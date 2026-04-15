@@ -152,6 +152,7 @@ class ScalpingPosition:
     
     # Timing
     opened_at: float  # Unix timestamp
+    open_order_id: str = ""
     max_hold_until: float = field(init=False)  # opened_at + 1800 seconds
     
     # Status

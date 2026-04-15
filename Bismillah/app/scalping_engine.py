@@ -143,6 +143,50 @@ class ScalpingEngine:
             pass
 
         return float(fallback), True
+
+    async def _resolve_net_pnl(
+        self,
+        symbol: str,
+        gross_pnl: float,
+        open_order_id: str = "",
+        close_order_id: str = "",
+    ) -> tuple[float, float, float, bool]:
+        """
+        Best-effort net PnL estimation using exchange order fees/details.
+        Returns: (net_pnl, open_fee, close_fee, used_exchange_data)
+        """
+        open_fee = 0.0
+        close_fee = 0.0
+        used_exchange_data = False
+        close_realized = None
+
+        get_fin = getattr(self.client, "get_order_financials", None)
+        if not callable(get_fin):
+            return gross_pnl, open_fee, close_fee, used_exchange_data
+
+        try:
+            if open_order_id:
+                o = await asyncio.to_thread(get_fin, open_order_id, symbol)
+                if o.get("success"):
+                    open_fee = abs(float(o.get("fee", 0) or 0))
+                    used_exchange_data = True
+        except Exception:
+            pass
+
+        try:
+            if close_order_id:
+                c = await asyncio.to_thread(get_fin, close_order_id, symbol)
+                if c.get("success"):
+                    close_fee = abs(float(c.get("fee", 0) or 0))
+                    if c.get("realized_pnl") is not None:
+                        close_realized = float(c.get("realized_pnl"))
+                    used_exchange_data = True
+        except Exception:
+            pass
+
+        base = close_realized if close_realized is not None else gross_pnl
+        net = base - open_fee - close_fee
+        return net, open_fee, close_fee, used_exchange_data
     
     async def run(self):
         """Main trading loop - scans every 15 seconds"""
@@ -1409,6 +1453,7 @@ class ScalpingEngine:
                         entry_price=signal.entry_price,
                         quantity=quantity_adjusted,
                         leverage=effective_leverage,
+                        open_order_id=exec_result.order_id or "",
                         tp_price=levels.tp1,
                         sl_price=levels.sl,
                         opened_at=time.time(),
@@ -1604,6 +1649,7 @@ class ScalpingEngine:
             )
             
             if result.get('success'):
+                close_order_id = str(result.get("order_id") or "")
                 fill_price, px_estimated = await self._resolve_exit_price(
                     position.symbol, position.entry_price, result
                 )
@@ -1615,10 +1661,16 @@ class ScalpingEngine:
                     pnl = (position.entry_price - fill_price) * position.quantity
                 
                 pnl_usdt = pnl
+                pnl_net, open_fee, close_fee, used_exchange = await self._resolve_net_pnl(
+                    symbol=position.symbol,
+                    gross_pnl=pnl_usdt,
+                    open_order_id=getattr(position, "open_order_id", "") or "",
+                    close_order_id=close_order_id,
+                )
                 
                 # Update database
                 await self._update_position_closed(
-                    position, fill_price, pnl_usdt, "max_hold_time_exceeded"
+                    position, fill_price, pnl_net, "max_hold_time_exceeded"
                 )
 
                 # Confirm position closed with coordinator
@@ -1638,7 +1690,9 @@ class ScalpingEngine:
                     f"Entry: {_fmt_price(position.entry_price)}\n"
                     f"Exit: {_fmt_price(fill_price)}{' (estimated)' if px_estimated else ''}\n"
                     f"Hold Time: 30 minutes\n"
-                    f"PnL: <b>{self._fmt_pnl_usdt(pnl_usdt)} USDT</b>"
+                    f"PnL (net): <b>{self._fmt_pnl_usdt(pnl_net)} USDT</b>\n"
+                    f"PnL (gross): <b>{self._fmt_pnl_usdt(pnl_usdt)} USDT</b>"
+                    + (f"\nFees: {self._fmt_pnl_usdt(-(open_fee + close_fee))} USDT" if used_exchange else "")
                 )
 
                 # Remove from tracking
@@ -1676,6 +1730,7 @@ class ScalpingEngine:
             )
             
             if result.get('success'):
+                close_order_id = str(result.get("order_id") or "")
                 fill_price = float(result.get('fill_price', 0))
                 # If exchange doesn't return fill_price, get current mark price
                 if fill_price <= 0:
@@ -1694,9 +1749,15 @@ class ScalpingEngine:
                     pnl = (position.entry_price - fill_price) * position.quantity
 
                 pnl_usdt = pnl
+                pnl_net, open_fee, close_fee, used_exchange = await self._resolve_net_pnl(
+                    symbol=position.symbol,
+                    gross_pnl=pnl_usdt,
+                    open_order_id=getattr(position, "open_order_id", "") or "",
+                    close_order_id=close_order_id,
+                )
 
                 closed_now = await self._update_position_closed(
-                    position, fill_price, pnl_usdt, "sideways_max_hold_exceeded"
+                    position, fill_price, pnl_net, "sideways_max_hold_exceeded"
                 )
                 if closed_now:
                     # Confirm position closed with coordinator
@@ -1715,7 +1776,9 @@ class ScalpingEngine:
                             f"Entry: {_fmt_price(position.entry_price)}\n"
                             f"Exit: {_fmt_price(fill_price)}\n"
                             f"Hold Time: {elapsed}s\n"
-                            f"PnL: <b>{self._fmt_pnl_usdt(pnl_usdt)} USDT</b>"
+                            f"PnL (net): <b>{self._fmt_pnl_usdt(pnl_net)} USDT</b>\n"
+                            f"PnL (gross): <b>{self._fmt_pnl_usdt(pnl_usdt)} USDT</b>"
+                            + (f"\nFees: {self._fmt_pnl_usdt(-(open_fee + close_fee))} USDT" if used_exchange else "")
                         ),
                         ttl_sec=600,
                     )

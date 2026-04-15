@@ -785,6 +785,65 @@ class BitunixAutoTradeClient:
             return {'success': True, 'response': "\n".join(lines)}
         return {'success': False, 'response': f"Failed to fetch history: {result['error']}"}
 
+    def get_order_financials(self, order_id: str, symbol: str = "", limit: int = 200) -> Dict:
+        """
+        Best-effort extraction of fee and realized PnL for a specific order_id
+        from Bitunix history orders endpoint.
+        """
+        try:
+            result = self._request(
+                'GET',
+                '/api/v1/futures/trade/get_history_orders',
+                params={'limit': int(limit)},
+                signed=True
+            )
+            if not result.get('success'):
+                return result
+
+            data = result.get('data') or {}
+            orders = data.get('orderList', []) if isinstance(data, dict) else (data or [])
+            oid = str(order_id)
+            row = None
+            for o in orders:
+                if str(o.get('orderId') or o.get('id') or o.get('order_id')) != oid:
+                    continue
+                if symbol and str(o.get('symbol') or '').upper() != str(symbol).upper():
+                    continue
+                row = o
+                break
+
+            if not row:
+                return {'success': False, 'error': f'Order not found in history: {order_id}'}
+
+            def _pick_float(src: dict, keys: list):
+                for k in keys:
+                    v = src.get(k)
+                    if v is None or v == "":
+                        continue
+                    try:
+                        return float(v)
+                    except Exception:
+                        continue
+                return None
+
+            fee = _pick_float(row, [
+                'fee', 'tradeFee', 'execFee', 'closeFee', 'takerFee', 'makerFee'
+            ])
+            realized = _pick_float(row, [
+                'realizedPnl', 'realizedPNL', 'closePnl', 'closedPnl', 'profit', 'pnl'
+            ])
+
+            return {
+                'success': True,
+                'order_id': oid,
+                'symbol': row.get('symbol'),
+                'fee': fee if fee is not None else 0.0,
+                'realized_pnl': realized,
+                'raw': row,
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
 
 # ------------------------------------------------------------------ #
 #  Quick test                                                          #
