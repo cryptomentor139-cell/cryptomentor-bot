@@ -493,7 +493,80 @@ class ScalpingEngine:
                     logger.warning(f"[Scalping:{self.user_id}] MicroMomentum error for {symbol}: {e}")
 
             if bounce_result is None:
-                logger.debug(f"[Scalping:{self.user_id}] {symbol} No bounce or momentum signal")
+                # Fallback: emit a conservative range-reversion candidate when
+                # market is sideways and a valid range exists, even without a
+                # clean wick bounce or micro-momentum trigger.
+                if range_result is not None:
+                    try:
+                        closes = [float(c["close"]) for c in candles_5m[-20:]]
+                        if len(closes) >= 15:
+                            gains, losses = [], []
+                            for i in range(1, len(closes)):
+                                d = closes[i] - closes[i - 1]
+                                gains.append(max(d, 0.0))
+                                losses.append(max(-d, 0.0))
+                            period = min(14, len(gains))
+                            avg_gain = sum(gains[-period:]) / period if period else 0.0
+                            avg_loss = sum(losses[-period:]) / period if period else 0.0
+                            rsi_5m = 100.0 if avg_loss == 0 else (100 - (100 / (1 + (avg_gain / avg_loss))))
+                        else:
+                            rsi_5m = 50.0
+
+                        support = range_result.support
+                        resistance = range_result.resistance
+                        width = max(1e-12, resistance - support)
+                        pos_in_range = (price - support) / width  # 0=near support, 1=near resistance
+
+                        direction = None
+                        if pos_in_range <= 0.35 and rsi_5m <= 58:
+                            direction = "LONG"
+                        elif pos_in_range >= 0.65 and rsi_5m >= 42:
+                            direction = "SHORT"
+
+                        if direction is not None:
+                            entry = price
+                            tr_list_fb = []
+                            for i in range(1, len(candles_5m)):
+                                c = candles_5m[i]
+                                p = candles_5m[i - 1]
+                                tr_list_fb.append(max(c["high"] - c["low"], abs(c["high"] - p["close"]), abs(c["low"] - p["close"])))
+                            atr_fb = (sum(tr_list_fb[-14:]) / 14) if len(tr_list_fb) >= 14 else 0.0
+                            sl_buffer = (atr_fb * 0.6) if atr_fb > 0 else (entry * 0.0025)
+                            if direction == "LONG":
+                                tp = entry + 0.55 * (resistance - entry)
+                                sl = support - sl_buffer
+                                rr = (tp - entry) / (entry - sl) if (entry - sl) > 0 else 0
+                            else:
+                                tp = entry - 0.55 * (entry - support)
+                                sl = resistance + sl_buffer
+                                rr = (entry - tp) / (sl - entry) if (sl - entry) > 0 else 0
+
+                            if rr >= getattr(self.config, "sideways_min_rr", 1.1):
+                                reasons = [
+                                    f"Sideways fallback: {sideways_result.reason}",
+                                    f"Range reversion candidate ({pos_in_range*100:.0f}% in range, RSI={rsi_5m:.1f})",
+                                    f"Range: {support:.4f} - {resistance:.4f} ({range_result.range_width_pct:.2f}%)",
+                                ]
+                                return MicroScalpSignal(
+                                    symbol=symbol,
+                                    side=direction,
+                                    entry_price=entry,
+                                    tp_price=round(tp, 6),
+                                    sl_price=round(sl, 6),
+                                    rr_ratio=round(rr, 2),
+                                    range_support=support,
+                                    range_resistance=resistance,
+                                    range_width_pct=range_result.range_width_pct,
+                                    confidence=72,
+                                    bounce_confirmed=False,
+                                    rsi_divergence_detected=False,
+                                    volume_ratio=1.0,
+                                    reasons=reasons,
+                                )
+                    except Exception as e:
+                        logger.debug(f"[Scalping:{self.user_id}] {symbol} sideways fallback failed: {e}")
+
+                logger.debug(f"[Scalping:{self.user_id}] {symbol} No bounce/momentum/fallback signal")
                 return None
 
             direction = bounce_result.direction  # "LONG" or "SHORT"
