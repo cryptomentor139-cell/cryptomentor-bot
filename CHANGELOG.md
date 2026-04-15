@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.2.4] — 2026-04-15 — Confidence & Startup Message Accuracy + Single Notification Flow
+
+### 🎯 Signal & Mode Accuracy
+- **Scalping Confidence Updated**: lowered scalping minimum confidence from **80%** to **72%**.
+  - Updated in `Bismillah/app/trading_mode.py` and reflected in `Bismillah/app/scalping_engine.py`.
+
+- **Dynamic Threshold Display (Per User/Mode)**:
+  - **Scalping** startup/mode message now displays the live configured threshold (72%).
+  - **Swing/AutoTrade** startup/mode message now displays threshold derived from each user’s `risk_per_trade` profile (dynamic, not fixed 68%).
+  - Implemented in:
+    - `Bismillah/app/scheduler.py`
+    - `Bismillah/app/handlers_autotrade.py`
+    - `Bismillah/app/autotrade_engine.py`
+
+### 📣 Notification UX Fixes
+- **Leverage Message Clarified**:
+  - Startup messages now show:
+    - `Base leverage setting`
+    - `Applied leverage is auto-adjusted per pair (max-safe)`
+  - This removes misleading fixed-leverage wording and aligns with live execution behavior.
+
+- **Duplicate Startup Message Removed**:
+  - Users previously received 2 startup messages (scheduler + engine startup notification).
+  - Scheduler-triggered engine starts now run with `silent=True`, preserving one consolidated startup message for both **Scalping** and **Swing** flows.
+
+### ✅ Deploy Notes
+1. Pushed to Ajax git (`main`): confidence + message accuracy + dedup startup notification.
+2. VPS synced and bot service restarted.
+3. Startup notifications now match actual runtime configuration and send as a single message.
+
 ## [2.2.3] — 2026-04-14 — Health-Check Status Restoration Fix
 
 ### 🛠️ Platform Stability
