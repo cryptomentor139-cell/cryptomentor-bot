@@ -17,6 +17,7 @@ from datetime import datetime, timezone, timedelta
 TZ_UTC8 = timezone(timedelta(hours=8))
 from typing import List, Dict, Any, Optional
 import logging
+import math
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -29,7 +30,23 @@ from app.auth.jwt import decode_token
 
 logger = logging.getLogger(__name__)
 RISK_MIN_PCT = 0.25
-RISK_MAX_PCT = 5.0
+RISK_MAX_PCT = 10.0
+ONE_CLICK_RISK_MIN_PCT = 0.5
+ONE_CLICK_RISK_MAX_PCT = 100.0
+AUTO_SAFE_LEVERAGE_BUFFER = 1.15
+AUTO_SAFE_LEVERAGE_MIN = 1
+AUTO_SAFE_LEVERAGE_MAX = 125
+
+try:
+    from Bismillah.app.symbol_coordinator import (
+        get_coordinator,
+        StrategyOwner,
+        PositionSide,
+    )
+except Exception:  # pragma: no cover - optional runtime dependency
+    get_coordinator = None
+    StrategyOwner = None
+    PositionSide = None
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -105,6 +122,23 @@ def _risk_profile(user_risk_pct: float) -> Dict[str, float]:
     if risk <= 4.0:
         return {"min_confidence": 34, "atr_multiplier": 2.25}
     return {"min_confidence": 32, "atr_multiplier": 2.5}
+
+
+def _calculate_auto_max_safe_leverage(
+    *,
+    sl_distance_pct: float,
+    configured_cap: int,
+) -> int:
+    """
+    Max-safe leverage so liquidation buffer remains farther than the SL.
+    Uses a safety factor (1.15) to avoid edge liquidation before stop triggers.
+    """
+    if sl_distance_pct <= 0:
+        return max(AUTO_SAFE_LEVERAGE_MIN, min(configured_cap, AUTO_SAFE_LEVERAGE_MAX))
+
+    raw = int(1.0 / (sl_distance_pct * AUTO_SAFE_LEVERAGE_BUFFER))
+    safe_cap = max(AUTO_SAFE_LEVERAGE_MIN, min(int(configured_cap), AUTO_SAFE_LEVERAGE_MAX))
+    return max(AUTO_SAFE_LEVERAGE_MIN, min(raw, safe_cap))
 
 # (display_pair, binance_symbol, tier, type)
 # All pairs are free — more pairs = more trading volume
@@ -638,6 +672,8 @@ async def execute_signal(
     """
     symbol = (payload.get("symbol") or "").upper().replace("/", "")
     generated_at_raw = payload.get("generated_at")
+    all_in = bool(payload.get("all_in", False))
+    risk_override = payload.get("risk_override_pct")
 
     wl = _watchlist_entry(symbol)
     if not wl:
@@ -685,12 +721,37 @@ async def execute_signal(
         raise HTTPException(status_code=400, detail="Insufficient equity (account value is zero or negative)")
 
     s = _client()
-    sess_res = s.table("autotrade_sessions").select(
-        "risk_per_trade, leverage"
-    ).eq("telegram_id", tg_id).limit(1).execute()
+    try:
+        sess_res = s.table("autotrade_sessions").select(
+            "risk_per_trade, one_click_risk_per_trade, leverage"
+        ).eq("telegram_id", tg_id).limit(1).execute()
+    except Exception:
+        sess_res = s.table("autotrade_sessions").select(
+            "risk_per_trade, leverage"
+        ).eq("telegram_id", tg_id).limit(1).execute()
     sess = (sess_res.data or [{}])[0]
-    risk_pct = _normalize_risk_pct(sess.get("risk_per_trade"), default=1.0)  # 0.25%..5.0%
-    leverage = int(sess.get("leverage") or 10)
+
+    # Dedicated 1-click risk: request override -> one_click field -> autotrade field.
+    if risk_override is not None:
+        try:
+            risk_pct = float(risk_override)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="risk_override_pct must be numeric")
+    else:
+        raw_one_click = sess.get("one_click_risk_per_trade")
+        if raw_one_click is None:
+            raw_one_click = sess.get("risk_per_trade")
+        risk_pct = float(raw_one_click or 1.0)
+
+    if all_in:
+        risk_pct = ONE_CLICK_RISK_MAX_PCT
+    if risk_pct < ONE_CLICK_RISK_MIN_PCT or risk_pct > ONE_CLICK_RISK_MAX_PCT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid one-click risk {risk_pct}. Must be between {ONE_CLICK_RISK_MIN_PCT}% and {ONE_CLICK_RISK_MAX_PCT}%",
+        )
+
+    configured_leverage = int(sess.get("leverage") or 20)
 
     # Re-derive the signal from live market data so dynamic sizing reflects
     # the *current* SL distance, not the stale snapshot in the user's UI.
@@ -720,17 +781,24 @@ async def execute_signal(
     if sl_distance_pct > 0.15:
         raise HTTPException(status_code=400, detail="Stop loss too wide (>15%)")
 
+    auto_max_safe_leverage = _calculate_auto_max_safe_leverage(
+        sl_distance_pct=sl_distance_pct,
+        configured_cap=configured_leverage,
+    )
+    if auto_max_safe_leverage < AUTO_SAFE_LEVERAGE_MIN:
+        raise HTTPException(status_code=400, detail="Unable to derive safe leverage for this setup")
+
     # Risk-based sizing: qty such that loss-at-SL == equity * risk%.
     # Uses equity (not balance) to account for unrealized PnL from open positions.
     risk_amount = equity * (risk_pct / 100.0)
     position_size_usdt = risk_amount / sl_distance_pct
-    margin_required = position_size_usdt / leverage
+    margin_required = position_size_usdt / auto_max_safe_leverage
     risk_zone = "amber_red" if risk_pct > 1.0 else "normal"
 
     # Cap margin at 95% of available balance (not equity) to ensure we have buffer
     if margin_required > balance * 0.95:
         margin_required = balance * 0.95
-        position_size_usdt = margin_required * leverage
+        position_size_usdt = margin_required * auto_max_safe_leverage
         logger.warning(
             f"[Risk] Position capped: margin required ${margin_required:.2f} "
             f"> balance ${balance:.2f}. Position size reduced."
@@ -746,6 +814,23 @@ async def execute_signal(
             detail=f"Computed qty {qty} below exchange minimum {min_qty}",
         )
 
+    coordinator = get_coordinator() if get_coordinator and StrategyOwner else None
+    if coordinator is not None:
+        can_enter, reason = await coordinator.can_enter(
+            user_id=tg_id,
+            symbol=sym,
+            strategy=StrategyOwner.ONE_CLICK,
+            now_ts=datetime.now(timezone.utc).timestamp(),
+        )
+        if not can_enter:
+            logger.warning(f"[1ClickConflict:{tg_id}] Blocked for {sym}: {reason}")
+            raise HTTPException(
+                status_code=409,
+                detail=f"1-click blocked by conflict gate: {reason}",
+            )
+        await coordinator.set_pending(tg_id, sym, StrategyOwner.ONE_CLICK)
+
+    pending_needs_clear = coordinator is not None
     try:
         result = await bsvc.place_market_with_tpsl(
             telegram_id=tg_id,
@@ -754,15 +839,30 @@ async def execute_signal(
             qty=qty,
             tp_price=tp_price,
             sl_price=sl_price,
-            leverage=leverage,
+            leverage=auto_max_safe_leverage,
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Order placement failed: {e}")
+    finally:
+        if coordinator is not None and pending_needs_clear:
+            await coordinator.clear_pending(tg_id, sym)
 
     if not result.get("success"):
         raise HTTPException(
             status_code=502,
             detail=f"Order rejected by exchange: {result.get('message') or result}",
+        )
+
+    if coordinator is not None and PositionSide is not None and StrategyOwner is not None:
+        side_enum = PositionSide.LONG if direction == "LONG" else PositionSide.SHORT
+        await coordinator.confirm_open(
+            user_id=tg_id,
+            symbol=sym,
+            strategy=StrategyOwner.ONE_CLICK,
+            side=side_enum,
+            size=float(qty),
+            entry_price=float(entry_price),
+            exchange_position_id=str(result.get("position_id") or result.get("order_id") or ""),
         )
 
     return {
@@ -784,8 +884,11 @@ async def execute_signal(
             "risk_pct": risk_pct,
             "risk_zone": risk_zone,
             "high_risk": risk_pct > 1.0,
+            "all_in": all_in,
             "sl_distance_pct": round(sl_distance_pct * 100, 3),
-            "leverage": leverage,
+            "leverage": auto_max_safe_leverage,
+            "leverage_mode": "auto_max_safe",
+            "configured_leverage_cap": configured_leverage,
             "signal_age_seconds": int(age),
         },
     }

@@ -1,5 +1,37 @@
 # Changelog
 
+## [2.2.5] — 2026-04-14 — 🔗 Community Referral Tracking System
+
+### 🚀 Referral & Partner Integration
+- **Website Referral Capture**: Implemented `?ref=` parameter tracking on the website. Users arriving from partner links now have their community source persisted in `localStorage`.
+- **Dynamic Approval Routing**: UID verification requests are now automatically routed to the corresponding Community Partner's Telegram account instead of the global admin.
+- **Referral Transparency**: The verification dashboard now shows which community a new user originated from.
+- **Auto-Applied Referral Codes**: Bitunix registration links on the dashboard now dynamically include the partner's referral code.
+
+### 🛠️ Backend & Infrastructure
+- **Database Schema Update**: Added `community_code` to `user_verifications` table for long-term tracking.
+- **Backend Routing Logic**: Updated `/submit-uid` endpoint to perform partner lookup and multi-target Telegram notification routing.
+
+### ✅ Deploy Notes
+1. Database migration: `db/add_community_code_to_verifications.sql` executed on Supabase.
+2. Frontend built and deployed to production VPS.
+3. Backend logic updated and `cryptomentor-web` service restarted.
+4. Changes pushed to Ajax Git repository.
+
+## [2.2.4] — 2026-04-14 — 🎯 Portfolio Optimization & Portfolio Expansion
+
+### 🚀 Performance & Signal Frequency
+- **Expanded Trading Portfolio**: Increased active trading pairs to **15 high-quality assets**, including Gold (XAU), Crude Oil (CL), and Nasdaq (QQQ).
+- **MATIC Retirement**: Removed `MATICUSDT` from the engine to refocus on more volatile and profitable setups.
+- **Execution Logic Precision Fix**: Updated the internal `QTY_PRECISION` mapping for 6 assets (LINK, UNI, ATOM, XAU, CL, QQQ) to ensure perfect compliance with Bitunix exchange requirements.
+- **Min Qty Calibration**: Synchronized the `MIN_QTY_MAP` in the Scalping Engine to prevent "balance too small" rejections for the new high-leverage assets.
+
+### ✅ Deploy Notes
+1. Updated `Bismillah/app/autotrade_engine.py` (symbols + precision).
+2. Updated `Bismillah/app/scalping_engine.py` (min qty levels).
+3. Updated `Bismillah/app/trading_mode.py` (scalping pair whitelist).
+4. Codebase synchronized with production VPS and Ajax Git for live redeployment.
+
 ## [2.2.3] — 2026-04-14 — Health-Check Status Restoration Fix
 
 ### 🛠️ Platform Stability

@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 bearer = HTTPBearer()
 ALLOWED_RISK_MIN = 0.25
-ALLOWED_RISK_MAX = 5.0
+ALLOWED_RISK_MAX = 10.0
+ONE_CLICK_RISK_MIN = 0.5
+ONE_CLICK_RISK_MAX = 100.0
 
 # Autotrade engines persist multiple closed variants, not only plain "closed".
 CLOSED_STATUSES = [
@@ -385,9 +387,15 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
     - unrealized_pnl: Current open position P&L
     """
     s = _client()
-    res = s.table("autotrade_sessions").select(
-        "risk_per_trade, leverage, trading_mode, risk_mode"
-    ).eq("telegram_id", tg_id).limit(1).execute()
+    try:
+        res = s.table("autotrade_sessions").select(
+            "risk_per_trade, one_click_risk_per_trade, leverage, trading_mode, risk_mode, margin_mode"
+        ).eq("telegram_id", tg_id).limit(1).execute()
+    except Exception:
+        # Backward-compatible fallback for schemas that don't have one_click_risk_per_trade yet.
+        res = s.table("autotrade_sessions").select(
+            "risk_per_trade, leverage, trading_mode, risk_mode, margin_mode"
+        ).eq("telegram_id", tg_id).limit(1).execute()
 
     row = (res.data or [{}])[0]
 
@@ -414,12 +422,26 @@ async def get_settings(tg_id: int = Depends(get_current_user)):
     except Exception as e:
         logger.warning(f"Failed to fetch live equity for {tg_id}: {e}")
 
+    autotrade_risk = max(ALLOWED_RISK_MIN, min(ALLOWED_RISK_MAX, float(row.get("risk_per_trade") or 1.0)))
+    one_click_raw = row.get("one_click_risk_per_trade")
+    one_click_risk = float(one_click_raw) if one_click_raw is not None else autotrade_risk
+    one_click_risk = max(ONE_CLICK_RISK_MIN, min(ONE_CLICK_RISK_MAX, one_click_risk))
+
     return {
         "success": True,
-        "risk_per_trade": max(ALLOWED_RISK_MIN, min(ALLOWED_RISK_MAX, float(row.get("risk_per_trade") or 1.0))),
-        "leverage": int(row.get("leverage") or 10),
+        # Backward-compatible existing field for AutoTrade controls.
+        "risk_per_trade": autotrade_risk,
+        "autotrade_risk_per_trade": autotrade_risk,
+        # Dedicated 1-click risk setting (supports ALL IN through 100%).
+        "one_click_risk_per_trade": one_click_risk,
+        # Leverage is applied dynamically at execution time using auto max-safe logic.
+        # Stored `leverage` acts as a hard cap for that dynamic calculation.
+        "leverage": int(row.get("leverage") or 20),
+        "leverage_cap": int(row.get("leverage") or 20),
+        "leverage_mode": "auto_max_safe",
         "trading_mode": row.get("trading_mode") or "auto",
         "risk_mode": row.get("risk_mode") or "moderate",
+        "margin_mode": row.get("margin_mode") or "cross",
         "equity": round(equity, 2),           # available + frozen + unrealized (for risk sizing)
         "balance": round(available, 2),        # free/available balance only
         "frozen": round(frozen, 2),            # locked in open positions
@@ -432,7 +454,7 @@ async def update_risk_setting(    payload: dict,
     tg_id: int = Depends(get_current_user)
 ):
     """
-    Update risk_per_trade for user (0.25% up to 5.0%).
+    Update AutoTrade risk_per_trade for user (0.25% up to 10.0%).
 
     Fixed dollar risk: position_size = (balance × risk%) / SL_distance
     - Tight SL → Larger position (same dollar risk)
@@ -471,7 +493,63 @@ async def update_risk_setting(    payload: dict,
     return {
         "success": True,
         "risk_per_trade": risk,
+        "autotrade_risk_per_trade": risk,
         "note": f"Risk updated to {risk}% per trade (stored as float: {float(risk)})"
+    }
+
+
+@router.put("/settings/one-click-risk")
+async def update_one_click_risk(
+    payload: dict,
+    tg_id: int = Depends(get_current_user),
+):
+    """
+    Update dedicated 1-click risk setting (0.5% to 100%).
+    This is intentionally separate from AutoTrade risk_per_trade.
+    """
+    from datetime import datetime
+
+    all_in = bool(payload.get("all_in", False))
+    raw = payload.get("one_click_risk_per_trade", payload.get("risk_per_trade"))
+    if raw is None:
+        raise HTTPException(status_code=400, detail="Missing one_click_risk_per_trade")
+
+    try:
+        risk = float(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="one_click_risk_per_trade must be numeric")
+
+    if all_in:
+        risk = ONE_CLICK_RISK_MAX
+
+    if risk < ONE_CLICK_RISK_MIN or risk > ONE_CLICK_RISK_MAX:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid one-click risk: {risk}. Must be between {ONE_CLICK_RISK_MIN}% and {ONE_CLICK_RISK_MAX}%",
+        )
+
+    s = _client()
+    updated_at = datetime.utcnow().isoformat()
+    storage_field = "one_click_risk_per_trade"
+    try:
+        s.table("autotrade_sessions").update({
+            "one_click_risk_per_trade": float(risk),
+            "updated_at": updated_at,
+        }).eq("telegram_id", tg_id).execute()
+    except Exception:
+        # Legacy schema fallback.
+        storage_field = "risk_per_trade"
+        s.table("autotrade_sessions").update({
+            "risk_per_trade": float(risk),
+            "updated_at": updated_at,
+        }).eq("telegram_id", tg_id).execute()
+
+    logger.info(f"[OneClickRisk:{tg_id}] Updated to {risk}% (all_in={all_in}, storage={storage_field})")
+    return {
+        "success": True,
+        "one_click_risk_per_trade": float(risk),
+        "all_in": all_in,
+        "storage_field": storage_field,
     }
 
 
@@ -481,7 +559,8 @@ async def update_leverage(
     tg_id: int = Depends(get_current_user)
 ):
     """
-    Update leverage setting (1-20x).
+    Update leverage CAP (1-20x).
+    The execution layer uses auto max-safe leverage per trade and never exceeds this cap.
     """
     from datetime import datetime
 
@@ -521,7 +600,7 @@ async def update_margin_mode(
     """
     from datetime import datetime
 
-    margin_mode = str(payload.get("margin_mode", "")).strip().lower()
+    margin_mode = str(payload.get("margin_mode", payload.get("mode", ""))).strip().lower()
     if margin_mode not in ("cross", "isolated"):
         raise HTTPException(
             status_code=400,

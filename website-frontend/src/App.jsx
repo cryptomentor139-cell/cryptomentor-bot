@@ -13,6 +13,7 @@ import bitunixLogo from './assets/bitunix.jpg';
 
 const _CONFIGURED_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const _FALLBACK_BASE = '/api';
+const REF_STORAGE_KEY = 'cm_ref_code';
 
 // Tracks which base URL is confirmed working so we don't retry every call.
 // null = untested, string = confirmed working base.
@@ -109,40 +110,8 @@ const MOCK_COURSES = [
   { id: 3, title: "Institutional Order Flow", category: "Masterclass", progress: 0, lessons: 12, locked: true },
 ];
 
-const RISK_OPTIONS = [0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0, 5.0];
-
-function RiskCustomInput({ value, onSubmit, disabled }) {
-  const [draft, setDraft] = React.useState('');
-  const [editing, setEditing] = React.useState(false);
-
-  const commit = () => {
-    const v = parseFloat(draft);
-    if (!isNaN(v) && v > 0 && v <= 100) {
-      onSubmit(Math.round(v * 100) / 100);
-    }
-    setEditing(false);
-    setDraft('');
-  };
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <input
-        type="number"
-        min="0.01"
-        max="100"
-        step="0.01"
-        value={editing ? draft : (value ?? '')}
-        placeholder="custom %"
-        disabled={disabled}
-        onChange={e => { setEditing(true); setDraft(e.target.value); }}
-        onBlur={commit}
-        onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); } if (e.key === 'Escape') { setEditing(false); setDraft(''); } }}
-        className="w-24 px-2.5 py-1.5 rounded-lg bg-[#050505] border border-white/10 text-slate-300 text-xs font-mono text-center focus:outline-none focus:border-amber-500/50 focus:text-white disabled:opacity-40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-      />
-      <span className="text-[10px] text-slate-600">%</span>
-    </div>
-  );
-}
+const RISK_OPTIONS = [0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0, 5.0, 7.5, 10.0];
+const ONE_CLICK_RISK_OPTIONS = [0.5, 1.0, 2.0, 3.0, 5.0, 7.5, 10.0, 25.0, 50.0, 100.0];
 
 const getRiskButtonTone = (risk) => {
   const r = Number(risk) || 0;
@@ -201,13 +170,29 @@ export default function App() {
   const [portfolioLoaded, setPortfolioLoaded] = useState(false);
   const [engineState, setEngineState] = useState({ autoModeEnabled: true, tradingMode: 'scalping', stackMentorActive: true, riskMode: 'moderate' });
   const [botRunning, setBotRunning] = useState(false);
+  const [refCode, setRefCode] = useState(() => {
+    try {
+      return (localStorage.getItem(REF_STORAGE_KEY) || '').trim().toLowerCase();
+    } catch {
+      return '';
+    }
+  });
+  const [referralContext, setReferralContext] = useState({
+    bitunix_referral_url: 'https://www.bitunix.com/register?vipCode=yongdnf',
+    ref_source: 'fallback',
+    community_code: null,
+  });
   const [botBusy, setBotBusy] = useState(false);
   const [botError, setBotError] = useState(null);
   const [showBotStartModal, setShowBotStartModal] = useState(false);
   const [verStatus, setVerStatus] = useState(null); // null = loading, object = loaded
   const [riskSettings, setRiskSettings] = useState({
     risk_per_trade: 0.5,
-    leverage: 10,
+    one_click_risk_per_trade: 0.5,
+    leverage: 20,
+    leverage_cap: 20,
+    leverage_mode: 'auto_max_safe',
+    margin_mode: 'cross',
     equity: 0,
     balance: 0,
     frozen: 0,
@@ -290,6 +275,12 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get('t') || params.get('token');
     const urlUserStr = params.get('u') || params.get('user');
+    const urlRef = (params.get('ref') || '').trim().toLowerCase();
+
+    if (urlRef) {
+      try { localStorage.setItem(REF_STORAGE_KEY, urlRef); } catch {}
+      setRefCode(urlRef);
+    }
 
     const parseJwtPayload = (jwtToken) => {
       try {
@@ -342,8 +333,13 @@ export default function App() {
         setUser(nextUser);
         setIsLoggedIn(true);
 
-        // Remove params from URL to prevent re-login issues on refresh
-        window.history.replaceState({}, document.title, window.location.pathname);
+        // Remove transient auth params from URL while preserving referral context.
+        const next = new URL(window.location.href);
+        next.searchParams.delete('t');
+        next.searchParams.delete('token');
+        next.searchParams.delete('u');
+        next.searchParams.delete('user');
+        window.history.replaceState({}, document.title, `${next.pathname}${next.search}${next.hash}`);
         console.log('[Phase1] Auto-login successful via bot link');
       } catch (e) {
         console.error('[Phase1] Auto-login parse error:', e);
@@ -514,8 +510,12 @@ export default function App() {
       if (resp.ok) {
         const data = await resp.json();
         setRiskSettings({
-          risk_per_trade: data.risk_per_trade || 0.5,
-          leverage: data.leverage || 10,
+          risk_per_trade: data.autotrade_risk_per_trade ?? data.risk_per_trade ?? 0.5,
+          one_click_risk_per_trade: data.one_click_risk_per_trade ?? data.risk_per_trade ?? 0.5,
+          leverage: data.leverage || 20,
+          leverage_cap: data.leverage_cap ?? data.leverage ?? 20,
+          leverage_mode: data.leverage_mode || 'auto_max_safe',
+          margin_mode: data.margin_mode || 'cross',
           equity: data.equity || 0,
           balance: data.balance || 0,        // free/available only
           frozen: data.frozen || 0,          // locked in positions
@@ -532,7 +532,7 @@ export default function App() {
     }
   };
 
-  // Update risk setting
+  // Update AutoTrade risk setting
   const updateRiskSetting = async (newRisk) => {
     setRiskSettings(prev => ({ ...prev, loading: true, error: null }));
     try {
@@ -545,7 +545,7 @@ export default function App() {
       if (resp.ok) {
         setRiskSettings(prev => ({
           ...prev,
-          risk_per_trade: data.risk_per_trade ?? newRisk,
+          risk_per_trade: data.autotrade_risk_per_trade ?? data.risk_per_trade ?? newRisk,
           loading: false,
           error: null,
         }));
@@ -559,6 +559,40 @@ export default function App() {
       }
     } catch (e) {
       console.error('Error updating risk setting:', e);
+      setRiskSettings(prev => ({ ...prev, loading: false, error: e.message }));
+    }
+  };
+
+  // Update dedicated 1-click risk setting
+  const updateOneClickRiskSetting = async (newRisk, options = {}) => {
+    setRiskSettings(prev => ({ ...prev, loading: true, error: null }));
+    try {
+      const payload = {
+        one_click_risk_per_trade: Number(newRisk),
+      };
+      if (options.all_in) payload.all_in = true;
+      const resp = await apiFetch('/dashboard/settings/one-click-risk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        setRiskSettings(prev => ({
+          ...prev,
+          one_click_risk_per_trade: data.one_click_risk_per_trade ?? Number(newRisk),
+          loading: false,
+          error: null,
+        }));
+      } else {
+        setRiskSettings(prev => ({
+          ...prev,
+          loading: false,
+          error: data.detail || `Error ${resp.status}`,
+        }));
+      }
+    } catch (e) {
+      console.error('Error updating one-click risk setting:', e);
       setRiskSettings(prev => ({ ...prev, loading: false, error: e.message }));
     }
   };
@@ -641,6 +675,28 @@ export default function App() {
   }, [isLoggedIn]);
 
   // Fetch verification status on login
+  const fetchReferralContext = async (codeOverride = null) => {
+    if (!isLoggedIn) return;
+    const code = (codeOverride ?? refCode ?? '').trim().toLowerCase();
+    try {
+      const qs = code ? `?community_code=${encodeURIComponent(code)}` : '';
+      const resp = await apiFetch(`/user/referral-context${qs}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      setReferralContext({
+        bitunix_referral_url: data.bitunix_referral_url || 'https://www.bitunix.com/register?vipCode=yongdnf',
+        ref_source: data.ref_source || 'fallback',
+        community_code: data.community_code || code || null,
+      });
+      if (data.community_code) {
+        setRefCode(data.community_code);
+        try { localStorage.setItem(REF_STORAGE_KEY, data.community_code); } catch {}
+      }
+    } catch (e) {
+      console.warn('[Referral] Context fetch failed:', e);
+    }
+  };
+
   const fetchVerStatus = async () => {
     if (!isLoggedIn) { setVerLoading(false); return; }
     try {
@@ -656,6 +712,17 @@ export default function App() {
       if (resp.ok) {
         const data = await resp.json();
         setVerStatus(data);
+        if (data.community_code) {
+          setRefCode(String(data.community_code).toLowerCase());
+          try { localStorage.setItem(REF_STORAGE_KEY, String(data.community_code).toLowerCase()); } catch {}
+        }
+        if (data.bitunix_referral_url) {
+          setReferralContext({
+            bitunix_referral_url: data.bitunix_referral_url,
+            ref_source: data.ref_source || 'fallback',
+            community_code: data.community_code || refCode || null,
+          });
+        }
         setBootIssue(null);
       } else {
         // Fail closed on backend/status errors.
@@ -683,6 +750,11 @@ export default function App() {
     }
     fetchVerStatus();
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    fetchReferralContext();
+  }, [isLoggedIn, refCode]);
 
   // Guard against indefinite "Checking access..." screen.
   useEffect(() => {
@@ -892,15 +964,26 @@ export default function App() {
     if (!verStatus || verStatus.status === 'none') {
       return <GatekeeperScreen
         user={user}
+        referralUrl={referralContext.bitunix_referral_url}
+        referralSource={referralContext.ref_source}
+        referralCode={refCode || referralContext.community_code}
         onSubmitUID={async (uid) => {
           try {
             const resp = await apiFetch('/user/submit-uid', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ uid }),
+              body: JSON.stringify({ uid, community_code: refCode || referralContext.community_code || null }),
             });
             if (resp.ok) {
-              setVerStatus({ status: 'pending' });
+              const data = await resp.json().catch(() => ({}));
+              setVerStatus({ status: 'pending', ...data });
+              if (data.bitunix_referral_url) {
+                setReferralContext({
+                  bitunix_referral_url: data.bitunix_referral_url,
+                  ref_source: data.ref_source || 'fallback',
+                  community_code: data.community_code || refCode || referralContext.community_code || null,
+                });
+              }
               return { ok: true };
             }
             const err = await resp.json().catch(() => ({}));
@@ -917,14 +1000,26 @@ export default function App() {
     }
     if (verStatus.status === 'rejected' || verStatus.status === 'uid_rejected') {
       return <RejectedScreen
+        referralUrl={referralContext.bitunix_referral_url}
         onResubmit={async (uid) => {
           try {
             const resp = await apiFetch('/user/submit-uid', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ uid }),
+              body: JSON.stringify({ uid, community_code: refCode || referralContext.community_code || null }),
             });
-            if (resp.ok) { setVerStatus({ status: 'pending' }); return { ok: true }; }
+            if (resp.ok) {
+              const data = await resp.json().catch(() => ({}));
+              setVerStatus({ status: 'pending', ...data });
+              if (data.bitunix_referral_url) {
+                setReferralContext({
+                  bitunix_referral_url: data.bitunix_referral_url,
+                  ref_source: data.ref_source || 'fallback',
+                  community_code: data.community_code || refCode || referralContext.community_code || null,
+                });
+              }
+              return { ok: true };
+            }
             const err = await resp.json().catch(() => ({}));
             return { ok: false, error: err.detail || 'Failed to submit UID' };
           } catch (e) { return { ok: false, error: e.message || 'Network error' }; }
@@ -1056,9 +1151,9 @@ export default function App() {
         {/* MAIN CONTENT */}
         <main className="flex-1 min-w-0 overflow-y-auto p-4 md:p-8 lg:p-10 w-full relative z-0 pb-20 md:pb-10 custom-scrollbar">
           {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : []} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} botBusy={botBusy} connectorStatus={connectorStatus} onCloseOneClickPosition={closeOneClickPosition} />}
-          {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} onUpdateLeverage={updateLeverageSetting} onUpdateMarginMode={updateMarginModeSetting} />}
+          {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} onUpdateMarginMode={updateMarginModeSetting} />}
           {activeTab === 'settings' && <SettingsTab onBotConnected={handleBotConnected} />}
-          {activeTab === 'signals' && <SignalsTab user={user} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} />}
+          {activeTab === 'signals' && <SignalsTab user={user} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} onUpdateOneClickRisk={updateOneClickRiskSetting} />}
           {activeTab === 'referral' && <ReferralTab user={user} />}
         </main>
       </div>
@@ -1066,7 +1161,7 @@ export default function App() {
   );
 }
 
-function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUpdateMarginMode }) {
+function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateMarginMode }) {
   if (!riskSettings) return null;
   
   return (
@@ -1083,8 +1178,8 @@ function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUp
       <div className="space-y-6 relative z-10">
         {/* Risk Level */}
         <div>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Risk Per Trade</p>
-          <div className="grid grid-cols-4 gap-2 mb-2">
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">AutoTrade Risk Per Trade (0.25% - 10%)</p>
+          <div className="grid grid-cols-4 gap-2">
             {RISK_OPTIONS.map(risk => (
               <button
                 key={risk}
@@ -1102,7 +1197,6 @@ function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUp
               </button>
             ))}
           </div>
-          <RiskCustomInput value={riskSettings.risk_per_trade} onSubmit={onUpdateRisk} disabled={riskSettings.loading} />
           <p className={`text-[10px] mt-2 font-medium ${riskSettings.risk_per_trade > 1.0 ? 'text-amber-300' : 'text-slate-500'}`}>
             {getRiskDescription(riskSettings.risk_per_trade)}
           </p>
@@ -1112,21 +1206,15 @@ function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUp
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Leverage</p>
-            <div className="flex gap-1.5 bg-[#050505] p-1 rounded-lg border border-white/5">
-              {[5, 10, 20].map(lev => (
-                <button
-                  key={lev}
-                  onClick={() => onUpdateLeverage(lev)}
-                  disabled={riskSettings.loading}
-                  className={`flex-1 py-1.5 rounded-md font-bold text-[10px] transition-all ${
-                    riskSettings.leverage === lev
-                      ? 'bg-amber-500 text-white'
-                      : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  {lev}x
-                </button>
-              ))}
+            <div className="bg-[#050505] p-3 rounded-lg border border-white/5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Auto Max-Safe</span>
+                <span className="text-xs font-black text-white">Dynamic</span>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1.5">
+                Derived per trade from stop-loss distance and equity risk.
+                Cap: {riskSettings.leverage_cap || riskSettings.leverage || 20}x.
+              </p>
             </div>
           </div>
           <div>
@@ -1338,7 +1426,9 @@ function EngineTab({
   onToggleBot,
   riskSettings = {
     risk_per_trade: 0.5,
-    leverage: 10,
+    leverage: 20,
+    leverage_cap: 20,
+    leverage_mode: 'auto_max_safe',
     equity: 0,
     balance: 0,
     frozen: 0,
@@ -1347,7 +1437,6 @@ function EngineTab({
     error: null,
   },
   onUpdateRisk,
-  onUpdateLeverage,
   onUpdateMarginMode,
   liveEquity,
 }) {
@@ -1432,7 +1521,7 @@ function EngineTab({
 
       {/* Risk Management Card */}
 
-      <RiskManagementCard riskSettings={riskSettings} onUpdateRisk={onUpdateRisk} onUpdateLeverage={onUpdateLeverage} onUpdateMarginMode={onUpdateMarginMode} />
+      <RiskManagementCard riskSettings={riskSettings} onUpdateRisk={onUpdateRisk} onUpdateMarginMode={onUpdateMarginMode} />
     </div>
   );
 }
@@ -1726,7 +1815,7 @@ function SettingsTab({ onBotConnected }) {
   );
 }
 
-function SignalsTab({ user, riskSettings, onUpdateRisk }) {
+function SignalsTab({ user, riskSettings, onUpdateRisk, onUpdateOneClickRisk }) {
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1798,23 +1887,22 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
         </div>
       </header>
       {/* Risk Level Quick Switch */}
-      {riskSettings && onUpdateRisk && (
+      {riskSettings && onUpdateOneClickRisk && (
         <div className="bg-[#0a0a0a]/60 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 md:p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex-1">
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">⚡ Risk Level Per Trade</p>
-              <div className="flex flex-wrap gap-2 items-center">
-                {RISK_OPTIONS.map(risk => (
-                  <button key={risk} onClick={() => onUpdateRisk(risk)} disabled={riskSettings?.loading}
+            <div>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">⚡ 1-Click Risk Level Per Trade</p>
+              <div className="flex flex-wrap gap-2">
+                {ONE_CLICK_RISK_OPTIONS.map(risk => (
+                  <button key={risk} onClick={() => onUpdateOneClickRisk(risk, { all_in: risk >= 100 })} disabled={riskSettings?.loading}
                     className={`px-4 py-2 rounded-xl font-bold text-xs transition-all ${
-                      riskSettings?.risk_per_trade === risk
+                      (riskSettings?.one_click_risk_per_trade ?? riskSettings?.risk_per_trade) === risk
                         ? getRiskButtonTone(risk)
                         : risk > 1.0
                           ? 'bg-[#090505] text-amber-300/70 border border-amber-500/15 hover:border-rose-500/35 hover:text-amber-200'
                           : 'bg-white/5 text-slate-500 border border-white/5 hover:border-white/20 hover:text-slate-300'
-                    } disabled:opacity-50`}>{risk}%</button>
+                    } disabled:opacity-50`}>{risk >= 100 ? 'ALL IN' : `${risk}%`}</button>
                 ))}
-                <RiskCustomInput value={riskSettings?.risk_per_trade} onSubmit={onUpdateRisk} disabled={riskSettings?.loading} />
               </div>
             </div>
             {riskSettings?.equity > 0 && (
@@ -1825,14 +1913,19 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
                 </div>
                 <div className="w-px h-8 bg-white/10" />
                 <div className="text-right">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Risk/Trade</p>
-                  <p className={`font-bold ${getRiskValueTone(riskSettings.risk_per_trade)}`}>${(riskSettings.equity * (riskSettings.risk_per_trade / 100)).toLocaleString('en-US', {maximumFractionDigits: 2})}</p>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Target Risk/Trade</p>
+                  <p className={`font-bold ${getRiskValueTone(riskSettings.one_click_risk_per_trade ?? riskSettings.risk_per_trade)}`}>
+                    ${(riskSettings.equity * ((riskSettings.one_click_risk_per_trade ?? riskSettings.risk_per_trade) / 100)).toLocaleString('en-US', {maximumFractionDigits: 2})}
+                  </p>
                 </div>
               </div>
             )}
           </div>
-          <p className={`text-[10px] mt-2 ${riskSettings?.risk_per_trade > 1.0 ? 'text-amber-300' : 'text-slate-600'}`}>
-            {getRiskDescription(riskSettings?.risk_per_trade)}
+          <p className={`text-[10px] mt-2 ${(riskSettings?.one_click_risk_per_trade ?? riskSettings?.risk_per_trade) > 1.0 ? 'text-amber-300' : 'text-slate-600'}`}>
+            {getRiskDescription(riskSettings?.one_click_risk_per_trade ?? riskSettings?.risk_per_trade)}
+          </p>
+          <p className="text-[10px] text-slate-600 mt-1">
+            Final effective risk may be lower per signal if available balance cannot support required margin.
           </p>
         </div>
       )}
@@ -1841,7 +1934,7 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {sortedSignals.map((signal, idx) => (
           <div key={signal.id || signal.pair} className="animate-in fade-in slide-in-from-bottom-8" style={{ animationDelay: `${idx * 100}ms`, animationFillMode: 'both' }}>
-            <SignalCard signal={signal} userIsPremium={user?.is_premium} riskSettings={riskSettings} onUpdateRisk={onUpdateRisk} />
+            <SignalCard signal={signal} userIsPremium={user?.is_premium} riskSettings={riskSettings} onUpdateOneClickRisk={onUpdateOneClickRisk} />
           </div>
         ))}
         {!loading && !signals.length && !error && <div className="col-span-full text-center text-slate-500 text-sm py-10">No signals available right now.</div>}
@@ -2308,11 +2401,13 @@ function BridgeCard({ name, status, logo, logoSrc, colors, onConnect, onDisconne
   );
 }
 
-function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
+function SignalCard({ signal, userIsPremium, riskSettings, onUpdateOneClickRisk }) {
   const [isPlaced, setIsPlaced] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState(null);
   const [now, setNow] = useState(() => Date.now());
+  const [riskDraft, setRiskDraft] = useState(null);
+  const [sliderRisk, setSliderRisk] = useState(null);
   const isLong = signal.direction === 'LONG';
   const isLocked = signal.premium && !userIsPremium;
   const isExpired = !!signal.expired;
@@ -2327,8 +2422,30 @@ function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
   const ageMs = Math.max(0, now - generatedMs);
   const remainingMs = Math.max(0, windowMs - ageMs);
   const windowExpired = remainingMs <= 0;
-  const oneClickRiskPct = Number(riskSettings?.risk_per_trade || 1.0);
+  const oneClickRiskPct = Number(riskSettings?.one_click_risk_per_trade ?? riskSettings?.risk_per_trade ?? 1.0);
+  const controlRiskPct = sliderRisk !== null ? sliderRisk : oneClickRiskPct;
   const oneClickHighRisk = oneClickRiskPct > 1.0;
+
+  // SL distance + position estimates (mirrors backend calculate_max_safe_leverage)
+  const entryNums = (signal.entry || '').split('-').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
+  const entryMid = entryNums.length >= 2 ? (entryNums[0] + entryNums[1]) / 2 : (entryNums[0] || 0);
+  const slPrice = parseFloat(signal.stopLoss) || 0;
+  const slDistPct = entryMid > 0 && slPrice > 0 ? Math.abs(entryMid - slPrice) / entryMid * 100 : 0;
+  const equity = riskSettings?.equity || 0;
+  const balance = riskSettings?.balance || 0;
+  const riskAmountUsd = equity > 0 ? equity * (oneClickRiskPct / 100) : 0;
+  const configuredLeverageCap = riskSettings?.leverage_cap || riskSettings?.leverage || 20;
+  const autoLeverage = slDistPct > 0
+    ? Math.max(1, Math.min(Math.floor(1.0 / (slDistPct / 100 * 1.15)), configuredLeverageCap))
+    : configuredLeverageCap;
+  const estPositionUsd = slDistPct > 0 ? riskAmountUsd / (slDistPct / 100) : 0;
+  const estMarginRawUsd = autoLeverage > 0 ? (estPositionUsd / autoLeverage) : 0;
+  const marginCapUsd = balance > 0 ? balance * 0.95 : estMarginRawUsd;
+  const marginCapApplied = balance > 0 && estMarginRawUsd > marginCapUsd;
+  const estMarginUsd = marginCapApplied ? marginCapUsd : estMarginRawUsd;
+  const estSizeUsd = estMarginUsd * autoLeverage;
+  const effectiveRiskUsd = slDistPct > 0 ? estSizeUsd * (slDistPct / 100) : estMarginUsd;
+  const effectiveRiskPct = equity > 0 ? effectiveRiskUsd / equity * 100 : oneClickRiskPct;
   const remainingLabel = windowExpired
     ? 'Entry window closed'
     : `${Math.floor(remainingMs / 60000)}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')} left`;
@@ -2344,6 +2461,8 @@ function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
         body: JSON.stringify({
           symbol: signal.pair.replace('/', ''),
           generated_at: signal.generated_at,
+          risk_override_pct: oneClickRiskPct,
+          all_in: oneClickRiskPct >= 100,
         }),
       });
       const data = await r.json().catch(() => ({}));
@@ -2355,6 +2474,20 @@ function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
       setPlacing(false);
     }
   };
+
+  const commitOneClickRisk = (raw) => {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    const clamped = Math.max(0.5, Math.min(100, Math.round(parsed * 100) / 100));
+    setSliderRisk(clamped);
+    onUpdateOneClickRisk(clamped, { all_in: clamped >= 100 });
+  };
+
+  useEffect(() => {
+    if (!riskSettings?.loading) {
+      setSliderRisk(null);
+    }
+  }, [riskSettings?.loading, oneClickRiskPct]);
 
   return (
     <div className={`bg-[#0a0a0a]/60 backdrop-blur-2xl rounded-[1.5rem] md:rounded-[2rem] border border-white/5 p-5 md:p-6 flex flex-col transition-all duration-500 relative overflow-hidden group hover:border-white/20 ${isLocked ? 'opacity-80' : ''} ${isExpired ? 'opacity-60 grayscale' : ''}`}>
@@ -2421,41 +2554,83 @@ function SignalCard({ signal, userIsPremium, riskSettings, onUpdateRisk }) {
             <div className="flex-1 bg-white/[0.02] p-3 rounded-xl border border-white/5"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Stack Targets</p><div className="flex flex-wrap gap-1">{signal.targets.map((t, i) => <span key={i} className="text-xs font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">TP{i+1}: {t}</span>)}</div></div>
             <div className="bg-white/[0.02] p-3 rounded-xl border border-white/5 min-w-[80px]"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Stop Loss</p><p className="text-rose-400 font-bold text-sm">{signal.stopLoss}</p></div>
           </div>
-          {!isPlaced && !windowExpired && riskSettings?.equity > 0 && signal.stopLoss && (
+          {!isPlaced && !windowExpired && equity > 0 && signal.stopLoss && (
             <div className={`rounded-lg p-2.5 text-[10px] ${oneClickHighRisk ? 'bg-amber-500/10 border border-amber-500/25' : 'bg-white/5'}`}>
-              <div className="flex items-center justify-between">
-              <span className="text-slate-500">1-Click will risk:</span>
-              <span className={`font-bold ${getRiskValueTone(oneClickRiskPct)}`}>
-                ${(riskSettings.equity * (riskSettings.risk_per_trade / 100)).toFixed(2)}
-                <span className={`ml-1 ${oneClickHighRisk ? 'text-amber-200/80' : 'text-slate-600'}`}>({riskSettings.risk_per_trade}% of equity)</span>
-              </span>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-slate-500">1-Click will risk:</span>
+                <span className={`font-bold ${getRiskValueTone(oneClickRiskPct)}`}>
+                  ${effectiveRiskUsd.toFixed(2)}
+                  <span className={`ml-1 ${oneClickHighRisk ? 'text-amber-200/80' : 'text-slate-600'}`}>({effectiveRiskPct.toFixed(2)}% effective)</span>
+                </span>
               </div>
+              {slDistPct > 0 && (
+                <div className="grid grid-cols-3 gap-1 mb-1.5 text-center">
+                  <div><p className="text-slate-600 mb-0.5">SL Dist</p><p className="text-slate-300 font-mono">{slDistPct.toFixed(2)}%</p></div>
+                  <div><p className="text-slate-600 mb-0.5">Est Size</p><p className="text-slate-300 font-mono">${estSizeUsd.toFixed(2)}</p></div>
+                  <div><p className="text-slate-600 mb-0.5">Est Margin</p><p className="text-slate-300 font-mono">${estMarginUsd.toFixed(2)}</p></div>
+                </div>
+              )}
+              {marginCapApplied && slDistPct > 0 && (
+                <p className="text-slate-500 mb-1">Dynamic margin cap applied (${estMarginUsd.toFixed(2)}), so effective risk is lower than target.</p>
+              )}
               {oneClickHighRisk && (
-                <p className="mt-1 text-[10px] text-amber-300 font-medium">Amber-Red Risk Zone active for this 1-click trade (&gt;1%).</p>
+                <p className="text-[10px] text-amber-300 font-medium">Amber-Red Risk Zone active for this 1-click trade (&gt;1%).</p>
               )}
             </div>
           )}
-          {!isPlaced && !windowExpired && riskSettings && onUpdateRisk && (
+          {!isPlaced && !windowExpired && riskSettings && onUpdateOneClickRisk && (
             <div className="bg-white/5 rounded-lg p-2.5">
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Risk Slider (1-Click, 0.25% - 5%)</p>
-              <div className="grid grid-cols-4 gap-1.5">
-                {RISK_OPTIONS.map((risk) => (
-                  <button
-                    key={risk}
-                    onClick={() => onUpdateRisk(risk)}
-                    disabled={riskSettings?.loading}
-                    className={`py-1.5 rounded-lg text-[10px] font-black transition-all ${
-                      riskSettings?.risk_per_trade === risk
-                        ? getRiskButtonTone(risk)
-                        : risk > 1.0
-                          ? 'bg-[#090505] text-amber-300/70 border border-amber-500/15 hover:border-rose-500/35 hover:text-amber-200'
-                          : "bg-[#050505] text-slate-500 border border-white/10 hover:text-slate-300"
-                    }`}
-                  >
-                    {risk}%
-                  </button>
-                ))}
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Risk Slider (1-Click, 0.5% – All In 100%)</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0.5"
+                  max="100"
+                  step="0.5"
+                  value={controlRiskPct}
+                  disabled={riskSettings?.loading}
+                  onChange={e => setSliderRisk(parseFloat(e.target.value))}
+                  onMouseUp={e => commitOneClickRisk(e.currentTarget.value)}
+                  onTouchEnd={e => commitOneClickRisk(e.currentTarget.value)}
+                  className="flex-1 accent-amber-500 disabled:opacity-40"
+                />
+                <input
+                  type="number"
+                  min="0.5"
+                  max="100"
+                  step="0.5"
+                  value={riskDraft !== null ? riskDraft : controlRiskPct}
+                  disabled={riskSettings?.loading}
+                  onChange={e => setRiskDraft(e.target.value)}
+                  onBlur={() => {
+                    if (riskDraft !== null) {
+                      const v = parseFloat(riskDraft);
+                      if (!isNaN(v)) commitOneClickRisk(v);
+                      setRiskDraft(null);
+                    }
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.target.blur();
+                    if (e.key === 'Escape') { setRiskDraft(null); e.target.blur(); }
+                  }}
+                  className="w-14 px-2 py-1 rounded bg-[#050505] border border-white/10 text-white text-xs font-mono text-center focus:outline-none focus:border-amber-500/50 disabled:opacity-40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="text-[10px] text-slate-500 font-bold">%</span>
               </div>
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => commitOneClickRisk(100)}
+                  disabled={riskSettings?.loading}
+                  className="px-2.5 py-1 rounded-md text-[10px] font-black tracking-wider uppercase border border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 disabled:opacity-40"
+                >
+                  ALL IN (100%)
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-600 mt-1.5">Type exact risk in the box for precision input.</p>
+              {oneClickHighRisk && (
+                <p className="text-[10px] mt-1 font-medium text-amber-300">{getRiskDescription(oneClickRiskPct)}</p>
+              )}
             </div>
           )}
           <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest mt-1">
@@ -2494,12 +2669,13 @@ function CourseCard({ course }) {
 
 // ── Verification & Onboarding Screens ────────────────────────────────────────
 
-function GatekeeperScreen({ user, onSubmitUID, onLogout }) {
+function GatekeeperScreen({ user, referralUrl, referralSource, referralCode, onSubmitUID, onLogout }) {
   const [step, setStep] = useState(1);
   const [uid, setUID] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState(null);
+  const resolvedReferralUrl = referralUrl || 'https://www.bitunix.com/register?vipCode=yongdnf';
 
   // After successful submit, show a holding screen — parent will transition to VerificationPendingScreen
   if (submitted) {
@@ -2550,11 +2726,16 @@ function GatekeeperScreen({ user, onSubmitUID, onLogout }) {
           <>
             <h2 className="text-xl font-bold text-white mb-2">Step 1: Register on Bitunix</h2>
             <p className="text-slate-300 text-sm mb-4">Create a Bitunix account using our referral link. This is required to enable AI-powered trading.</p>
-            <a href="https://www.bitunix.com/register?vipCode=sq45" target="_blank" rel="noopener noreferrer"
+            <a href={resolvedReferralUrl} target="_blank" rel="noopener noreferrer"
               className="block w-full text-center bg-cyan-500 text-white font-bold py-3 rounded-xl mb-4 hover:bg-cyan-600 transition-colors">
               Open Bitunix Registration
             </a>
-            <p className="text-xs text-slate-500 mb-6">Referral Code: <code className="text-cyan-400">sq45</code> (auto-applied via link)</p>
+            <p className="text-xs text-slate-500 mb-3">
+              Referral Source: <code className="text-cyan-400">{referralSource || 'fallback'}</code>
+            </p>
+            <p className="text-xs text-slate-500 mb-6">
+              Community Code: <code className="text-cyan-400">{referralCode || 'none'}</code> (auto-applied via link)
+            </p>
             <button onClick={() => setStep(2)} className="w-full bg-white/10 text-white font-bold py-3 rounded-xl hover:bg-white/20 transition-colors">
               I've Already Registered &rarr; Continue
             </button>
@@ -2618,10 +2799,11 @@ function VerificationPendingScreen({ onRefresh, onLogout }) {
   );
 }
 
-function RejectedScreen({ onResubmit, onLogout }) {
+function RejectedScreen({ referralUrl, onResubmit, onLogout }) {
   const [uid, setUid] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const resolvedReferralUrl = referralUrl || 'https://www.bitunix.com/register?vipCode=yongdnf';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#020202] p-4 relative overflow-hidden">
@@ -2638,7 +2820,7 @@ function RejectedScreen({ onResubmit, onLogout }) {
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-6 text-sm text-amber-200/80">
           Make sure you registered on Bitunix using our referral link before submitting your UID.
         </div>
-        <a href="https://www.bitunix.com/register?vipCode=sq45" target="_blank" rel="noopener noreferrer"
+        <a href={resolvedReferralUrl} target="_blank" rel="noopener noreferrer"
           className="block w-full text-center bg-fuchsia-500/15 border border-fuchsia-500/30 text-fuchsia-400 font-bold py-3 rounded-xl mb-6 hover:bg-fuchsia-500/25 transition-colors">
           Re-register on Bitunix with Referral →
         </a>
