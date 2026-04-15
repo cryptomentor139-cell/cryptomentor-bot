@@ -111,6 +111,39 @@ const MOCK_COURSES = [
 
 const RISK_OPTIONS = [0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0, 5.0];
 
+function RiskCustomInput({ value, onSubmit, disabled }) {
+  const [draft, setDraft] = React.useState('');
+  const [editing, setEditing] = React.useState(false);
+
+  const commit = () => {
+    const v = parseFloat(draft);
+    if (!isNaN(v) && v > 0 && v <= 100) {
+      onSubmit(Math.round(v * 100) / 100);
+    }
+    setEditing(false);
+    setDraft('');
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        type="number"
+        min="0.01"
+        max="100"
+        step="0.01"
+        value={editing ? draft : (value ?? '')}
+        placeholder="custom %"
+        disabled={disabled}
+        onChange={e => { setEditing(true); setDraft(e.target.value); }}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); } if (e.key === 'Escape') { setEditing(false); setDraft(''); } }}
+        className="w-24 px-2.5 py-1.5 rounded-lg bg-[#050505] border border-white/10 text-slate-300 text-xs font-mono text-center focus:outline-none focus:border-amber-500/50 focus:text-white disabled:opacity-40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      />
+      <span className="text-[10px] text-slate-600">%</span>
+    </div>
+  );
+}
+
 const getRiskButtonTone = (risk) => {
   const r = Number(risk) || 0;
   if (r > 1.0) return 'bg-gradient-to-r from-amber-500/20 to-rose-500/20 text-amber-300 border border-amber-400/40';
@@ -1050,8 +1083,8 @@ function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUp
       <div className="space-y-6 relative z-10">
         {/* Risk Level */}
         <div>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Risk Per Trade (0.25% - 5%)</p>
-          <div className="grid grid-cols-4 gap-2">
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Risk Per Trade</p>
+          <div className="grid grid-cols-4 gap-2 mb-2">
             {RISK_OPTIONS.map(risk => (
               <button
                 key={risk}
@@ -1069,6 +1102,7 @@ function RiskManagementCard({ riskSettings, onUpdateRisk, onUpdateLeverage, onUp
               </button>
             ))}
           </div>
+          <RiskCustomInput value={riskSettings.risk_per_trade} onSubmit={onUpdateRisk} disabled={riskSettings.loading} />
           <p className={`text-[10px] mt-2 font-medium ${riskSettings.risk_per_trade > 1.0 ? 'text-amber-300' : 'text-slate-500'}`}>
             {getRiskDescription(riskSettings.risk_per_trade)}
           </p>
@@ -1767,9 +1801,9 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
       {riskSettings && onUpdateRisk && (
         <div className="bg-[#0a0a0a]/60 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 md:p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
+            <div className="flex-1">
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">⚡ Risk Level Per Trade</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 items-center">
                 {RISK_OPTIONS.map(risk => (
                   <button key={risk} onClick={() => onUpdateRisk(risk)} disabled={riskSettings?.loading}
                     className={`px-4 py-2 rounded-xl font-bold text-xs transition-all ${
@@ -1780,6 +1814,7 @@ function SignalsTab({ user, riskSettings, onUpdateRisk }) {
                           : 'bg-white/5 text-slate-500 border border-white/5 hover:border-white/20 hover:text-slate-300'
                     } disabled:opacity-50`}>{risk}%</button>
                 ))}
+                <RiskCustomInput value={riskSettings?.risk_per_trade} onSubmit={onUpdateRisk} disabled={riskSettings?.loading} />
               </div>
             </div>
             {riskSettings?.equity > 0 && (

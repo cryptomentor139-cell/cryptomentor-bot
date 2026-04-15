@@ -98,7 +98,7 @@ _signals_being_processed: Dict[int, set] = {}
 #  Engine config (professional defaults)
 # ─────────────────────────────────────────────
 ENGINE_CONFIG = {
-    "symbols":            ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "DOT", "MATIC", "LINK", "UNI", "ATOM", "XAU", "CL", "QQQ"],  # 16 pairs
+    "symbols":            ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "DOT", "LINK", "UNI", "ATOM", "XAU", "CL", "QQQ"],  # 15 pairs (expanded)
     "scan_interval":      45,       # detik antar scan
     "min_confidence":     68,       # hanya sinyal berkualitas tinggi
     "max_trades_per_day": 999,       # unlimited — push trading volume
@@ -121,7 +121,8 @@ ENGINE_CONFIG = {
 QTY_PRECISION = {
     "BTCUSDT": 3, "ETHUSDT": 2, "SOLUSDT": 1, "BNBUSDT": 2,
     "XRPUSDT": 0, "ADAUSDT": 0, "DOGEUSDT": 0, "AVAXUSDT": 2,
-    "DOTUSDT": 1, "MATICUSDT": 0,
+    "DOTUSDT": 1, "LINKUSDT": 1, "UNIUSDT": 1, "ATOMUSDT": 1,
+    "XAUUSDT": 2, "CLUSDT": 2, "QQQUSDT": 1,
 }
 
 RISK_MIN_PCT = 0.25
