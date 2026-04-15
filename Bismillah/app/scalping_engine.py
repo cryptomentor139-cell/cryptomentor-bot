@@ -62,7 +62,7 @@ class ScalpingEngine:
     - Single TP at 1.5R
     - 30-minute max hold time
     - 5-minute cooldown between signals
-    - 80% minimum confidence
+    - 72% minimum confidence
     """
     
     def __init__(self, user_id: int, client, bot, notify_chat_id: int, config: Optional[ScalpingConfig] = None):

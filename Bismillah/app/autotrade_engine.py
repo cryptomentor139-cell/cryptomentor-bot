@@ -1317,9 +1317,16 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     except Exception as e:
         logger.warning(f"[Engine:{user_id}] Failed to load user risk_pct, using default 1.0%: {e}")
 
-    logger.info(f"[Engine:{user_id}] PRO ENGINE STARTED — symbols={cfg['symbols']}, "
-                f"min_conf={cfg['min_confidence']}, min_rr={cfg['min_rr_ratio']}, "
-                f"user_risk={user_risk_pct}%, daily_loss_limit_DISABLED")
+    risk_profile_cfg = _risk_profile(user_risk_pct)
+    dynamic_min_confidence = int(risk_profile_cfg["min_confidence"])
+    cfg = dict(cfg)
+    cfg["min_confidence"] = dynamic_min_confidence
+
+    logger.info(
+        f"[Engine:{user_id}] PRO ENGINE STARTED — symbols={cfg['symbols']}, "
+        f"min_conf={cfg['min_confidence']} (risk-profile dynamic), min_rr={cfg['min_rr_ratio']}, "
+        f"user_risk={user_risk_pct}%, daily_loss_limit_DISABLED"
+    )
 
     try:
         if not silent:
@@ -1329,7 +1336,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 text=(
                     "🤖 <b>AutoTrade PRO Engine Active!</b>\n\n"
                     f"📊 Strategy: Confluence-based multi-factor detection\n"
-                    f"🎯 Min Confidence: {cfg['min_confidence']}%\n"
+                    f"🎯 Min Confidence: {cfg['min_confidence']}% (risk-profile dynamic)\n"
                     f"💰 Risk Per Trade: {user_risk_pct}%\n"
                     + (
                         f"⚖️ R:R: 1:2 (TP1, 75%) → 1:3 (TP2, 25%)\n"

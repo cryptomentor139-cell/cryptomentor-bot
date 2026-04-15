@@ -46,7 +46,7 @@ class ScalpingConfig:
     scan_interval: int = 15  # seconds between scans (back to 15s with proper async)
     
     # Signal requirements
-    min_confidence: float = 0.80  # 80% minimum
+    min_confidence: float = 0.72  # 72% minimum
     min_rr: float = 1.5  # Minimum risk-reward ratio
     
     # Position management

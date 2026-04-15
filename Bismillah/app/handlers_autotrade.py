@@ -1456,6 +1456,8 @@ async def callback_select_scalping(update: Update, context: ContextTypes.DEFAULT
     )
     
     if result["success"]:
+        from app.trading_mode import ScalpingConfig
+        min_confidence = int(round(ScalpingConfig().min_confidence * 100))
         await query.edit_message_text(
             "✅ <b>Trading Mode Changed</b>\n\n"
             "⚡ <b>Scalping Mode Activated</b>\n\n"
@@ -1466,7 +1468,7 @@ async def callback_select_scalping(update: Update, context: ContextTypes.DEFAULT
             "• Max hold time: 30 minutes\n"
             "• Trading pairs: Top 15 (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, DOT, LINK, UNI, ATOM, XAU, CL, QQQ)\n"
             "• Max concurrent: 4 positions\n"
-            "• Min confidence: 80%\n\n"
+            f"• Min confidence: {min_confidence}%\n\n"
             "🚀 Engine restarted with scalping parameters.\n"
             "You'll receive signals when high-probability setups appear.",
             parse_mode='HTML',
@@ -1509,6 +1511,10 @@ async def callback_select_swing(update: Update, context: ContextTypes.DEFAULT_TY
     )
     
     if result["success"]:
+        from app.supabase_repo import get_risk_per_trade
+        from app.autotrade_engine import _normalize_risk_pct, _risk_profile
+        risk_pct = _normalize_risk_pct(get_risk_per_trade(user_id), default=1.0)
+        min_confidence = int(round(_risk_profile(risk_pct)["min_confidence"]))
         await query.edit_message_text(
             "✅ <b>Trading Mode Changed</b>\n\n"
             "📊 <b>Swing Mode Activated</b>\n\n"
@@ -1519,7 +1525,7 @@ async def callback_select_swing(update: Update, context: ContextTypes.DEFAULT_TY
             "• No max hold time\n"
             "• Trading pairs: Top 15 (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, DOT, LINK, UNI, ATOM, XAU, CL, QQQ)\n"
             "• Max concurrent: 4 positions\n"
-            "• Min confidence: 68%\n\n"
+            f"• Min confidence: {min_confidence}% (dynamic by risk profile)\n\n"
             "🚀 Engine restarted with swing parameters.",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([

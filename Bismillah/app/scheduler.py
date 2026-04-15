@@ -97,6 +97,26 @@ def _mark_requires_manual_restart(user_id: int):
         logger.warning(f"[HealthCheck] Failed to mark user {user_id} as stopped: {e}")
 
 
+def _resolve_min_confidence_for_user(user_id: int, trading_mode: str) -> int:
+    """Return user-visible min confidence threshold for current mode."""
+    mode = (trading_mode or "").strip().lower()
+    try:
+        if mode == "scalping":
+            from app.trading_mode import ScalpingConfig
+            return int(round(ScalpingConfig().min_confidence * 100))
+
+        from app.supabase_repo import get_risk_per_trade
+        from app.autotrade_engine import _normalize_risk_pct, _risk_profile
+
+        user_risk = _normalize_risk_pct(get_risk_per_trade(user_id), default=1.0)
+        return int(round(_risk_profile(user_risk)["min_confidence"]))
+    except Exception as e:
+        logger.warning(
+            f"[Scheduler] Failed to resolve dynamic min confidence for user {user_id} mode={mode}: {e}"
+        )
+        return 72 if mode == "scalping" else 68
+
+
 class TaskScheduler:
 
     """Scheduler untuk task otomatis"""
@@ -456,6 +476,7 @@ def start_scheduler(application):
                         # Get trading mode details
                         from app.trading_mode_manager import TradingMode
                         is_scalping = trading_mode == "scalping"
+                        min_confidence_display = _resolve_min_confidence_for_user(user_id, trading_mode)
                         
                         if is_scalping:
                             # Scalping mode notification
@@ -467,7 +488,7 @@ def start_scheduler(application):
                                     "<b>Configuration:</b>\n"
                                     "• Timeframe: <b>5m</b>\n"
                                     "• Scan interval: <b>15s</b>\n"
-                                    "• Min confidence: <b>80%</b>\n"
+                                    f"• Min confidence: <b>{min_confidence_display}%</b>\n"
                                     "• Min R:R: <b>1:1.5</b>\n"
                                     "• Max hold time: <b>30 minutes</b>\n"
                                     f"• Max concurrent: <b>4 positions</b>\n"
@@ -491,7 +512,7 @@ def start_scheduler(application):
                                     "<b>Configuration:</b>\n"
                                     "• Timeframe: <b>15m</b>\n"
                                     "• Scan interval: <b>45s</b>\n"
-                                    "• Min confidence: <b>68%</b>\n"
+                                    f"• Min confidence: <b>{min_confidence_display}%</b> (dynamic by risk profile)\n"
                                     "• Min R:R: <b>1:2</b>\n"
                                     f"• Max concurrent: <b>4 positions</b>\n"
                                     "• Trading pairs: <b>15 pairs</b>\n\n"
