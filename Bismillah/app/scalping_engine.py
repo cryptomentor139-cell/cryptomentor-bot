@@ -1180,20 +1180,30 @@ class ScalpingEngine:
                 "opened_at", datetime.utcnow().date().isoformat()
             ).execute()
             
-            if not res.data:
+            if not res or not isinstance(getattr(res, "data", None), list) or not res.data:
                 return False
             
-            total_pnl = sum(float(t.get("pnl_usdt", 0)) for t in res.data)
+            total_pnl = 0.0
+            for t in res.data:
+                if not isinstance(t, dict):
+                    continue
+                try:
+                    total_pnl += float(t.get("pnl_usdt", 0) or 0)
+                except Exception:
+                    continue
             
             # Get account balance
             session_res = s.table("autotrade_sessions").select("initial_deposit").eq(
                 "telegram_id", self.user_id
             ).limit(1).execute()
             
-            if not session_res.data:
+            if not session_res or not isinstance(getattr(session_res, "data", None), list) or not session_res.data:
                 return False
-            
-            balance = float(session_res.data[0].get("initial_deposit", 100))
+
+            first = session_res.data[0] if session_res.data else {}
+            if not isinstance(first, dict):
+                first = {}
+            balance = float(first.get("initial_deposit", 100) or 100)
             loss_pct = abs(total_pnl / balance) if balance > 0 else 0
             
             if loss_pct >= self.config.daily_loss_limit:
