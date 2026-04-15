@@ -310,6 +310,8 @@ class ScalpingEngine:
             return emergency_signal
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error in _scan_single_symbol for {symbol}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
             
     async def generate_scalping_signal(self, symbol: str) -> Optional[ScalpingSignal]:
