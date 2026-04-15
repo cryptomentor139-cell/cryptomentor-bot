@@ -102,6 +102,47 @@ class ScalpingEngine:
         self.coordinator = get_coordinator()
 
         logger.info(f"[Scalping:{user_id}] Engine initialized with config: {self.config}")
+
+    def _fmt_pnl_usdt(self, pnl: float) -> str:
+        """Format PnL with higher precision for tiny values."""
+        try:
+            p = float(pnl)
+        except Exception:
+            p = 0.0
+        if abs(p) < 0.01:
+            return f"{p:+.4f}"
+        return f"{p:+.2f}"
+
+    async def _resolve_exit_price(self, symbol: str, fallback: float, order_result: Optional[dict] = None) -> tuple[float, bool]:
+        """
+        Resolve exit price for PnL calculation.
+        Returns (price, is_estimated_from_ticker).
+        """
+        try:
+            if isinstance(order_result, dict):
+                fp = order_result.get("fill_price")
+                if fp is not None:
+                    fpv = float(fp)
+                    if fpv > 0:
+                        return fpv, False
+        except Exception:
+            pass
+
+        try:
+            ticker = await asyncio.to_thread(self.client.get_ticker, symbol)
+            if ticker and ticker.get("success"):
+                px = float(
+                    ticker.get("mark_price")
+                    or ticker.get("last_price")
+                    or ticker.get("price")
+                    or fallback
+                )
+                if px > 0:
+                    return px, True
+        except Exception:
+            pass
+
+        return float(fallback), True
     
     async def run(self):
         """Main trading loop - scans every 15 seconds"""
@@ -1563,7 +1604,9 @@ class ScalpingEngine:
             )
             
             if result.get('success'):
-                fill_price = float(result.get('fill_price', position.entry_price))
+                fill_price, px_estimated = await self._resolve_exit_price(
+                    position.symbol, position.entry_price, result
+                )
                 
                 # Calculate PnL
                 if position.side == "BUY":
@@ -1592,10 +1635,10 @@ class ScalpingEngine:
                 await self._notify_user(
                     f"⏰ <b>Position Closed (Max Hold Time)</b>\n\n"
                     f"Symbol: {position.symbol}\n"
-                    f"Entry: {position.entry_price:.4f}\n"
-                    f"Exit: {fill_price:.4f}\n"
+                    f"Entry: {_fmt_price(position.entry_price)}\n"
+                    f"Exit: {_fmt_price(fill_price)}{' (estimated)' if px_estimated else ''}\n"
                     f"Hold Time: 30 minutes\n"
-                    f"PnL: <b>{pnl_usdt:+.2f} USDT</b>"
+                    f"PnL: <b>{self._fmt_pnl_usdt(pnl_usdt)} USDT</b>"
                 )
 
                 # Remove from tracking
@@ -1669,10 +1712,10 @@ class ScalpingEngine:
                         message=(
                             f"⏰ <b>SIDEWAYS Closed (2min)</b>\n\n"
                             f"Symbol: {position.symbol}\n"
-                            f"Entry: {position.entry_price:.4f}\n"
-                            f"Exit: {fill_price:.4f}\n"
+                            f"Entry: {_fmt_price(position.entry_price)}\n"
+                            f"Exit: {_fmt_price(fill_price)}\n"
                             f"Hold Time: {elapsed}s\n"
-                            f"PnL: <b>{pnl_usdt:+.2f} USDT</b>"
+                            f"PnL: <b>{self._fmt_pnl_usdt(pnl_usdt)} USDT</b>"
                         ),
                         ttl_sec=600,
                     )
