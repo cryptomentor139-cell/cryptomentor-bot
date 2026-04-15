@@ -138,7 +138,7 @@ class ScalpingEngine:
                     f"• Max hold time: {self.config.max_hold_time // 60} minutes\n"
                     f"• Max concurrent: {self.config.max_concurrent_positions} positions\n"
                     f"• Trading pairs: {len(self.config.pairs)} pairs\n\n"
-                    "Bot will scan for high-probability setups every 15 seconds.\n"
+                    f"Bot will scan for high-probability setups every {self.config.scan_interval} seconds.\n"
                     "Patience = profit. 🎯"
                 ),
                 parse_mode='HTML'

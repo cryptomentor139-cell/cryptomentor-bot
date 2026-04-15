@@ -1464,7 +1464,7 @@ async def callback_select_scalping(update: Update, context: ContextTypes.DEFAULT
             "• Scan interval: 15 seconds\n"
             "• Profit target: 1.5R (single TP)\n"
             "• Max hold time: 30 minutes\n"
-            "• Trading pairs: Top 10 (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, DOT, MATIC)\n"
+            "• Trading pairs: Top 15 (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, DOT, LINK, UNI, ATOM, XAU, CL, QQQ)\n"
             "• Max concurrent: 4 positions\n"
             "• Min confidence: 80%\n\n"
             "🚀 Engine restarted with scalping parameters.\n"
@@ -1517,7 +1517,7 @@ async def callback_select_swing(update: Update, context: ContextTypes.DEFAULT_TY
             "• Scan interval: 45 seconds\n"
             "• Profit targets: 3-tier (StackMentor)\n"
             "• No max hold time\n"
-            "• Trading pairs: Top 10 (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, DOT, MATIC)\n"
+            "• Trading pairs: Top 15 (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, DOT, LINK, UNI, ATOM, XAU, CL, QQQ)\n"
             "• Max concurrent: 4 positions\n"
             "• Min confidence: 68%\n\n"
             "🚀 Engine restarted with swing parameters.",
