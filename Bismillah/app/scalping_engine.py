@@ -199,13 +199,32 @@ class ScalpingEngine:
                     if scan_tasks and self.running:
                         results = await asyncio.gather(*scan_tasks, return_exceptions=True)
                         
-                        valid_signals = []
+                        candidate_signals = []
                         for r in results:
                             if isinstance(r, Exception):
                                 logger.error(f"[Scalping:{self.user_id}] Gathered exception: {r}")
                             elif r is not None:
-                                valid_signals.append(r)
-                                
+                                candidate_signals.append(r)
+
+                        normal_signals = [s for s in candidate_signals if not getattr(s, "is_emergency", False)]
+                        emergency_signals = [s for s in candidate_signals if getattr(s, "is_emergency", False)]
+
+                        if normal_signals:
+                            valid_signals = normal_signals
+                        elif emergency_signals:
+                            best_emergency = max(
+                                emergency_signals,
+                                key=lambda s: float(getattr(s, "emergency_score", getattr(s, "confidence", 0)))
+                            )
+                            valid_signals = [best_emergency]
+                            logger.info(
+                                f"[Scalping:{self.user_id}] Emergency candidate selected: "
+                                f"{best_emergency.symbol} {best_emergency.side} "
+                                f"(score={getattr(best_emergency, 'emergency_score', best_emergency.confidence):.2f})"
+                            )
+                        else:
+                            valid_signals = []
+
                         signals_found += len(valid_signals)
                         
                         # Sequentially process the returned valid signals
@@ -262,16 +281,33 @@ class ScalpingEngine:
                 return None
                 
             signal = await self.generate_scalping_signal(symbol)
-            if signal is None:
-                return None
-                
-            if not self.validate_scalping_entry(signal):
+            if signal is not None:
+                if not self.validate_scalping_entry(signal):
+                    signal = None
+                elif not self._passes_anti_flip_filters(signal):
+                    signal = None
+                else:
+                    setattr(signal, "is_emergency", False)
+                    return signal
+
+            if not getattr(self.config, "emergency_candidate_mode", False):
                 return None
 
-            if not self._passes_anti_flip_filters(signal):
+            emergency_signal = await self._generate_emergency_candidate(symbol)
+            if emergency_signal is None:
                 return None
-                
-            return signal
+            if not self.validate_scalping_entry(emergency_signal):
+                return None
+            if not self._passes_anti_flip_filters(emergency_signal):
+                return None
+
+            setattr(emergency_signal, "is_emergency", True)
+            setattr(
+                emergency_signal,
+                "emergency_score",
+                float(emergency_signal.confidence) + (float(emergency_signal.rr_ratio) * 8.0) + (float(getattr(emergency_signal, "volume_ratio", 1.0)) * 4.0),
+            )
+            return emergency_signal
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error in _scan_single_symbol for {symbol}: {e}")
             return None
@@ -337,6 +373,131 @@ class ScalpingEngine:
         
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error generating signal for {symbol}: {e}")
+            return None
+
+    async def _generate_emergency_candidate(self, symbol: str) -> Optional[ScalpingSignal]:
+        """
+        Emergency candidate mode:
+        Build a conservative fallback candidate when normal logic produces nothing.
+        Safety checks are still enforced by validate_scalping_entry().
+        """
+        try:
+            from app.candle_cache import get_candles_cached
+            from app.providers.alternative_klines_provider import alternative_klines_provider
+
+            base_symbol = symbol.replace("USDT", "").upper()
+
+            async def fetch_klines_async(sym, interval, limit):
+                source_orders = [
+                    ["bitunix", "binance", "cryptocompare", "coingecko"],
+                    ["binance", "bitunix", "cryptocompare", "coingecko"],
+                ]
+                for order in source_orders:
+                    data = await asyncio.to_thread(
+                        alternative_klines_provider.get_klines,
+                        sym, interval, limit, order
+                    )
+                    if data:
+                        return data
+                return []
+
+            raw_5m = await get_candles_cached(fetch_klines_async, base_symbol, "5m", 80)
+            if not raw_5m or len(raw_5m) < 40:
+                return None
+
+            closes = [float(k[4]) for k in raw_5m]
+            highs = [float(k[2]) for k in raw_5m]
+            lows = [float(k[3]) for k in raw_5m]
+            vols = [float(k[5]) for k in raw_5m]
+            price = closes[-1]
+            if price <= 0:
+                return None
+
+            def _ema(values, period):
+                if len(values) < period:
+                    return values[-1]
+                k = 2 / (period + 1)
+                e = sum(values[:period]) / period
+                for v in values[period:]:
+                    e = v * k + e * (1 - k)
+                return e
+
+            def _rsi(values, period=14):
+                if len(values) < period + 1:
+                    return 50.0
+                gains = []
+                losses = []
+                for i in range(1, len(values)):
+                    d = values[i] - values[i - 1]
+                    gains.append(max(d, 0.0))
+                    losses.append(max(-d, 0.0))
+                avg_gain = sum(gains[-period:]) / period
+                avg_loss = sum(losses[-period:]) / period
+                if avg_loss == 0:
+                    return 100.0
+                rs = avg_gain / avg_loss
+                return 100 - (100 / (1 + rs))
+
+            ema21 = _ema(closes, 21)
+            ema50 = _ema(closes, 50)
+            rsi_5m = _rsi(closes, 14)
+
+            tr = []
+            for i in range(1, len(closes)):
+                tr.append(max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1])))
+            atr = (sum(tr[-14:]) / 14) if len(tr) >= 14 else 0.0
+            atr_pct = (atr / price) * 100 if price > 0 else 0.0
+            if atr_pct < max(0.08, self.config.min_atr_pct * 0.6):
+                return None
+
+            avg_vol = sum(vols[-21:-1]) / 20 if len(vols) >= 21 else (sum(vols[:-1]) / max(1, len(vols) - 1))
+            vol_ratio = (vols[-1] / avg_vol) if avg_vol > 0 else 0.0
+            if vol_ratio < getattr(self.config, "emergency_min_volume_ratio", 0.9):
+                return None
+
+            side = None
+            if ema21 >= ema50 and rsi_5m <= 62:
+                side = "LONG"
+            elif ema21 <= ema50 and rsi_5m >= 38:
+                side = "SHORT"
+            if side is None:
+                return None
+
+            sl_distance = max(atr * 1.15, price * 0.0025)
+            tp_distance = sl_distance * 1.6
+            if side == "LONG":
+                sl = price - sl_distance
+                tp = price + tp_distance
+                trend_15m = "LONG"
+            else:
+                sl = price + sl_distance
+                tp = price - tp_distance
+                trend_15m = "SHORT"
+
+            rr = tp_distance / sl_distance if sl_distance > 0 else 0.0
+            confidence = min(82, max(72, int(72 + max(0.0, (vol_ratio - 1.0) * 8.0) + (2 if atr_pct > 0.4 else 0))))
+
+            signal = ScalpingSignal(
+                symbol=symbol,
+                side=side,
+                confidence=confidence,
+                entry_price=price,
+                tp_price=tp,
+                sl_price=sl,
+                rr_ratio=rr,
+                atr_pct=atr_pct,
+                volume_ratio=vol_ratio,
+                rsi_5m=rsi_5m,
+                trend_15m=trend_15m,
+                reasons=[
+                    "Emergency candidate mode (top-ranked fallback)",
+                    f"EMA21/50={ema21:.4f}/{ema50:.4f}, RSI={rsi_5m:.1f}",
+                    f"ATR={atr_pct:.2f}%, Volume={vol_ratio:.2f}x",
+                ],
+            )
+            return signal
+        except Exception as e:
+            logger.debug(f"[Scalping:{self.user_id}] Emergency candidate error for {symbol}: {e}")
             return None
 
     async def _try_sideways_signal(self, symbol: str):

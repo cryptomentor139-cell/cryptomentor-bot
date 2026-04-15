@@ -50,6 +50,8 @@ class ScalpingConfig:
     min_confidence: float = 0.72  # 72% minimum
     min_rr: float = 1.5  # Minimum risk-reward ratio
     sideways_min_rr: float = float(os.getenv("SCALPING_SIDEWAYS_MIN_RR", "1.1"))  # temporary relax for sideways flow
+    emergency_candidate_mode: bool = os.getenv("SCALPING_EMERGENCY_CANDIDATE_MODE", "true").lower() == "true"
+    emergency_min_volume_ratio: float = float(os.getenv("SCALPING_EMERGENCY_MIN_VOL_RATIO", "0.9"))
     
     # Position management
     max_hold_time: int = 1800  # 30 minutes in seconds
