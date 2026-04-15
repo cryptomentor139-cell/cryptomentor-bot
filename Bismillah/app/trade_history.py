@@ -255,12 +255,12 @@ def reconcile_open_trades_with_exchange(
             except Exception:
                 pass
 
-            # Estimate PnL from price delta * qty * leverage direction.
+            # Estimate PnL from price delta * qty direction.
+            # Do NOT multiply by leverage: qty is already the position size.
             if side == "LONG":
                 pnl = (exit_price - entry) * qty
             else:
                 pnl = (entry - exit_price) * qty
-            pnl_with_lev = pnl * leverage
 
             # Infer close reason. Prefer StackMentor tp-hit flags if any.
             tp1_hit = bool(trade.get("tp1_hit"))
@@ -272,7 +272,7 @@ def reconcile_open_trades_with_exchange(
                 reason = "closed_tp2"
             elif tp1_hit:
                 reason = "closed_tp1"
-            elif pnl_with_lev >= 0:
+            elif pnl >= 0:
                 reason = "closed_tp"
             else:
                 reason = "closed_sl"
@@ -280,11 +280,11 @@ def reconcile_open_trades_with_exchange(
             save_trade_close(
                 trade_id=trade["id"],
                 exit_price=exit_price,
-                pnl_usdt=pnl_with_lev,
+                pnl_usdt=pnl,
                 close_reason=reason,
                 loss_reasoning=(
                     "Reconciled from exchange — position no longer open"
-                    if pnl_with_lev < 0 else ""
+                    if pnl < 0 else ""
                 ),
             )
             healed += 1

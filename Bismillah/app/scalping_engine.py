@@ -1303,11 +1303,11 @@ class ScalpingEngine:
                 else:
                     pnl = (position.entry_price - fill_price) * position.quantity
                 
-                pnl_with_leverage = pnl * position.leverage
+                pnl_usdt = pnl
                 
                 # Update database
                 await self._update_position_closed(
-                    position, fill_price, pnl_with_leverage, "max_hold_time_exceeded"
+                    position, fill_price, pnl_usdt, "max_hold_time_exceeded"
                 )
 
                 # Confirm position closed with coordinator
@@ -1327,7 +1327,7 @@ class ScalpingEngine:
                     f"Entry: {position.entry_price:.4f}\n"
                     f"Exit: {fill_price:.4f}\n"
                     f"Hold Time: 30 minutes\n"
-                    f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
+                    f"PnL: <b>{pnl_usdt:+.2f} USDT</b>"
                 )
 
                 # Remove from tracking
@@ -1382,10 +1382,10 @@ class ScalpingEngine:
                 else:
                     pnl = (position.entry_price - fill_price) * position.quantity
 
-                pnl_with_leverage = pnl * position.leverage
+                pnl_usdt = pnl
 
                 closed_now = await self._update_position_closed(
-                    position, fill_price, pnl_with_leverage, "sideways_max_hold_exceeded"
+                    position, fill_price, pnl_usdt, "sideways_max_hold_exceeded"
                 )
                 if closed_now:
                     # Confirm position closed with coordinator
@@ -1404,7 +1404,7 @@ class ScalpingEngine:
                             f"Entry: {position.entry_price:.4f}\n"
                             f"Exit: {fill_price:.4f}\n"
                             f"Hold Time: {elapsed}s\n"
-                            f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
+                            f"PnL: <b>{pnl_usdt:+.2f} USDT</b>"
                         ),
                         ttl_sec=600,
                     )
@@ -1447,9 +1447,9 @@ class ScalpingEngine:
                 else:
                     pnl = (position.entry_price - fill_price) * position.quantity
                 
-                pnl_with_leverage = pnl * position.leverage
+                pnl_usdt = pnl
                 
-                closed_now = await self._update_position_closed(position, fill_price, pnl_with_leverage, "closed_tp")
+                closed_now = await self._update_position_closed(position, fill_price, pnl_usdt, "closed_tp")
                 if closed_now:
                     # Confirm position closed with coordinator
                     await self.coordinator.confirm_closed(self.user_id, position.symbol, time.time())
@@ -1460,18 +1460,18 @@ class ScalpingEngine:
                         "reason": "closed_tp",
                     }
                     if position.is_sideways:
-                        await self._notify_sideways_closed(position, fill_price, pnl_with_leverage, "closed_tp")
+                        await self._notify_sideways_closed(position, fill_price, pnl_usdt, "closed_tp")
                     else:
                         await self._notify_user(
                             f"✅ <b>TP Hit!</b>\n\n"
                             f"Symbol: {position.symbol}\n"
                             f"Entry: {position.entry_price:.4f}\n"
                             f"Exit: {fill_price:.4f}\n"
-                            f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b> 🎉"
+                            f"PnL: <b>{pnl_usdt:+.2f} USDT</b> 🎉"
                         )
 
                 # Social proof broadcast — kirim ke semua user jika profit >= 2 USDT
-                if pnl_with_leverage >= 2.0:
+                if pnl_usdt >= 2.0:
                     try:
                         from app.social_proof import broadcast_profit
                         from app.supabase_repo import get_user_by_tid
@@ -1484,7 +1484,7 @@ class ScalpingEngine:
                             first_name=fname,
                             symbol=position.symbol,
                             side=position.side,
-                            pnl_usdt=pnl_with_leverage,
+                            pnl_usdt=pnl_usdt,
                             leverage=position.leverage,
                         ))
                     except Exception as _bp_err:
@@ -1516,9 +1516,9 @@ class ScalpingEngine:
                 else:
                     pnl = (position.entry_price - fill_price) * position.quantity
                 
-                pnl_with_leverage = pnl * position.leverage
+                pnl_usdt = pnl
                 
-                closed_now = await self._update_position_closed(position, fill_price, pnl_with_leverage, "closed_sl")
+                closed_now = await self._update_position_closed(position, fill_price, pnl_usdt, "closed_sl")
                 if closed_now:
                     # Confirm position closed with coordinator
                     await self.coordinator.confirm_closed(self.user_id, position.symbol, time.time())
@@ -1529,14 +1529,14 @@ class ScalpingEngine:
                         "reason": "closed_sl",
                     }
                     if position.is_sideways:
-                        await self._notify_sideways_closed(position, fill_price, pnl_with_leverage, "closed_sl")
+                        await self._notify_sideways_closed(position, fill_price, pnl_usdt, "closed_sl")
                     else:
                         await self._notify_user(
                             f"🛑 <b>SL Hit</b>\n\n"
                             f"Symbol: {position.symbol}\n"
                             f"Entry: {position.entry_price:.4f}\n"
                             f"Exit: {fill_price:.4f}\n"
-                            f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
+                            f"PnL: <b>{pnl_usdt:+.2f} USDT</b>"
                         )
 
                 self.positions.pop(position.symbol, None)
