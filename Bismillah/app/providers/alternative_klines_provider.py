@@ -15,6 +15,9 @@ import requests
 import time
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AlternativeKlinesProvider:
     """Provider OHLCV data dengan fallback multi-source"""
@@ -25,40 +28,83 @@ class AlternativeKlinesProvider:
         self.coingecko_api    = "https://api.coingecko.com/api/v3"
         self.cryptocompare_api = "https://min-api.cryptocompare.com/data/v2"
         self.cryptocompare_key = os.getenv('CRYPTOCOMPARE_API_KEY', '')
+        self.max_retries = max(1, int(os.getenv("KLINE_FETCH_RETRIES", "3")))
+        self.backoff_base_ms = max(50, int(os.getenv("KLINE_RETRY_BASE_DELAY_MS", "250")))
+        self.backoff_cap_ms = max(200, int(os.getenv("KLINE_RETRY_CAP_DELAY_MS", "2000")))
+
+    def _resolve_source_order(self, preferred_sources: Optional[List[str]] = None) -> List[str]:
+        default_order = ["bitunix", "binance", "cryptocompare", "coingecko"]
+        source_order_raw = os.getenv("KLINE_SOURCE_ORDER", ",".join(default_order))
+        configured = [s.strip().lower() for s in source_order_raw.split(",") if s.strip()]
+        pool = preferred_sources if preferred_sources else configured
+
+        valid = []
+        for source in pool:
+            if source in default_order and source not in valid:
+                valid.append(source)
+
+        for source in default_order:
+            if source not in valid:
+                valid.append(source)
+        return valid
+
+    def _min_required_candles(self, limit: int) -> int:
+        if limit <= 0:
+            return 1
+        return max(1, min(limit, 10))
         
-    def get_klines(self, symbol: str, interval: str = '1h', limit: int = 100) -> List:
+    def get_klines(
+        self,
+        symbol: str,
+        interval: str = '1h',
+        limit: int = 100,
+        preferred_sources: Optional[List[str]] = None
+    ) -> List:
         """
         Get OHLCV data — prioritas Bitunix, fallback ke CryptoCompare/CoinGecko.
         Returns list of klines in Binance format: [timestamp, open, high, low, close, volume, ...]
         """
         clean_symbol = symbol.upper().replace('USDT', '').replace('BUSD', '').replace('USDC', '')
         full_symbol  = clean_symbol + "USDT"
+        source_order = self._resolve_source_order(preferred_sources)
+        min_required = self._min_required_candles(limit)
 
-        # 1. Bitunix (prioritas utama — data futures langsung)
-        klines = self._get_from_bitunix(full_symbol, interval, limit)
-        if klines:
-            return klines
+        source_fetchers = {
+            "bitunix": lambda: self._get_from_bitunix(full_symbol, interval, limit),
+            "binance": lambda: self._get_from_binance(full_symbol, interval, limit),
+            "cryptocompare": lambda: self._get_from_cryptocompare(clean_symbol, interval, limit) if self.cryptocompare_key else [],
+            "coingecko": lambda: self._get_from_coingecko(clean_symbol, interval, limit),
+        }
 
-        # 2. Binance Futures (fallback terbaik — gratis, reliable, semua pair)
-        klines = self._get_from_binance(full_symbol, interval, limit)
-        if klines:
-            print(f"✅ Got {len(klines)} candles from Binance for {symbol}")
-            return klines
+        for source in source_order:
+            fetcher = source_fetchers.get(source)
+            if fetcher is None:
+                continue
+            for attempt in range(1, self.max_retries + 1):
+                try:
+                    klines = fetcher()
+                except Exception as e:
+                    logger.warning(
+                        f"[Klines] {source} exception {clean_symbol} {interval} attempt {attempt}/{self.max_retries}: {e}"
+                    )
+                    klines = []
 
-        # 3. CryptoCompare
-        if self.cryptocompare_key:
-            klines = self._get_from_cryptocompare(clean_symbol, interval, limit)
-            if klines:
-                print(f"✅ Got {len(klines)} candles from CryptoCompare for {symbol}")
-                return klines
+                if klines and len(klines) >= min_required:
+                    logger.debug(
+                        f"[Klines] {source} success {clean_symbol} {interval}: "
+                        f"{len(klines)} candles (attempt {attempt})"
+                    )
+                    return klines
 
-        # 4. CoinGecko
-        klines = self._get_from_coingecko(clean_symbol, interval, limit)
-        if klines:
-            print(f"✅ Got {len(klines)} candles from CoinGecko for {symbol}")
-            return klines
+                if attempt < self.max_retries:
+                    backoff_ms = min(self.backoff_cap_ms, self.backoff_base_ms * (2 ** (attempt - 1)))
+                    time.sleep(backoff_ms / 1000.0)
+            logger.warning(
+                f"[Klines] source failed: {source} {clean_symbol} {interval} "
+                f"after {self.max_retries} attempts"
+            )
 
-        print(f"❌ Failed to get klines for {symbol} from all sources")
+        logger.error(f"[Klines] Failed all sources for {clean_symbol} {interval} limit={limit}")
         return []
 
     def _get_from_bitunix(self, symbol: str, interval: str, limit: int) -> List:
@@ -112,14 +158,13 @@ class AlternativeKlinesProvider:
                     ts + 1, qvol, 0, "0", "0", "0"
                 ])
 
-            if len(klines) >= 10:
-                print(f"✅ Got {len(klines)} candles from Bitunix for {symbol}")
+            if len(klines) >= self._min_required_candles(limit):
                 return klines
 
             return []
 
         except Exception as e:
-            print(f"Bitunix klines error ({symbol}): {e}")
+            logger.debug(f"[Klines] Bitunix error ({symbol} {interval}): {e}")
             return []
     
     def _get_from_binance(self, symbol: str, interval: str, limit: int) -> List:
@@ -157,7 +202,7 @@ class AlternativeKlinesProvider:
             
             # Binance response sudah dalam format yang kita butuhkan:
             # [timestamp, open, high, low, close, volume, close_time, quote_volume, ...]
-            if isinstance(klines, list) and len(klines) >= 10:
+            if isinstance(klines, list) and len(klines) >= self._min_required_candles(limit):
                 # Convert all values to string for consistency
                 formatted_klines = []
                 for k in klines:
@@ -180,7 +225,7 @@ class AlternativeKlinesProvider:
             return []
 
         except Exception as e:
-            print(f"Binance klines error ({symbol}): {e}")
+            logger.debug(f"[Klines] Binance error ({symbol} {interval}): {e}")
             return []
     
     def _get_from_cryptocompare(self, symbol: str, interval: str, limit: int) -> List:
@@ -243,7 +288,7 @@ class AlternativeKlinesProvider:
             return []
         
         except Exception as e:
-            print(f"CryptoCompare error: {e}")
+            logger.debug(f"[Klines] CryptoCompare error ({symbol} {interval}): {e}")
             return []
     
     def _get_from_coingecko(self, symbol: str, interval: str, limit: int) -> List:
@@ -335,7 +380,7 @@ class AlternativeKlinesProvider:
             return []
         
         except Exception as e:
-            print(f"CoinGecko error: {e}")
+            logger.debug(f"[Klines] CoinGecko error ({symbol} {interval}): {e}")
             return []
 
 # Global instance

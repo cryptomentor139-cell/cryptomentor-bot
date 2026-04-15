@@ -357,16 +357,29 @@ class ScalpingEngine:
 
             # Wrap sync get_klines in async with cache
             async def fetch_klines_async(sym, interval, limit):
-                return await asyncio.to_thread(
-                    alternative_klines_provider.get_klines,
-                    sym, interval, limit
-                )
+                source_orders = [
+                    ["bitunix", "binance", "cryptocompare", "coingecko"],
+                    ["binance", "bitunix", "cryptocompare", "coingecko"],
+                    ["binance", "cryptocompare", "bitunix", "coingecko"],
+                ]
+                for order in source_orders:
+                    data = await asyncio.to_thread(
+                        alternative_klines_provider.get_klines,
+                        sym, interval, limit, order
+                    )
+                    if data:
+                        return data
+                return []
 
             # Fetch klines (list format: [timestamp, open, high, low, close, volume, ...])
             raw_5m = await get_candles_cached(fetch_klines_async, base_symbol, "5m", 50)
             raw_15m = await get_candles_cached(fetch_klines_async, base_symbol, "15m", 60)
 
             if not raw_5m or not raw_15m:
+                logger.warning(
+                    f"[Scalping:{self.user_id}] {symbol} partial feed outage in sideways path "
+                    f"(5m={len(raw_5m) if raw_5m else 0}, 15m={len(raw_15m) if raw_15m else 0})"
+                )
                 return None
 
             # Convert list format to dict format expected by detectors

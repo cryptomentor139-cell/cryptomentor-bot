@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional
 import time
+import os
 
 
 class TradingMode(Enum):
@@ -76,7 +77,7 @@ class ScalpingConfig:
     
     # Volume and volatility filters
     min_volume_ratio: float = 2.0  # Volume must be >2x average
-    min_atr_pct: float = 0.3  # Skip if ATR < 0.3% (too flat)
+    min_atr_pct: float = float(os.getenv("SCALPING_MIN_ATR_PCT", "0.2"))  # relaxed from 0.3%
     max_atr_pct: float = 10.0  # Skip if ATR > 10% (too volatile)
 
 

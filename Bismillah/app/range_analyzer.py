@@ -6,6 +6,7 @@ Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8
 
 from dataclasses import dataclass
 from typing import Optional
+import os
 
 
 @dataclass
@@ -20,8 +21,8 @@ class RangeResult:
 class RangeAnalyzer:
     TOLERANCE_PCT = 0.002   # 0.2% clustering tolerance (relaxed from 0.15%)
     MIN_TOUCHES = 2
-    MIN_RANGE_PCT = 0.003   # 0.3% (relaxed from 0.5% for tight sideways market)
-    MAX_RANGE_PCT = 0.040   # 4.0%
+    MIN_RANGE_PCT = float(os.getenv("SIDEWAYS_MIN_RANGE_PCT", "0.002"))  # default 0.2%
+    MAX_RANGE_PCT = float(os.getenv("SIDEWAYS_MAX_RANGE_PCT", "0.050"))  # default 5.0%
 
     def analyze(self, candles_5m: list, price: float) -> Optional[RangeResult]:
         """
