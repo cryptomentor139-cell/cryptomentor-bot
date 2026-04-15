@@ -861,6 +861,9 @@ class ScalpingEngine:
         required = int(getattr(self.config, "signal_confirmations_required", 2))
         max_gap = int(getattr(self.config, "signal_confirmation_max_gap_seconds", 45))
         streak = self.signal_streaks.get(symbol)
+        if not isinstance(streak, dict):
+            streak = None
+            self.signal_streaks[symbol] = None
         if not streak:
             self.signal_streaks[symbol] = {"direction": direction, "count": 1, "ts": now}
             if required > 1:
