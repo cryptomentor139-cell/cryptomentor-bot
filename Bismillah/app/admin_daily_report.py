@@ -33,6 +33,19 @@ def _fmt(val, prefix="$", decimals=2) -> str:
         return "N/A"
 
 
+def _is_real_user_id(raw_id) -> bool:
+    """
+    Accept real Telegram user IDs without legacy hard cutoff.
+    Old logic used < 999,999,990 and excluded most modern 10-digit IDs.
+    """
+    try:
+        uid = int(raw_id)
+    except Exception:
+        return False
+    # Exclude empty/invalid and obviously non-user sentinels.
+    return uid > 0
+
+
 def _engine_stop_reason(session: dict, has_api_keys: bool) -> str:
     """Determine why an engine is stopped based on session data."""
     status = session.get("status", "")
@@ -68,7 +81,7 @@ async def send_daily_report(bot):
 
         total_users = len([
             sess for sess in all_sessions
-            if sess.get("telegram_id") and int(sess.get("telegram_id", 0)) < 999999990
+            if _is_real_user_id(sess.get("telegram_id"))
         ])
 
         active_engines = []
@@ -77,7 +90,7 @@ async def send_daily_report(bot):
 
         for sess in all_sessions:
             uid = sess.get("telegram_id")
-            if not uid or int(uid) >= 999999990:
+            if not _is_real_user_id(uid):
                 continue
             status = sess.get("status", "")
             if status in ("pending_verification", "uid_rejected", "pending"):
