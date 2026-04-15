@@ -65,7 +65,7 @@ class ScalpingConfig:
     pairs: List[str] = field(default_factory=lambda: [
         "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", 
         "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT", 
-        "UNIUSDT", "ATOMUSDT", "XAUUSDT", "CLUSDT", "QQQUSDT"
+        "UNIUSDT", "ATOMUSDT", "XAUUSDT"
     ])
     
     # ATR multipliers

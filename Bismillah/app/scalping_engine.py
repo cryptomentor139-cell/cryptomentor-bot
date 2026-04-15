@@ -248,6 +248,8 @@ class ScalpingEngine:
                                 self.mark_cooldown(signal.symbol)
                                 logger.info(f"[Scalping:{self.user_id}] {signal.symbol} - Order placed successfully!")
                             else:
+                                # Avoid hammering non-executable symbols in emergency mode.
+                                self.cooldown_tracker[signal.symbol] = time.time() + 300
                                 logger.warning(f"[Scalping:{self.user_id}] {signal.symbol} - Order placement failed")
                     
                     logger.info(
