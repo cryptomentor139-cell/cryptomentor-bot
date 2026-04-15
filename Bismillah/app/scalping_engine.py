@@ -883,11 +883,12 @@ class ScalpingEngine:
             )
             return False
         
-        # Check R:R
-        if signal.rr_ratio < self.config.min_rr:
+        # Check R:R (sideways uses a dedicated temporary floor)
+        required_rr = self.config.sideways_min_rr if is_sideways else self.config.min_rr
+        if signal.rr_ratio < required_rr:
             logger.debug(
                 f"[Scalping:{self.user_id}] Signal rejected: "
-                f"R:R {signal.rr_ratio} < {self.config.min_rr}"
+                f"R:R {signal.rr_ratio} < {required_rr}"
             )
             return False
         

@@ -49,6 +49,7 @@ class ScalpingConfig:
     # Signal requirements
     min_confidence: float = 0.72  # 72% minimum
     min_rr: float = 1.5  # Minimum risk-reward ratio
+    sideways_min_rr: float = float(os.getenv("SCALPING_SIDEWAYS_MIN_RR", "1.1"))  # temporary relax for sideways flow
     
     # Position management
     max_hold_time: int = 1800  # 30 minutes in seconds
@@ -72,7 +73,7 @@ class ScalpingConfig:
     cooldown_seconds: int = 150  # 2.5 minutes between signals on same pair (was 5min)
     sideways_reentry_cooldown_seconds: int = 420  # 7 minutes after sideways close
     anti_flip_opposite_seconds: int = 600  # 10 minutes block for opposite-direction re-entry
-    signal_confirmations_required: int = 2  # require same-direction signal seen in consecutive scans
+    signal_confirmations_required: int = int(os.getenv("SCALPING_SIGNAL_CONFIRMATIONS_REQUIRED", "1"))  # temporary relax
     signal_confirmation_max_gap_seconds: int = 45  # invalidate stale confirmation chain
     
     # Volume and volatility filters
