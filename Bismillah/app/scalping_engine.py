@@ -127,6 +127,26 @@ class ScalpingEngine:
         self._blocked_pending_notify_ts[key] = now_ts
         return True
 
+    async def _open_managed_position_safe(self, open_managed_position_fn, **kwargs):
+        """
+        Compatibility guard for mixed deployments:
+        retry without tp_price if remote/runtime function signature is older.
+        """
+        try:
+            return await open_managed_position_fn(**kwargs)
+        except TypeError as te:
+            msg = str(te)
+            if "unexpected keyword argument 'tp_price'" not in msg:
+                raise
+            retry_kwargs = dict(kwargs)
+            retry_kwargs.pop("tp_price", None)
+            logger.warning(
+                "[Scalping:%s] open_managed_position tp_price unsupported in runtime; retrying without tp_price for %s",
+                self.user_id,
+                retry_kwargs.get("symbol", "?"),
+            )
+            return await open_managed_position_fn(**retry_kwargs)
+
     def _fmt_pnl_usdt(self, pnl: float) -> str:
         """Format PnL with higher precision for tiny values."""
         try:
@@ -1524,7 +1544,8 @@ class ScalpingEngine:
                 from app.trading_mode import MicroScalpSignal as _MicroScalpSignalCheck
                 _is_sideways_signal = isinstance(signal, _MicroScalpSignalCheck)
 
-                exec_result = await open_managed_position(
+                exec_result = await self._open_managed_position_safe(
+                    open_managed_position,
                     client=self.client,
                     user_id=self.user_id,
                     symbol=signal.symbol,

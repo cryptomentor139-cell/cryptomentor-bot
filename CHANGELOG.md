@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.2.11] — 2026-04-16 — Scalping Runtime Compatibility Guard (`tp_price`)
+
+### 🛠️ Fix
+- Updated `Bismillah/app/scalping_engine.py` to harden unified entry call against mixed runtime signatures:
+  - Added `_open_managed_position_safe(...)` wrapper.
+  - If runtime raises `TypeError: unexpected keyword argument 'tp_price'`, engine now retries `open_managed_position(...)` without `tp_price` and logs a compatibility warning.
+- This prevents repeated entry-path failures that could cascade into persistent `blocked_pending_order` skips during version skew or stale runtime code windows.
+
+### ✅ Verification
+- Compile/syntax pass:
+  - `python -m py_compile Bismillah/app/scalping_engine.py Bismillah/app/symbol_coordinator.py Bismillah/app/autotrade_engine.py`
+
 ## [2.2.10] — 2026-04-16 — Pending-Lock Self-Healing + Restart Serialization
 
 ### 🛡️ Coordinator Hardening (`blocked_pending_order`)
