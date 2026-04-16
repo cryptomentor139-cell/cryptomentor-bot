@@ -69,6 +69,7 @@ async def send_daily_report(bot):
         from app.supabase_repo import _client
         from app.autotrade_engine import is_running
         from app.handlers_autotrade import get_user_api_keys
+        from app.adaptive_confluence import classify_outcome_class, get_adaptive_overrides
 
         s = _client()
         now_wib = datetime.now(TZ_WIB)
@@ -102,7 +103,7 @@ async def send_daily_report(bot):
 
         # ── 2. Today's trades ─────────────────────────────────────────
         trades_res = s.table("autotrade_trades").select(
-            "telegram_id, symbol, side, pnl_usdt, status, opened_at, closed_at"
+            "telegram_id, symbol, side, pnl_usdt, status, close_reason, loss_reasoning, opened_at, closed_at"
         ).gte("opened_at", since_24h).execute()
         trades_today = trades_res.data or []
 
@@ -115,6 +116,43 @@ async def send_daily_report(bot):
         win_pnl = sum(float(t.get("pnl_usdt") or 0) for t in wins)
         loss_pnl = sum(float(t.get("pnl_usdt") or 0) for t in losses)
         win_rate = (len(wins) / len(closed_trades) * 100) if closed_trades else 0
+
+        # ── 2b. Outcome taxonomy + adaptive snapshot ───────────────────
+        taxonomy_counts = {
+            "strategy_loss": 0,
+            "strategy_win": 0,
+            "timeout_exit": 0,
+            "ops_reconcile": 0,
+            "unknown": 0,
+        }
+        for t in closed_trades:
+            oc = classify_outcome_class(t)
+            taxonomy_counts[oc] = taxonomy_counts.get(oc, 0) + 1
+
+        strategy_total = taxonomy_counts["strategy_loss"] + taxonomy_counts["strategy_win"]
+        strategy_loss_rate_24h = (
+            taxonomy_counts["strategy_loss"] / strategy_total * 100
+            if strategy_total > 0 else 0.0
+        )
+        ops_rate_24h = (
+            taxonomy_counts["ops_reconcile"] / len(closed_trades) * 100
+            if closed_trades else 0.0
+        )
+
+        adaptive = get_adaptive_overrides()
+
+        # 7-day trend from closed trades
+        since_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        closed_7d_res = s.table("autotrade_trades").select(
+            "status, close_reason, pnl_usdt, loss_reasoning"
+        ).gte("closed_at", since_7d).neq("status", "open").execute()
+        closed_7d = closed_7d_res.data or []
+        strategy_7d = [r for r in closed_7d if classify_outcome_class(r) in ("strategy_loss", "strategy_win")]
+        strategy_losses_7d = [r for r in strategy_7d if classify_outcome_class(r) == "strategy_loss"]
+        strategy_loss_rate_7d = (
+            len(strategy_losses_7d) / len(strategy_7d) * 100 if strategy_7d else 0.0
+        )
+        trades_per_day_7d = (len(strategy_7d) / 7.0) if strategy_7d else 0.0
 
         # ── 3. New users today ────────────────────────────────────────
         new_users_res = s.table("users").select("telegram_id, first_name, created_at").gte(
@@ -154,6 +192,18 @@ async def send_daily_report(bot):
             f"• Win rate: <b>{win_rate:.1f}%</b> ({len(wins)}W / {len(losses)}L)\n"
             f"• Total PnL: <b>{pnl_str}</b>\n"
             f"• Profit: <b>+${win_pnl:,.2f}</b> | Loss: <b>-${abs(loss_pnl):,.2f}</b>\n\n"
+
+            f"🧠 <b>ADAPTIVE CONFLUENCE (24h)</b>\n"
+            f"• Strategy outcomes: <b>{strategy_total}</b> "
+            f"({taxonomy_counts['strategy_win']}W / {taxonomy_counts['strategy_loss']}L)\n"
+            f"• Strategy loss rate: <b>{strategy_loss_rate_24h:.1f}%</b>\n"
+            f"• Timeout exits: <b>{taxonomy_counts['timeout_exit']}</b>\n"
+            f"• Ops/reconcile closures: <b>{taxonomy_counts['ops_reconcile']}</b> ({ops_rate_24h:.1f}%)\n"
+            f"• Active thresholds: conf_delta=<b>{int(adaptive.get('conf_delta', 0)):+d}</b>, "
+            f"vol_delta=<b>{float(adaptive.get('volume_min_ratio_delta', 0.0)):+.2f}</b>, "
+            f"ob_mode=<b>{adaptive.get('ob_fvg_requirement_mode', 'soft')}</b>\n"
+            f"• 7-day trend: strategy_loss=<b>{strategy_loss_rate_7d:.1f}%</b>, "
+            f"strategy_trades/day=<b>{trades_per_day_7d:.1f}</b>\n\n"
         )
 
         # ── 6. Stopped engines with reasoning ────────────────────────

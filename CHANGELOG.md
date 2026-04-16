@@ -1,5 +1,50 @@
 # Changelog
 
+## [2.2.8] — 2026-04-16 — Adaptive Confluence v1 (Global Controller + Outcome Taxonomy)
+
+### 🧠 Adaptive Confluence Controller (Global, Balanced Objective)
+- Added `Bismillah/app/adaptive_confluence.py`:
+  - Normalizes trade outcomes into: `strategy_loss`, `strategy_win`, `timeout_exit`, `ops_reconcile`
+  - Builds rolling metrics from closed trades (strategy-loss rate, weak-confluence loss shares, trades/day)
+  - Computes bounded adaptive overlays:
+    - `conf_delta` (range `-3..+8`)
+    - `volume_min_ratio_delta` (range `0.0..0.4`)
+    - `ob_fvg_requirement_mode` (`soft` / `required_when_risk_high`)
+  - Enforces safety controls:
+    - update interval rate-limit: 6h
+    - capped step-size per adaptation cycle
+    - conservative fallback defaults when sample is insufficient
+
+### ⚙️ Engine Integration (Global-first)
+- `Bismillah/app/autotrade_engine.py`
+  - Added periodic adaptive refresh (every 10 min, best-effort).
+  - Applies adaptive overlay to scan confidence threshold and volume strictness.
+  - Extends signal pipeline with adaptive-aware gates:
+    - dynamic internal min confidence (risk-profile + adaptive delta)
+    - high-risk borderline entries can require OB/FVG confluence.
+- `Bismillah/app/scalping_engine.py`
+  - Added periodic adaptive refresh (every 10 min, best-effort).
+  - Applies adaptive confidence and volume gates in `validate_scalping_entry` for trending + sideways paths.
+  - Startup message now includes active adaptive deltas.
+
+### 📊 Admin Visibility
+- `Bismillah/app/admin_daily_report.py`
+  - Added 24h strategy vs ops closure taxonomy section.
+  - Added active adaptive thresholds snapshot.
+  - Added 7-day trend metrics:
+    - strategy loss rate
+    - strategy trades/day.
+
+### 🗄️ Data Interface
+- Added migration file: `db/add_adaptive_config_state.sql`
+  - Defines singleton table `adaptive_config_state` for global adaptive state persistence.
+
+### ✅ Tests
+- Added `tests/test_adaptive_confluence.py` covering:
+  - outcome classification correctness (including status-only rows)
+  - ops/reconcile exclusion from strategy-loss learning
+  - controller tighten/relax behavior based on synthetic metrics.
+
 ## [2.2.7] — 2026-04-16 — Scalping SL/TP Risk-Reward Consistency Fix
 
 ### 🛡️ Scalping Risk Management Consistency

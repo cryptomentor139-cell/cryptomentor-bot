@@ -21,6 +21,7 @@ from app.symbol_coordinator import (
     StrategyOwner,
     PositionSide,
 )
+from app.adaptive_confluence import refresh_global_adaptive_state, get_adaptive_overrides
 
 logger = logging.getLogger(__name__)
 WEB_DASHBOARD_URL = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
@@ -97,6 +98,17 @@ class ScalpingEngine:
         
         # Running state
         self.running = False
+        self._adaptive_overlay: Dict[str, float] = {
+            "conf_delta": 0,
+            "volume_min_ratio_delta": 0.0,
+            "ob_fvg_requirement_mode": "soft",
+            "strategy_loss_rate": 0.0,
+            "ops_reconcile_rate": 0.0,
+            "trade_count_per_day": 0.0,
+            "strategy_sample_size": 0,
+            "decision_reason": "bootstrap",
+        }
+        self._adaptive_next_refresh = 0.0
 
         # Multi-user symbol coordinator
         self.coordinator = get_coordinator()
@@ -210,6 +222,13 @@ class ScalpingEngine:
         
         # Send startup notification
         try:
+            # Best-effort initial adaptive load.
+            try:
+                await asyncio.to_thread(refresh_global_adaptive_state)
+                self._adaptive_overlay = await asyncio.to_thread(get_adaptive_overrides)
+            except Exception as adapt_err:
+                logger.warning(f"[Scalping:{self.user_id}] Initial adaptive load failed: {adapt_err}")
+
             await self.bot.send_message(
                 chat_id=self.notify_chat_id,
                 text=(
@@ -223,6 +242,8 @@ class ScalpingEngine:
                     f"• Max hold time: {self.config.max_hold_time // 60} minutes\n"
                     f"• Max concurrent: {self.config.max_concurrent_positions} positions\n"
                     f"• Trading pairs: {len(self.config.pairs)} pairs\n\n"
+                    f"• Adaptive conf delta: {int(self._adaptive_overlay.get('conf_delta', 0)):+d}\n"
+                    f"• Adaptive vol delta: {float(self._adaptive_overlay.get('volume_min_ratio_delta', 0.0)):+.2f}\n\n"
                     f"Bot will scan for high-probability setups every {self.config.scan_interval} seconds.\n"
                     "Patience = profit. 🎯"
                 ),
@@ -266,6 +287,22 @@ class ScalpingEngine:
                         pass
 
                     scan_count += 1
+                    now_ts = time.time()
+                    if now_ts >= self._adaptive_next_refresh:
+                        try:
+                            await asyncio.to_thread(refresh_global_adaptive_state)
+                            self._adaptive_overlay = await asyncio.to_thread(get_adaptive_overrides)
+                            logger.info(
+                                f"[Scalping:{self.user_id}] Adaptive overlay refreshed — "
+                                f"conf_delta={self._adaptive_overlay.get('conf_delta')} "
+                                f"vol_delta={self._adaptive_overlay.get('volume_min_ratio_delta'):.2f} "
+                                f"mode={self._adaptive_overlay.get('ob_fvg_requirement_mode')} "
+                                f"loss_rate={self._adaptive_overlay.get('strategy_loss_rate'):.3f} "
+                                f"sample={self._adaptive_overlay.get('strategy_sample_size')}"
+                            )
+                        except Exception as adapt_err:
+                            logger.warning(f"[Scalping:{self.user_id}] Adaptive refresh failed: {adapt_err}")
+                        self._adaptive_next_refresh = now_ts + 600.0  # 10 minutes
                     logger.info(f"[Scalping:{self.user_id}] Scan cycle #{scan_count} starting...")
                     
                     # Monitor existing positions first (priority)
@@ -1203,12 +1240,16 @@ class ScalpingEngine:
         """
         from app.trading_mode import MicroScalpSignal as _MicroScalpSignal
         is_sideways = isinstance(signal, _MicroScalpSignal)
+        conf_delta = int(self._adaptive_overlay.get("conf_delta", 0) or 0)
+        vol_delta = float(self._adaptive_overlay.get("volume_min_ratio_delta", 0.0) or 0.0)
 
         # Check confidence
-        if signal.confidence < self.config.min_confidence * 100:
+        min_conf_pct = max(0.0, min(100.0, (self.config.min_confidence * 100.0) + conf_delta))
+        if signal.confidence < min_conf_pct:
             logger.debug(
                 f"[Scalping:{self.user_id}] Signal rejected: "
-                f"Confidence {signal.confidence}% < {self.config.min_confidence * 100}%"
+                f"Confidence {signal.confidence}% < {min_conf_pct}% "
+                f"(adaptive conf_delta={conf_delta})"
             )
             return False
         
@@ -1218,6 +1259,19 @@ class ScalpingEngine:
             logger.debug(
                 f"[Scalping:{self.user_id}] Signal rejected: "
                 f"R:R {signal.rr_ratio} < {required_rr}"
+            )
+            return False
+
+        # Adaptive volume-quality gate for both trending and sideways.
+        # Keep conservative defaults to avoid abrupt behavior shifts.
+        base_vol_req = 0.9 if is_sideways else 1.0
+        required_vol = max(0.8, min(2.0, base_vol_req + vol_delta))
+        signal_vol = float(getattr(signal, "volume_ratio", 0.0) or 0.0)
+        if signal_vol < required_vol:
+            logger.debug(
+                f"[Scalping:{self.user_id}] Signal rejected: "
+                f"Volume {signal_vol:.2f}x < {required_vol:.2f}x "
+                f"(adaptive vol_delta={vol_delta:.2f})"
             )
             return False
         

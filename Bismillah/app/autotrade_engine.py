@@ -13,7 +13,7 @@ import logging
 import os
 from html import escape
 from typing import Any, Dict, Optional, List
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -532,7 +532,8 @@ def _generate_confluence_signal(
     symbol: str,
     candles_1h: List,
     user_risk_pct: float = 0.5,
-    btc_bias: Optional[Dict] = None
+    btc_bias: Optional[Dict] = None,
+    adaptive_overrides: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict]:
     """
     Generate confluence-based signal using multiple confluence factors.
@@ -550,7 +551,9 @@ def _generate_confluence_signal(
 
     user_risk_pct = _normalize_risk_pct(user_risk_pct, default=1.0)
     config = _risk_profile(user_risk_pct)
-    min_confidence = config["min_confidence"]
+    adaptive_conf_delta = int((adaptive_overrides or {}).get("conf_delta", 0) or 0)
+    adaptive_vol_delta = float((adaptive_overrides or {}).get("volume_min_ratio_delta", 0.0) or 0.0)
+    min_confidence = int(max(0, min(100, config["min_confidence"] + adaptive_conf_delta)))
     atr_multiplier = config["atr_multiplier"]
 
     try:
@@ -603,7 +606,8 @@ def _generate_confluence_signal(
 
         # 3. Volume Spike
         vol_ma = sum(volumes[-20:]) / 20 if len(volumes) >= 20 else sum(volumes) / len(volumes)
-        vol_spike = volumes[-1] > vol_ma * 1.5 if vol_ma > 0 else False
+        confluence_vol_ratio = 1.5 + max(0.0, adaptive_vol_delta)
+        vol_spike = volumes[-1] > vol_ma * confluence_vol_ratio if vol_ma > 0 else False
 
         # 4. Market Regime (Trending Check)
         atr = _calc_atr(highs[-30:], lows[-30:], closes[-30:], 14)
@@ -700,7 +704,12 @@ def _generate_confluence_signal(
 # ─────────────────────────────────────────────
 #  Professional Signal Engine (Hybrid Mode)
 # ─────────────────────────────────────────────
-def _compute_signal_pro(base_symbol: str, btc_bias: Optional[Dict] = None, user_risk_pct: float = 1.0) -> Optional[Dict]:
+def _compute_signal_pro(
+    base_symbol: str,
+    btc_bias: Optional[Dict] = None,
+    user_risk_pct: float = 1.0,
+    adaptive_overrides: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict]:
     """
     Hybrid signal generation:
     - PRIMARY: Confluence-based multi-factor detection (S/R + RSI + Volume + Trend)
@@ -715,7 +724,12 @@ def _compute_signal_pro(base_symbol: str, btc_bias: Optional[Dict] = None, user_
     - >1.0% to 5.0% (amber-red risk zone): progressively lower min conf, wider TPs
     """
     symbol = base_symbol.upper() + "USDT"
-    cfg = ENGINE_CONFIG
+    cfg = dict(ENGINE_CONFIG)
+    adaptive_conf_delta = int((adaptive_overrides or {}).get("conf_delta", 0) or 0)
+    adaptive_vol_delta = float((adaptive_overrides or {}).get("volume_min_ratio_delta", 0.0) or 0.0)
+    adaptive_ob_mode = str((adaptive_overrides or {}).get("ob_fvg_requirement_mode", "soft") or "soft")
+    internal_min_confidence = int(max(0, min(100, _risk_profile(user_risk_pct)["min_confidence"] + adaptive_conf_delta)))
+    cfg["volume_spike_min"] = max(1.0, cfg["volume_spike_min"] + adaptive_vol_delta)
     
     # ── BTC Bias Filter ──────────────────────────────────────
     btc_is_sideways = False
@@ -752,10 +766,11 @@ def _compute_signal_pro(base_symbol: str, btc_bias: Optional[Dict] = None, user_
             symbol=symbol,
             candles_1h=klines_1h,
             user_risk_pct=user_risk_pct,
-            btc_bias=btc_bias
+            btc_bias=btc_bias,
+            adaptive_overrides=adaptive_overrides,
         )
 
-        if confluence_signal and confluence_signal.get('confidence', 0) >= cfg["min_confidence"]:
+        if confluence_signal and confluence_signal.get('confidence', 0) >= internal_min_confidence:
             # Confluence signal passed thresholds — use it with SMC enhancement
             logger.info(
                 f"[Signal] {symbol} using CONFLUENCE signal "
@@ -966,6 +981,18 @@ def _compute_signal_pro(base_symbol: str, btc_bias: Optional[Dict] = None, user_
         elif market_structure == ("downtrend" if side == "LONG" else "uptrend"):
             confidence -= 8  # counter-trend penalty
 
+        # ── Adaptive OB/FVG confluence requirement (high-risk + borderline entries) ──
+        if adaptive_ob_mode == "required_when_risk_high":
+            is_high_risk = _normalize_risk_pct(user_risk_pct, default=1.0) > 1.0
+            is_borderline = confidence < (internal_min_confidence + 8)
+            has_ob_fvg = any(("OB" in str(r)) or ("FVG" in str(r)) for r in smc_reasons)
+            if is_high_risk and is_borderline and not has_ob_fvg:
+                logger.info(
+                    f"[Signal] {symbol} adaptive skip — high-risk borderline entry without OB/FVG "
+                    f"(conf={confidence}, min_conf={internal_min_confidence}, user_risk={user_risk_pct}%)"
+                )
+                return None
+
         # ── ATR-based SL/TP (professional sizing) ─────────────────────
         # Use 1H ATR for SL/TP to avoid noise from 15M
         sl_dist  = atr_1h * cfg["atr_sl_multiplier"]
@@ -1019,11 +1046,18 @@ def _compute_signal_pro(base_symbol: str, btc_bias: Optional[Dict] = None, user_
                     return None
 
         confidence = int(min(max(confidence, 50), 95))
+        if confidence < internal_min_confidence:
+            logger.info(
+                f"[Signal] {symbol} confidence {confidence}% < internal_min_conf {internal_min_confidence}% "
+                f"(adaptive conf_delta={adaptive_conf_delta})"
+            )
+            return None
 
         logger.info(
             f"[Signal] {symbol} {side} conf={confidence}% "
             f"entry={price:.4f} sl={sl:.4f} tp={tp1:.4f} "
-            f"RR={rr:.1f} ATR={atr_pct:.2f}% vol={vol_ratio:.1f}x"
+            f"RR={rr:.1f} ATR={atr_pct:.2f}% vol={vol_ratio:.1f}x "
+            f"(adaptive conf_delta={adaptive_conf_delta} vol_delta={adaptive_vol_delta:.2f} ob_mode={adaptive_ob_mode})"
         )
 
         return {
@@ -1164,6 +1198,10 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     from app.exchange_registry import get_client, get_exchange
     from app.supabase_repo import _client
     from app.bitunix_ws_pnl import start_pnl_tracker, stop_pnl_tracker, is_tracking
+    from app.adaptive_confluence import (
+        refresh_global_adaptive_state,
+        get_adaptive_overrides,
+    )
 
     # Get exchange-specific client
     ex_cfg = get_exchange(exchange_id)
@@ -1321,6 +1359,18 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     dynamic_min_confidence = int(risk_profile_cfg["min_confidence"])
     cfg = dict(cfg)
     cfg["min_confidence"] = dynamic_min_confidence
+    adaptive_state: Dict[str, Any] = {
+        "conf_delta": 0,
+        "volume_min_ratio_delta": 0.0,
+        "ob_fvg_requirement_mode": "soft",
+        "strategy_loss_rate": 0.0,
+        "ops_reconcile_rate": 0.0,
+        "trade_count_per_day": 0.0,
+        "strategy_sample_size": 0,
+        "decision_reason": "bootstrap",
+        "updated_at": None,
+    }
+    adaptive_next_refresh_ts = 0.0
 
     logger.info(
         f"[Engine:{user_id}] PRO ENGINE STARTED — symbols={cfg['symbols']}, "
@@ -1357,6 +1407,26 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
     while True:
         try:
+            now_ts = datetime.now(timezone.utc).timestamp()
+            if now_ts >= adaptive_next_refresh_ts:
+                try:
+                    # Refresh computes metrics/policy and persists a bounded state.
+                    await asyncio.to_thread(refresh_global_adaptive_state)
+                    adaptive_state = await asyncio.to_thread(get_adaptive_overrides)
+                    logger.info(
+                        f"[Engine:{user_id}] Adaptive overlay refreshed — "
+                        f"conf_delta={adaptive_state.get('conf_delta')} "
+                        f"vol_delta={adaptive_state.get('volume_min_ratio_delta'):.2f} "
+                        f"ob_mode={adaptive_state.get('ob_fvg_requirement_mode')} "
+                        f"loss_rate={adaptive_state.get('strategy_loss_rate'):.3f} "
+                        f"ops_rate={adaptive_state.get('ops_reconcile_rate'):.3f} "
+                        f"sample={adaptive_state.get('strategy_sample_size')} "
+                        f"decision={adaptive_state.get('decision_reason')}"
+                    )
+                except Exception as adapt_err:
+                    logger.warning(f"[Engine:{user_id}] Adaptive refresh failed, using last state: {adapt_err}")
+                adaptive_next_refresh_ts = now_ts + 600.0  # every 10 minutes
+
             # ── Initialize btc_bias for this iteration ────────────────
             btc_bias = {"bias": "NEUTRAL", "strength": 0, "reasons": []}
             
@@ -1509,7 +1579,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                             # Loss — generate reasoning
                             try:
                                 curr_sig = await asyncio.to_thread(
-                                    _compute_signal_pro, sym_base, None, user_risk_pct
+                                    _compute_signal_pro, sym_base, None, user_risk_pct, adaptive_state
                                 )
                             except Exception:
                                 curr_sig = None
@@ -1671,7 +1741,9 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
                     # Scan sinyal baru untuk simbol ini
                     try:
-                        rev_sig = await asyncio.to_thread(_compute_signal_pro, base_symbol, btc_bias, user_risk_pct)
+                        rev_sig = await asyncio.to_thread(
+                            _compute_signal_pro, base_symbol, btc_bias, user_risk_pct, adaptive_state
+                        )
                     except Exception:
                         continue
 
@@ -1851,12 +1923,17 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             # Saat BTC sideways: hanya scan BTC sendiri (altcoin diblokir di _compute_signal_pro)
             # BTC bisa range trade dengan confidence lebih tinggi
             btc_sideways_mode = (btc_bias_dir == "NEUTRAL" or btc_strength < 60)
-            min_conf_scan = cfg["min_confidence"] + 5 if btc_sideways_mode else cfg["min_confidence"]
+            effective_min_conf = int(
+                max(0, min(100, cfg["min_confidence"] + int(adaptive_state.get("conf_delta", 0) or 0)))
+            )
+            min_conf_scan = effective_min_conf + 5 if btc_sideways_mode else effective_min_conf
 
             candidates: List[Dict] = []
             for sym in available:
                 try:
-                    sig = await asyncio.to_thread(_compute_signal_pro, sym, btc_bias, user_risk_pct)
+                    sig = await asyncio.to_thread(
+                        _compute_signal_pro, sym, btc_bias, user_risk_pct, adaptive_state
+                    )
                     if sig and sig.get('confidence', 0) >= min_conf_scan:
                         candidates.append(sig)
                         logger.info(f"[Engine:{user_id}] Candidate: {sym} {sig['side']} "
