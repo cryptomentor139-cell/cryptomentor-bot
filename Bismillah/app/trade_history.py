@@ -104,6 +104,7 @@ def save_trade_close(
         update = {
             "exit_price":     float(exit_price),
             "pnl_usdt":       float(pnl_usdt),
+            "close_reason":   close_reason,
             "status":         close_reason,
             "closed_at":      datetime.utcnow().isoformat(),
         }

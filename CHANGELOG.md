@@ -15,6 +15,14 @@
       - all terminal failure exits
       - preserved pending state correctly on successful open
 
+### 💹 PnL Accounting & Trade Close Consistency
+- Added `get_roundtrip_financials()` to `Bismillah/app/bitunix_autotrade_client.py`:
+  - best-effort retrieval of close realized PnL from Bitunix history orders
+  - fee-aware net PnL computation: `net = close_realized_pnl - open_fee - close_fee`
+  - includes open/close leg resolution and optional avg open/close prices.
+- Updated `Bismillah/app/trade_history.py`:
+  - `save_trade_close()` now also persists `close_reason` field explicitly when closing a trade.
+
 ### 📊 Trading Pair Standard
 - **Scalping runtime standard set to 15 pairs** (aligned with startup messaging standard).
   - Updated `Bismillah/app/trading_mode.py` `ScalpingConfig.pairs` by adding:
