@@ -71,6 +71,7 @@ from app.symbol_coordinator import (
     PositionSide,
 )
 from app.volume_pair_selector import get_ranked_top_volume_pairs
+from app.leverage_policy import get_auto_max_safe_leverage
 
 _running_tasks: Dict[int, asyncio.Task] = {}
 _engine_lifecycle_locks: Dict[int, asyncio.Lock] = {}
@@ -1931,13 +1932,24 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
                     await asyncio.sleep(1)  # beri waktu exchange proses close
 
-                    # Step 2: Open posisi baru arah berlawanan
-                    flip_qty = calc_qty(pos_symbol, amount * leverage, new_entry)
+                    # Step 2: Open posisi baru arah berlawanan (auto max-safe leverage)
+                    flip_effective_leverage = get_auto_max_safe_leverage(
+                        symbol=pos_symbol,
+                        entry_price=new_entry,
+                        sl_price=new_sl,
+                        baseline_leverage=leverage,
+                    )
+                    logger.info(
+                        f"[Engine:{user_id}] leverage_mode=auto_max_safe symbol={pos_symbol} "
+                        f"baseline_leverage={leverage} effective_leverage={flip_effective_leverage}"
+                    )
+
+                    flip_qty = calc_qty(pos_symbol, amount * flip_effective_leverage, new_entry)
                     if flip_qty <= 0:
                         logger.warning(f"[Engine:{user_id}] Flip qty=0 for {pos_symbol}, skip open")
                         continue
 
-                    await asyncio.to_thread(client.set_leverage, pos_symbol, leverage)
+                    await asyncio.to_thread(client.set_leverage, pos_symbol, flip_effective_leverage)
                     open_result = await asyncio.to_thread(
                         client.place_order_with_tpsl, pos_symbol,
                         "BUY" if new_side == "LONG" else "SELL",
@@ -1992,7 +2004,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                                 side=new_side,
                                 entry_price=new_entry,
                                 qty=flip_qty,
-                                leverage=effective_leverage,
+                                leverage=flip_effective_leverage,
                                 tp_price=new_tp,
                                 sl_price=new_sl,
                                 signal=rev_sig,
@@ -2009,7 +2021,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                                 f"💵 Entry: <code>{new_entry:.4f}</code>\n"
                                 f"🎯 TP: <code>{new_tp:.4f}</code> (+{tp_pct:.1f}%)\n"
                                 f"🛑 SL: <code>{new_sl:.4f}</code> (-{sl_pct:.1f}%)\n"
-                                f"📦 Qty: {flip_qty} | {leverage}x\n"
+                                f"📦 Qty: {flip_qty} | {flip_effective_leverage}x\n"
                                 f"🧠 Confidence: {new_conf}%\n"
                                 f"⚖️ R:R: 1:{rev_sig['rr_ratio']:.1f}"
                             ),
@@ -2236,10 +2248,16 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 logger.debug(f"[Engine:{user_id}] Queue status notification failed: {_qst_err}")
 
             # ── Auto Max Pair Leverage Calculation ──
-            from app.position_sizing import calculate_max_safe_leverage
-            effective_leverage = calculate_max_safe_leverage(entry, sl, symbol)
-            
-            logger.info(f"[Engine:{user_id}] Auto Max Pair Leverage for {symbol}: {effective_leverage}x (Baseline: {leverage}x)")
+            effective_leverage = get_auto_max_safe_leverage(
+                symbol=symbol,
+                entry_price=entry,
+                sl_price=sl,
+                baseline_leverage=leverage,
+            )
+            logger.info(
+                f"[Engine:{user_id}] leverage_mode=auto_max_safe symbol={symbol} "
+                f"baseline_leverage={leverage} effective_leverage={effective_leverage}"
+            )
 
             # Sync signal execution update to Supabase including effective leverage
             try:

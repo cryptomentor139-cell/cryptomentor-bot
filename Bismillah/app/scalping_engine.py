@@ -23,6 +23,7 @@ from app.symbol_coordinator import (
 )
 from app.adaptive_confluence import refresh_global_adaptive_state, get_adaptive_overrides
 from app.volume_pair_selector import get_ranked_top_volume_pairs
+from app.leverage_policy import get_auto_max_safe_leverage
 
 logger = logging.getLogger(__name__)
 WEB_DASHBOARD_URL = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
@@ -1463,10 +1464,16 @@ class ScalpingEngine:
                 leverage = int(session.data[0].get("leverage", 10))
                 
                 # ── Auto Max Pair Leverage Calculation ──
-                from app.position_sizing import calculate_max_safe_leverage
-                effective_leverage = calculate_max_safe_leverage(signal.entry_price, signal.sl_price, signal.symbol)
-                
-                logger.info(f"[Scalping:{self.user_id}] Auto Max Pair Leverage for {signal.symbol}: {effective_leverage}x (Baseline: {leverage}x)")
+                effective_leverage = get_auto_max_safe_leverage(
+                    symbol=signal.symbol,
+                    entry_price=signal.entry_price,
+                    sl_price=signal.sl_price,
+                    baseline_leverage=leverage,
+                )
+                logger.info(
+                    f"[Scalping:{self.user_id}] leverage_mode=auto_max_safe symbol={signal.symbol} "
+                    f"baseline_leverage={leverage} effective_leverage={effective_leverage}"
+                )
                 
                 # CRITICAL: Calculate position size based on risk (Phase 2)
                 quantity, used_risk_sizing = self.calculate_position_size_pro(

@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.2.12] — 2026-04-16 — Unified Auto Max-Safe Leverage Compliance
+
+### ⚙️ Canonical Leverage Policy
+- Added `Bismillah/app/leverage_policy.py` with canonical function:
+  - `get_auto_max_safe_leverage(symbol, entry_price=None, sl_price=None, baseline_leverage=None) -> int`
+- `Bismillah/app/position_sizing.py` now delegates leverage selection to canonical policy.
+
+### 🤖 Engine Alignment (Production + Whitelabel + SMC)
+- `Bismillah/app/autotrade_engine.py`:
+  - swing flip/reversal path now uses auto max-safe leverage for qty sizing + `set_leverage` + trade history + notifications.
+  - standardized leverage observability log markers (`leverage_mode=auto_max_safe`).
+- `Bismillah/app/scalping_engine.py`:
+  - entry path now uses canonical policy with standardized leverage observability logs.
+- `Whitelabel #1/app/autotrade_engine.py`:
+  - regular entries and flip/reversal entries now use canonical auto max-safe leverage end-to-end.
+- `smc_trading_engine/app/services/trade_service.py`:
+  - order requests now use canonical auto max-safe leverage instead of direct `default_leverage`.
+
+### 🌐 One-Click Web Alignment
+- `website-backend/app/routes/signals.py`:
+  - removed local leverage map drift.
+  - one-click execution now derives leverage from canonical policy while preserving existing response fields:
+    - `leverage`, `leverage_mode`, `baseline_leverage`.
+
+### ✅ Tests
+- Added `tests/test_leverage_policy.py`:
+  - known-symbol max-safe mapping
+  - unknown-symbol fallback
+  - baseline metadata does not override effective policy
+
 ## [2.2.11] — 2026-04-16 — Scalping Runtime Compatibility Guard (`tp_price`)
 
 ### 🛠️ Fix

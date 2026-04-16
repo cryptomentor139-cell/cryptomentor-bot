@@ -12,27 +12,12 @@ This enables:
 import logging
 from typing import Dict, Optional, Any
 import math
+from app.leverage_policy import (
+    SYMBOL_MAX_LEVERAGE,
+    get_auto_max_safe_leverage,
+)
 
 logger = logging.getLogger(__name__)
-
-SYMBOL_MAX_LEVERAGE = {
-    "BTCUSDT": 200,
-    "ETHUSDT": 100,
-    "SOLUSDT": 75,
-    "DOGEUSDT": 75,
-    "XRPUSDT": 75,
-    "ADAUSDT": 75,
-    "BNBUSDT": 75,
-    "AVAXUSDT": 50,
-    "DOTUSDT": 50,
-    "MATICUSDT": 50,
-    "LINKUSDT": 50,
-    "UNIUSDT": 50,
-    "ATOMUSDT": 50,
-    "XAUUSDT": 100,
-    "CLUSDT": 100,
-    "QQQUSDT": 100,
-}
 
 def calculate_max_safe_leverage(entry_price: float, sl_price: float, symbol: str = "") -> int:
     """
@@ -40,11 +25,15 @@ def calculate_max_safe_leverage(entry_price: float, sl_price: float, symbol: str
     Current behavior: return max leverage allowed for the trading pair.
     """
     try:
-        exchange_max = SYMBOL_MAX_LEVERAGE.get(symbol.upper(), 200) if symbol else 200
-        return max(1, int(exchange_max))
+        return get_auto_max_safe_leverage(
+            symbol=symbol,
+            entry_price=entry_price,
+            sl_price=sl_price,
+            baseline_leverage=None,
+        )
     except Exception as e:
         logger.error(f"[PositionSizing] Error calculating max pair leverage: {e}")
-        return 20
+        return get_auto_max_safe_leverage(symbol=symbol)
 
 
 

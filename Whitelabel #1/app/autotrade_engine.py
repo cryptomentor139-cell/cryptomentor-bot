@@ -9,10 +9,29 @@ Strategy: Multi-timeframe confluence + SMC + Risk Management
 """
 import asyncio
 import logging
+import os
+import sys
 from typing import Dict, Optional, List
 from datetime import datetime, date
 
 logger = logging.getLogger(__name__)
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_BISMILLAH_APP_PATH = os.path.join(_REPO_ROOT, "Bismillah", "app")
+if _BISMILLAH_APP_PATH not in sys.path:
+    sys.path.insert(0, _BISMILLAH_APP_PATH)
+
+try:
+    from leverage_policy import get_auto_max_safe_leverage  # type: ignore
+except Exception:
+    def get_auto_max_safe_leverage(
+        symbol: str,
+        entry_price: Optional[float] = None,
+        sl_price: Optional[float] = None,
+        baseline_leverage: Optional[int] = None,
+    ) -> int:
+        _ = (symbol, entry_price, sl_price, baseline_leverage)
+        return 20
 
 _running_tasks: Dict[int, asyncio.Task] = {}
 
@@ -1039,13 +1058,23 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
                     await asyncio.sleep(1)  # beri waktu exchange proses close
 
-                    # Step 2: Open posisi baru arah berlawanan
-                    flip_qty = calc_qty(pos_symbol, amount * leverage, new_entry)
+                    # Step 2: Open posisi baru arah berlawanan (auto max-safe leverage)
+                    flip_effective_leverage = get_auto_max_safe_leverage(
+                        symbol=pos_symbol,
+                        entry_price=new_entry,
+                        sl_price=new_sl,
+                        baseline_leverage=leverage,
+                    )
+                    logger.info(
+                        f"[Engine:{user_id}] leverage_mode=auto_max_safe symbol={pos_symbol} "
+                        f"baseline_leverage={leverage} effective_leverage={flip_effective_leverage}"
+                    )
+                    flip_qty = calc_qty(pos_symbol, amount * flip_effective_leverage, new_entry)
                     if flip_qty <= 0:
                         logger.warning(f"[Engine:{user_id}] Flip qty=0 for {pos_symbol}, skip open")
                         continue
 
-                    await asyncio.to_thread(client.set_leverage, pos_symbol, leverage)
+                    await asyncio.to_thread(client.set_leverage, pos_symbol, flip_effective_leverage)
                     open_result = await asyncio.to_thread(
                         client.place_order_with_tpsl, pos_symbol,
                         "BUY" if new_side == "LONG" else "SELL",
@@ -1088,7 +1117,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                                 side=new_side,
                                 entry_price=new_entry,
                                 qty=flip_qty,
-                                leverage=leverage,
+                                leverage=flip_effective_leverage,
                                 tp_price=new_tp,
                                 sl_price=new_sl,
                                 signal=rev_sig,
@@ -1105,7 +1134,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                                 f"💵 Entry: <code>{new_entry:.4f}</code>\n"
                                 f"🎯 TP: <code>{new_tp:.4f}</code> (+{tp_pct:.1f}%)\n"
                                 f"🛑 SL: <code>{new_sl:.4f}</code> (-{sl_pct:.1f}%)\n"
-                                f"📦 Qty: {flip_qty} | {leverage}x\n"
+                                f"📦 Qty: {flip_qty} | {flip_effective_leverage}x\n"
                                 f"🧠 Confidence: {new_conf}%\n"
                                 f"⚖️ R:R: 1:{rev_sig['rr_ratio']:.1f}"
                             ),
@@ -1185,8 +1214,19 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             confidence = sig['confidence']
             rr_ratio   = sig['rr_ratio']
 
+            effective_leverage = get_auto_max_safe_leverage(
+                symbol=symbol,
+                entry_price=entry,
+                sl_price=sl,
+                baseline_leverage=leverage,
+            )
+            logger.info(
+                f"[Engine:{user_id}] leverage_mode=auto_max_safe symbol={symbol} "
+                f"baseline_leverage={leverage} effective_leverage={effective_leverage}"
+            )
+
             # ── Hitung qty ────────────────────────────────────────────
-            qty = calc_qty(symbol, amount * leverage, entry)
+            qty = calc_qty(symbol, amount * effective_leverage, entry)
             if qty <= 0:
                 logger.warning(f"[Engine:{user_id}] qty=0 for {symbol}, skip")
                 await asyncio.sleep(cfg["scan_interval"])
@@ -1205,7 +1245,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 qty_tp2 = 0
 
             # ── Set leverage ──────────────────────────────────────────
-            await asyncio.to_thread(client.set_leverage, symbol, leverage)
+            await asyncio.to_thread(client.set_leverage, symbol, effective_leverage)
 
             # ── Place order dengan TP1 sebagai TP utama ───────────────
             # Premium: TP2 dimonitor manual oleh engine (setelah TP1 hit, SL geser ke entry)
@@ -1326,7 +1366,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     side=side,
                     entry_price=entry,
                     qty=qty,
-                    leverage=leverage,
+                    leverage=effective_leverage,
                     tp_price=tp1,
                     sl_price=sl,
                     signal=sig,
@@ -1340,9 +1380,9 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             sl_pct      = abs(entry - sl)  / entry * 100
             tp1_pct     = abs(tp1 - entry) / entry * 100
             tp2_pct     = abs(tp2 - entry) / entry * 100
-            risk_usdt   = amount * (sl_pct  / 100) * leverage
-            reward_tp1  = amount * (tp1_pct / 100) * leverage
-            reward_tp2  = amount * (tp2_pct / 100) * leverage
+            risk_usdt   = amount * (sl_pct  / 100) * effective_leverage
+            reward_tp1  = amount * (tp1_pct / 100) * effective_leverage
+            reward_tp2  = amount * (tp2_pct / 100) * effective_leverage
 
             trend_1h   = sig.get('trend_1h', '-')
             struct      = sig.get('market_structure', 'ranging')
@@ -1360,7 +1400,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 chat_id=notify_chat_id,
                 text=(
                     f"✅ <b>ORDER EXECUTED</b>  [{trades_today}/{cfg['max_trades_per_day']} today]\n\n"
-                    f"📊 {symbol} | {side} | {leverage}x\n"
+                    f"📊 {symbol} | {side} | {effective_leverage}x\n"
                     f"💵 Entry: <code>{entry:.4f}</code>\n"
                     + (
                         f"🎯 TP1: <code>{tp1:.4f}</code> (+{tp1_pct:.1f}%) — 75% posisi\n"

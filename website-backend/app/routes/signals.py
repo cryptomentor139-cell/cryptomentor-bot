@@ -17,6 +17,8 @@ from datetime import datetime, timezone, timedelta
 TZ_UTC8 = timezone(timedelta(hours=8))
 from typing import List, Dict, Any, Optional
 import logging
+import os
+import sys
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -38,6 +40,25 @@ from app.services.risk_policy import (
     risk_band,
 )
 from app.auth.jwt import decode_token
+
+_BISMILLAH_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "Bismillah")
+)
+_BISMILLAH_APP_PATH = os.path.join(_BISMILLAH_PATH, "app")
+if _BISMILLAH_APP_PATH not in sys.path:
+    sys.path.insert(0, _BISMILLAH_APP_PATH)
+
+try:
+    from leverage_policy import get_auto_max_safe_leverage  # type: ignore
+except Exception:
+    def get_auto_max_safe_leverage(
+        symbol: str,
+        entry_price: Optional[float] = None,
+        sl_price: Optional[float] = None,
+        baseline_leverage: Optional[int] = None,
+    ) -> int:
+        _ = (symbol, entry_price, sl_price, baseline_leverage)
+        return 20
 
 logger = logging.getLogger(__name__)
 RISK_MIN_PCT = AUTO_RISK_MIN_PCT
@@ -76,33 +97,6 @@ _QTY_PRECISION = {
     "MATICUSDT": 0,
     "LTCUSDT":  2,
 }
-
-# Keep aligned with Bismillah/app/position_sizing.py auto max pair leverage map.
-_SYMBOL_MAX_LEVERAGE = {
-    "BTCUSDT": 200,
-    "ETHUSDT": 100,
-    "SOLUSDT": 75,
-    "DOGEUSDT": 75,
-    "XRPUSDT": 75,
-    "ADAUSDT": 75,
-    "BNBUSDT": 75,
-    "AVAXUSDT": 50,
-    "DOTUSDT": 50,
-    "MATICUSDT": 50,
-    "LINKUSDT": 50,
-    "UNIUSDT": 50,
-    "ATOMUSDT": 50,
-    "XAUUSDT": 100,
-    "CLUSDT": 100,
-    "QQQUSDT": 100,
-}
-
-
-def _max_pair_leverage(symbol: str) -> int:
-    try:
-        return max(1, int(_SYMBOL_MAX_LEVERAGE.get(str(symbol or "").upper(), 200)))
-    except Exception:
-        return 200
 
 router = APIRouter(prefix="/dashboard", tags=["signals"])
 
@@ -740,7 +734,19 @@ async def execute_signal(
         requested_risk_pct = ONE_CLICK_RISK_MAX_PCT
         risk_pct = ONE_CLICK_RISK_MAX_PCT
     baseline_leverage = int(sess.get("leverage") or 10)
-    leverage = _max_pair_leverage(sym)
+    leverage = get_auto_max_safe_leverage(
+        symbol=sym,
+        entry_price=None,
+        sl_price=None,
+        baseline_leverage=baseline_leverage,
+    )
+    logger.info(
+        "[OneClick:%s] leverage_mode=auto_max_safe symbol=%s baseline_leverage=%sx effective_leverage=%sx",
+        tg_id,
+        sym,
+        baseline_leverage,
+        leverage,
+    )
 
     # Re-derive the signal from live market data so dynamic sizing reflects
     # the *current* SL distance, not the stale snapshot in the user's UI.
