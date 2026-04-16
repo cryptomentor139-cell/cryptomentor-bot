@@ -19,12 +19,16 @@ Standard operating guide for the core CryptoMentor operators: Admin, Engine, Bro
 - `Bismillah/app/autotrade_engine.py`
 - `Bismillah/app/scalping_engine.py`
 - `Bismillah/app/symbol_coordinator.py`
+- `Bismillah/app/volume_pair_selector.py`
 - Must enforce:
 - No stale pending locks (`set_pending` must be paired with clear/confirm paths).
 - Risk behavior consistent with user profile and safety fallback.
 - SL/TP validation must never mutate SL/TP in a way that changes pre-sized risk.
 - Executed TP/SL must match the strategy signal used for entry validation.
 - Startup messages consistent with live runtime values.
+- Runtime pair universe for swing + scalp must use Bitunix dynamic top-volume routing (top 10 by `quoteVol`, highest-first priority).
+- Volume selector fallback policy is fixed: last-good cache first, bootstrap list only if cache unavailable.
+- Queue/scan priority must preserve volume rank before secondary quality sort (confidence/R:R).
 - Required checks:
 - Compile/syntax pass for touched files.
 - Negative-path verification (timeouts, order failure, validation skip).
@@ -35,13 +39,18 @@ Standard operating guide for the core CryptoMentor operators: Admin, Engine, Bro
 - Code scope:
 - `Bismillah/app/trading_mode.py`
 - `Bismillah/app/position_sizing.py`
+- `Bismillah/app/volume_pair_selector.py`
 - Rules:
-- Keep declared pair standard aligned with all user-facing messages.
+- Keep declared pair standard aligned with runtime behavior and all user-facing messages.
 - Any pair-count change requires explicit changelog line.
+- Dynamic universe standard (v2.2.9+): `Top 10 by volume` from Bitunix tickers (`quoteVol`).
+- Equity wording standard: use `Equity` for account-value/risk basis; use `Available balance` only for free margin context.
 - Runtime verification command (VPS/local):
 - `python3 - <<'PY'`
-- `from app.trading_mode import ScalpingConfig`
-- `print(len(ScalpingConfig().pairs), ScalpingConfig().pairs)`
+- `from app.volume_pair_selector import get_ranked_top_volume_pairs, get_selector_health`
+- `pairs = get_ranked_top_volume_pairs(10)`
+- `print(len(pairs), pairs)`
+- `print(get_selector_health())`
 - `PY`
 
 ## 4) Broadcast Agent
@@ -77,6 +86,8 @@ Standard operating guide for the core CryptoMentor operators: Admin, Engine, Bro
 5. `cryptomentor` restarted once.
 6. Health and runtime validations passed.
 7. Broadcast/reporting (if applicable) recorded.
+8. For pairing/routing changes: verify live selector health and top-10 ordering output.
+9. For messaging changes: verify startup/restart notification uses live `Equity` and `Top 10 by volume`.
 
 ## Guardrails
 - No destructive git actions without explicit instruction.

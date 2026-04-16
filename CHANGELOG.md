@@ -1,5 +1,41 @@
 # Changelog
 
+## [2.2.9] — 2026-04-16 — Dynamic Top-10 Volume Routing + Equity Messaging Alignment
+
+### 📈 Dynamic Pair Universe (Bitunix `quoteVol`)
+- Added `Bismillah/app/volume_pair_selector.py`:
+  - Pulls futures tickers from `GET /api/v1/futures/market/tickers`
+  - Filters tradable `*USDT` pairs
+  - Sorts by `quoteVol` (descending)
+  - Returns top-10 ranked symbols (highest volume first)
+- Selector includes safe runtime controls:
+  - 5-minute refresh TTL cache
+  - fallback priority: last-good cache → bootstrap list
+  - structured refresh/fallback logs with source + error
+
+### ⚙️ Engine Integration
+- `Bismillah/app/autotrade_engine.py`
+  - Swing scan universe now uses live top-10 volume pairs at runtime.
+  - Candidate queue priority updated: `volume_rank` first, then confidence, then RR.
+  - Queue ordering and processing now follow highest-volume-first focus.
+- `Bismillah/app/scalping_engine.py`
+  - Scan universe now uses the same shared top-10 volume selector.
+  - Startup + scan logs now reflect top-volume dynamic pair routing.
+  - Allowed-symbol validation follows current active top-volume set.
+
+### 💬 Equity Wording / Startup Messaging
+- Replaced user-facing “Capital” semantics with “Equity” across autotrade startup/status/risk text where account-value semantics are intended.
+- `Bismillah/app/scheduler.py` startup/restart notifications now show:
+  - `Equity` sourced from live exchange account data (`available + frozen + unrealized`)
+  - trading universe label: `Top 10 by volume`
+- Updated mode switch copy in `Bismillah/app/handlers_autotrade.py` from fixed `Top 15` to dynamic `Top 10 by volume`.
+
+### ✅ Tests
+- Added `tests/test_volume_pair_selector.py`:
+  - descending sort correctness on `quoteVol`
+  - cache fallback behavior on API failure
+  - bootstrap fallback behavior when cache is unavailable
+
 ## [2.2.8] — 2026-04-16 — Adaptive Confluence v1 (Global Controller + Outcome Taxonomy)
 
 ### 🧠 Adaptive Confluence Controller (Global, Balanced Objective)

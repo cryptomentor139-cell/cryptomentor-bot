@@ -21,7 +21,7 @@ REMINDER_MESSAGES = [
         "• Bot analyzes the market 24/7 using AI + SMC indicators\n"
         "• If there's a good setup, bot immediately opens positions automatically\n"
         "• SL/TP managed automatically, you just monitor profits\n\n"
-        "💰 Minimum capital can start from <b>10 USDT</b>\n"
+        "💰 Minimum equity can start from <b>10 USDT</b>\n"
         "🔒 Your funds stay on your exchange, bot only has Trade permission\n\n"
         "Want to try? Type /autotrade"
     ),
@@ -58,7 +58,7 @@ REMINDER_MESSAGES = [
         "But setup is just 3 steps:\n"
         "1. Register an exchange via our referral\n"
         "2. Create API Key (Trade only)\n"
-        "3. Enter into bot → choose capital → start!\n\n"
+        "3. Enter into bot → choose equity → start!\n\n"
         "⏱ Total setup time: <b>~5 minutes</b>\n\n"
         "After that, the bot works 24/7 for you.\n\n"
         "Start now: /autotrade"

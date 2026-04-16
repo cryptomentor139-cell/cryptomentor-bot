@@ -69,6 +69,7 @@ from app.symbol_coordinator import (
     StrategyOwner,
     PositionSide,
 )
+from app.volume_pair_selector import get_ranked_top_volume_pairs
 
 _running_tasks: Dict[int, asyncio.Task] = {}
 
@@ -1373,9 +1374,9 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
     adaptive_next_refresh_ts = 0.0
 
     logger.info(
-        f"[Engine:{user_id}] PRO ENGINE STARTED — symbols={cfg['symbols']}, "
-        f"min_conf={cfg['min_confidence']} (risk-profile dynamic), min_rr={cfg['min_rr_ratio']}, "
-        f"user_risk={user_risk_pct}%, daily_loss_limit_DISABLED"
+        f"[Engine:{user_id}] PRO ENGINE STARTED — symbols_mode=dynamic_top10_volume "
+        f"(bootstrap={cfg['symbols']}), min_conf={cfg['min_confidence']} (risk-profile dynamic), "
+        f"min_rr={cfg['min_rr_ratio']}, user_risk={user_risk_pct}%, daily_loss_limit_DISABLED"
     )
 
     try:
@@ -1736,7 +1737,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     pos_qty     = float(pos.get("qty", 0))
                     base_symbol = pos_symbol.replace("USDT", "")
 
-                    if not pos_qty or base_symbol not in cfg["symbols"]:
+                    if not pos_qty:
                         continue
 
                     # Scan sinyal baru untuk simbol ini
@@ -1904,11 +1905,22 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 await asyncio.sleep(cfg["scan_interval"])
                 continue
 
-            # ── Scan symbols ──────────────────────────────────────────
-            available = [s for s in cfg["symbols"] if (s + "USDT") not in occupied_syms]
+            # ── Scan symbols (dynamic top-10 by volume, highest first) ─────
+            ranked_pairs = await asyncio.to_thread(get_ranked_top_volume_pairs, 10)
+            ranked_bases = []
+            for pair in ranked_pairs:
+                base = str(pair).upper().replace("USDT", "")
+                if base and base not in ranked_bases:
+                    ranked_bases.append(base)
+            volume_rank = {b: idx for idx, b in enumerate(ranked_bases, start=1)}
+            available = [s for s in ranked_bases if (s + "USDT") not in occupied_syms]
             if not available:
                 await asyncio.sleep(cfg["scan_interval"])
                 continue
+            logger.info(
+                f"[Engine:{user_id}] Top-volume focus: "
+                + ", ".join([f"{s}(#{volume_rank.get(s, 0)})" for s in available])
+            )
             
             # ── Get BTC bias first (market leader analysis) ───────────
             btc_bias = await asyncio.to_thread(_get_btc_bias)
@@ -1935,9 +1947,10 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                         _compute_signal_pro, sym, btc_bias, user_risk_pct, adaptive_state
                     )
                     if sig and sig.get('confidence', 0) >= min_conf_scan:
+                        sig["_volume_rank"] = volume_rank.get(sym, 9999)
                         candidates.append(sig)
                         logger.info(f"[Engine:{user_id}] Candidate: {sym} {sig['side']} "
-                                    f"conf={sig['confidence']}% RR={sig['rr_ratio']}"
+                                    f"conf={sig['confidence']}% RR={sig['rr_ratio']} rank={sig['_volume_rank']}"
                                     f"{' [SIDEWAYS]' if sig.get('btc_is_sideways') else ''}")
                 except Exception as e:
                     logger.warning(f"[Engine:{user_id}] Scan error {sym}: {e}")
@@ -1947,15 +1960,27 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 await asyncio.sleep(cfg["scan_interval"])
                 continue
 
-            # ── Signal Queue System: Sort candidates by confidence (highest first) ──
-            # All candidates are queued, not just the best one
-            candidates.sort(key=lambda s: (s['confidence'], s['rr_ratio']), reverse=True)
+            # ── Signal Queue System: Sort by volume-rank first, then quality ────────
+            # Highest-volume pair is top priority, confidence and RR resolve ties.
+            candidates.sort(
+                key=lambda s: (
+                    int(s.get("_volume_rank", 9999)),
+                    -float(s.get("confidence", 0)),
+                    -float(s.get("rr_ratio", 0)),
+                )
+            )
 
-            logger.info(f"[Engine:{user_id}] Signal Queue System: {len(candidates)} candidates generated (sorted by confidence)")
-            queue_msg = "📋 <b>Signal Queue (by confidence):</b>\n"
+            logger.info(f"[Engine:{user_id}] Signal Queue System: {len(candidates)} candidates generated (sorted by volume-rank then confidence)")
+            queue_msg = "📋 <b>Signal Queue (by volume priority):</b>\n"
             for idx, cand in enumerate(candidates, 1):
-                logger.info(f"  [{idx}] {cand['symbol']}: {cand['side']} conf={cand['confidence']}% RR={cand['rr_ratio']:.1f}")
-                queue_msg += f"{idx}. <b>{cand['symbol']}</b> {cand['side']} | Conf: {cand['confidence']}% | R:R: 1:{cand['rr_ratio']:.1f}\n"
+                logger.info(
+                    f"  [{idx}] {cand['symbol']}: rank={cand.get('_volume_rank', '?')} "
+                    f"{cand['side']} conf={cand['confidence']}% RR={cand['rr_ratio']:.1f}"
+                )
+                queue_msg += (
+                    f"{idx}. <b>{cand['symbol']}</b> (Vol Rank #{cand.get('_volume_rank', '?')}) "
+                    f"{cand['side']} | Conf: {cand['confidence']}% | R:R: 1:{cand['rr_ratio']:.1f}\n"
+                )
 
             # Store candidates in signal queue for this user
             if user_id not in _signal_queues:
@@ -2000,6 +2025,15 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     except Exception as _sync_err:
                         logger.warning(f"[Engine:{user_id}] Failed to sync signal to Supabase: {_sync_err}")
 
+            # Keep queue globally ordered by current volume priority then signal quality.
+            _signal_queues[user_id].sort(
+                key=lambda s: (
+                    int(s.get("_volume_rank", 9999)),
+                    -float(s.get("confidence", 0)),
+                    -float(s.get("rr_ratio", 0)),
+                )
+            )
+
             # ── Process next signal from queue ──────────────────────────────────
             if not _signal_queues[user_id]:
                 await asyncio.sleep(cfg["scan_interval"])
@@ -2011,7 +2045,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             if user_id not in _signals_being_processed:
                 _signals_being_processed[user_id] = set()
 
-            # Get next signal from queue (highest confidence)
+            # Get next signal from queue (highest volume priority first)
             sig = None
             for idx, candidate in enumerate(_signal_queues[user_id]):
                 if candidate['symbol'] not in _signals_being_processed[user_id]:
@@ -2375,7 +2409,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                                 f"📦 Required margin: <b>~{margin_needed:.2f} USDT</b>\n\n"
                                 f"Solutions:\n"
                                 f"• Transfer USDT from <b>Spot → Futures</b> on Bitunix\n"
-                                f"• Or reduce your autotrade capital\n\n"
+                                f"• Or reduce your autotrade equity target\n\n"
                                 f"Bot is still running and will retry."
                             ),
                             parse_mode='HTML'

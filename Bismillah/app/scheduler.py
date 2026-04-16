@@ -117,6 +117,31 @@ def _resolve_min_confidence_for_user(user_id: int, trading_mode: str) -> int:
         return 72 if mode == "scalping" else 68
 
 
+async def _fetch_live_equity(exchange_id: str, api_key: str, api_secret: str, fallback: float) -> float:
+    """
+    Best-effort equity fetch: available + frozen + unrealized.
+    Falls back to session amount when exchange call fails.
+    """
+    try:
+        from app.exchange_registry import get_client
+
+        ex_client = get_client(exchange_id, api_key, api_secret)
+        acc = await asyncio.wait_for(
+            asyncio.to_thread(ex_client.get_account_info),
+            timeout=4.0,
+        )
+        if acc.get("success"):
+            available = float(acc.get("available", 0) or 0)
+            frozen = float(acc.get("frozen", 0) or 0)
+            unrealized = float(acc.get("total_unrealized_pnl", 0) or 0)
+            equity = available + frozen + unrealized
+            if equity > 0:
+                return equity
+    except Exception as e:
+        logger.warning(f"[Scheduler] Live equity fetch failed ({exchange_id}): {e}")
+    return float(fallback or 0)
+
+
 class TaskScheduler:
 
     """Scheduler untuk task otomatis"""
@@ -478,6 +503,12 @@ def start_scheduler(application):
                         from app.trading_mode_manager import TradingMode
                         is_scalping = trading_mode == "scalping"
                         min_confidence_display = _resolve_min_confidence_for_user(user_id, trading_mode)
+                        live_equity = await _fetch_live_equity(
+                            exchange_id=exchange_id,
+                            api_key=keys["api_key"],
+                            api_secret=keys["api_secret"],
+                            fallback=amount,
+                        )
                         
                         if is_scalping:
                             # Scalping mode notification
@@ -493,8 +524,8 @@ def start_scheduler(application):
                                     "• Min R:R: <b>1:1.5</b>\n"
                                     "• Max hold time: <b>30 minutes</b>\n"
                                     f"• Max concurrent: <b>4 positions</b>\n"
-                                    "• Trading pairs: <b>15 pairs</b>\n\n"
-                                    f"💰 Capital: <b>{amount} USDT</b>\n"
+                                    "• Trading pairs: <b>Top 10 by volume</b>\n\n"
+                                    f"💰 Equity: <b>{live_equity:.2f} USDT</b>\n"
                                     f"⚡ Base leverage setting: <b>{leverage}x</b>\n"
                                     "⚙️ Applied leverage is auto-adjusted per pair (max-safe).\n\n"
                                     "Bot will scan for high-probability setups every 15 seconds.\n"
@@ -516,8 +547,8 @@ def start_scheduler(application):
                                     f"• Min confidence: <b>{min_confidence_display}%</b> (dynamic by risk profile)\n"
                                     "• Min R:R: <b>1:2</b>\n"
                                     f"• Max concurrent: <b>4 positions</b>\n"
-                                    "• Trading pairs: <b>15 pairs</b>\n\n"
-                                    f"💰 Capital: <b>{amount} USDT</b>\n"
+                                    "• Trading pairs: <b>Top 10 by volume</b>\n\n"
+                                    f"💰 Equity: <b>{live_equity:.2f} USDT</b>\n"
                                     f"⚡ Base leverage setting: <b>{leverage}x</b>\n"
                                     "⚙️ Applied leverage is auto-adjusted per pair (max-safe).\n\n"
                                     "Bot will scan for high-quality setups every 45 seconds.\n"
@@ -715,13 +746,20 @@ async def _engine_health_check_task(application):
                         _api_key_fail_count.pop(user_id, None)
                         
                         # Notify user
+                        live_equity = await _fetch_live_equity(
+                            exchange_id=exchange_id,
+                            api_key=keys["api_key"],
+                            api_secret=keys["api_secret"],
+                            fallback=amount,
+                        )
                         await application.bot.send_message(
                             chat_id=user_id,
                             text=(
                                 "🔄 <b>AutoTrade Engine Auto-Restarted</b>\n\n"
                                 "Your engine stopped unexpectedly and has been automatically restarted.\n\n"
                                 f"📊 Mode: <b>{trading_mode.title()}</b>\n"
-                                f"💰 Capital: <b>{amount} USDT</b>\n"
+                                f"💰 Equity: <b>{live_equity:.2f} USDT</b>\n"
+                                "• Trading pairs: <b>Top 10 by volume</b>\n"
                                 f"⚡ Base leverage setting: <b>{leverage}x</b>\n"
                                 "⚙️ Applied leverage is auto-adjusted per pair (max-safe).\n\n"
                                 "If this happens frequently, please contact support.\n\n"

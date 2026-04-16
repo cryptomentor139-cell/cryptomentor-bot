@@ -22,6 +22,7 @@ from app.symbol_coordinator import (
     PositionSide,
 )
 from app.adaptive_confluence import refresh_global_adaptive_state, get_adaptive_overrides
+from app.volume_pair_selector import get_ranked_top_volume_pairs
 
 logger = logging.getLogger(__name__)
 WEB_DASHBOARD_URL = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
@@ -109,6 +110,7 @@ class ScalpingEngine:
             "decision_reason": "bootstrap",
         }
         self._adaptive_next_refresh = 0.0
+        self._active_scan_pairs = list(self.config.pairs)
 
         # Multi-user symbol coordinator
         self.coordinator = get_coordinator()
@@ -228,6 +230,11 @@ class ScalpingEngine:
                 self._adaptive_overlay = await asyncio.to_thread(get_adaptive_overrides)
             except Exception as adapt_err:
                 logger.warning(f"[Scalping:{self.user_id}] Initial adaptive load failed: {adapt_err}")
+            try:
+                self._active_scan_pairs = await asyncio.to_thread(get_ranked_top_volume_pairs, 10)
+            except Exception as vol_err:
+                logger.warning(f"[Scalping:{self.user_id}] Initial volume pair load failed: {vol_err}")
+                self._active_scan_pairs = list(self.config.pairs)
 
             await self.bot.send_message(
                 chat_id=self.notify_chat_id,
@@ -241,7 +248,7 @@ class ScalpingEngine:
                     f"• Min R:R: 1:{self.config.min_rr}\n"
                     f"• Max hold time: {self.config.max_hold_time // 60} minutes\n"
                     f"• Max concurrent: {self.config.max_concurrent_positions} positions\n"
-                    f"• Trading pairs: {len(self.config.pairs)} pairs\n\n"
+                    f"• Trading pairs: Top {len(self._active_scan_pairs)} by volume\n\n"
                     f"• Adaptive conf delta: {int(self._adaptive_overlay.get('conf_delta', 0)):+d}\n"
                     f"• Adaptive vol delta: {float(self._adaptive_overlay.get('volume_min_ratio_delta', 0.0)):+.2f}\n\n"
                     f"Bot will scan for high-probability setups every {self.config.scan_interval} seconds.\n"
@@ -309,13 +316,18 @@ class ScalpingEngine:
                     logger.info(f"[Scalping:{self.user_id}] Monitoring positions...")
                     await self.monitor_positions()
                     
-                    # Scan for new signals in PARALLEL
-                    logger.info(f"[Scalping:{self.user_id}] Scanning {len(self.config.pairs)} pairs simultaneously...")
+                    # Scan for new signals in PARALLEL (dynamic top-volume universe).
+                    ranked_pairs = await asyncio.to_thread(get_ranked_top_volume_pairs, 10)
+                    self._active_scan_pairs = ranked_pairs or list(self.config.pairs)
+                    logger.info(
+                        f"[Scalping:{self.user_id}] Scanning {len(self._active_scan_pairs)} top-volume pairs: "
+                        + ", ".join(self._active_scan_pairs)
+                    )
                     signals_found = 0
                     signals_validated = 0
                     
                     scan_tasks = []
-                    for symbol in self.config.pairs:
+                    for symbol in self._active_scan_pairs:
                         scan_tasks.append(self._scan_single_symbol(symbol))
                         
                     if scan_tasks and self.running:
@@ -1276,7 +1288,8 @@ class ScalpingEngine:
             return False
         
         # Check symbol in allowed list
-        if signal.symbol not in [f"{p}" for p in self.config.pairs]:
+        allowed_symbols = set(self._active_scan_pairs or self.config.pairs)
+        if signal.symbol not in allowed_symbols:
             logger.debug(f"[Scalping:{self.user_id}] Signal rejected: Symbol {signal.symbol} not allowed")
             return False
         

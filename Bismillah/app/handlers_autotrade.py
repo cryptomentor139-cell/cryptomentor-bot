@@ -544,7 +544,7 @@ async def callback_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             emoji="📊",
             items=[
                 f"Mode: 🎯 Rekomendasi (Risk Per Trade)",
-                f"Balance: <b>${current_amount:.0f} USDT</b>",
+                f"Equity: <b>${current_amount:.0f} USDT</b>",
                 f"Risk per trade: <b>{current_risk}%</b>",
                 f"Risk level: {risk_label}",
                 f"Auto Mode Switch: {auto_mode_status}",
@@ -660,13 +660,13 @@ async def callback_set_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
         pass
 
     await query.edit_message_text(
-        f"💰 <b>Change Trading Capital</b>\n\n"
+        f"💰 <b>Change Trading Equity</b>\n\n"
         f"{balance_line}"
-        f"Current capital: <b>{current_amount:.0f} USDT</b>\n"
+        f"Current equity target: <b>{current_amount:.0f} USDT</b>\n"
         f"Leverage: <b>{current_leverage}x</b>\n\n"
-        f"ℹ️ <b>Trading capital</b> = the amount of USDT from your Bitunix balance the bot uses to open positions.\n"
-        f"The larger the capital, the larger the potential profit <i>and</i> loss.\n\n"
-        f"Enter new capital amount (USDT):\n"
+        f"ℹ️ <b>Trading equity target</b> = the amount of USDT from your Bitunix equity the bot uses to open positions.\n"
+        f"The larger the equity target, the larger the potential profit <i>and</i> loss.\n\n"
+        f"Enter new equity amount (USDT):\n"
         f"📌 Min: 10 USDT | Max: 10,000 USDT",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
@@ -687,7 +687,7 @@ async def callback_set_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def receive_new_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle new capital input from text."""
+    """Handle new equity input from text."""
     try:
         amount = float(update.message.text.strip())
     except ValueError:
@@ -786,8 +786,8 @@ async def _apply_new_amount(msg_or_query, user_id: int, amount: float,
                 text = (
                     f"❌ <b>Insufficient balance</b>\n\n"
                     f"Available balance: <b>{avail:.2f} USDT</b>\n"
-                    f"Requested capital: <b>{amount:.0f} USDT</b>\n\n"
-                    f"Reduce the capital amount or top up your {ex_cfg2.get('name', 'exchange')} balance."
+                    f"Requested equity: <b>{amount:.0f} USDT</b>\n\n"
+                    f"Reduce the equity amount or top up your {ex_cfg2.get('name', 'exchange')} balance."
                 )
                 kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="at_set_amount")]])
                 if from_callback:
@@ -826,13 +826,13 @@ async def _apply_new_amount(msg_or_query, user_id: int, amount: float,
             notify_chat_id=user_id,
             exchange_id=exchange_id,
         )
-        engine_restarted = "\n🔄 Engine restarted with new capital."
+        engine_restarted = "\n🔄 Engine restarted with new equity target."
 
     notional = amount * leverage
     liquidation_pct = round(100 / leverage, 1)
 
     text = (
-        f"✅ <b>Trading capital updated to {amount:.0f} USDT</b>\n\n"
+        f"✅ <b>Trading equity updated to {amount:.0f} USDT</b>\n\n"
         f"📊 Leverage: {leverage}x\n"
         f"📈 Notional value: <b>{notional:.0f} USDT</b>\n"
         f"💥 Liquidation if price moves: <b>{liquidation_pct}%</b>"
@@ -1203,16 +1203,16 @@ async def callback_risk_settings(update: Update, context: ContextTypes.DEFAULT_T
     
     await query.edit_message_text(
         f"🎯 <b>Risk Management Settings</b>\n\n"
-        f"💰 Current Balance: <b>${balance:.2f}</b>\n"
+        f"💰 Current Equity: <b>${balance:.2f}</b>\n"
         f"{risk_info}\n"
-        f"💡 Recommended for your balance: <b>{recommended}%</b>\n\n"
+        f"💡 Recommended for your equity: <b>{recommended}%</b>\n\n"
         f"<b>What is Risk Per Trade?</b>\n"
-        f"Instead of fixed margin, you choose how much % of your balance to risk per trade. "
+        f"Instead of fixed margin, you choose how much % of your equity to risk per trade. "
         f"This enables safe compounding and protects your account.\n\n"
-        f"<b>Example:</b> Balance $100, Risk 2%\n"
+        f"<b>Example:</b> Equity $100, Risk 2%\n"
         f"• Max loss per trade: $2\n"
         f"• Position size auto-calculated based on stop loss\n"
-        f"• As balance grows, position size grows too\n\n"
+        f"• As equity grows, position size grows too\n\n"
         f"Select your risk level:",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
@@ -1296,10 +1296,10 @@ async def callback_set_risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Risk level: <b>{level}</b>\n"
         f"Max loss per trade: <b>${risk_amount:.2f}</b>\n\n"
         f"Your position sizes will now be calculated automatically based on:\n"
-        f"• Your current balance\n"
+        f"• Your current equity\n"
         f"• Risk percentage ({risk_pct}%)\n"
         f"• Stop loss distance\n\n"
-        f"This enables safe compounding as your balance grows! 📈"
+        f"This enables safe compounding as your equity grows! 📈"
         f"{restart_note}",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
@@ -1319,23 +1319,23 @@ async def callback_risk_education(update: Update, context: ContextTypes.DEFAULT_
         "📚 <b>Risk Per Trade Education</b>\n\n"
         "<b>Why Risk % Instead of Fixed Margin?</b>\n\n"
         "❌ <b>Fixed Margin Problem:</b>\n"
-        "• Balance $100, trade $10 = 10% risk\n"
-        "• Balance grows to $200, still trade $10 = 5% risk\n"
-        "• Balance drops to $50, still trade $10 = 20% risk!\n"
+        "• Equity $100, trade $10 = 10% risk\n"
+        "• Equity grows to $200, still trade $10 = 5% risk\n"
+        "• Equity drops to $50, still trade $10 = 20% risk!\n"
         "• Can't compound gains, high risk when losing\n\n"
         "✅ <b>Risk % Solution:</b>\n"
-        "• Always risk same % regardless of balance\n"
-        "• Position size grows with balance (compound)\n"
+        "• Always risk same % regardless of equity\n"
+        "• Position size grows with equity (compound)\n"
         "• Position size shrinks when losing (protection)\n"
         "• Professional money management\n\n"
         "<b>Example: 2% Risk</b>\n\n"
-        "Balance $100:\n"
+        "Equity $100:\n"
         "• Risk: $2 per trade\n"
         "• 50 consecutive losses to blow account\n\n"
-        "Balance grows to $150:\n"
+        "Equity grows to $150:\n"
         "• Risk: $3 per trade (auto-adjusted)\n"
         "• Still 50 consecutive losses to blow\n\n"
-        "Balance drops to $80:\n"
+        "Equity drops to $80:\n"
         "• Risk: $1.60 per trade (protected)\n"
         "• Still 50 consecutive losses to blow\n\n"
         "<b>Key Benefits:</b>\n"
@@ -1395,19 +1395,19 @@ async def callback_risk_simulator(update: Update, context: ContextTypes.DEFAULT_
     
     await query.edit_message_text(
         f"🧮 <b>Risk Simulator</b>\n\n"
-        f"Starting Balance: <b>${current_amount:.2f}</b>\n"
+        f"Starting Equity: <b>${current_amount:.2f}</b>\n"
         f"Risk per trade: <b>{current_risk}%</b>\n"
         f"Assumed R:R: <b>1:2</b>\n\n"
         f"<b>Scenario 1: 10 Wins</b>\n"
-        f"Final balance: <b>${balance_10w:.2f}</b>\n"
+        f"Final equity: <b>${balance_10w:.2f}</b>\n"
         f"Profit: <b>+${balance_10w - current_amount:.2f}</b> "
         f"({((balance_10w / current_amount - 1) * 100):.1f}%)\n\n"
         f"<b>Scenario 2: 5 Wins, 5 Losses</b>\n"
-        f"Final balance: <b>${balance_5w5l:.2f}</b>\n"
+        f"Final equity: <b>${balance_5w5l:.2f}</b>\n"
         f"Profit: <b>+${balance_5w5l - current_amount:.2f}</b> "
         f"({((balance_5w5l / current_amount - 1) * 100):.1f}%)\n\n"
         f"<b>Scenario 3: 10 Losses</b>\n"
-        f"Final balance: <b>${balance_10l:.2f}</b>\n"
+        f"Final equity: <b>${balance_10l:.2f}</b>\n"
         f"Loss: <b>-${current_amount - balance_10l:.2f}</b> "
         f"({((1 - balance_10l / current_amount) * 100):.1f}%)\n\n"
         f"<b>Survivability:</b>\n"
@@ -1506,7 +1506,7 @@ async def callback_select_scalping(update: Update, context: ContextTypes.DEFAULT
             "• Scan interval: 15 seconds\n"
             "• Profit target: 1.5R (single TP)\n"
             "• Max hold time: 30 minutes\n"
-            "• Trading pairs: Top 15 (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, DOT, LINK, UNI, ATOM, XAU, CL, QQQ)\n"
+            "• Trading pairs: Top 10 by volume (auto-ranked)\n"
             "• Max concurrent: 4 positions\n"
             f"• Min confidence: {min_confidence}%\n\n"
             "🚀 Engine restarted with scalping parameters.\n"
@@ -1563,7 +1563,7 @@ async def callback_select_swing(update: Update, context: ContextTypes.DEFAULT_TY
             "• Scan interval: 45 seconds\n"
             "• Profit targets: 3-tier (StackMentor)\n"
             "• No max hold time\n"
-            "• Trading pairs: Top 15 (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, DOT, LINK, UNI, ATOM, XAU, CL, QQQ)\n"
+            "• Trading pairs: Top 10 by volume (auto-ranked)\n"
             "• Max concurrent: 4 positions\n"
             f"• Min confidence: {min_confidence}% (dynamic by risk profile)\n\n"
             "🚀 Engine restarted with swing parameters.",
