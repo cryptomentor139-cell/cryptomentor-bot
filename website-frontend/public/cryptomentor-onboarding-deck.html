@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png?v=20260417-1" />
 <link rel="icon" type="image/x-icon" href="/favicon.ico?v=20260417-1" />
 <link rel="shortcut icon" href="/favicon.ico?v=20260417-1" />
@@ -31,11 +31,20 @@
   --shadow:0 20px 56px rgba(2,8,18,.58);
   --glow:0 0 0 1px rgba(34,211,238,.2),0 14px 40px rgba(34,211,238,.1);
   --ease:cubic-bezier(.22,.78,.23,.99);
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+  --safe-left:env(safe-area-inset-left,0px);
+  --safe-right:env(safe-area-inset-right,0px);
+  --vh:1vh;
+  --topbar-h:74px;
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;width:100%}
-html{scroll-behavior:smooth;scroll-padding-top:5.6rem}
+html{
+  scroll-behavior:smooth;
+  scroll-padding-top:calc(var(--topbar-h) + var(--safe-top) + .9rem);
+}
 body{
   font-family:Manrope,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   color:var(--text);
@@ -46,6 +55,9 @@ body{
   overflow-x:hidden;
   overflow-y:auto;
   scroll-snap-type:y mandatory;
+  min-height:100dvh;
+  overscroll-behavior-y:contain;
+  -webkit-overflow-scrolling:touch;
 }
 
 body::before{
@@ -95,9 +107,13 @@ body::after{
 .shell{
   position:relative;
   z-index:1;
-  min-height:100vh;
+  min-height:100dvh;
   display:block;
-  padding:.72rem .9rem .76rem;
+  padding:
+    calc(.72rem + var(--safe-top))
+    calc(.9rem + var(--safe-right))
+    calc(.76rem + var(--safe-bottom))
+    calc(.9rem + var(--safe-left));
 }
 
 .topbar,
@@ -115,7 +131,7 @@ body::after{
 }
 .topbar{
   position:sticky;
-  top:.72rem;
+  top:calc(.35rem + var(--safe-top));
   z-index:50;
   margin-bottom:.84rem;
 }
@@ -191,7 +207,8 @@ body::after{
   transform:none;
   pointer-events:auto;
   overflow:visible;
-  min-height:calc(100svh - 6.4rem);
+  min-height:calc(100svh - var(--topbar-h) - 1.5rem - var(--safe-bottom));
+  min-height:calc((var(--vh, 1vh) * 100) - var(--topbar-h) - 1.5rem - var(--safe-bottom));
   scroll-snap-align:start;
   border:1px solid var(--border);
   border-radius:24px;
@@ -604,7 +621,7 @@ h2{font-size:clamp(1.25rem,2.8vw,2.35rem);line-height:1.08}
 }
 .scroll-dots{
   position:fixed;
-  right:.9rem;
+  right:calc(.9rem + var(--safe-right));
   top:50%;
   transform:translateY(-50%);
   z-index:55;
@@ -632,12 +649,54 @@ button:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
 @media(max-width:1000px){
   .grid2,.grid2.eq,.regimes,.steps,.cards,.counters,.phases,.signals{grid-template-columns:1fr}
   .step:not(:last-child)::after{display:none}
+  body{scroll-snap-type:y proximity}
 }
 @media(max-width:640px){
-  .shell{padding:.5rem .55rem}
-  .slide{padding:.72rem}
+  .shell{
+    padding:
+      calc(.46rem + var(--safe-top))
+      calc(.55rem + var(--safe-right))
+      calc(.62rem + var(--safe-bottom))
+      calc(.55rem + var(--safe-left));
+  }
+  .topbar{
+    top:calc(.22rem + var(--safe-top));
+    margin-bottom:.58rem;
+    padding:.48rem .62rem;
+  }
+  .brand{font-size:.88rem}
+  #counter{min-width:62px;font-size:.73rem}
+  .slide{
+    padding:.72rem;
+    border-radius:18px;
+    min-height:calc(100svh - var(--topbar-h) - 1.1rem - var(--safe-bottom));
+    min-height:calc((var(--vh, 1vh) * 100) - var(--topbar-h) - 1.1rem - var(--safe-bottom));
+  }
   .lead{font-size:.78rem}
-  .scroll-dots{right:.55rem}
+  .scroll-dots{
+    left:50%;
+    right:auto;
+    top:auto;
+    bottom:calc(.48rem + var(--safe-bottom));
+    transform:translateX(-50%);
+    flex-direction:row;
+    gap:.34rem;
+    background:rgba(4,6,15,.66);
+    border:1px solid var(--border);
+    border-radius:999px;
+    padding:.3rem .4rem;
+    backdrop-filter:blur(14px);
+  }
+  .scroll-dot{width:9px;height:9px}
+  #scrollProgress{height:2px}
+}
+@media(max-width:420px){
+  .lang button{
+    padding:.34rem .56rem;
+    font-size:.69rem;
+  }
+  h1{font-size:clamp(1.85rem,11vw,2.45rem);line-height:.98}
+  h2{font-size:clamp(1.1rem,6.6vw,1.5rem)}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
@@ -705,6 +764,7 @@ const slides=[...document.querySelectorAll('.slide')]
 const counter=document.getElementById('counter')
 const dotsWrap=document.getElementById('scrollDots')
 const progressBar=document.getElementById('scrollProgress')
+const topbar=document.querySelector('.topbar')
 const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 let lang='en'
@@ -712,6 +772,7 @@ let cur=0
 let regimeIdx=0
 let regimeTimer=null
 let sectionObserver=null
+let viewportRaf=0
 const seenAnimation=new Set()
 
 function applyLang(l){
@@ -748,9 +809,30 @@ function setActiveDot(){
 }
 
 function updateProgress(){
-  const max=document.documentElement.scrollHeight-window.innerHeight
-  const pct=max>0?Math.min(100,Math.max(0,(window.scrollY/max)*100)):0
+  const scroller=document.scrollingElement||document.documentElement
+  const viewportH=window.visualViewport?.height||window.innerHeight
+  const max=scroller.scrollHeight-viewportH
+  const y=window.scrollY||scroller.scrollTop||0
+  const pct=max>0?Math.min(100,Math.max(0,(y/max)*100)):0
   progressBar.style.width=`${pct}%`
+}
+
+function syncViewportMetrics(){
+  const viewportH=window.visualViewport?.height||window.innerHeight
+  document.documentElement.style.setProperty('--vh',`${viewportH*0.01}px`)
+  if(topbar){
+    const h=Math.round(topbar.getBoundingClientRect().height)
+    if(h>0) document.documentElement.style.setProperty('--topbar-h',`${h}px`)
+  }
+  updateProgress()
+}
+
+function queueViewportSync(){
+  if(viewportRaf) return
+  viewportRaf=requestAnimationFrame(()=>{
+    viewportRaf=0
+    syncViewportMetrics()
+  })
 }
 
 function setRegimes(){
@@ -876,11 +958,18 @@ window.addEventListener('keydown',e=>{
 })
 
 window.addEventListener('scroll',updateProgress,{passive:true})
+window.addEventListener('resize',queueViewportSync,{passive:true})
+window.addEventListener('orientationchange',queueViewportSync,{passive:true})
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize',queueViewportSync,{passive:true})
+  window.visualViewport.addEventListener('scroll',queueViewportSync,{passive:true})
+}
 
 buildDots()
 applyLang('en')
 slides[0].classList.add('is-visible')
 setCurrent(0)
+syncViewportMetrics()
 updateProgress()
 setupSectionObserver()
 </script>

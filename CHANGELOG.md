@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.2.26] — 2026-04-17 — Intro Deck Mobile Dynamic Viewport Optimization
+
+### 📱 Frontend Mobile UX Hardening (Onboarding Deck)
+- Updated `website-frontend/public/cryptomentor-onboarding-deck.html` for stronger mobile dynamic viewport behavior without changing scroll-native section architecture:
+  - enabled `viewport-fit=cover` and safe-area-aware spacing using `env(safe-area-inset-*)`,
+  - introduced dynamic viewport tokens (`--vh`, `--topbar-h`) and applied them to section min-height + scroll offsets,
+  - tuned mobile snap behavior (`mandatory` desktop, `proximity` small screens) and repositioned section dots to a bottom-center touch-friendly control on phones,
+  - improved notch/home-indicator handling for top bar, shell padding, and progress/dot controls.
+- Added lightweight JS viewport synchronization:
+  - `visualViewport` + `resize` + `orientationchange` hooks update `--vh` and `--topbar-h`,
+  - scroll progress now uses dynamic viewport height for stable progress tracking when browser chrome expands/collapses.
+- Preserved all required core content/logic:
+  - 8-section flow,
+  - EN/ID translation system,
+  - signal values and pairs,
+  - projection milestones and CTA routes.
+
+### ✅ Validation
+- Inline JS parse check passed.
+- Structural check confirmed 8 sections remain in flow.
+- Key preserved values verified:
+  - `BTCUSDT 89%`, `ETHUSDT 73%`, `SOLUSDT 58%`, `XRPUSDT 81%`
+  - `$1,000 -> $1,360 -> $1,920 -> $2,670`
+
 ## [2.2.25] — 2026-04-17 — Intro Deck Scroll-Native Story Mode (Intro Color Match)
 
 ### 🎨 Frontend UX Refactor (Onboarding Deck)
