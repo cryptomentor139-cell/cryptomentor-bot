@@ -818,6 +818,22 @@
 6. Smoke-test StackMentor:
    - New trades should show fixed `1:3` target behavior and full close on TP
 
+## [2.1.1] — 2026-04-17 — Credibility-First Stress Scenario Upgrade (Onboarding + Intro)
+
+### 🌐 Frontend (Investor Messaging Hardening)
+- Updated onboarding deck growth section to lead with drawdown risk before upside projections:
+  - Added interactive scenario tabs: `Conservative`, `Base`, `Stress` (default), `Extreme`
+  - Added stress metrics: `Max Drawdown`, `Recovery Window`, `Outcome at 12M`
+  - Added scenario-specific explanations (`Loss phase -> Stabilization -> Recovery conditions`)
+  - Added “How to read this” risk-interpretation guidance
+  - Reframed projection disclaimer as simulation ranges (not promises)
+- Applied the same scenario explorer interaction and drawdown-first framing to intro growth section for consistency.
+- Added EN + ID localization keys for all new scenario labels, metrics, explanations, and disclaimers.
+
+### ✅ Deployment Notes
+- Scope: `website-frontend/public/cryptomentor-onboarding-deck.html`, `website-frontend/public/intro.html`
+- Runtime copies synced to `website-frontend/dist/*` for VPS static-site rollout.
+
 ## [2.1.0] — 2026-04-10 — 🚀 Phase 1 & 2 Migration: Bot Gatekeeper & Pro Money Management
 
 **Major Milestone**: Successfully transitioned the Telegram bot from a primary trading interface to a **Web-Dashboard-first Gatekeeper**. All trading features, configuration, and identity verification are now centralized on the web, with the bot serving as a secure onboarding and notification bridge.
