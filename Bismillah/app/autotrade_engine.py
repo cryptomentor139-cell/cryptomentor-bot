@@ -95,6 +95,7 @@ _blocked_pending_notify_ts: Dict[tuple, float] = {}
 _stale_price_cooldown_ts: Dict[tuple, float] = {}
 _BLOCKED_PENDING_NOTIFY_TTL_SECONDS = 600.0
 _STALE_PRICE_COOLDOWN_SECONDS = 120.0
+_SWING_QUEUE_MAX_AGE_SECONDS = 90.0
 
 # Multi-user symbol coordinator
 _coordinator = None
@@ -295,6 +296,154 @@ def _cleanup_signal_queue(user_id: int, symbol: str, success: bool = True):
         logger.debug(f"[Engine:{user_id}] Synced {symbol} as {status} to Supabase")
     except Exception as _sync_err:
         logger.warning(f"[Engine:{user_id}] Failed to sync cleanup status: {_sync_err}")
+
+
+def _upsert_signal_queue_entry(
+    user_id: int,
+    signal: Dict[str, Any],
+    now_ts: Optional[float] = None,
+) -> str:
+    """
+    Insert or refresh a queued signal for this user.
+    Returns one of: inserted, updated, skipped_inflight, ignored.
+    """
+    symbol = str(signal.get("symbol", "")).upper()
+    if not symbol:
+        return "ignored"
+
+    queued_entry = dict(signal)
+    queued_entry["symbol"] = symbol
+    queued_entry["_queued_at_ts"] = float(time.time() if now_ts is None else now_ts)
+
+    user_queue = _signal_queues.setdefault(int(user_id), [])
+    processing = _signals_being_processed.setdefault(int(user_id), set())
+
+    for idx, existing in enumerate(user_queue):
+        if str(existing.get("symbol", "")).upper() != symbol:
+            continue
+        if symbol in processing:
+            return "skipped_inflight"
+        user_queue[idx] = queued_entry
+        return "updated"
+
+    user_queue.append(queued_entry)
+    return "inserted"
+
+
+def _drop_expired_signal_queue_entries(
+    user_id: int,
+    max_age_sec: float = _SWING_QUEUE_MAX_AGE_SECONDS,
+    now_ts: Optional[float] = None,
+) -> List[str]:
+    """
+    Drop queued (non-processing) signals older than max_age_sec.
+    Signals missing queue timestamp are treated as expired.
+    """
+    uid = int(user_id)
+    if uid not in _signal_queues:
+        return []
+
+    now = float(time.time() if now_ts is None else now_ts)
+    processing = _signals_being_processed.get(uid, set())
+    fresh_queue: List[Dict[str, Any]] = []
+    expired_symbols: List[str] = []
+
+    for queued in _signal_queues[uid]:
+        symbol = str(queued.get("symbol", "")).upper()
+        if symbol in processing:
+            fresh_queue.append(queued)
+            continue
+
+        try:
+            queued_at = float(queued.get("_queued_at_ts", 0.0) or 0.0)
+        except Exception:
+            queued_at = 0.0
+        age_sec = now - queued_at
+        if queued_at <= 0.0 or age_sec > float(max_age_sec):
+            if symbol:
+                expired_symbols.append(symbol)
+            continue
+        fresh_queue.append(queued)
+
+    _signal_queues[uid] = fresh_queue
+    return expired_symbols
+
+
+def _build_queued_remaining_symbols(
+    queue: List[Dict[str, Any]],
+    active_idx: int,
+    active_symbol: str,
+) -> List[str]:
+    """Build display list excluding the active entry."""
+    active_symbol_u = str(active_symbol).upper()
+    remaining: List[str] = []
+    for idx, queued in enumerate(queue):
+        symbol = str(queued.get("symbol", "")).upper()
+        if idx == int(active_idx):
+            continue
+        if symbol == active_symbol_u:
+            continue
+        if symbol:
+            remaining.append(symbol)
+    return remaining
+
+
+def _sync_pending_signal_queue_row(user_id: int, signal: Dict[str, Any]):
+    """Insert or refresh pending signal_queue row for web visibility."""
+    try:
+        symbol = str(signal.get("symbol", "")).upper()
+        if not symbol:
+            return
+        payload = {
+            "direction": signal.get("side"),
+            "confidence": signal.get("confidence"),
+            "entry_price": signal.get("entry_price"),
+            "tp1": signal.get("tp1"),
+            "tp2": signal.get("tp2"),
+            "tp3": signal.get("tp3"),
+            "sl": signal.get("sl"),
+            "generated_at": datetime.utcnow().isoformat(),
+            "reason": signal.get("reason", ""),
+            "source": "autotrade",
+        }
+        from app.supabase_repo import _client
+        s = _client()
+        existing = s.table("signal_queue").select("id").eq(
+            "user_id", user_id
+        ).eq("symbol", symbol).eq(
+            "status", "pending"
+        ).limit(1).execute()
+        if existing.data:
+            row_id = existing.data[0].get("id")
+            update_q = s.table("signal_queue").update(payload)
+            if row_id is not None:
+                update_q = update_q.eq("id", row_id)
+            else:
+                update_q = update_q.eq("user_id", user_id).eq("symbol", symbol).eq("status", "pending")
+            update_q.execute()
+            logger.debug(f"[Engine:{user_id}] Refreshed pending signal_queue row for {symbol}")
+            return
+        s.table("signal_queue").insert({
+            "user_id": user_id,
+            "symbol": symbol,
+            "status": "pending",
+            **payload,
+        }).execute()
+        logger.info(f"[Engine:{user_id}] Synced {symbol} to signal_queue (web visibility)")
+    except Exception as _sync_err:
+        logger.warning(f"[Engine:{user_id}] Failed to sync signal to Supabase: {_sync_err}")
+
+
+def _cleanup_inflight_signal_marker(user_id: int, symbol: Optional[str]) -> bool:
+    """Clear leaked in-flight marker when loop exits unexpectedly."""
+    symbol_u = str(symbol or "").upper()
+    if not symbol_u:
+        return False
+    processing = _signals_being_processed.get(int(user_id), set())
+    if symbol_u not in processing:
+        return False
+    _cleanup_signal_queue(int(user_id), symbol_u, success=False)
+    return True
 
 
 def _passes_swing_confirmation_gate(user_id: int, signal: Dict[str, Any], cfg: Dict[str, Any]) -> bool:
@@ -2704,48 +2853,19 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     f"| PB: {float(cand.get('playbook_match_score', 0.0)):.2f}\n"
                 )
 
-            # Store candidates in signal queue for this user
             if user_id not in _signal_queues:
                 _signal_queues[user_id] = []
+            if user_id not in _signals_being_processed:
+                _signals_being_processed[user_id] = set()
 
-            # Add candidates to queue (deduplicate by symbol)
-            queued_symbols = {s['symbol'] for s in _signal_queues[user_id]}
+            queue_now_ts = time.time()
             for cand in candidates:
-                if cand['symbol'] not in queued_symbols:
-                    _signal_queues[user_id].append(cand)
-                    queued_symbols.add(cand['symbol'])
-
-                    # Sync to Supabase for web visibility
-                    try:
-                        from app.supabase_repo import _client
-                        s = _client()
-                        # Check if signal already in queue
-                        existing = s.table("signal_queue").select("id").eq(
-                            "user_id", user_id
-                        ).eq("symbol", cand['symbol']).eq(
-                            "status", "pending"
-                        ).limit(1).execute()
-
-                        if not existing.data:
-                            # Insert new signal to queue
-                            s.table("signal_queue").insert({
-                                "user_id": user_id,
-                                "symbol": cand['symbol'],
-                                "direction": cand['side'],
-                                "confidence": cand['confidence'],
-                                "entry_price": cand['entry_price'],
-                                "tp1": cand['tp1'],
-                                "tp2": cand['tp2'],
-                                "tp3": cand['tp3'],
-                                "sl": cand['sl'],
-                                "generated_at": datetime.utcnow().isoformat(),
-                                "reason": cand.get('reason', ''),
-                                "source": "autotrade",
-                                "status": "pending",
-                            }).execute()
-                            logger.info(f"[Engine:{user_id}] Synced {cand['symbol']} to signal_queue (web visibility)")
-                    except Exception as _sync_err:
-                        logger.warning(f"[Engine:{user_id}] Failed to sync signal to Supabase: {_sync_err}")
+                queue_action = _upsert_signal_queue_entry(user_id, cand, now_ts=queue_now_ts)
+                if queue_action == "skipped_inflight":
+                    logger.debug(f"[Engine:{user_id}] Skip queue refresh for in-flight {cand.get('symbol')}")
+                    continue
+                if queue_action in {"inserted", "updated"}:
+                    _sync_pending_signal_queue_row(user_id, cand)
 
             # Keep queue globally ordered by current volume priority then signal quality.
             _signal_queues[user_id].sort(
@@ -2762,6 +2882,15 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     str(queued.get("symbol", "")).upper(),
                 )
             ]
+            expired_from_age = _drop_expired_signal_queue_entries(
+                user_id,
+                max_age_sec=_SWING_QUEUE_MAX_AGE_SECONDS,
+            )
+            if expired_from_age:
+                logger.info(
+                    f"[Engine:{user_id}] Dropped stale queued signals (> {_SWING_QUEUE_MAX_AGE_SECONDS:.0f}s): "
+                    + ", ".join(expired_from_age)
+                )
 
             # ── Process next signal from queue ──────────────────────────────────
             if not _signal_queues[user_id]:
@@ -2771,9 +2900,6 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             # Initialize symbol locks for this user if not exists
             if user_id not in _symbol_locks:
                 _symbol_locks[user_id] = {}
-            if user_id not in _signals_being_processed:
-                _signals_being_processed[user_id] = set()
-
             # Get next signal from queue (highest volume priority first)
             sig = None
             for idx, candidate in enumerate(_signal_queues[user_id]):
@@ -2823,7 +2949,11 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
             # Send queue status update to user
             try:
-                queued_remaining = [s['symbol'] for s in _signal_queues[user_id][1:]]
+                queued_remaining = _build_queued_remaining_symbols(
+                    _signal_queues[user_id],
+                    active_idx=queued_idx,
+                    active_symbol=symbol,
+                )
                 if queued_remaining:
                     queue_status = f"📊 <b>Signal Queue Status:</b>\n\n"
                     queue_status += f"<b>⚙️ Now Processing:</b>\n{symbol} | {side} | Conf: {confidence}%\n\n"
@@ -3317,6 +3447,10 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     await _get_coordinator().clear_pending(user_id, symbol)
             except Exception:
                 pass
+            try:
+                _cleanup_inflight_signal_marker(user_id, locals().get("symbol"))
+            except Exception:
+                pass
             stop_pnl_tracker(user_id)
             try:
                 await bot.send_message(chat_id=notify_chat_id,
@@ -3332,6 +3466,10 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             try:
                 if 'pending_marked' in locals() and pending_marked:
                     await _get_coordinator().clear_pending(user_id, symbol)
+            except Exception:
+                pass
+            try:
+                _cleanup_inflight_signal_marker(user_id, locals().get("symbol"))
             except Exception:
                 pass
             err_str = str(e)

@@ -14,6 +14,7 @@ if _BISMILLAH not in sys.path:
     sys.path.insert(0, _BISMILLAH)
 
 from app.auto_mode_switcher import AutoModeSwitcher  # type: ignore
+import app.autotrade_engine as autotrade_engine  # type: ignore
 from app.scalping_engine import ScalpingEngine  # type: ignore
 from app.trade_execution import open_managed_position  # type: ignore
 from app.trading_mode_manager import TradingMode, TradingModeManager  # type: ignore
@@ -117,6 +118,84 @@ def test_scalping_stale_cooldown_not_overridden_by_generic_failure():
     applied = engine._apply_generic_failure_cooldown("ETHUSDT", ttl_sec=300.0, now_ts=1010.0)
     assert applied is False
     assert engine.cooldown_tracker["ETHUSDT"] == pytest.approx(1120.0)
+
+
+def test_swing_queue_upsert_refreshes_symbol_and_respects_inflight():
+    uid = 4242
+    autotrade_engine._signal_queues[uid] = []
+    autotrade_engine._signals_being_processed[uid] = set()
+    first = {"symbol": "ETHUSDT", "side": "SHORT", "entry_price": 2500.0, "tp1": 2450.0, "tp2": 2400.0, "tp3": 2350.0, "sl": 2550.0, "confidence": 72, "rr_ratio": 2.0}
+    second = {"symbol": "ETHUSDT", "side": "SHORT", "entry_price": 2490.0, "tp1": 2440.0, "tp2": 2390.0, "tp3": 2340.0, "sl": 2540.0, "confidence": 78, "rr_ratio": 2.2}
+    third = {"symbol": "ETHUSDT", "side": "SHORT", "entry_price": 2480.0, "tp1": 2430.0, "tp2": 2380.0, "tp3": 2330.0, "sl": 2530.0, "confidence": 80, "rr_ratio": 2.3}
+    try:
+        action1 = autotrade_engine._upsert_signal_queue_entry(uid, first, now_ts=1000.0)
+        assert action1 == "inserted"
+        action2 = autotrade_engine._upsert_signal_queue_entry(uid, second, now_ts=1010.0)
+        assert action2 == "updated"
+        assert len(autotrade_engine._signal_queues[uid]) == 1
+        queued = autotrade_engine._signal_queues[uid][0]
+        assert queued["entry_price"] == pytest.approx(2490.0)
+        assert queued["_queued_at_ts"] == pytest.approx(1010.0)
+
+        autotrade_engine._signals_being_processed[uid].add("ETHUSDT")
+        action3 = autotrade_engine._upsert_signal_queue_entry(uid, third, now_ts=1020.0)
+        assert action3 == "skipped_inflight"
+        assert autotrade_engine._signal_queues[uid][0]["entry_price"] == pytest.approx(2490.0)
+    finally:
+        autotrade_engine._signal_queues.pop(uid, None)
+        autotrade_engine._signals_being_processed.pop(uid, None)
+
+
+def test_swing_queue_age_gate_drops_expired_entries():
+    uid = 4243
+    autotrade_engine._signal_queues[uid] = [
+        {"symbol": "BTCUSDT", "_queued_at_ts": 100.0},
+        {"symbol": "ETHUSDT", "_queued_at_ts": 130.5},
+    ]
+    autotrade_engine._signals_being_processed[uid] = set()
+    try:
+        expired = autotrade_engine._drop_expired_signal_queue_entries(
+            uid,
+            max_age_sec=90.0,
+            now_ts=220.0,
+        )
+        assert expired == ["BTCUSDT"]
+        assert [s["symbol"] for s in autotrade_engine._signal_queues[uid]] == ["ETHUSDT"]
+    finally:
+        autotrade_engine._signal_queues.pop(uid, None)
+        autotrade_engine._signals_being_processed.pop(uid, None)
+
+
+def test_swing_queue_remaining_symbols_excludes_active_index_and_symbol():
+    queue = [
+        {"symbol": "SOLUSDT"},
+        {"symbol": "ETHUSDT"},
+        {"symbol": "XRPUSDT"},
+        {"symbol": "ETHUSDT"},
+    ]
+    remaining = autotrade_engine._build_queued_remaining_symbols(
+        queue,
+        active_idx=1,
+        active_symbol="ETHUSDT",
+    )
+    assert remaining == ["SOLUSDT", "XRPUSDT"]
+
+
+def test_swing_loop_error_cleanup_clears_inflight_marker(monkeypatch):
+    uid = 4244
+    autotrade_engine._signals_being_processed[uid] = {"ETHUSDT"}
+    calls = []
+
+    def _fake_cleanup(user_id, symbol, success=True):
+        calls.append((user_id, symbol, success))
+        autotrade_engine._signals_being_processed[user_id].discard(symbol)
+
+    monkeypatch.setattr(autotrade_engine, "_cleanup_signal_queue", _fake_cleanup)
+    cleaned = autotrade_engine._cleanup_inflight_signal_marker(uid, "ETHUSDT")
+    assert cleaned is True
+    assert calls == [(uid, "ETHUSDT", False)]
+    assert "ETHUSDT" not in autotrade_engine._signals_being_processed[uid]
+    autotrade_engine._signals_being_processed.pop(uid, None)
 
 
 def test_swing_queue_status_mentions_volume_priority():

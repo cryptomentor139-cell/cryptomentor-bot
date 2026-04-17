@@ -12,6 +12,7 @@ if _BISMILLAH not in sys.path:
     sys.path.insert(0, _BISMILLAH)
 
 import app.engine_runtime_shared as runtime_shared  # type: ignore
+import app.autotrade_engine as autotrade_engine  # type: ignore
 from app.autotrade_engine import _scalping_engines, get_engine, get_scalping_engine  # type: ignore
 from app.engine_execution_shared import build_cumulative_close_update_payload  # type: ignore
 
@@ -38,6 +39,23 @@ def test_stale_cooldown_helpers_set_and_expire():
     assert runtime_shared.is_ttl_cooldown_active(cache, key="ETHUSDT", now_ts=1119.9) is True
     assert runtime_shared.is_ttl_cooldown_active(cache, key="ETHUSDT", now_ts=1120.0) is False
     assert "ETHUSDT" not in cache
+
+
+def test_swing_queue_age_gate_does_not_drop_inflight_symbol():
+    uid = 77701
+    autotrade_engine._signal_queues[uid] = [{"symbol": "ETHUSDT", "_queued_at_ts": 10.0}]
+    autotrade_engine._signals_being_processed[uid] = {"ETHUSDT"}
+    try:
+        expired = autotrade_engine._drop_expired_signal_queue_entries(
+            uid,
+            max_age_sec=90.0,
+            now_ts=1000.0,
+        )
+        assert expired == []
+        assert [s["symbol"] for s in autotrade_engine._signal_queues[uid]] == ["ETHUSDT"]
+    finally:
+        autotrade_engine._signal_queues.pop(uid, None)
+        autotrade_engine._signals_being_processed.pop(uid, None)
 
 
 @pytest.mark.asyncio

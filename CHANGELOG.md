@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.2.39] — 2026-04-18 — Swing Queue Freshness Hardening (Stale-Signal Repeat Fix)
+
+### 🎯 Swing Stale-Signal Stability
+- Kept strict `invalid_prices` rejection behavior unchanged (no TP/SL mutation, no forced entry).
+- Hardened swing queue freshness in `Bismillah/app/autotrade_engine.py`:
+  - added internal queue timestamp tracking (`_queued_at_ts`),
+  - switched same-symbol queue behavior from keep-old to refresh-upsert (unless symbol is already in-flight),
+  - added 90s queued-signal age gate before execution selection.
+- Fixed queue status rendering to exclude the actual active entry index/symbol from the "Queued remaining" list.
+
+### 🛡️ Runtime Safety + Visibility
+- Added exception/cancellation-safe in-flight marker cleanup to prevent ghost `_signals_being_processed` locks after loop tracebacks.
+- Updated Supabase pending queue sync behavior to refresh existing pending rows on same-symbol upsert (not insert-only).
+
+### 🧪 Regression Coverage
+- Updated `tests/test_swing_scalp_parity.py`:
+  - covers swing queue upsert refresh behavior and in-flight skip behavior,
+  - covers 90s queue age pruning,
+  - covers queue remaining list correctness when active index is non-zero,
+  - covers exception-path in-flight marker cleanup helper behavior.
+- Updated `tests/test_engine_shared_core.py`:
+  - covers queue age-gate behavior that preserves active in-flight symbols.
+
+### ✅ Validation
+- Compile check:
+  - `python -m py_compile Bismillah/app/autotrade_engine.py tests/test_engine_shared_core.py tests/test_swing_scalp_parity.py`
+- Targeted tests:
+  - `pytest tests/test_engine_shared_core.py tests/test_swing_scalp_parity.py -q`
+  - Result: `23 passed`.
+
 ## [2.2.38] — 2026-04-17 — Win Tag Fallback Enforcement + Historical Winner Backfill
 
 ### 🏷️ Win Tag Contract Enforcement
