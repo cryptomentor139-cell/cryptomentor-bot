@@ -15,6 +15,7 @@ import app.engine_runtime_shared as runtime_shared  # type: ignore
 import app.autotrade_engine as autotrade_engine  # type: ignore
 from app.autotrade_engine import _scalping_engines, get_engine, get_scalping_engine  # type: ignore
 from app.engine_execution_shared import build_cumulative_close_update_payload  # type: ignore
+from app.providers.alternative_klines_provider import AlternativeKlinesProvider  # type: ignore
 
 
 def test_get_scalping_engine_alias_delegates_runtime_instance(monkeypatch):
@@ -66,6 +67,22 @@ def test_swing_signal_mark_proxy_uses_cache_within_ttl():
         assert px == pytest.approx(2450.5)
     finally:
         autotrade_engine._SIGNAL_MARK_PROXY_CACHE.pop(symbol, None)
+
+
+def test_klines_freshness_gate_accepts_recent_candle():
+    provider = AlternativeKlinesProvider()
+    now_ts = 1_700_000_000.0
+    recent_ts_ms = int((now_ts - 45.0) * 1000.0)
+    klines = [[recent_ts_ms, "1", "2", "1", "1.5", "100", recent_ts_ms + 60000, "0", 0, "0", "0", "0"]]
+    assert provider._is_klines_fresh(klines, interval="1m", now_ts=now_ts) is True
+
+
+def test_klines_freshness_gate_rejects_stale_candle():
+    provider = AlternativeKlinesProvider()
+    now_ts = 1_700_000_000.0
+    stale_ts_ms = int((now_ts - 500.0) * 1000.0)
+    klines = [[stale_ts_ms, "1", "2", "1", "1.5", "100", stale_ts_ms + 60000, "0", 0, "0", "0", "0"]]
+    assert provider._is_klines_fresh(klines, interval="1m", now_ts=now_ts) is False
 
 
 @pytest.mark.asyncio

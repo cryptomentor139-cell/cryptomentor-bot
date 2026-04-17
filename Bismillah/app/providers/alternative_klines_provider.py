@@ -31,6 +31,10 @@ class AlternativeKlinesProvider:
         self.max_retries = max(1, int(os.getenv("KLINE_FETCH_RETRIES", "3")))
         self.backoff_base_ms = max(50, int(os.getenv("KLINE_RETRY_BASE_DELAY_MS", "250")))
         self.backoff_cap_ms = max(200, int(os.getenv("KLINE_RETRY_CAP_DELAY_MS", "2000")))
+        self.max_staleness_multiplier = max(
+            1.0,
+            float(os.getenv("KLINE_MAX_STALENESS_MULTIPLIER", "3.0")),
+        )
 
     def _resolve_source_order(self, preferred_sources: Optional[List[str]] = None) -> List[str]:
         default_order = ["bitunix", "binance", "cryptocompare", "coingecko"]
@@ -52,6 +56,58 @@ class AlternativeKlinesProvider:
         if limit <= 0:
             return 1
         return max(1, min(limit, 10))
+
+    def _interval_to_seconds(self, interval: str) -> int:
+        mapping = {
+            '1m': 60,
+            '3m': 180,
+            '5m': 300,
+            '15m': 900,
+            '30m': 1800,
+            '1h': 3600,
+            '2h': 7200,
+            '4h': 14400,
+            '6h': 21600,
+            '8h': 28800,
+            '12h': 43200,
+            '1d': 86400,
+            '3d': 259200,
+            '1w': 604800,
+        }
+        return int(mapping.get(str(interval).lower(), 0))
+
+    def _normalize_ts_sec(self, raw_ts) -> Optional[float]:
+        try:
+            ts = float(raw_ts)
+        except Exception:
+            return None
+        if ts <= 0:
+            return None
+        if ts > 1_000_000_000_000:  # milliseconds
+            ts = ts / 1000.0
+        return ts
+
+    def _is_klines_fresh(
+        self,
+        klines: List,
+        interval: str,
+        now_ts: Optional[float] = None,
+    ) -> bool:
+        if not klines:
+            return False
+        interval_sec = self._interval_to_seconds(interval)
+        if interval_sec <= 0:
+            return True
+        last_candle = klines[-1] if isinstance(klines[-1], (list, tuple)) and klines[-1] else None
+        if not last_candle:
+            return False
+        last_ts_sec = self._normalize_ts_sec(last_candle[0] if len(last_candle) > 0 else None)
+        if last_ts_sec is None:
+            return False
+        now = float(time.time() if now_ts is None else now_ts)
+        max_age_sec = float(interval_sec) * float(self.max_staleness_multiplier)
+        age_sec = max(0.0, now - last_ts_sec)
+        return age_sec <= max_age_sec
         
     def get_klines(
         self,
@@ -90,11 +146,18 @@ class AlternativeKlinesProvider:
                     klines = []
 
                 if klines and len(klines) >= min_required:
-                    logger.debug(
-                        f"[Klines] {source} success {clean_symbol} {interval}: "
-                        f"{len(klines)} candles (attempt {attempt})"
-                    )
-                    return klines
+                    if not self._is_klines_fresh(klines, interval):
+                        logger.warning(
+                            f"[Klines] {source} stale data rejected: {clean_symbol} {interval} "
+                            f"(candles={len(klines)})"
+                        )
+                        klines = []
+                    else:
+                        logger.debug(
+                            f"[Klines] {source} success {clean_symbol} {interval}: "
+                            f"{len(klines)} candles (attempt {attempt})"
+                        )
+                        return klines
 
                 if attempt < self.max_retries:
                     backoff_ms = min(self.backoff_cap_ms, self.backoff_base_ms * (2 ** (attempt - 1)))
