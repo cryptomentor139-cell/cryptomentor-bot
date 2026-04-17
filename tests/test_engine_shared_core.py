@@ -31,6 +31,15 @@ def test_should_notify_blocked_pending_honors_ttl():
     assert runtime_shared.should_notify_blocked_pending(cache, key="BTCUSDT", ttl_sec=600, now_ts=1601.0) is True
 
 
+def test_stale_cooldown_helpers_set_and_expire():
+    cache = {}
+    expiry = runtime_shared.set_ttl_cooldown(cache, key="ETHUSDT", ttl_sec=120, now_ts=1000.0)
+    assert expiry == pytest.approx(1120.0)
+    assert runtime_shared.is_ttl_cooldown_active(cache, key="ETHUSDT", now_ts=1119.9) is True
+    assert runtime_shared.is_ttl_cooldown_active(cache, key="ETHUSDT", now_ts=1120.0) is False
+    assert "ETHUSDT" not in cache
+
+
 @pytest.mark.asyncio
 async def test_refresh_runtime_snapshot_respects_next_refresh():
     calls = {"refresh": 0}

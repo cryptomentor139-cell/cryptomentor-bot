@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.2.37] — 2026-04-17 — Stale-Price Skip Stabilization (Swing + Scalping)
+
+### 🎯 Entry Validation Handling
+- Kept strict `open_managed_position(...)` SL/TP vs mark validation unchanged (no force-entry, no SL/TP mutation).
+- Reclassified `invalid_prices` runtime skips as stale-signal outcomes in both engines.
+
+### ⚙️ Runtime Cooldown + Queue Behavior
+- Added shared TTL cooldown helpers in `Bismillah/app/engine_runtime_shared.py`:
+  - `set_ttl_cooldown(...)`
+  - `is_ttl_cooldown_active(...)`
+- Swing (`Bismillah/app/autotrade_engine.py`):
+  - added per-user stale-price cooldown map (120s),
+  - on `invalid_prices`, applies stale cooldown and emits clear stale-market skip message,
+  - skips stale-cooled symbols during candidate scan/queue processing,
+  - queue status footer text now matches actual policy: volume-rank first, confidence tie-break.
+- Scalping (`Bismillah/app/scalping_engine.py`):
+  - on `invalid_prices`, applies stale cooldown (120s) with explicit user message,
+  - generic 300s failure cooldown now preserves active stale cooldown (no override).
+
+### 🧪 Regression Coverage
+- Updated `tests/test_engine_shared_core.py`:
+  - added TTL cooldown helper set/active/expiry coverage.
+- Updated `tests/test_swing_scalp_parity.py`:
+  - added scalping stale-cooldown non-override coverage,
+  - added source-level guard for swing queue messaging (volume-priority wording).
+
+### ✅ Validation
+- `pytest tests/test_engine_shared_core.py tests/test_swing_scalp_parity.py -q`
+  - Result: `18 passed`.
+
 ## [2.2.36] — 2026-04-17 — Win Reasoning Coverage Hotfix (Winning Close Path Policy)
 
 ### 🏆 Win Strategy Persistence Fix

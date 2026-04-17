@@ -37,6 +37,39 @@ def should_notify_blocked_pending(
     return True
 
 
+def set_ttl_cooldown(
+    cooldown_map: MutableMapping[Any, float],
+    key: Any,
+    ttl_sec: float,
+    now_ts: Optional[float] = None,
+) -> float:
+    """Set cooldown expiry for key and return the expiry timestamp."""
+    if now_ts is None:
+        now_ts = time.time()
+    expires_at = float(now_ts + max(0.0, float(ttl_sec)))
+    cooldown_map[key] = expires_at
+    return expires_at
+
+
+def is_ttl_cooldown_active(
+    cooldown_map: MutableMapping[Any, float],
+    key: Any,
+    now_ts: Optional[float] = None,
+) -> bool:
+    """
+    Return True when cooldown for key is still active.
+
+    Expired entries are cleaned up lazily.
+    """
+    if now_ts is None:
+        now_ts = time.time()
+    expires_at = float(cooldown_map.get(key, 0.0) or 0.0)
+    if expires_at <= float(now_ts):
+        cooldown_map.pop(key, None)
+        return False
+    return True
+
+
 async def sanitize_startup_pending_locks(
     coordinator: Any,
     user_id: int,

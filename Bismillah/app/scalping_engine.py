@@ -32,8 +32,10 @@ from app.engine_execution_shared import (
 )
 from app.engine_runtime_shared import (
     get_top_volume_pairs,
+    is_ttl_cooldown_active as _shared_is_ttl_cooldown_active,
     refresh_runtime_snapshot,
     sanitize_startup_pending_locks,
+    set_ttl_cooldown as _shared_set_ttl_cooldown,
     should_notify_blocked_pending as _shared_should_notify_blocked_pending,
     should_stop_engine,
 )
@@ -123,6 +125,7 @@ class ScalpingEngine:
         self.signal_streaks: Dict[str, Dict[str, float]] = {}
         self.last_closed_meta: Dict[str, Dict[str, float]] = {}
         self._blocked_pending_notify_ts: Dict[str, float] = {}
+        self._stale_price_cooldown_ts: Dict[str, float] = {}
         
         # Running state
         self.running = False
@@ -176,6 +179,50 @@ class ScalpingEngine:
             key=str(symbol).upper(),
             ttl_sec=float(ttl_sec),
         )
+
+    def _mark_stale_price_cooldown(
+        self,
+        symbol: str,
+        ttl_sec: float = 120.0,
+        now_ts: Optional[float] = None,
+    ) -> float:
+        key = str(symbol).upper()
+        expiry = _shared_set_ttl_cooldown(
+            self.cooldown_tracker,
+            key=key,
+            ttl_sec=float(ttl_sec),
+            now_ts=now_ts,
+        )
+        _shared_set_ttl_cooldown(
+            self._stale_price_cooldown_ts,
+            key=key,
+            ttl_sec=float(ttl_sec),
+            now_ts=now_ts,
+        )
+        return expiry
+
+    def _is_stale_price_cooldown_active(self, symbol: str, now_ts: Optional[float] = None) -> bool:
+        return _shared_is_ttl_cooldown_active(
+            self._stale_price_cooldown_ts,
+            key=str(symbol).upper(),
+            now_ts=now_ts,
+        )
+
+    def _apply_generic_failure_cooldown(
+        self,
+        symbol: str,
+        ttl_sec: float = 300.0,
+        now_ts: Optional[float] = None,
+    ) -> bool:
+        if self._is_stale_price_cooldown_active(symbol, now_ts=now_ts):
+            return False
+        _shared_set_ttl_cooldown(
+            self.cooldown_tracker,
+            key=str(symbol).upper(),
+            ttl_sec=float(ttl_sec),
+            now_ts=now_ts,
+        )
+        return True
 
     async def _open_managed_position_safe(self, open_managed_position_fn, **kwargs):
         """
@@ -585,7 +632,8 @@ class ScalpingEngine:
                                 logger.info(f"[Scalping:{self.user_id}] {signal.symbol} - Order placed successfully!")
                             else:
                                 # Avoid hammering non-executable symbols in emergency mode.
-                                self.cooldown_tracker[signal.symbol] = time.time() + 300
+                                # Preserve stale-price cooldown when already set.
+                                self._apply_generic_failure_cooldown(signal.symbol, ttl_sec=300.0)
                                 logger.warning(f"[Scalping:{self.user_id}] {signal.symbol} - Order placement failed")
                     
                     logger.info(
@@ -1875,9 +1923,12 @@ class ScalpingEngine:
                         pending_marked = False
                         return False
                     if error_code == "invalid_prices":
+                        expiry_ts = self._mark_stale_price_cooldown(signal.symbol, ttl_sec=120.0)
+                        cooldown_sec = max(1, int(round(expiry_ts - time.time())))
                         await self._notify_user(
                             f"⚠️ <b>Trade skipped: {signal.symbol}</b>\n\n"
-                            f"Market moved before entry: {error_msg}"
+                            f"Market moved before entry: {error_msg}\n\n"
+                            f"Cooldown on {signal.symbol}: {cooldown_sec}s to avoid repeated stale entries."
                         )
                         await coordinator_clear_pending(self.coordinator, self.user_id, signal.symbol)
                         pending_marked = False

@@ -105,6 +105,26 @@ def test_scalping_position_size_uses_requested_symbol(monkeypatch):
     assert captured["symbol"] == "ETHUSDT"
 
 
+def test_scalping_stale_cooldown_not_overridden_by_generic_failure():
+    engine = ScalpingEngine.__new__(ScalpingEngine)
+    engine.cooldown_tracker = {}
+    engine._stale_price_cooldown_ts = {}
+
+    expiry = engine._mark_stale_price_cooldown("ETHUSDT", ttl_sec=120.0, now_ts=1000.0)
+    assert expiry == pytest.approx(1120.0)
+    assert engine.cooldown_tracker["ETHUSDT"] == pytest.approx(1120.0)
+
+    applied = engine._apply_generic_failure_cooldown("ETHUSDT", ttl_sec=300.0, now_ts=1010.0)
+    assert applied is False
+    assert engine.cooldown_tracker["ETHUSDT"] == pytest.approx(1120.0)
+
+
+def test_swing_queue_status_mentions_volume_priority():
+    source = Path(_ROOT, "Bismillah", "app", "autotrade_engine.py").read_text(encoding="utf-8")
+    assert "Higher volume priority signals execute first (confidence breaks ties)" in source
+    assert "Higher confidence signals execute first" not in source
+
+
 def test_swing_timeout_alias_env_compat(monkeypatch):
     import app.trading_mode as trading_mode  # type: ignore
 

@@ -79,8 +79,10 @@ from app.engine_execution_shared import (
 )
 from app.engine_runtime_shared import (
     get_top_volume_pairs,
+    is_ttl_cooldown_active as _shared_is_ttl_cooldown_active,
     refresh_runtime_snapshot,
     sanitize_startup_pending_locks,
+    set_ttl_cooldown as _shared_set_ttl_cooldown,
     should_notify_blocked_pending as _shared_should_notify_blocked_pending,
     should_stop_engine,
 )
@@ -90,7 +92,9 @@ _running_tasks: Dict[int, asyncio.Task] = {}
 _engine_lifecycle_locks: Dict[int, asyncio.Lock] = {}
 _scalping_engines: Dict[int, Any] = {}
 _blocked_pending_notify_ts: Dict[tuple, float] = {}
+_stale_price_cooldown_ts: Dict[tuple, float] = {}
 _BLOCKED_PENDING_NOTIFY_TTL_SECONDS = 600.0
+_STALE_PRICE_COOLDOWN_SECONDS = 120.0
 
 # Multi-user symbol coordinator
 _coordinator = None
@@ -130,10 +134,27 @@ def _should_notify_blocked_pending(user_id: int, symbol: str) -> bool:
         ttl_sec=_BLOCKED_PENDING_NOTIFY_TTL_SECONDS,
     )
 
+
+def _mark_stale_price_cooldown(user_id: int, symbol: str, ttl_sec: float = _STALE_PRICE_COOLDOWN_SECONDS) -> float:
+    key = (int(user_id), str(symbol).upper())
+    return _shared_set_ttl_cooldown(
+        _stale_price_cooldown_ts,
+        key=key,
+        ttl_sec=float(ttl_sec),
+    )
+
+
+def _is_stale_price_cooldown_active(user_id: int, symbol: str) -> bool:
+    key = (int(user_id), str(symbol).upper())
+    return _shared_is_ttl_cooldown_active(
+        _stale_price_cooldown_ts,
+        key=key,
+    )
+
 # Track posisi yang sudah hit TP1 (breakeven mode): user_id → set of symbols
 _tp1_hit_positions: Dict[int, set] = {}
 
-# Signal queue system: user_id → list of signals (sorted by confidence)
+# Signal queue system: user_id → list of signals (volume-rank first, confidence tie-break)
 _signal_queues: Dict[int, List[Dict]] = {}
 
 # Symbol execution locks: user_id → {symbol → asyncio.Lock}
@@ -2564,6 +2585,10 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     ranked_bases.append(base)
             volume_rank = {b: idx for idx, b in enumerate(ranked_bases, start=1)}
             available = [s for s in ranked_bases if (s + "USDT") not in occupied_syms]
+            available = [
+                s for s in available
+                if not _is_stale_price_cooldown_active(user_id, f"{str(s).upper()}USDT")
+            ]
             if not available:
                 await asyncio.sleep(cfg["scan_interval"])
                 continue
@@ -2730,6 +2755,13 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     -float(s.get("rr_ratio", 0)),
                 )
             )
+            _signal_queues[user_id] = [
+                queued for queued in _signal_queues[user_id]
+                if not _is_stale_price_cooldown_active(
+                    user_id,
+                    str(queued.get("symbol", "")).upper(),
+                )
+            ]
 
             # ── Process next signal from queue ──────────────────────────────────
             if not _signal_queues[user_id]:
@@ -2798,7 +2830,7 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     queue_status += f"<b>📋 Queued ({len(queued_remaining)} remaining):</b>\n"
                     for q_sym in queued_remaining:
                         queue_status += f"  • {q_sym}\n"
-                    queue_status += f"\n<i>Higher confidence signals execute first</i>"
+                    queue_status += f"\n<i>Higher volume priority signals execute first (confidence breaks ties)</i>"
                     await bot.send_message(chat_id=notify_chat_id, text=queue_status, parse_mode='HTML')
             except Exception as _qst_err:
                 logger.debug(f"[Engine:{user_id}] Queue status notification failed: {_qst_err}")
@@ -2987,7 +3019,24 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 await coordinator_clear_pending(coordinator, user_id, symbol)
                 pending_marked = False
 
-                if err_code in {"invalid_prices", "invalid_sl_price"}:
+                if err_code == "invalid_prices":
+                    expiry_ts = _mark_stale_price_cooldown(user_id, symbol)
+                    cooldown_sec = max(1, int(round(expiry_ts - time.time())))
+                    await bot.send_message(
+                        chat_id=notify_chat_id,
+                        text=(
+                            f"⚠️ <b>Trade skipped: stale signal</b>\n\n"
+                            f"{err}\n\n"
+                            f"Market moved before entry validation.\n"
+                            f"Cooldown on {symbol}: {cooldown_sec}s to avoid repeated stale entries.\n\n"
+                            f"Bot will look for next setup."
+                        ),
+                        parse_mode='HTML'
+                    )
+                    _cleanup_signal_queue(user_id, symbol, success=False)
+                    await asyncio.sleep(cfg["scan_interval"])
+                    continue
+                if err_code == "invalid_sl_price":
                     await bot.send_message(
                         chat_id=notify_chat_id,
                         text=(
