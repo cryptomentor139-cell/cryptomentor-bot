@@ -2470,7 +2470,6 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     if not rev_sig or not _is_reversal(pos_side, rev_sig, rev_sig.get("btc_is_sideways", False)):
                         continue
 
-                    import time
                     # ── CHoCH terdeteksi — eksekusi flip ─────────────
                     new_side    = rev_sig["side"]
                     new_entry   = rev_sig["entry_price"]
@@ -3096,7 +3095,6 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             # ── Multi-user symbol coordination check ───────────────────
             # Check if this user can enter this symbol (no conflicting owner)
             coordinator = _get_coordinator()
-            import time
             can_enter, block_reason = await coordinator.can_enter(
                 user_id=user_id,
                 symbol=symbol,
@@ -3309,7 +3307,6 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
 
             # Confirm with coordinator that position is now open
             coordinator = _get_coordinator()
-            import time
             await coordinator_confirm_open(
                 coordinator,
                 user_id=user_id,

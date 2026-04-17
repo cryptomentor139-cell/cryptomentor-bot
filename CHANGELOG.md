@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.2.40] — 2026-04-18 — Swing Queue Hotfix (Runtime `time` Scope Regression)
+
+### 🚑 Hotfix Summary
+- Fixed a production regression introduced in `2.2.39` where swing `_trade_loop` could raise:
+  - `UnboundLocalError: cannot access local variable 'time'`
+- Root cause: function-local `import time` statements inside `_trade_loop` shadowed the module-level `time` import on control-flow paths where local import was not executed.
+
+### 🔧 Engine Fix
+- Updated `Bismillah/app/autotrade_engine.py`:
+  - removed local `import time` statements inside `_trade_loop`,
+  - ensured all `_trade_loop` time usage resolves to the module-level `time` import consistently.
+- No SL/TP validation behavior changes.
+- No queue policy changes from `2.2.39`.
+
+### ✅ Validation
+- `python -m py_compile Bismillah/app/autotrade_engine.py`
+- `pytest tests/test_engine_shared_core.py tests/test_swing_scalp_parity.py -q`
+  - Result: `23 passed`.
+
 ## [2.2.39] — 2026-04-18 — Swing Queue Freshness Hardening (Stale-Signal Repeat Fix)
 
 ### 🎯 Swing Stale-Signal Stability
