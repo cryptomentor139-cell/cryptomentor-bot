@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.2.41] — 2026-04-18 — Swing Live-Mark Preflight Gate (Stale Signal Suppression)
+
+### 🎯 Stale-Signal Suppression
+- Added strict preflight live-mark gating in `Bismillah/app/autotrade_engine.py` before swing signals are returned/queued.
+- New behavior: if generated levels are already invalid vs live mark (`LONG TP1 <= mark`, `SHORT TP1 >= mark`, or SL on wrong side), signal is rejected early.
+- Policy preserved:
+  - no TP/SL mutation,
+  - no forced entry,
+  - existing `open_managed_position(...)` strict validation unchanged (this is a prefilter, not a validator replacement).
+
+### ⚙️ Runtime Efficiency
+- Added short-lived mark proxy cache (5s TTL) for preflight checks to avoid repeated per-symbol fetch bursts across users.
+
+### 🧪 Regression Coverage
+- Updated `tests/test_swing_scalp_parity.py`:
+  - preflight rejects stale short levels against live mark,
+  - preflight accepts valid short levels.
+- Updated `tests/test_engine_shared_core.py`:
+  - mark-proxy cache hit behavior within TTL.
+
+### ✅ Validation
+- `python -m py_compile Bismillah/app/autotrade_engine.py tests/test_engine_shared_core.py tests/test_swing_scalp_parity.py`
+- `pytest tests/test_engine_shared_core.py tests/test_swing_scalp_parity.py -q`
+  - Result: `26 passed`.
+
 ## [2.2.40] — 2026-04-18 — Swing Queue Hotfix (Runtime `time` Scope Regression)
 
 ### 🚑 Hotfix Summary

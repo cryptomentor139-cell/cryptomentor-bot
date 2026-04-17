@@ -198,6 +198,30 @@ def test_swing_loop_error_cleanup_clears_inflight_marker(monkeypatch):
     autotrade_engine._signals_being_processed.pop(uid, None)
 
 
+def test_swing_preflight_live_mark_rejects_stale_short_levels(monkeypatch):
+    monkeypatch.setattr(autotrade_engine, "_resolve_signal_mark_price", lambda _symbol, now_ts=None: 2451.0)
+    ok = autotrade_engine._signal_prices_pass_live_mark(
+        symbol="ETHUSDT",
+        side="SHORT",
+        entry_price=2513.9210,
+        tp1_price=2479.448857,
+        sl_price=2525.4117,
+    )
+    assert ok is False
+
+
+def test_swing_preflight_live_mark_accepts_valid_short_levels(monkeypatch):
+    monkeypatch.setattr(autotrade_engine, "_resolve_signal_mark_price", lambda _symbol, now_ts=None: 2500.0)
+    ok = autotrade_engine._signal_prices_pass_live_mark(
+        symbol="ETHUSDT",
+        side="SHORT",
+        entry_price=2513.9210,
+        tp1_price=2479.448857,
+        sl_price=2525.4117,
+    )
+    assert ok is True
+
+
 def test_swing_queue_status_mentions_volume_priority():
     source = Path(_ROOT, "Bismillah", "app", "autotrade_engine.py").read_text(encoding="utf-8")
     assert "Higher volume priority signals execute first (confidence breaks ties)" in source

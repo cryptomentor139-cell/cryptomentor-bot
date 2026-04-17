@@ -58,6 +58,16 @@ def test_swing_queue_age_gate_does_not_drop_inflight_symbol():
         autotrade_engine._signals_being_processed.pop(uid, None)
 
 
+def test_swing_signal_mark_proxy_uses_cache_within_ttl():
+    symbol = "ETHUSDT"
+    autotrade_engine._SIGNAL_MARK_PROXY_CACHE[symbol] = (2450.5, 100.0)
+    try:
+        px = autotrade_engine._resolve_signal_mark_price(symbol, now_ts=104.0)
+        assert px == pytest.approx(2450.5)
+    finally:
+        autotrade_engine._SIGNAL_MARK_PROXY_CACHE.pop(symbol, None)
+
+
 @pytest.mark.asyncio
 async def test_refresh_runtime_snapshot_respects_next_refresh():
     calls = {"refresh": 0}

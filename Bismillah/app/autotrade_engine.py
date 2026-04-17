@@ -63,7 +63,7 @@ from app.stackmentor import (
     calculate_qty_splits,
     monitor_stackmentor_positions,
 )
-from app.trade_execution import MIN_QTY_MAP, open_managed_position
+from app.trade_execution import MIN_QTY_MAP, open_managed_position, validate_entry_prices
 from app.symbol_coordinator import (
     get_coordinator,
     StrategyOwner,
@@ -96,6 +96,8 @@ _stale_price_cooldown_ts: Dict[tuple, float] = {}
 _BLOCKED_PENDING_NOTIFY_TTL_SECONDS = 600.0
 _STALE_PRICE_COOLDOWN_SECONDS = 120.0
 _SWING_QUEUE_MAX_AGE_SECONDS = 90.0
+_SIGNAL_MARK_PROXY_CACHE: Dict[str, tuple[float, float]] = {}
+_SIGNAL_MARK_PROXY_TTL_SECONDS = 5.0
 
 # Multi-user symbol coordinator
 _coordinator = None
@@ -444,6 +446,70 @@ def _cleanup_inflight_signal_marker(user_id: int, symbol: Optional[str]) -> bool
         return False
     _cleanup_signal_queue(int(user_id), symbol_u, success=False)
     return True
+
+
+def _resolve_signal_mark_price(symbol: str, now_ts: Optional[float] = None) -> Optional[float]:
+    """
+    Best-effort live mark proxy for preflight signal staleness checks.
+    Uses 1m close from provider chain with short TTL cache to avoid request bursts.
+    """
+    symbol_u = str(symbol or "").upper()
+    if not symbol_u:
+        return None
+    now = float(time.time() if now_ts is None else now_ts)
+    cached = _SIGNAL_MARK_PROXY_CACHE.get(symbol_u)
+    if cached:
+        cached_px, cached_ts = cached
+        if (now - float(cached_ts)) <= _SIGNAL_MARK_PROXY_TTL_SECONDS and float(cached_px) > 0:
+            return float(cached_px)
+    try:
+        from app.providers.alternative_klines_provider import alternative_klines_provider
+        base = symbol_u.replace("USDT", "")
+        klines = alternative_klines_provider.get_klines(
+            base,
+            interval="1m",
+            limit=2,
+            preferred_sources=["bitunix", "binance", "cryptocompare", "coingecko"],
+        )
+        if klines:
+            mark_px = float(klines[-1][4])
+            if mark_px > 0:
+                _SIGNAL_MARK_PROXY_CACHE[symbol_u] = (mark_px, now)
+                return mark_px
+    except Exception as _mark_err:
+        logger.debug(f"[Signal] {symbol_u} mark proxy fetch failed: {_mark_err}")
+    return None
+
+
+def _signal_prices_pass_live_mark(
+    symbol: str,
+    side: str,
+    entry_price: float,
+    tp1_price: float,
+    sl_price: float,
+) -> bool:
+    """
+    Reject stale signal levels before queueing when live mark already violates
+    strict execution validation rules. No price mutation is performed.
+    """
+    symbol_u = str(symbol or "").upper()
+    mark_px = _resolve_signal_mark_price(symbol_u)
+    if mark_px is None or mark_px <= 0:
+        return True
+    ok, _, err = validate_entry_prices(
+        side=str(side or "").upper(),
+        entry=float(entry_price),
+        tp1=float(tp1_price),
+        sl=float(sl_price),
+        mark_price=float(mark_px),
+    )
+    if ok:
+        return True
+    logger.info(
+        f"[Signal] {symbol_u} preflight stale reject: {err} "
+        f"(entry={float(entry_price):.6f} tp1={float(tp1_price):.6f} sl={float(sl_price):.6f})"
+    )
+    return False
 
 
 def _passes_swing_confirmation_gate(user_id: int, signal: Dict[str, Any], cfg: Dict[str, Any]) -> bool:
@@ -1122,6 +1188,15 @@ def _compute_signal_pro(
                     sig["confidence"] += bonus
                     sig["reasons"].append(f"BTC {btc_bias_dir} aligned (+{bonus}%)")
 
+            if not _signal_prices_pass_live_mark(
+                symbol=symbol,
+                side=sig.get("side", ""),
+                entry_price=float(sig.get("entry_price", 0.0) or 0.0),
+                tp1_price=float(sig.get("tp1", 0.0) or 0.0),
+                sl_price=float(sig.get("sl", 0.0) or 0.0),
+            ):
+                return None
+
             return sig
 
         # ── FALLBACK: Original SMC-based signal system ────────────────
@@ -1381,6 +1456,15 @@ def _compute_signal_pro(
                 f"[Signal] {symbol} confidence {confidence}% < internal_min_conf {internal_min_confidence}% "
                 f"(adaptive conf_delta={adaptive_conf_delta})"
             )
+            return None
+
+        if not _signal_prices_pass_live_mark(
+            symbol=symbol,
+            side=side,
+            entry_price=price,
+            tp1_price=tp1,
+            sl_price=sl,
+        ):
             return None
 
         logger.info(
