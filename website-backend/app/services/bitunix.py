@@ -13,6 +13,9 @@ import os
 import sys
 import asyncio
 import logging
+import copy
+import time
+from threading import Lock
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -24,6 +27,41 @@ logger = logging.getLogger(__name__)
 _HARDCODED_BITUNIX_UID = "481262194"
 _HARDCODED_BITUNIX_API_KEY = "75def4bf497098aca194b4707c8c7a09"
 _HARDCODED_BITUNIX_API_SECRET = "475c3287b3888ff738e3787419641137"
+
+# Lightweight in-memory cache to dampen repeated high-frequency polling bursts
+# from the web dashboard (positions/account endpoints).
+_LIVE_CACHE: dict[tuple[str, int], tuple[float, Dict[str, Any]]] = {}
+_LIVE_CACHE_LOCK = Lock()
+_ACCOUNT_CACHE_TTL = float(os.getenv("BITUNIX_ACCOUNT_CACHE_TTL_SECONDS", "2.5"))
+_POSITIONS_CACHE_TTL = float(os.getenv("BITUNIX_POSITIONS_CACHE_TTL_SECONDS", "2.0"))
+
+
+def _cache_get(kind: str, telegram_id: int, ttl: float) -> Optional[Dict[str, Any]]:
+    now = time.time()
+    key = (kind, int(telegram_id))
+    with _LIVE_CACHE_LOCK:
+        hit = _LIVE_CACHE.get(key)
+        if not hit:
+            return None
+        ts, payload = hit
+        if now - ts > ttl:
+            _LIVE_CACHE.pop(key, None)
+            return None
+        return copy.deepcopy(payload)
+
+
+def _cache_set(kind: str, telegram_id: int, payload: Dict[str, Any]) -> None:
+    key = (kind, int(telegram_id))
+    with _LIVE_CACHE_LOCK:
+        _LIVE_CACHE[key] = (time.time(), copy.deepcopy(payload))
+
+
+def _cache_invalidate_user(telegram_id: int) -> None:
+    uid = int(telegram_id)
+    with _LIVE_CACHE_LOCK:
+        for key in list(_LIVE_CACHE.keys()):
+            if key[1] == uid:
+                _LIVE_CACHE.pop(key, None)
 
 # Make the bot package importable so we can reuse the existing client + crypto
 # (single source of truth — mirrors handlers_autotrade.py behaviour).
@@ -140,13 +178,23 @@ def _client_for(telegram_id: int) -> "BitunixAutoTradeClient":
 # they don't block the FastAPI event loop.
 
 async def fetch_account(telegram_id: int) -> Dict[str, Any]:
+    cached = _cache_get("account", telegram_id, _ACCOUNT_CACHE_TTL)
+    if cached is not None:
+        return cached
     client = _client_for(telegram_id)
-    return await asyncio.to_thread(client.get_account_info)
+    res = await asyncio.to_thread(client.get_account_info)
+    _cache_set("account", telegram_id, res)
+    return res
 
 
 async def fetch_positions(telegram_id: int) -> Dict[str, Any]:
+    cached = _cache_get("positions", telegram_id, _POSITIONS_CACHE_TTL)
+    if cached is not None:
+        return cached
     client = _client_for(telegram_id)
-    return await asyncio.to_thread(client.get_positions)
+    res = await asyncio.to_thread(client.get_positions)
+    _cache_set("positions", telegram_id, res)
+    return res
 
 
 async def fetch_trade_history(telegram_id: int, symbol: str = None) -> Dict[str, Any]:
@@ -163,12 +211,16 @@ async def fetch_connection(telegram_id: int) -> Dict[str, Any]:
 
 async def set_position_tpsl(telegram_id: int, symbol: str, tp_price: float, sl_price: float) -> Dict[str, Any]:
     client = _client_for(telegram_id)
-    return await asyncio.to_thread(client.set_position_tpsl, symbol, tp_price, sl_price)
+    res = await asyncio.to_thread(client.set_position_tpsl, symbol, tp_price, sl_price)
+    _cache_invalidate_user(telegram_id)
+    return res
 
 
 async def set_position_sl(telegram_id: int, symbol: str, sl_price: float) -> Dict[str, Any]:
     client = _client_for(telegram_id)
-    return await asyncio.to_thread(client.set_position_sl, symbol, sl_price)
+    res = await asyncio.to_thread(client.set_position_sl, symbol, sl_price)
+    _cache_invalidate_user(telegram_id)
+    return res
 
 
 async def place_market_with_tpsl(
@@ -187,9 +239,11 @@ async def place_market_with_tpsl(
         await asyncio.to_thread(client.set_leverage, symbol, int(leverage), "cross")
     except Exception:
         pass
-    return await asyncio.to_thread(
+    res = await asyncio.to_thread(
         client.place_order_with_tpsl, symbol, side, qty, tp_price, sl_price
     )
+    _cache_invalidate_user(telegram_id)
+    return res
 
 
 async def close_market_position(
@@ -204,6 +258,8 @@ async def close_market_position(
     close_side: SELL to close LONG, BUY to close SHORT.
     """
     client = _client_for(telegram_id)
-    return await asyncio.to_thread(
+    res = await asyncio.to_thread(
         client.close_partial, symbol, close_side, qty, position_side
     )
+    _cache_invalidate_user(telegram_id)
+    return res

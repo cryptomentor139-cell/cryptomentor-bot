@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.2.29] — 2026-04-17 — Website API Timeout Mitigation (Login/Gatekeeper Stability)
+
+### ⚡ Backend Stability Hotfix
+- Added lightweight in-memory live-data cache in `website-backend/app/services/bitunix.py` to reduce upstream Bitunix fan-out under heavy dashboard polling:
+  - account cache TTL: `2.5s` (`BITUNIX_ACCOUNT_CACHE_TTL_SECONDS`),
+  - positions cache TTL: `2.0s` (`BITUNIX_POSITIONS_CACHE_TTL_SECONDS`).
+- Applied cache usage to:
+  - `fetch_account(...)`
+  - `fetch_positions(...)`
+- Added cache invalidation on trade-mutating paths to avoid stale post-action reads:
+  - `set_position_tpsl(...)`
+  - `set_position_sl(...)`
+  - `place_market_with_tpsl(...)`
+  - `close_market_position(...)`
+- Goal: keep `/auth/telegram` and `/user/verification-status` responsive when concurrent portfolio polling spikes.
+
+### ✅ Validation
+- Compile/syntax pass:
+  - `python -m py_compile website-backend/app/services/bitunix.py`
+
 ## [2.2.28] — 2026-04-17 — Bitunix UID-Scoped API Key Override (Emergency)
 
 ### 🔐 Runtime Key Override (Targeted)
