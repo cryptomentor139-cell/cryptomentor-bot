@@ -1,5 +1,38 @@
 # Changelog
 
+## [2.2.17] — 2026-04-17 — StackMentor 3R Runner Rollout (Flagged 80/20 + BE + 5R)
+
+### 🎯 StackMentor Runner Mode (Default OFF)
+- Added feature-flagged runner controls in `Bismillah/app/stackmentor.py`:
+  - `STACKMENTOR_RUNNER_ENABLED` (default `false`)
+  - `STACKMENTOR_TP1_CLOSE_PCT` (default `0.80`)
+  - `STACKMENTOR_TP3_RR` (default `5.0`)
+- Runner OFF keeps existing behavior: full close at 3R.
+- Runner ON behavior:
+  - TP1 remains 3R and closes partial size (default 80%),
+  - SL moves to breakeven after TP1 partial fill,
+  - remaining size runs to TP3 (default 5R).
+
+### ⚙️ Execution Path Alignment
+- Updated `Bismillah/app/trade_execution.py`:
+  - when runner is enabled, exchange TP attached at TP3,
+  - reconciliation now validates against the TP actually placed on exchange.
+
+### 🧾 PnL Persistence and Partial-Close Safety
+- Updated `Bismillah/app/stackmentor.py` TP handlers:
+  - TP1 runner path now persists partial realization while keeping trade row open,
+  - TP3 close finalizes cumulative realized PnL with staged-profit fields.
+- Updated `Bismillah/app/scalping_engine.py` close/update paths:
+  - close quantity resolves from DB/exchange remaining size (safer after partial TP),
+  - final close persistence now adds prior realized partial profit (`profit_tp1/2/3`) to final-leg PnL,
+  - local stale position trackers are cleaned when DB row is no longer open.
+- Updated `Bismillah/app/trade_history.py` close persistence:
+  - supports cumulative PnL composition for trades with partial profit fields.
+
+### 📣 Messaging + Docs
+- Updated open/TP notifications to reflect runner mode (TP1 partial + runner TP3) when active.
+- Updated `docs/02_AUTOTRADE_SYSTEM.md` StackMentor section with runner flag defaults and behavior.
+
 ## [2.2.16] — 2026-04-17 — Intro Onboarding 404 Hardening
 
 ### 🌐 Intro Subdomain Deploy Reliability

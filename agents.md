@@ -20,6 +20,9 @@ Standard operating guide for the core CryptoMentor operators: Admin, Engine, Bro
 - `Bismillah/app/scalping_engine.py`
 - `Bismillah/app/symbol_coordinator.py`
 - `Bismillah/app/volume_pair_selector.py`
+- `Bismillah/app/win_playbook.py`
+- `Bismillah/app/trade_history.py`
+- `Bismillah/app/stackmentor.py`
 - Must enforce:
 - No stale pending locks (`set_pending` must be paired with clear/confirm paths).
 - Stale pending lock policy: auto-expire pending-without-position after 90s; run restart/startup pending cleanup per user.
@@ -27,6 +30,21 @@ Standard operating guide for the core CryptoMentor operators: Admin, Engine, Bro
 - SL/TP validation must never mutate SL/TP in a way that changes pre-sized risk.
 - Executed TP/SL must match the strategy signal used for entry validation.
 - Startup messages consistent with live runtime values.
+- Global win playbook refresh cadence: every 10 minutes (aligned with adaptive overlay refresh).
+- Runtime risk overlay is memory/runtime only; never mutate persisted base user risk (`autotrade_sessions.risk_per_trade`).
+- Effective risk formula is fixed: `effective_risk_pct = min(10.0, base_risk_pct + risk_overlay_pct)`.
+- Overlay guardrails are strict: ramp only when rolling win rate >= 75% and rolling expectancy > 0.
+- Overlay brake behavior must be gradual (step-down), never instant hard reset unless explicitly requested.
+- Overlay affects position sizing only; do not relax confluence/signal-quality gates.
+- Scalping open rows must persist `entry_reasons`.
+- Winning close paths (`closed_tp`, `closed_tp3`, profitable `closed_flip`) must persist non-empty `win_reasoning` + `win_reason_tags`.
+- StackMentor close updates must set `close_reason` consistently, not only `status`.
+- StackMentor runner rollout must stay feature-flagged by default: `STACKMENTOR_RUNNER_ENABLED=false` unless explicitly approved to enable.
+- Runner behavior standard (when enabled): TP1 fixed at `3R` with partial close (`STACKMENTOR_TP1_CLOSE_PCT`, default `0.80`), move SL to breakeven, and final runner target at `STACKMENTOR_TP3_RR` (default `5.0`).
+- Exchange TP must align with runtime mode: unified mode uses TP1 on exchange; runner mode uses TP3 on exchange while StackMentor monitor executes TP1 partial handling.
+- Trade close persistence must use cumulative PnL for partial-flow exits (`profit_tp1/2/3 + final_leg_pnl`) so positive net outcomes are never misclassified as losses.
+- Timeout protection policy is feature-flagged (`adaptive_timeout_protection_enabled` default false) and must emit structured timeout loss reasoning when timeout exits occur.
+- Timeout protection env compatibility is mandatory: support both `SCALPING_ADAPTIVE_TIMEOUT_PROTECTION_ENABLED` and legacy `SCALPING_TIMEOUT_PROTECTION_ENABLED` (alias) in runtime parsing.
 - Runtime pair universe for swing + scalp must use Bitunix dynamic top-volume routing (top 10 by `quoteVol`, highest-first priority).
 - Volume selector fallback policy is fixed: last-good cache first, bootstrap list only if cache unavailable.
 - Queue/scan priority must preserve volume rank before secondary quality sort (confidence/R:R).
@@ -35,6 +53,8 @@ Standard operating guide for the core CryptoMentor operators: Admin, Engine, Bro
 - Compile/syntax pass for touched files.
 - Negative-path verification (timeouts, order failure, validation skip).
 - R:R parity check: verify `abs(TP-entry)/abs(entry-SL)` from executed levels matches strategy expectation.
+- Playbook safety fallback check: if playbook service fails, engines degrade to base-risk behavior with no crash.
+- Win-reason coverage check for new winners: target >=95% non-empty `win_reasoning`.
 
 ## 3) Risk & Pairing Agent
 - Owner: risk defaults and symbol universe.
@@ -42,17 +62,27 @@ Standard operating guide for the core CryptoMentor operators: Admin, Engine, Bro
 - `Bismillah/app/trading_mode.py`
 - `Bismillah/app/position_sizing.py`
 - `Bismillah/app/volume_pair_selector.py`
+- `Bismillah/app/win_playbook.py`
 - Rules:
 - Keep declared pair standard aligned with runtime behavior and all user-facing messages.
 - Any pair-count change requires explicit changelog line.
 - Dynamic universe standard (v2.2.9+): `Top 10 by volume` from Bitunix tickers (`quoteVol`).
 - Equity wording standard: use `Equity` for account-value/risk basis; use `Available balance` only for free margin context.
+- Base-risk clamp policy remains `0.25%–5.0%`; only runtime overlay may extend effective sizing risk up to `10.0%` cap.
+- Timeout-protection config keys in `ScalpingConfig` must remain feature-flagged and backward-safe.
+- Timeout flag backward-compatibility rule: legacy env key (`SCALPING_TIMEOUT_PROTECTION_ENABLED`) must still activate runtime flag behavior.
 - Runtime verification command (VPS/local):
 - `python3 - <<'PY'`
 - `from app.volume_pair_selector import get_ranked_top_volume_pairs, get_selector_health`
 - `pairs = get_ranked_top_volume_pairs(10)`
 - `print(len(pairs), pairs)`
 - `print(get_selector_health())`
+- `PY`
+- Win playbook verification command (VPS/local):
+- `python3 - <<'PY'`
+- `from app.win_playbook import refresh_global_win_playbook_state, get_win_playbook_snapshot`
+- `refresh_global_win_playbook_state()`
+- `print(get_win_playbook_snapshot())`
 - `PY`
 
 ## 4) Broadcast Agent
@@ -79,6 +109,10 @@ Standard operating guide for the core CryptoMentor operators: Admin, Engine, Bro
 6. Verify hash parity for deployed files (local vs VPS).
 7. Verify runtime checks (for example pair count).
 8. For trading engine patches, verify one live/open notification sample has consistent Entry/TP/SL and R:R math.
+9. For playbook/risk patches, verify runtime snapshot exposes expected guardrails/overlay values.
+10. For timeout-protection patches, verify feature flag default/active state and timeout KPI log/report path.
+11. For timeout-flag patches, verify both env-key paths (`SCALPING_ADAPTIVE_TIMEOUT_PROTECTION_ENABLED` and `SCALPING_TIMEOUT_PROTECTION_ENABLED`) resolve to expected runtime boolean.
+12. For StackMentor runner patches, verify default flag is OFF, TP1/TP3 levels resolve to `3R/5R` when enabled, and cumulative PnL persistence remains correct after partial TP.
 
 ## Release Checklist
 1. Code patch complete.
@@ -90,6 +124,11 @@ Standard operating guide for the core CryptoMentor operators: Admin, Engine, Bro
 7. Broadcast/reporting (if applicable) recorded.
 8. For pairing/routing changes: verify live selector health and top-10 ordering output.
 9. For messaging changes: verify startup/restart notification uses live `Equity` and `Top 10 by volume`.
+10. For schema-impact patches: DB migration applied and acknowledged before restart.
+11. For win-playbook patches: admin report contains playbook section and win-reason coverage KPI.
+12. For timeout policy patches: timeout-loss metrics appear in admin report and logs.
+13. For timeout flag alias patches: runtime must read enabled state correctly from `.env` without code-side override.
+14. For StackMentor runner patches: verify canary open message and close logs show expected split (`80/20` default), breakeven transition after TP1, and final runner close reason (`closed_tp3`) with cumulative PnL.
 
 ## Guardrails
 - No destructive git actions without explicit instruction.
@@ -97,3 +136,5 @@ Standard operating guide for the core CryptoMentor operators: Admin, Engine, Bro
 - Do not claim “synced” without commit hash + hash parity evidence.
 - Keep operational messages and actual runtime config in line.
 - Do not auto-adjust SL/TP post-sizing unless position size is recomputed and revalidated.
+- Do not bypass runtime guardrails to force risk ramp; if guardrails fail, overlay must brake down.
+- Do not ship timeout-protection default-on without explicit approval.

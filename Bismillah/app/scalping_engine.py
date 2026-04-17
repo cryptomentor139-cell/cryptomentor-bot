@@ -247,6 +247,66 @@ class ScalpingEngine:
         base = close_realized if close_realized is not None else gross_pnl
         net = base - open_fee - close_fee
         return net, open_fee, close_fee, used_exchange_data
+
+    async def _get_open_trade_row(self, symbol: str) -> Dict[str, Any]:
+        try:
+            s = _client()
+            res = (
+                s.table("autotrade_trades")
+                .select("*")
+                .eq("telegram_id", self.user_id)
+                .eq("symbol", symbol)
+                .eq("status", "open")
+                .order("opened_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if res.data:
+                return dict(res.data[0])
+        except Exception as e:
+            logger.warning(f"[Scalping:{self.user_id}] Failed open trade fetch for {symbol}: {e}")
+        return {}
+
+    @staticmethod
+    def _sum_partial_realized(open_row: Dict[str, Any]) -> float:
+        total = 0.0
+        for k in ("profit_tp1", "profit_tp2", "profit_tp3"):
+            try:
+                total += float(open_row.get(k) or 0.0)
+            except Exception:
+                continue
+        return float(total)
+
+    async def _resolve_close_quantity(self, position: ScalpingPosition) -> float:
+        """
+        Determine safest close quantity for reduce-only close.
+        Priority:
+        1) DB remaining quantity snapshot (if partial TP already happened)
+        2) Live exchange position quantity
+        3) Local in-memory position quantity
+        """
+        open_row = await self._get_open_trade_row(position.symbol)
+        for key in ("remaining_quantity", "quantity", "qty"):
+            try:
+                q = float(open_row.get(key) or 0.0)
+                if q > 0:
+                    return q
+            except Exception:
+                continue
+
+        try:
+            pos_resp = await asyncio.to_thread(self.client.get_positions)
+            if pos_resp and pos_resp.get("success"):
+                for p in pos_resp.get("positions", []):
+                    if str(p.get("symbol")) != str(position.symbol):
+                        continue
+                    q = abs(float(p.get("qty") or p.get("size") or 0.0))
+                    if q > 0:
+                        return q
+        except Exception:
+            pass
+
+        return max(0.0, float(getattr(position, "quantity", 0.0) or 0.0))
     
     async def run(self):
         """Main trading loop - scans every 15 seconds"""
@@ -1839,7 +1899,17 @@ class ScalpingEngine:
                 if position.is_expired():
                     await self._close_position_max_hold(position)
                     continue
-            
+
+                # Remove stale local tracker if DB row is no longer open.
+                open_row = await self._get_open_trade_row(symbol)
+                if not open_row:
+                    logger.info(
+                        f"[Scalping:{self.user_id}] Removing stale local position tracker for {symbol} "
+                        f"(no open DB row)"
+                    )
+                    self.positions.pop(symbol, None)
+                    continue
+             
             except Exception as e:
                 logger.error(f"[Scalping:{self.user_id}] Error checking {symbol}: {e}")
                 continue
@@ -2018,6 +2088,14 @@ class ScalpingEngine:
                 f"(elapsed: {int(time.time() - position.opened_at)}s)"
             )
             
+            close_qty = await self._resolve_close_quantity(position)
+            if close_qty <= 0:
+                logger.warning(
+                    f"[Scalping:{self.user_id}] Max-hold close skipped for {position.symbol}: qty<=0"
+                )
+                self.positions.pop(position.symbol, None)
+                return
+
             # Close entire position at market
             close_side = "SELL" if position.side == "BUY" else "BUY"
             
@@ -2025,7 +2103,7 @@ class ScalpingEngine:
                 self.client.place_order,
                 symbol=position.symbol,
                 side=close_side,
-                qty=position.quantity,
+                qty=close_qty,
                 order_type='market',
                 reduce_only=True
             )
@@ -2038,9 +2116,9 @@ class ScalpingEngine:
                 
                 # Calculate PnL
                 if position.side == "BUY":
-                    pnl = (fill_price - position.entry_price) * position.quantity
+                    pnl = (fill_price - position.entry_price) * close_qty
                 else:
-                    pnl = (position.entry_price - fill_price) * position.quantity
+                    pnl = (position.entry_price - fill_price) * close_qty
                 
                 pnl_usdt = pnl
                 pnl_net, open_fee, close_fee, used_exchange = await self._resolve_net_pnl(
@@ -2121,6 +2199,14 @@ class ScalpingEngine:
                 f"[Scalping:{self.user_id}] Sideways max hold exceeded for {position.symbol} "
                 f"(elapsed: {elapsed}s)"
             )
+
+            close_qty = await self._resolve_close_quantity(position)
+            if close_qty <= 0:
+                logger.warning(
+                    f"[Scalping:{self.user_id}] Sideways close skipped for {position.symbol}: qty<=0"
+                )
+                self.positions.pop(position.symbol, None)
+                return
             
             close_side = "SELL" if position.side == "BUY" else "BUY"
             
@@ -2128,7 +2214,7 @@ class ScalpingEngine:
                 self.client.place_order,
                 symbol=position.symbol,
                 side=close_side,
-                qty=position.quantity,
+                qty=close_qty,
                 order_type='market',
                 reduce_only=True
             )
@@ -2148,9 +2234,9 @@ class ScalpingEngine:
                         fill_price = position.entry_price
 
                 if position.side == "BUY":
-                    pnl = (fill_price - position.entry_price) * position.quantity
+                    pnl = (fill_price - position.entry_price) * close_qty
                 else:
-                    pnl = (position.entry_price - fill_price) * position.quantity
+                    pnl = (position.entry_price - fill_price) * close_qty
 
                 pnl_usdt = pnl
                 pnl_net, open_fee, close_fee, used_exchange = await self._resolve_net_pnl(
@@ -2228,13 +2314,21 @@ class ScalpingEngine:
     async def _close_position_tp(self, position: ScalpingPosition, fill_price: float):
         """Close position when TP hit"""
         try:
+            close_qty = await self._resolve_close_quantity(position)
+            if close_qty <= 0:
+                logger.warning(
+                    f"[Scalping:{self.user_id}] TP close skipped for {position.symbol}: qty<=0"
+                )
+                self.positions.pop(position.symbol, None)
+                return
+
             close_side = "SELL" if position.side == "BUY" else "BUY"
             
             result = await asyncio.to_thread(
                 self.client.place_order,
                 symbol=position.symbol,
                 side=close_side,
-                qty=position.quantity,
+                qty=close_qty,
                 order_type='market',
                 reduce_only=True
             )
@@ -2242,9 +2336,9 @@ class ScalpingEngine:
             if result.get('success'):
                 # Calculate PnL
                 if position.side == "BUY":
-                    pnl = (fill_price - position.entry_price) * position.quantity
+                    pnl = (fill_price - position.entry_price) * close_qty
                 else:
-                    pnl = (position.entry_price - fill_price) * position.quantity
+                    pnl = (position.entry_price - fill_price) * close_qty
                 
                 pnl_usdt = pnl
                 
@@ -2297,13 +2391,21 @@ class ScalpingEngine:
     async def _close_position_sl(self, position: ScalpingPosition, fill_price: float):
         """Close position when SL hit"""
         try:
+            close_qty = await self._resolve_close_quantity(position)
+            if close_qty <= 0:
+                logger.warning(
+                    f"[Scalping:{self.user_id}] SL close skipped for {position.symbol}: qty<=0"
+                )
+                self.positions.pop(position.symbol, None)
+                return
+
             close_side = "SELL" if position.side == "BUY" else "BUY"
             
             result = await asyncio.to_thread(
                 self.client.place_order,
                 symbol=position.symbol,
                 side=close_side,
-                qty=position.quantity,
+                qty=close_qty,
                 order_type='market',
                 reduce_only=True
             )
@@ -2311,9 +2413,9 @@ class ScalpingEngine:
             if result.get('success'):
                 # Calculate PnL
                 if position.side == "BUY":
-                    pnl = (fill_price - position.entry_price) * position.quantity
+                    pnl = (fill_price - position.entry_price) * close_qty
                 else:
-                    pnl = (position.entry_price - fill_price) * position.quantity
+                    pnl = (position.entry_price - fill_price) * close_qty
                 
                 pnl_usdt = pnl
                 
@@ -2390,6 +2492,8 @@ class ScalpingEngine:
                 "entry_price": position.entry_price,
                 "qty": position.quantity,
                 "quantity": position.quantity,
+                "original_quantity": position.quantity,
+                "remaining_quantity": position.quantity,
                 "leverage": position.leverage,
                 "tp_price": position.tp_price,
                 "sl_price": position.sl_price,
@@ -2443,20 +2547,27 @@ class ScalpingEngine:
         """
         try:
             s = _client()
-            open_rows = s.table("autotrade_trades").select("id").eq(
+            open_rows = s.table("autotrade_trades").select("*").eq(
                 "telegram_id", self.user_id
             ).eq("symbol", position.symbol).eq("status", "open").order("opened_at", desc=True).limit(1).execute()
             if not open_rows.data:
                 logger.info(f"[Scalping:{self.user_id}] No open DB row to close for {position.symbol} (already closed)")
                 return False
 
-            trade_id = open_rows.data[0]["id"]
+            open_row = dict(open_rows.data[0])
+            trade_id = open_row["id"]
+            partial_realized = self._sum_partial_realized(open_row)
+            final_leg_pnl = float(pnl)
+            cumulative_pnl = float(final_leg_pnl + partial_realized)
             update_payload: Dict[str, Any] = {
                 "close_price": close_price,
                 "exit_price": close_price,
-                "pnl_usdt": pnl,
+                "pnl_usdt": cumulative_pnl,
                 "close_reason": close_reason,
                 "status": close_reason,
+                "qty": 0.0,
+                "quantity": 0.0,
+                "remaining_quantity": 0.0,
                 "closed_at": datetime.utcnow().isoformat(),
             }
             if loss_reasoning:
@@ -2475,7 +2586,7 @@ class ScalpingEngine:
                     update_payload["win_reasoning"] = str(win_metadata.get("win_reasoning"))
 
             is_win_close = (
-                float(pnl) > 0
+                float(cumulative_pnl) > 0
                 and close_reason in {"closed_tp", "closed_tp3", "closed_flip"}
             )
             if is_win_close and not update_payload.get("win_reasoning"):
@@ -2488,7 +2599,7 @@ class ScalpingEngine:
                     "side": "LONG" if position.side == "BUY" else "SHORT",
                     "entry_price": position.entry_price,
                     "exit_price": close_price,
-                    "pnl_usdt": pnl,
+                    "pnl_usdt": cumulative_pnl,
                     "close_reason": close_reason,
                     "entry_reasons": entry_reasons,
                     "confidence": 0,
@@ -2505,6 +2616,28 @@ class ScalpingEngine:
                 )
                 update_payload["effective_risk_pct"] = float(getattr(position, "effective_risk_pct", 0.0) or 0.0)
                 update_payload["risk_overlay_pct"] = float(getattr(position, "risk_overlay_pct", 0.0) or 0.0)
+            elif float(cumulative_pnl) > 0 and not update_payload.get("win_reasoning"):
+                # Non-TP closes can still end positive after partial TP realization.
+                from app.trade_history import build_win_reasoning
+                entry_reasons = list(getattr(position, "entry_reasons", []) or [])
+                trade_ctx = {
+                    "symbol": position.symbol,
+                    "side": "LONG" if position.side == "BUY" else "SHORT",
+                    "entry_price": position.entry_price,
+                    "exit_price": close_price,
+                    "pnl_usdt": cumulative_pnl,
+                    "close_reason": close_reason,
+                    "entry_reasons": entry_reasons,
+                    "confidence": 0,
+                    "rr_ratio": 0,
+                }
+                update_payload["win_reasoning"] = build_win_reasoning(trade_ctx)
+
+            if partial_realized > 0:
+                logger.info(
+                    f"[Scalping:{self.user_id}] cumulative_pnl applied for {position.symbol}: "
+                    f"partial={partial_realized:+.6f} final_leg={final_leg_pnl:+.6f} total={cumulative_pnl:+.6f}"
+                )
 
             res = s.table("autotrade_trades").update(update_payload).eq("id", trade_id).eq("status", "open").execute()
             if not getattr(res, "data", None):
@@ -2603,6 +2736,9 @@ class ScalpingEngine:
         """
         try:
             risk_amount = abs(position.entry_price - levels.sl) * position.quantity
+            runner_active = float(getattr(levels, "qty_tp3", 0.0) or 0.0) > 0 and abs(
+                float(getattr(levels, "tp3", 0.0) or 0.0) - float(getattr(levels, "tp1", 0.0) or 0.0)
+            ) > 1e-9
             acc_result = await asyncio.to_thread(self.client.get_account_info)
             current_equity = 0.0
             if acc_result.get("success"):
@@ -2614,6 +2750,16 @@ class ScalpingEngine:
             direction = "Long" if position.side.upper() in ("BUY", "LONG") else "Short"
             opened_at = datetime.utcnow().strftime("%d %b %Y %H:%M:%S UTC")
             order_id_text = escape(str(order_id or "-"))
+            tp_block = (
+                (
+                    f"<b>TP1 (Partial):</b> {_fmt_price(levels.tp1)}\n"
+                    f"<b>Runner TP (TP3):</b> {_fmt_price(levels.tp3)}\n"
+                    f"<b>Split:</b> {float(levels.qty_tp1 / position.quantity * 100) if position.quantity > 0 else 0:.0f}% / "
+                    f"{float(levels.qty_tp3 / position.quantity * 100) if position.quantity > 0 else 0:.0f}%\n"
+                )
+                if runner_active else
+                f"<b>TP:</b> {_fmt_price(levels.tp1)}\n"
+            )
 
             await self.bot.send_message(
                 chat_id=self.notify_chat_id,
@@ -2622,9 +2768,9 @@ class ScalpingEngine:
                     f"<b>Direction:</b> {direction}\n"
                     f"<b>Trading Pair:</b> {position.symbol}\n"
                     f"<b>Entry:</b> {_fmt_price(position.entry_price)}\n"
-                    f"<b>TP:</b> {_fmt_price(levels.tp1)}\n"
-                    f"<b>SL:</b> {_fmt_price(levels.sl)}\n"
-                    f"<b>Risk PNL:</b> ${risk_amount:.2f}\n"
+                    + tp_block
+                    + f"<b>SL:</b> {_fmt_price(levels.sl)}\n"
+                    + f"<b>Risk PNL:</b> ${risk_amount:.2f}\n"
                     + (
                         f"<b>Risk % on equity:</b> {risk_pct_equity:.2f}%\n"
                         if risk_pct_equity is not None else

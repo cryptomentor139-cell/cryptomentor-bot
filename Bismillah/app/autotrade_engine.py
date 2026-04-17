@@ -2848,6 +2848,12 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
             direction = "Long" if side.upper() in ("LONG", "BUY") else "Short"
             opened_at = datetime.utcnow().strftime("%d %b %Y %H:%M:%S UTC")
             order_id_text = escape(str(order_id or "-"))
+            runner_active = float(qty_tp3 or 0) > 0 and abs(float(tp3 or 0) - float(tp1 or 0)) > 1e-9
+            tp_block = (
+                f"<b>TP1 (Partial):</b> {_fmt_price(tp1)}\n"
+                f"<b>Runner TP (TP3):</b> {_fmt_price(tp3)}\n"
+                f"<b>Split:</b> {((qty_tp1 / qty) * 100) if qty > 0 else 0:.0f}% / {((qty_tp3 / qty) * 100) if qty > 0 else 0:.0f}%\n"
+            ) if runner_active else f"<b>TP:</b> {_fmt_price(tp1)}\n"
 
             await bot.send_message(
                 chat_id=notify_chat_id,
@@ -2856,9 +2862,9 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                     f"<b>Direction:</b> {direction}\n"
                     f"<b>Trading Pair:</b> {symbol}\n"
                     f"<b>Entry:</b> {_fmt_price(entry)}\n"
-                    f"<b>TP:</b> {_fmt_price(tp1)}\n"
-                    f"<b>SL:</b> {_fmt_price(sl)}\n"
-                    f"<b>Risk PNL:</b> ${risk_amount:.2f}\n"
+                    + tp_block
+                    + f"<b>SL:</b> {_fmt_price(sl)}\n"
+                    + f"<b>Risk PNL:</b> ${risk_amount:.2f}\n"
                     + (
                         f"<b>Risk % on equity:</b> {risk_pct_equity:.2f}%\n"
                         if risk_pct_equity is not None else

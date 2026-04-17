@@ -14,6 +14,16 @@ def _db():
     return _client()
 
 
+def _partial_realized_pnl(trade_row: Dict[str, Any]) -> float:
+    total = 0.0
+    for key in ("profit_tp1", "profit_tp2", "profit_tp3"):
+        try:
+            total += float(trade_row.get(key) or 0.0)
+        except Exception:
+            continue
+    return float(total)
+
+
 # ─────────────────────────────────────────────
 #  WRITE: Simpan trade baru saat order masuk
 # ─────────────────────────────────────────────
@@ -112,11 +122,17 @@ def save_trade_close(
     try:
         res_open = _db().table("autotrade_trades").select("*").eq("id", trade_id).limit(1).execute()
         trade_row = (res_open.data or [{}])[0] if res_open else {}
+        partial_realized = _partial_realized_pnl(trade_row)
+        pnl_is_total = bool((win_metadata or {}).get("pnl_is_total", False))
+        final_leg_pnl = float(pnl_usdt)
+        cumulative_pnl = float(final_leg_pnl if pnl_is_total else (final_leg_pnl + partial_realized))
+
         update = {
             "exit_price":     float(exit_price),
-            "pnl_usdt":       float(pnl_usdt),
+            "pnl_usdt":       float(cumulative_pnl),
             "close_reason":   close_reason,
             "status":         close_reason,
+            "remaining_quantity": 0.0,
             "closed_at":      datetime.utcnow().isoformat(),
         }
         if loss_reasoning:
@@ -135,14 +151,14 @@ def save_trade_close(
                 update["win_reasoning"] = str(win_metadata.get("win_reasoning"))
 
         is_win_close = (
-            float(pnl_usdt) > 0
+            float(cumulative_pnl) > 0
             and str(close_reason).startswith("closed_tp")
-        ) or (str(close_reason) == "closed_flip" and float(pnl_usdt) > 0)
+        ) or (str(close_reason) == "closed_flip" and float(cumulative_pnl) > 0)
         if is_win_close and not update.get("win_reasoning"):
             merged_trade = dict(trade_row or {})
             merged_trade.update({
                 "exit_price": float(exit_price),
-                "pnl_usdt": float(pnl_usdt),
+                "pnl_usdt": float(cumulative_pnl),
                 "close_reason": close_reason,
             })
             matched_tags = []
@@ -156,8 +172,14 @@ def save_trade_close(
             if matched_tags:
                 update["win_reason_tags"] = matched_tags
 
+        if partial_realized > 0 and not pnl_is_total:
+            logger.info(
+                f"[TradeHistory] cumulative_pnl applied trade #{trade_id}: "
+                f"partial={partial_realized:+.6f} final_leg={final_leg_pnl:+.6f} total={cumulative_pnl:+.6f}"
+            )
+
         _db().table("autotrade_trades").update(update).eq("id", trade_id).execute()
-        logger.info(f"[TradeHistory] Closed trade #{trade_id} — {close_reason} PnL={pnl_usdt:.4f}")
+        logger.info(f"[TradeHistory] Closed trade #{trade_id} — {close_reason} PnL={cumulative_pnl:.4f}")
     except Exception as e:
         logger.error(f"[TradeHistory] Failed to close trade #{trade_id}: {e}")
 

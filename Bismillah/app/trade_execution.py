@@ -19,7 +19,7 @@ This module owns the canonical entry pipeline:
     1. Compute StackMentor TP/SL tiers and qty splits
     2. Validate prices against current mark price
     3. Set leverage
-    4. Place atomic order WITH TP1 + SL on the exchange
+    4. Place atomic order WITH exchange TP + SL (TP1 in unified mode, TP3 in runner mode)
     5. Register the position in the StackMentor in-memory registry
 
 Both engines call `open_managed_position(...)` so behavior cannot drift.
@@ -35,6 +35,7 @@ from typing import Dict, Optional, Tuple
 from app.stackmentor import (
     calculate_stackmentor_levels,
     calculate_qty_splits,
+    get_exchange_tp_price,
     register_stackmentor_position,
 )
 
@@ -317,7 +318,8 @@ async def open_managed_position(
       1. Compute TP1/TP2/TP3 + qty splits (or honor explicit TP when provided)
       2. Get mark price → validate SL/TP, possibly adjust SL
       3. Set leverage on the symbol
-      4. Atomic `place_order_with_tpsl` (TP1 + SL attached at entry)
+      4. Atomic `place_order_with_tpsl` (TP + SL attached at entry:
+         TP1 in unified mode, TP3 when runner is enabled)
       5. Register the position in the StackMentor monitoring registry
 
     Returns an `ExecutionResult`. Callers are responsible for user-facing
@@ -397,15 +399,16 @@ async def open_managed_position(
                 user_id, symbol, e,
             )
 
-    # 4. Atomic entry: place order WITH TP1 + SL on the exchange ───────────────
+    # 4. Atomic entry: place order WITH exchange TP + SL ────────────────────────
     order_side = "BUY" if side == "LONG" else "SELL"
+    exchange_tp = float(get_exchange_tp_price(levels.tp1, levels.tp3))
     try:
         order_result = await asyncio.to_thread(
             client.place_order_with_tpsl,
             symbol,
             order_side,
             quantity,
-            levels.tp1,
+            exchange_tp,
             levels.sl,
         )
     except Exception as e:
@@ -440,8 +443,8 @@ async def open_managed_position(
 
     order_id = order_result.get("order_id", "-")
     logger.info(
-        "[trade_execution:%s] %s %s opened qty=%.6f tp1=%.6f sl=%.6f order=%s",
-        user_id, symbol, side, quantity, levels.tp1, levels.sl, order_id,
+        "[trade_execution:%s] %s %s opened qty=%.6f tp_entry=%.6f tp1=%.6f tp3=%.6f sl=%.6f order=%s",
+        user_id, symbol, side, quantity, exchange_tp, levels.tp1, levels.tp3, levels.sl, order_id,
     )
 
     # 4b. Self-healing reconciliation ──────────────────────────────────────────
@@ -459,7 +462,7 @@ async def open_managed_position(
                 symbol=symbol,
                 side=side,
                 expected_qty=quantity,
-                expected_tp=levels.tp1,
+                expected_tp=exchange_tp,
                 expected_sl=levels.sl,
             )
             # Retrieve the update of the quantity after the position check
