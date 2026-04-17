@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.31] — 2026-04-17 — API Key DB Population + Hardcode Removal
+
+### 🔐 Bitunix Key Source Normalization
+- Populated `user_api_keys` for Telegram user `8263889133` (`exchange=bitunix`) via encrypted save path.
+- Removed temporary UID-scoped hardcoded API-key override from:
+  - `Bismillah/app/handlers_autotrade.py`
+  - `website-backend/app/services/bitunix.py`
+- Runtime now resolves this user’s Bitunix key strictly from `user_api_keys` table again.
+
+### ✅ Validation
+- DB verification:
+  - `user_api_keys` row exists for `telegram_id=8263889133`, `exchange=bitunix`, with non-empty `api_secret_enc`.
+- Compile/syntax pass:
+  - `python -m py_compile Bismillah/app/handlers_autotrade.py website-backend/app/services/bitunix.py`
+
 ## [2.2.30] — 2026-04-17 — Web API Concurrency Hotfix (504 Login/Gatekeeper)
 
 ### 🚀 Service Runtime Capacity Patch

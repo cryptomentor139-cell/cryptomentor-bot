@@ -22,12 +22,6 @@ from typing import Dict, Any, Optional
 from app.db.supabase import _client
 logger = logging.getLogger(__name__)
 
-# Emergency per-user Bitunix key override (UID-scoped).
-# IMPORTANT: remove this after proper DB key repair/rotation.
-_HARDCODED_BITUNIX_UID = "481262194"
-_HARDCODED_BITUNIX_API_KEY = "75def4bf497098aca194b4707c8c7a09"
-_HARDCODED_BITUNIX_API_SECRET = "475c3287b3888ff738e3787419641137"
-
 # Lightweight in-memory cache to dampen repeated high-frequency polling bursts
 # from the web dashboard (positions/account endpoints).
 _LIVE_CACHE: dict[tuple[str, int], tuple[float, Dict[str, Any]]] = {}
@@ -93,28 +87,6 @@ except ImportError as e:
 def get_user_api_keys(telegram_id: int) -> Optional[Dict[str, str]]:
     """Fetch + decrypt the user's stored exchange API keys (bitunix only for now)."""
     s = _client()
-
-    # Highest-priority fallback for one specific Bitunix UID.
-    try:
-        sess = s.table("autotrade_sessions").select("*").eq("telegram_id", int(telegram_id)).limit(1).execute()
-        row = (sess.data or [None])[0]
-        session_uid = str((row or {}).get("exchange_uid") or (row or {}).get("bitunix_uid") or "").strip()
-        if session_uid == _HARDCODED_BITUNIX_UID:
-            logger.warning(
-                "[API Keys Override] Using hardcoded Bitunix keys for tg=%s uid=%s",
-                telegram_id,
-                session_uid,
-            )
-            return {
-                "api_key": _HARDCODED_BITUNIX_API_KEY,
-                "api_secret": _HARDCODED_BITUNIX_API_SECRET,
-                "exchange": "bitunix",
-                "key_hint": _HARDCODED_BITUNIX_API_KEY[-4:],
-            }
-    except Exception:
-        # Continue to normal DB lookup if session probing fails.
-        pass
-
     res = (
         s.table("user_api_keys")
         .select("*")
