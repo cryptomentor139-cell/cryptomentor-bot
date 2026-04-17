@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.2.30] — 2026-04-17 — Web API Concurrency Hotfix (504 Login/Gatekeeper)
+
+### 🚀 Service Runtime Capacity Patch
+- Updated website backend systemd unit template `website-backend/cryptomentor-web.service`:
+  - switched uvicorn from single process to multi-worker:
+    - `--workers 4`
+    - `--timeout-keep-alive 10`
+- Purpose:
+  - reduce request queue starvation during high-frequency dashboard polling,
+  - keep lightweight auth and gatekeeper endpoints (`/auth/telegram`, `/user/verification-status`) responsive under load.
+
+### ✅ Validation
+- Service status check target after deploy:
+  - `systemctl is-active cryptomentor-web`
+  - `systemctl show cryptomentor-web -p MainPID -p ActiveState -p SubState`
+  - process list includes uvicorn master + 4 workers.
+
 ## [2.2.29] — 2026-04-17 — Website API Timeout Mitigation (Login/Gatekeeper Stability)
 
 ### ⚡ Backend Stability Hotfix
