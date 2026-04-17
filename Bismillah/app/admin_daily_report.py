@@ -109,7 +109,7 @@ async def send_daily_report(bot):
         ).gte("opened_at", since_24h).execute()
         trades_today = trades_res.data or []
 
-        closed_trades = [t for t in trades_today if t.get("status", "").startswith("closed")]
+        closed_trades = [t for t in trades_today if str(t.get("status") or "").lower() != "open"]
         open_trades = [t for t in trades_today if t.get("status") == "open"]
 
         total_pnl = sum(float(t.get("pnl_usdt") or 0) for t in closed_trades)

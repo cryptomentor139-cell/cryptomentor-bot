@@ -53,6 +53,21 @@ def test_classification_ops_reconcile_detected_from_reasoning():
     assert classify_outcome_class(row) == "ops_reconcile"
 
 
+def test_classification_ops_reconcile_detected_from_status():
+    row = _mk_trade(status="stale_reconcile", pnl=0.0, close_reason="stale_reconcile")
+    assert classify_outcome_class(row) == "ops_reconcile"
+
+
+def test_classification_zero_pnl_reconcile_not_strategy_win():
+    row = _mk_trade(
+        status="closed_tp",
+        pnl=0.0,
+        close_reason="closed_tp",
+        loss_reasoning="Reconciled from exchange — position no longer open; reason=stale_reconcile; near_flat=1",
+    )
+    assert classify_outcome_class(row) == "ops_reconcile"
+
+
 def test_build_metrics_counts_weak_confluence_shares():
     now = datetime.now(timezone.utc)
     trades = [

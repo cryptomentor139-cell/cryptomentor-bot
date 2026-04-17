@@ -72,6 +72,9 @@ def save_trade_open(
             "is_flip":          is_flip,
             "order_id":         order_id,
             "opened_at":        datetime.utcnow().isoformat(),
+            "playbook_match_score": 0.0,
+            "effective_risk_pct": 0.0,
+            "risk_overlay_pct": 0.0,
             # StackMentor fields
             "strategy":         strategy,
         }
@@ -126,6 +129,18 @@ def save_trade_close(
         pnl_is_total = bool((win_metadata or {}).get("pnl_is_total", False))
         final_leg_pnl = float(pnl_usdt)
         cumulative_pnl = float(final_leg_pnl if pnl_is_total else (final_leg_pnl + partial_realized))
+        try:
+            base_playbook = float(trade_row.get("playbook_match_score") or 0.0)
+        except Exception:
+            base_playbook = 0.0
+        try:
+            base_effective = float(trade_row.get("effective_risk_pct") or 0.0)
+        except Exception:
+            base_effective = 0.0
+        try:
+            base_overlay = float(trade_row.get("risk_overlay_pct") or 0.0)
+        except Exception:
+            base_overlay = 0.0
 
         update = {
             "exit_price":     float(exit_price),
@@ -134,9 +149,16 @@ def save_trade_close(
             "status":         close_reason,
             "remaining_quantity": 0.0,
             "closed_at":      datetime.utcnow().isoformat(),
+            "playbook_match_score": base_playbook,
+            "effective_risk_pct": base_effective,
+            "risk_overlay_pct": base_overlay,
         }
         if loss_reasoning:
             update["loss_reasoning"] = loss_reasoning
+        elif float(cumulative_pnl) < 0 and not str(update.get("loss_reasoning") or "").strip():
+            update["loss_reasoning"] = (
+                f"auto_loss_reason: close_reason={close_reason}; pnl={float(cumulative_pnl):+.6f}"
+            )
         if win_metadata:
             if win_metadata.get("playbook_match_score") is not None:
                 update["playbook_match_score"] = float(win_metadata.get("playbook_match_score"))
@@ -150,11 +172,7 @@ def save_trade_close(
             if win_metadata.get("win_reasoning"):
                 update["win_reasoning"] = str(win_metadata.get("win_reasoning"))
 
-        is_win_close = (
-            float(cumulative_pnl) > 0
-            and str(close_reason).startswith("closed_tp")
-        ) or (str(close_reason) == "closed_flip" and float(cumulative_pnl) > 0)
-        if is_win_close and not update.get("win_reasoning"):
+        if float(cumulative_pnl) > 0 and not update.get("win_reasoning"):
             merged_trade = dict(trade_row or {})
             merged_trade.update({
                 "exit_price": float(exit_price),
@@ -332,7 +350,7 @@ def reconcile_open_trades_with_exchange(
             else:
                 pnl = (entry - exit_price) * qty
 
-            # Infer close reason. Prefer StackMentor tp-hit flags if any.
+            # Infer close reason. Use stale_reconcile unless TP evidence exists.
             tp1_hit = bool(trade.get("tp1_hit"))
             tp2_hit = bool(trade.get("tp2_hit"))
             tp3_hit = bool(trade.get("tp3_hit"))
@@ -342,25 +360,29 @@ def reconcile_open_trades_with_exchange(
                 reason = "closed_tp2"
             elif tp1_hit:
                 reason = "closed_tp1"
-            elif pnl >= 0:
-                reason = "closed_tp"
             else:
-                reason = "closed_sl"
+                reason = "stale_reconcile"
+
+            near_flat_thr = 0.02
+            near_flat = abs(float(pnl)) <= near_flat_thr
+            if reason == "stale_reconcile" and near_flat:
+                pnl = 0.0
+            reconcile_reasoning = (
+                f"Reconciled from exchange — position no longer open; "
+                f"reason={reason}; near_flat={1 if near_flat else 0}"
+            )
 
             save_trade_close(
                 trade_id=trade["id"],
                 exit_price=exit_price,
                 pnl_usdt=pnl,
                 close_reason=reason,
-                loss_reasoning=(
-                    "Reconciled from exchange — position no longer open"
-                    if pnl < 0 else ""
-                ),
+                loss_reasoning=reconcile_reasoning,
             )
             healed += 1
             logger.warning(
                 f"[Reconcile:{telegram_id}] Healed orphan {symbol} #{trade['id']} "
-                f"as {reason} pnl={pnl_with_lev:.4f}"
+                f"as {reason} pnl={pnl:.4f}"
             )
 
         # Also clear stale entries from the in-memory StackMentor registry

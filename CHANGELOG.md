@@ -1,5 +1,58 @@
 # Changelog
 
+## [2.2.21] — 2026-04-17 — Adaptive Exit + Sideways Recovery (Balanced Fast Rollout)
+
+### 🎯 Trading Engine Runtime Upgrades
+- Added runtime adaptive sideways governor (`normal|strict|pause`) with 10-minute refresh cadence:
+  - `Bismillah/app/sideways_governor.py`
+  - strict trigger: sample >= 20 and (`expectancy < 0` or `timeout_loss_rate >= 55%`)
+  - pause trigger: sample >= 30 and (`expectancy < -0.005` and `timeout_loss_rate >= 65%`)
+  - strict mode actions:
+    - disables sideways fallback entries
+    - raises sideways quality floors (`RR >= 1.25`, `volume >= 1.1x`, `+3` confidence)
+    - requires 2 confirmation streak for sideways entries
+  - pause mode blocks sideways entries for 60 minutes
+  - recovery requires 2 consecutive healthy windows (`expectancy >= 0`, `timeout_loss_rate <= 45%`)
+- Wired governor into scalping runtime:
+  - `Bismillah/app/scalping_engine.py`
+  - pre-scan expired-position processing runs before new signal scan
+  - dynamic max-hold windows now adaptive by subtype/symbol performance:
+    - sideways: 90–150s
+    - non-sideways: 1200–2400s
+  - hourly KPI logs added for:
+    - sideways expectancy (24h)
+    - sideways timeout-loss rate (24h)
+    - governor mode + sample size
+
+### 🧹 Learning Data Hygiene
+- Hardened close persistence defaults:
+  - `Bismillah/app/trade_history.py`
+  - always writes fallback metadata defaults on close path:
+    - `playbook_match_score`
+    - `effective_risk_pct`
+    - `risk_overlay_pct`
+  - enforces non-empty fallback reasoning:
+    - negative close -> `loss_reasoning` fallback
+    - positive close -> `win_reasoning` fallback builder
+- Reconcile close classification hardened:
+  - orphan exchange-reconciled closes without TP evidence now persisted as `stale_reconcile`
+  - near-flat stale reconcile closes normalized to neutral PnL (0.0), avoiding false strategy-win learning
+
+### 📊 Observability + Reporting
+- Daily report headline closed-trade count now includes timeout exits (all non-open statuses):
+  - `Bismillah/app/admin_daily_report.py`
+- Added tests:
+  - `tests/test_sideways_governor.py` (mode transitions + hold resolution + KPI metrics)
+  - `tests/test_adaptive_confluence.py` (ops reconcile classification coverage for new `stale_reconcile` flow)
+
+### ✅ Validation
+- Targeted compile pass succeeded for touched modules.
+- Targeted tests passed:
+  - `tests/test_sideways_governor.py`
+  - `tests/test_adaptive_confluence.py`
+  - `tests/test_win_playbook.py`
+  - `tests/test_trade_history_win_reasoning.py`
+
 ## [2.2.20] — 2026-04-17 — Onboarding Slide-1 Social Proof Panel (Alignment Fix)
 
 ### 🎨 Intro Deck UI Patch (Production-Facing)
