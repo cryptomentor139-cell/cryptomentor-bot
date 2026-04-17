@@ -3222,6 +3222,24 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 await asyncio.sleep(cfg["scan_interval"])
                 continue
 
+            # Final stale guard with fully computed levels (post sizing/StackMentor path).
+            if not _signal_prices_pass_live_mark(
+                symbol=symbol,
+                side=side,
+                entry_price=float(entry),
+                tp1_price=float(tp1),
+                sl_price=float(sl),
+            ):
+                expiry_ts = _mark_stale_price_cooldown(user_id, symbol)
+                cooldown_sec = max(1, int(round(expiry_ts - time.time())))
+                logger.info(
+                    f"[Engine:{user_id}] Final pre-open stale reject: {symbol} "
+                    f"(cooldown={cooldown_sec}s)"
+                )
+                _cleanup_signal_queue(user_id, symbol, success=False)
+                await asyncio.sleep(cfg["scan_interval"])
+                continue
+
             # Mark pending (order about to be submitted)
             await coordinator_set_pending(coordinator, user_id, symbol, StrategyOwner.SWING)
             pending_marked = True

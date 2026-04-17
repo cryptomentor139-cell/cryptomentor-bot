@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.2.43] — 2026-04-18 — Swing Final Pre-Open Stale Gate (Post-StackMentor)
+
+### 🎯 Final Execution-Race Guard
+- Added a final stale validation gate in `Bismillah/app/autotrade_engine.py` immediately before pending/open calls.
+- This gate runs after queue selection and after final TP/SL shaping (including StackMentor path), then:
+  - rejects stale levels before order submission,
+  - applies existing 120s stale cooldown,
+  - removes queued item and continues scanning.
+
+### ✅ Policy Preserved
+- No TP/SL mutation.
+- No forced entry.
+- Unified `open_managed_position(...)` strict validation remains unchanged as final guard.
+
+### 🧪 Regression Coverage
+- Updated `tests/test_swing_scalp_parity.py` with source-level guard check for final pre-open stale reject hook.
+
+### ✅ Validation
+- `python -m py_compile Bismillah/app/autotrade_engine.py tests/test_swing_scalp_parity.py`
+- `pytest tests/test_engine_shared_core.py tests/test_swing_scalp_parity.py -q`
+  - Result: `29 passed`.
+
 ## [2.2.42] — 2026-04-18 — Swing Pre-Execution Stale Guard (Queue Path)
 
 ### 🎯 Additional Stale Protection

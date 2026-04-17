@@ -239,6 +239,11 @@ def test_swing_queue_pre_exec_stale_guard_present():
     assert "Queue pre-exec stale reject" in source
 
 
+def test_swing_final_pre_open_stale_guard_present():
+    source = Path(_ROOT, "Bismillah", "app", "autotrade_engine.py").read_text(encoding="utf-8")
+    assert "Final pre-open stale reject" in source
+
+
 def test_swing_queue_status_mentions_volume_priority():
     source = Path(_ROOT, "Bismillah", "app", "autotrade_engine.py").read_text(encoding="utf-8")
     assert "Higher volume priority signals execute first (confidence breaks ties)" in source
