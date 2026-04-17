@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.2.27] — 2026-04-17 — Website Telegram Login 500 Guardrails
+
+### 🔐 Website Auth Stability Patch
+- Fixed login upsert timestamp serialization in `website-backend/app/db/supabase.py`:
+  - replaced `updated_at: "now()"` with UTC ISO timestamp to avoid invalid timestamp payloads during user updates.
+- Hardened referral-column compatibility for mixed schemas:
+  - `upsert_web_login(...)` now retries without `referred_by_code` when Supabase reports unknown-column/schema-cache errors,
+  - insert path now includes `referred_by_code` only when a value is present, with safe fallback retry.
+- Added defensive error handling in `website-backend/app/routes/auth.py`:
+  - wraps login user upsert in `try/except`,
+  - logs backend exception and returns controlled `503 Login service temporarily unavailable` instead of unhandled `500`.
+
+### ✅ Validation
+- Compile/syntax pass:
+  - `python -m py_compile website-backend/app/db/supabase.py website-backend/app/routes/auth.py`
+
 ## [2.2.26] — 2026-04-17 — Intro Deck Mobile Dynamic Viewport Optimization
 
 ### 📱 Frontend Mobile UX Hardening (Onboarding Deck)
