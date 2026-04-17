@@ -9,9 +9,9 @@ if _BISMILLAH not in sys.path:
     sys.path.insert(0, _BISMILLAH)
 
 try:
-    from Bismillah.app.trade_history import build_win_reasoning
+    from Bismillah.app.trade_history import build_win_reasoning, _should_enforce_win_reasoning
 except ImportError:
-    from app.trade_history import build_win_reasoning  # type: ignore
+    from app.trade_history import build_win_reasoning, _should_enforce_win_reasoning  # type: ignore
 
 
 def test_build_win_reasoning_includes_playbook_and_alignment():
@@ -37,3 +37,11 @@ def test_build_win_reasoning_includes_playbook_and_alignment():
     assert "Playbook tags matched" in txt
     assert "Alignment factors" in txt
     assert "Realized positive expectancy" in txt
+
+
+def test_should_enforce_win_reasoning_status_policy():
+    assert _should_enforce_win_reasoning("closed_tp", -0.20) is True
+    assert _should_enforce_win_reasoning("closed_tp3", -1.00) is True
+    assert _should_enforce_win_reasoning("closed_sl", 0.50) is True
+    assert _should_enforce_win_reasoning("closed_flip", 0.01) is True
+    assert _should_enforce_win_reasoning("closed_flip", -0.01) is False

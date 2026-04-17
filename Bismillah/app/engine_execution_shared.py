@@ -45,6 +45,17 @@ def _get_signal_field(signal: Any, key: str, default: Any = None) -> Any:
     return getattr(signal, key, default)
 
 
+def _should_enforce_win_reasoning(close_reason: str, cumulative_pnl: float) -> bool:
+    if float(cumulative_pnl) > 0:
+        return True
+    reason = str(close_reason or "").strip().lower()
+    if reason in {"closed_tp", "closed_tp3"}:
+        return True
+    if reason == "closed_flip" and float(cumulative_pnl) > 0:
+        return True
+    return False
+
+
 async def evaluate_and_apply_playbook_risk(
     *,
     signal: Any,
@@ -240,9 +251,11 @@ def build_cumulative_close_update_payload(
         "risk_overlay_pct": base_overlay,
     }
 
+    should_enforce_win_reasoning = _should_enforce_win_reasoning(str(close_reason), cumulative_pnl)
+
     if loss_reasoning:
         payload["loss_reasoning"] = str(loss_reasoning)
-    elif cumulative_pnl < 0:
+    elif cumulative_pnl < 0 and not should_enforce_win_reasoning:
         payload["loss_reasoning"] = (
             f"auto_loss_reason: close_reason={close_reason}; pnl={cumulative_pnl:+.6f}"
         )
@@ -259,8 +272,7 @@ def build_cumulative_close_update_payload(
         if win_metadata.get("win_reasoning"):
             payload["win_reasoning"] = str(win_metadata.get("win_reasoning"))
 
-    is_win_close = cumulative_pnl > 0 and close_reason in {"closed_tp", "closed_tp3", "closed_flip"}
-    if cumulative_pnl > 0 and not payload.get("win_reasoning"):
+    if should_enforce_win_reasoning and not payload.get("win_reasoning"):
         from app.trade_history import build_win_reasoning
 
         entry_reasons = list(
@@ -278,7 +290,7 @@ def build_cumulative_close_update_payload(
             "rr_ratio": _as_float(open_row.get("rr_ratio", 0), 0.0),
         }
 
-        if is_win_close and playbook_snapshot is not None:
+        if playbook_snapshot is not None:
             match_meta = compute_playbook_match_from_reasons(entry_reasons, playbook_snapshot)
             payload["win_reasoning"] = build_win_reasoning(
                 trade_ctx,

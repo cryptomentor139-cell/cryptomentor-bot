@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.2.36] — 2026-04-17 — Win Reasoning Coverage Hotfix (Winning Close Path Policy)
+
+### 🏆 Win Strategy Persistence Fix
+- Hardened winning-close reasoning policy in both shared and legacy close persistence paths:
+  - `Bismillah/app/engine_execution_shared.py`
+  - `Bismillah/app/trade_history.py`
+- Win reasoning is now persisted when either:
+  - cumulative PnL is positive, or
+  - close reason is `closed_tp` / `closed_tp3`, or
+  - close reason is profitable `closed_flip`.
+- Prevented contradictory auto `loss_reasoning` injection on enforced winning close paths (`closed_tp`/`closed_tp3`), even when net PnL is slightly negative from fees.
+
+### 🧪 Regression Coverage
+- Updated `tests/test_engine_shared_core.py`:
+  - added coverage ensuring `closed_tp` paths persist non-empty `win_reasoning` even for slight net-negative exits.
+- Updated `tests/test_trade_history_win_reasoning.py`:
+  - added policy coverage for `_should_enforce_win_reasoning(...)`.
+
+### ✅ Validation
+- Targeted tests:
+  - `pytest -q tests/test_engine_shared_core.py tests/test_trade_history_win_reasoning.py tests/test_swing_scalp_parity.py tests/test_risk_audit.py`
+  - Result: `20 passed`.
+- Full suite:
+  - `pytest -q tests`
+  - Result: `95 passed, 6 skipped`.
+
 ## [2.2.35] — 2026-04-17 — Auto Mode Switcher Hardening (Hysteresis + Cooldown + Manual Override)
 
 ### 🎯 Orchestration Policy

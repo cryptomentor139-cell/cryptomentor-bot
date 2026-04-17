@@ -24,6 +24,17 @@ def _partial_realized_pnl(trade_row: Dict[str, Any]) -> float:
     return float(total)
 
 
+def _should_enforce_win_reasoning(close_reason: str, cumulative_pnl: float) -> bool:
+    if float(cumulative_pnl) > 0:
+        return True
+    reason = str(close_reason or "").strip().lower()
+    if reason in {"closed_tp", "closed_tp3"}:
+        return True
+    if reason == "closed_flip" and float(cumulative_pnl) > 0:
+        return True
+    return False
+
+
 # ─────────────────────────────────────────────
 #  WRITE: Simpan trade baru saat order masuk
 # ─────────────────────────────────────────────
@@ -153,9 +164,15 @@ def save_trade_close(
             "effective_risk_pct": base_effective,
             "risk_overlay_pct": base_overlay,
         }
+        should_enforce_win_reasoning = _should_enforce_win_reasoning(close_reason, cumulative_pnl)
+
         if loss_reasoning:
             update["loss_reasoning"] = loss_reasoning
-        elif float(cumulative_pnl) < 0 and not str(update.get("loss_reasoning") or "").strip():
+        elif (
+            float(cumulative_pnl) < 0
+            and not should_enforce_win_reasoning
+            and not str(update.get("loss_reasoning") or "").strip()
+        ):
             update["loss_reasoning"] = (
                 f"auto_loss_reason: close_reason={close_reason}; pnl={float(cumulative_pnl):+.6f}"
             )
@@ -172,7 +189,7 @@ def save_trade_close(
             if win_metadata.get("win_reasoning"):
                 update["win_reasoning"] = str(win_metadata.get("win_reasoning"))
 
-        if float(cumulative_pnl) > 0 and not update.get("win_reasoning"):
+        if should_enforce_win_reasoning and not update.get("win_reasoning"):
             merged_trade = dict(trade_row or {})
             merged_trade.update({
                 "exit_price": float(exit_price),

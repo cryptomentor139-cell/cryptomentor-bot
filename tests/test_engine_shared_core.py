@@ -198,3 +198,27 @@ def test_build_cumulative_close_update_payload_applies_win_metadata_overrides():
     assert payload["risk_overlay_pct"] == pytest.approx(0.8)
     assert payload["win_reason_tags"] == ["tag_a", "tag_b"]
     assert payload["win_reasoning"] == "manual override winner"
+
+
+def test_build_cumulative_close_update_payload_enforces_win_reasoning_for_closed_tp_even_if_net_negative():
+    open_row = {
+        "symbol": "BTCUSDT",
+        "side": "LONG",
+        "entry_price": 100.0,
+        "entry_reasons": ["tp_breakout", "trend_align"],
+        "confidence": 78.0,
+        "rr_ratio": 1.5,
+    }
+    position = SimpleNamespace(symbol="BTCUSDT", side="BUY", entry_price=100.0, entry_reasons=["tp_breakout"])
+
+    payload, cumulative_pnl, _ = build_cumulative_close_update_payload(
+        open_row=open_row,
+        position=position,
+        close_price=99.95,
+        pnl=-0.05,
+        close_reason="closed_tp",
+    )
+    assert cumulative_pnl == pytest.approx(-0.05)
+    assert payload["close_reason"] == "closed_tp"
+    assert payload.get("win_reasoning"), "closed_tp close paths must persist win_reasoning"
+    assert "loss_reasoning" not in payload
