@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.2.42] — 2026-04-18 — Swing Pre-Execution Stale Guard (Queue Path)
+
+### 🎯 Additional Stale Protection
+- Added a second stale-price guard in swing queue processing (`Bismillah/app/autotrade_engine.py`) right before execution handoff.
+- Behavior:
+  - re-check queued signal levels against live mark proxy,
+  - if already invalid, drop queued signal before execution,
+  - apply existing 120s stale cooldown for that symbol,
+  - continue scanning without sending execution-time stale failure for that queued item.
+
+### ✅ Policy Preserved
+- No TP/SL mutation.
+- No forced entry.
+- `open_managed_position(...)` strict validation remains the final hard gate.
+
+### 🧪 Regression Coverage
+- Updated `tests/test_swing_scalp_parity.py`:
+  - coverage for mark-unavailable pass-through behavior,
+  - source-level guard for queue pre-exec stale rejection hook.
+
+### ✅ Validation
+- `python -m py_compile Bismillah/app/autotrade_engine.py tests/test_engine_shared_core.py tests/test_swing_scalp_parity.py`
+- `pytest tests/test_engine_shared_core.py tests/test_swing_scalp_parity.py -q`
+  - Result: `28 passed`.
+
 ## [2.2.41] — 2026-04-18 — Swing Live-Mark Preflight Gate (Stale Signal Suppression)
 
 ### 🎯 Stale-Signal Suppression

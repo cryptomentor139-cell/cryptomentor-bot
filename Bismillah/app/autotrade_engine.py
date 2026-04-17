@@ -3013,6 +3013,23 @@ async def _trade_loop(bot, user_id: int, api_key: str, api_secret: str,
                 f"(Queue position: #{_signal_queues[user_id].index(sig) + 1}/{len(_signal_queues[user_id])})"
             )
 
+            if not _signal_prices_pass_live_mark(
+                symbol=symbol,
+                side=side,
+                entry_price=float(entry),
+                tp1_price=float(tp1),
+                sl_price=float(sl),
+            ):
+                expiry_ts = _mark_stale_price_cooldown(user_id, symbol)
+                cooldown_sec = max(1, int(round(expiry_ts - time.time())))
+                logger.info(
+                    f"[Engine:{user_id}] Queue pre-exec stale reject: {symbol} "
+                    f"(cooldown={cooldown_sec}s)"
+                )
+                _cleanup_signal_queue(user_id, symbol, success=False)
+                await asyncio.sleep(cfg["scan_interval"])
+                continue
+
             # ── Mark symbol as being processed (prevent concurrent execution) ──
             _signals_being_processed[user_id].add(symbol)
 
