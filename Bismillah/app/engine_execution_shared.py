@@ -254,8 +254,7 @@ def build_cumulative_close_update_payload(
         "pnl_usdt": cumulative_pnl,
         "close_reason": str(close_reason),
         "status": str(close_reason),
-        "qty": 0.0,
-        "quantity": 0.0,
+        # Keep entry sizing fields intact for post-trade risk analytics.
         "remaining_quantity": 0.0,
         "closed_at": datetime.now(timezone.utc).isoformat(),
         "playbook_match_score": base_playbook_score,

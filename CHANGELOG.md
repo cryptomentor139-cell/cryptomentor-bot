@@ -1,5 +1,54 @@
 # Changelog
 
+## [2.2.48] — 2026-04-18 — Swing/Scalping R:R Integrity Stabilization
+
+### 🎯 Close Persistence + Reconcile Accuracy
+- Updated `Bismillah/app/engine_execution_shared.py` close payload:
+  - no longer zeroes `qty` / `quantity` on close updates.
+  - keeps size fields intact for post-trade risk analytics; only `remaining_quantity=0` is enforced.
+- Updated `Bismillah/app/trade_history.py` stale reconcile flow:
+  - reconciliation now attempts `client.get_roundtrip_financials(...)` first for exchange-history close PnL/price.
+  - if exchange close-leg financials are unavailable, fallback is forced to:
+    - `close_reason=stale_reconcile`
+    - `pnl_usdt=0.0`
+    - neutral `exit_price=entry_price`
+  - removes ticker-estimated stale-reconcile PnL guesses to prevent fake large wins/losses.
+
+### ⚡ Scalping Open-Row Completeness
+- Updated `Bismillah/app/scalping_engine.py` `_save_position_to_db(...)`:
+  - persists derived `rr_ratio` from executed `entry/sl/tp`.
+  - enforces non-positive quantity guard (rejects DB insert when quantity <= 0).
+  - keeps `qty`, `quantity`, `original_quantity`, `remaining_quantity` consistent from a single validated quantity source.
+
+### 📊 Daily Read-Only R:R Audit Path
+- Added `get_daily_rr_integrity_audit(...)` in `Bismillah/app/trade_history.py`:
+  - day-windowed per-mode audit (`swing`, `scalping`, `unknown`) with:
+    - opened/closed counts
+    - configured R:R median
+    - realized R-multiple median
+    - close-reason mix
+  - includes runtime snapshot metadata for:
+    - adaptive (`updated_at`, `decision_reason`, deltas)
+    - sideways governor (`mode`, `decision_reason`, `updated_at`)
+    - win playbook (`guardrails_healthy`, `rolling_expectancy`, `risk_overlay_pct`, `updated_at`)
+
+### 🧪 Regression Coverage
+- Extended `tests/test_engine_shared_core.py`:
+  - verifies close payload preserves `qty`/`quantity` fields (not force-zeroed).
+- Added `tests/test_scalping_persistence.py`:
+  - validates scalping open-row `rr_ratio` derivation + quantity consistency.
+  - validates non-positive quantity insert rejection.
+- Added `tests/test_trade_history_reconcile.py`:
+  - validates exchange-history reconcile path.
+  - validates stale fallback policy (`stale_reconcile + pnl_usdt=0.0`) when roundtrip financials are unavailable.
+- Added `tests/test_trade_history_daily_audit.py`:
+  - validates per-mode daily audit metrics.
+  - validates runtime snapshot reason metadata inclusion.
+
+### ✅ Validation
+- `python -m compileall Bismillah/app/engine_execution_shared.py Bismillah/app/scalping_engine.py Bismillah/app/trade_history.py tests/test_engine_shared_core.py tests/test_scalping_persistence.py tests/test_trade_history_reconcile.py tests/test_trade_history_daily_audit.py`
+- `pytest -q tests/test_engine_shared_core.py tests/test_scalping_persistence.py tests/test_trade_history_reconcile.py tests/test_trade_history_daily_audit.py`
+
 ## [2.2.47] — 2026-04-18 — Gatekeeper Verification Drift Fix (Admin + Partner)
 
 ### 🎯 Root Cause + Access Fix

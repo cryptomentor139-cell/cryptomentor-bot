@@ -62,6 +62,24 @@ def _fmt_price(v: float) -> str:
     return s.rstrip("0").rstrip(".")
 
 
+def _derive_rr_ratio(entry_price: float, sl_price: float, tp_price: float, fallback_rr: float = 0.0) -> float:
+    """Derive R:R from executed levels and fallback to signal R:R when invalid."""
+    try:
+        entry = float(entry_price)
+        sl = float(sl_price)
+        tp = float(tp_price)
+        risk = abs(entry - sl)
+        reward = abs(tp - entry)
+        if risk > 0 and reward > 0:
+            return round(reward / risk, 2)
+    except Exception:
+        pass
+    try:
+        return float(fallback_rr)
+    except Exception:
+        return 0.0
+
+
 def _build_trade_url(trade_id: Optional[int] = None, order_id: str = "", symbol: str = "") -> str:
     try:
         parsed = urlsplit(WEB_DASHBOARD_URL)
@@ -2701,19 +2719,36 @@ class ScalpingEngine:
         try:
             from app.trading_mode import MicroScalpSignal as _MicroScalpSignal
             s = _client()
+            try:
+                persist_qty = float(getattr(position, "quantity", 0.0) or 0.0)
+            except Exception:
+                persist_qty = 0.0
+            if persist_qty <= 0:
+                logger.error(
+                    f"[Scalping:{self.user_id}] Refusing DB insert for {position.symbol}: non-positive quantity={persist_qty}"
+                )
+                return None
+            fallback_rr = float(getattr(signal, "rr_ratio", 0.0) or 0.0)
+            rr_ratio = _derive_rr_ratio(
+                entry_price=float(position.entry_price),
+                sl_price=float(position.sl_price),
+                tp_price=float(position.tp_price),
+                fallback_rr=fallback_rr,
+            )
 
             row = {
                 "telegram_id": self.user_id,
                 "symbol": position.symbol,
                 "side": position.side,
                 "entry_price": position.entry_price,
-                "qty": position.quantity,
-                "quantity": position.quantity,
-                "original_quantity": position.quantity,
-                "remaining_quantity": position.quantity,
+                "qty": persist_qty,
+                "quantity": persist_qty,
+                "original_quantity": persist_qty,
+                "remaining_quantity": persist_qty,
                 "leverage": position.leverage,
                 "tp_price": position.tp_price,
                 "sl_price": position.sl_price,
+                "rr_ratio": rr_ratio,
                 "trade_type": "scalping",
                 "timeframe": "5m",
                 "confidence": signal.confidence,

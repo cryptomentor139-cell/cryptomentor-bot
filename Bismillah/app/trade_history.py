@@ -3,8 +3,10 @@ Trade History — Simpan dan kelola history trade autotrade ke Supabase.
 Setiap order masuk/keluar dicatat lengkap dengan reasoning.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from statistics import median
 from typing import Any, Optional, Dict, List
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,70 @@ def _derive_executed_rr(entry_price: float, sl_price: float, tp_price: float, fa
     except Exception:
         pass
     return float(fallback_rr)
+
+
+def _to_float(value: Any, default: Optional[float] = None) -> Optional[float]:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _classify_trade_mode(trade: Dict[str, Any]) -> str:
+    trade_type = str(trade.get("trade_type") or "").strip().lower()
+    timeframe = str(trade.get("timeframe") or "").strip().lower()
+    strategy = str(trade.get("strategy") or "").strip().lower()
+    if trade_type == "scalping" or timeframe == "5m":
+        return "scalping"
+    if strategy in {"stackmentor", "legacy", "swing"}:
+        return "swing"
+    if trade.get("tp1_price") is not None and trade_type != "scalping":
+        return "swing"
+    return "unknown"
+
+
+def _configured_rr(trade: Dict[str, Any]) -> Optional[float]:
+    rr = _to_float(trade.get("rr_ratio"), None)
+    if rr is not None and rr > 0:
+        return float(rr)
+    entry = _to_float(trade.get("entry_price"), None)
+    sl = _to_float(trade.get("sl_price"), None)
+    tp = _to_float(trade.get("tp1_price"), None)
+    if tp is None:
+        tp = _to_float(trade.get("tp_price"), None)
+    if entry is None or sl is None or tp is None:
+        return None
+    risk = abs(entry - sl)
+    reward = abs(tp - entry)
+    if risk <= 0 or reward <= 0:
+        return None
+    return float(reward / risk)
+
+
+def _resolve_qty_for_r_multiple(trade: Dict[str, Any]) -> Optional[float]:
+    for key in ("qty", "quantity", "original_quantity"):
+        q = _to_float(trade.get(key), None)
+        if q is not None and abs(q) > 0:
+            return float(abs(q))
+    return None
+
+
+def _realized_r_multiple(trade: Dict[str, Any]) -> Optional[float]:
+    status = str(trade.get("status") or "").strip().lower()
+    if status == "open":
+        return None
+    pnl = _to_float(trade.get("pnl_usdt"), None)
+    entry = _to_float(trade.get("entry_price"), None)
+    sl = _to_float(trade.get("sl_price"), None)
+    qty = _resolve_qty_for_r_multiple(trade)
+    if pnl is None or entry is None or sl is None or qty is None:
+        return None
+    risk_usdt = abs(entry - sl) * qty
+    if risk_usdt <= 0:
+        return None
+    return float(pnl / risk_usdt)
 
 
 # ─────────────────────────────────────────────
@@ -384,29 +450,35 @@ def reconcile_open_trades_with_exchange(
 
             # Orphan: DB says open, exchange says no position. Close it.
             entry = float(trade.get("entry_price") or 0)
-            qty = float(trade.get("qty") or 0)
-            leverage = int(trade.get("leverage") or 1)
+            qty = float(
+                trade.get("qty")
+                or trade.get("quantity")
+                or trade.get("original_quantity")
+                or 0
+            )
             side = (trade.get("side") or "").upper()
-
-            # Try to fetch current price for a best-effort exit value.
             exit_price = entry
-            try:
-                ticker = client.get_ticker(symbol)
-                if ticker.get("success"):
-                    exit_price = float(
-                        ticker.get("mark_price") or ticker.get("last_price") or entry
+            pnl = 0.0
+            roundtrip_net_pnl = None
+            roundtrip_close_price = None
+            get_roundtrip = getattr(client, "get_roundtrip_financials", None)
+            if callable(get_roundtrip):
+                try:
+                    roundtrip = get_roundtrip(
+                        symbol=str(symbol or ""),
+                        open_order_id=str(trade.get("order_id") or ""),
+                        entry_side=str(side or ""),
+                        opened_at_iso=str(trade.get("opened_at") or ""),
                     )
-            except Exception:
-                pass
+                    if isinstance(roundtrip, dict) and roundtrip.get("success"):
+                        roundtrip_net_pnl = _to_float(roundtrip.get("net_pnl"), None)
+                        roundtrip_close_price = _to_float(roundtrip.get("close_avg_price"), None)
+                except Exception as e:
+                    logger.warning(
+                        f"[Reconcile:{telegram_id}] roundtrip financial lookup failed for {symbol}: {e}"
+                    )
 
-            # Estimate PnL from price delta * qty direction.
-            # Do NOT multiply by leverage: qty is already the position size.
-            if side == "LONG":
-                pnl = (exit_price - entry) * qty
-            else:
-                pnl = (entry - exit_price) * qty
-
-            # Infer close reason. Use stale_reconcile unless TP evidence exists.
+            # Infer close reason from execution evidence when available.
             tp1_hit = bool(trade.get("tp1_hit"))
             tp2_hit = bool(trade.get("tp2_hit"))
             tp3_hit = bool(trade.get("tp3_hit"))
@@ -419,13 +491,22 @@ def reconcile_open_trades_with_exchange(
             else:
                 reason = "stale_reconcile"
 
-            near_flat_thr = 0.02
-            near_flat = abs(float(pnl)) <= near_flat_thr
-            if reason == "stale_reconcile" and near_flat:
+            if roundtrip_net_pnl is not None:
+                pnl = float(roundtrip_net_pnl)
+                if roundtrip_close_price is not None and float(roundtrip_close_price) > 0:
+                    exit_price = float(roundtrip_close_price)
+                source = "exchange_history"
+            else:
+                # Policy: never guess stale-reconcile PnL from ticker snapshots.
+                reason = "stale_reconcile"
                 pnl = 0.0
+                source = "fallback_zero_pnl"
+
             reconcile_reasoning = (
                 f"Reconciled from exchange — position no longer open; "
-                f"reason={reason}; near_flat={1 if near_flat else 0}"
+                f"reason={reason}; source={source}; "
+                f"roundtrip_pnl_resolved={1 if roundtrip_net_pnl is not None else 0}; "
+                f"qty={qty:.8f}; side={side}"
             )
 
             save_trade_close(
@@ -472,6 +553,189 @@ def get_trade_history(telegram_id: int, limit: int = 20) -> List[Dict]:
     except Exception as e:
         logger.error(f"[TradeHistory] Failed to get trade history: {e}")
         return []
+
+
+def _resolve_day_window_utc(
+    *,
+    day_tz: str = "Asia/Singapore",
+    now_utc: Optional[datetime] = None,
+) -> Dict[str, datetime]:
+    now = now_utc or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    tz = ZoneInfo(day_tz)
+    local_now = now.astimezone(tz)
+    local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    local_end = local_start + timedelta(days=1)
+    return {
+        "utc_start": local_start.astimezone(timezone.utc),
+        "utc_end": local_end.astimezone(timezone.utc),
+        "local_start": local_start,
+        "local_end": local_end,
+    }
+
+
+def _fetch_trades_for_window(
+    *,
+    time_column: str,
+    utc_start: datetime,
+    utc_end: datetime,
+    limit: int = 5000,
+) -> List[Dict[str, Any]]:
+    s = _db()
+    fields = (
+        "id,telegram_id,symbol,status,close_reason,trade_type,timeframe,strategy,"
+        "entry_price,sl_price,tp_price,tp1_price,rr_ratio,pnl_usdt,"
+        "qty,quantity,original_quantity,remaining_quantity,opened_at,closed_at"
+    )
+    rows: List[Dict[str, Any]] = []
+    page_size = min(1000, max(200, int(limit)))
+    page = 0
+    while len(rows) < limit:
+        frm = page * page_size
+        to = frm + page_size - 1
+        res = (
+            s.table("autotrade_trades")
+            .select(fields)
+            .gte(time_column, utc_start.isoformat())
+            .lt(time_column, utc_end.isoformat())
+            .order(time_column, desc=False)
+            .range(frm, to)
+            .execute()
+        )
+        chunk = res.data or []
+        if not chunk:
+            break
+        rows.extend(chunk)
+        if len(chunk) < page_size:
+            break
+        page += 1
+    return rows[:limit]
+
+
+def _summarize_mode_audit(opened_rows: List[Dict[str, Any]], closed_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    configured_rr = [_configured_rr(r) for r in opened_rows]
+    configured_rr = [x for x in configured_rr if x is not None and x > 0]
+    realized_r = [_realized_r_multiple(r) for r in closed_rows]
+    realized_r = [x for x in realized_r if x is not None]
+
+    close_reason_mix: Dict[str, int] = {}
+    for row in closed_rows:
+        reason = str(row.get("close_reason") or row.get("status") or "unknown").strip().lower()
+        close_reason_mix[reason] = close_reason_mix.get(reason, 0) + 1
+
+    return {
+        "opened_count": len(opened_rows),
+        "closed_count": len(closed_rows),
+        "configured_rr_median": round(float(median(configured_rr)), 3) if configured_rr else None,
+        "configured_rr_values": len(configured_rr),
+        "realized_r_median": round(float(median(realized_r)), 3) if realized_r else None,
+        "realized_r_values": len(realized_r),
+        "close_reason_mix": close_reason_mix,
+    }
+
+
+def get_daily_rr_integrity_audit(
+    *,
+    day_tz: str = "Asia/Singapore",
+    now_utc: Optional[datetime] = None,
+    include_runtime_snapshots: bool = True,
+) -> Dict[str, Any]:
+    """
+    Read-only daily audit path for R:R integrity by bot mode.
+
+    Output includes:
+    - opened/closed counts per bot (swing/scalping)
+    - configured RR median (open rows)
+    - realized R multiple median (closed rows)
+    - close reason mix
+    - runtime snapshot reason metadata (adaptive/governor/playbook)
+    """
+    window = _resolve_day_window_utc(day_tz=day_tz, now_utc=now_utc)
+    opened_rows = _fetch_trades_for_window(
+        time_column="opened_at",
+        utc_start=window["utc_start"],
+        utc_end=window["utc_end"],
+    )
+    closed_rows = _fetch_trades_for_window(
+        time_column="closed_at",
+        utc_start=window["utc_start"],
+        utc_end=window["utc_end"],
+    )
+
+    opened_by_mode: Dict[str, List[Dict[str, Any]]] = {"swing": [], "scalping": [], "unknown": []}
+    closed_by_mode: Dict[str, List[Dict[str, Any]]] = {"swing": [], "scalping": [], "unknown": []}
+
+    for row in opened_rows:
+        opened_by_mode[_classify_trade_mode(row)].append(row)
+    for row in closed_rows:
+        closed_by_mode[_classify_trade_mode(row)].append(row)
+
+    per_mode = {
+        mode: _summarize_mode_audit(opened_by_mode.get(mode, []), closed_by_mode.get(mode, []))
+        for mode in ("swing", "scalping", "unknown")
+    }
+
+    runtime_snapshots: Dict[str, Any] = {}
+    if include_runtime_snapshots:
+        try:
+            from app.adaptive_confluence import get_adaptive_overrides
+            from app.sideways_governor import refresh_sideways_governor_state, get_sideways_governor_snapshot
+            from app.win_playbook import refresh_global_win_playbook_state, get_win_playbook_snapshot
+
+            adaptive = get_adaptive_overrides() or {}
+            try:
+                refresh_sideways_governor_state()
+            except Exception:
+                pass
+            governor = get_sideways_governor_snapshot() or {}
+            try:
+                refresh_global_win_playbook_state()
+            except Exception:
+                pass
+            playbook = get_win_playbook_snapshot() or {}
+
+            runtime_snapshots = {
+                "adaptive": {
+                    "updated_at": adaptive.get("updated_at"),
+                    "decision_reason": adaptive.get("decision_reason"),
+                    "conf_delta": int(adaptive.get("conf_delta", 0) or 0),
+                    "volume_min_ratio_delta": float(adaptive.get("volume_min_ratio_delta", 0.0) or 0.0),
+                },
+                "sideways_governor": {
+                    "updated_at": governor.get("updated_at"),
+                    "mode": str(governor.get("mode", "normal")).upper(),
+                    "decision_reason": governor.get("decision_reason"),
+                    "sample_size_24h": int(governor.get("sample_size_24h", 0) or 0),
+                },
+                "win_playbook": {
+                    "updated_at": playbook.get("updated_at"),
+                    "guardrails_healthy": bool(playbook.get("guardrails_healthy", False)),
+                    "rolling_expectancy": float(playbook.get("rolling_expectancy", 0.0) or 0.0),
+                    "rolling_win_rate": float(playbook.get("rolling_win_rate", 0.0) or 0.0),
+                    "sample_size": int(playbook.get("sample_size", 0) or 0),
+                    "risk_overlay_pct": float(playbook.get("risk_overlay_pct", 0.0) or 0.0),
+                    "active_tag_count": len(playbook.get("active_tags", []) or []),
+                },
+            }
+        except Exception as e:
+            runtime_snapshots = {"error": str(e)}
+
+    return {
+        "day_tz": day_tz,
+        "window": {
+            "local_start": window["local_start"].isoformat(),
+            "local_end": window["local_end"].isoformat(),
+            "utc_start": window["utc_start"].isoformat(),
+            "utc_end": window["utc_end"].isoformat(),
+        },
+        "totals": {
+            "opened_count": len(opened_rows),
+            "closed_count": len(closed_rows),
+        },
+        "per_mode": per_mode,
+        "runtime_snapshots": runtime_snapshots,
+    }
 
 
 # ─────────────────────────────────────────────

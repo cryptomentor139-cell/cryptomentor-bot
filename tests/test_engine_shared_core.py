@@ -280,6 +280,34 @@ def test_build_cumulative_close_update_payload_enforces_win_reasoning_for_closed
     assert "loss_reasoning" not in payload
 
 
+def test_build_cumulative_close_update_payload_preserves_qty_fields_for_audit_integrity():
+    open_row = {
+        "symbol": "SOLUSDT",
+        "side": "LONG",
+        "entry_price": 150.0,
+        "entry_reasons": ["trend_align"],
+        "confidence": 72.0,
+        "rr_ratio": 2.0,
+        "qty": 0.42,
+        "quantity": 0.42,
+        "original_quantity": 0.42,
+    }
+    position = SimpleNamespace(symbol="SOLUSDT", side="BUY", entry_price=150.0, entry_reasons=["trend_align"])
+
+    payload, cumulative_pnl, _ = build_cumulative_close_update_payload(
+        open_row=open_row,
+        position=position,
+        close_price=149.0,
+        pnl=-1.0,
+        close_reason="closed_sl",
+    )
+
+    assert cumulative_pnl == pytest.approx(-1.0)
+    assert "qty" not in payload
+    assert "quantity" not in payload
+    assert payload["remaining_quantity"] == pytest.approx(0.0)
+
+
 def test_save_trade_open_derives_rr_from_executed_levels(monkeypatch):
     captured = {}
 
