@@ -133,11 +133,11 @@ def update_autotrade_status(telegram_id: int, status: str):
 
 def _normalized_status_from_legacy(raw_status: str) -> str:
     status = str(raw_status or "").strip().lower()
-    if status in ("active", "uid_verified"):
+    if status in ("approved", "active", "uid_verified", "verified"):
         return VER_APPROVED
-    if status == "pending_verification":
+    if status in ("pending", "pending_verification", "awaiting_approval"):
         return VER_PENDING
-    if status == "uid_rejected":
+    if status in ("rejected", "uid_rejected", "denied"):
         return VER_REJECTED
     return VER_NONE
 
@@ -436,7 +436,7 @@ async def callback_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def notify_admins_of_uid(bot, user_id: int, uid: str):
     admin_ids = []
-    for key in ['ADMIN_IDS', 'ADMIN1', 'ADMIN2', 'ADMIN_USER_ID', 'ADMIN2_USER_ID']:
+    for key in ['ADMIN_IDS', 'ADMIN1', 'ADMIN2', 'ADMIN3', 'ADMIN_USER_ID', 'ADMIN2_USER_ID']:
         val = os.getenv(key)
         if val:
             for part in val.split(','):

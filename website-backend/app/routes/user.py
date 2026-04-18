@@ -53,6 +53,7 @@ def _load_admin_ids() -> list[int]:
         os.getenv("ADMIN_IDS", ""),
         os.getenv("ADMIN1", ""),
         os.getenv("ADMIN2", ""),
+        os.getenv("ADMIN3", ""),
         os.getenv("ADMIN_USER_ID", ""),
         os.getenv("ADMIN2_USER_ID", ""),
     ]

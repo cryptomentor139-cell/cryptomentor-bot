@@ -5,6 +5,7 @@ Admin handlers for UID verification callbacks.
 import logging
 import os
 from datetime import datetime, timezone
+from typing import Optional, Tuple
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -29,29 +30,120 @@ def _is_admin(user_id: int) -> bool:
     return user_id in admin_ids
 
 
+def _load_existing_uid(s, user_id: int) -> str:
+    """Fetch known UID from unified table first, then legacy mirror."""
+    existing = (
+        s.table("user_verifications")
+        .select("bitunix_uid")
+        .eq("telegram_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    existing_uid = (existing.data or [{}])[0].get("bitunix_uid")
+    if existing_uid:
+        return str(existing_uid)
+
+    legacy = (
+        s.table("autotrade_sessions")
+        .select("bitunix_uid")
+        .eq("telegram_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    legacy_uid = (legacy.data or [{}])[0].get("bitunix_uid")
+    return str(legacy_uid or "unknown")
+
+
+def _resolve_partner_owner_id(s, user_id: int) -> Optional[int]:
+    """
+    Resolve owning partner for this verification target.
+    Priority:
+    1) user_verifications.resolved_partner_telegram_id
+    2) community_code -> active community_partners.telegram_id
+    """
+    try:
+        ver = (
+            s.table("user_verifications")
+            .select("resolved_partner_telegram_id, community_code")
+            .eq("telegram_id", int(user_id))
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        # Backward compatibility for schemas that do not have resolved_partner_telegram_id yet.
+        ver = (
+            s.table("user_verifications")
+            .select("community_code")
+            .eq("telegram_id", int(user_id))
+            .limit(1)
+            .execute()
+        )
+    row = (ver.data or [None])[0]
+    if not row:
+        return None
+
+    resolved_partner = row.get("resolved_partner_telegram_id")
+    if resolved_partner is not None:
+        try:
+            return int(resolved_partner)
+        except (TypeError, ValueError):
+            logger.warning("Invalid resolved_partner_telegram_id for user %s: %s", user_id, resolved_partner)
+
+    community_code = str(row.get("community_code") or "").strip().lower()
+    if not community_code:
+        return None
+
+    partner = (
+        s.table("community_partners")
+        .select("telegram_id")
+        .eq("community_code", community_code)
+        .eq("status", "active")
+        .limit(1)
+        .execute()
+    )
+    partner_row = (partner.data or [None])[0]
+    if not partner_row:
+        return None
+    try:
+        return int(partner_row.get("telegram_id"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_authorized_reviewer(s, actor_id: int, target_user_id: int) -> Tuple[bool, str]:
+    """Allow admin or owning partner to review UID callbacks."""
+    if _is_admin(actor_id):
+        return True, "admin"
+
+    try:
+        owner_id = _resolve_partner_owner_id(s, target_user_id)
+    except Exception as exc:
+        logger.error("Failed partner owner lookup for user=%s actor=%s: %s", target_user_id, actor_id, exc)
+        return False, "lookup_failed"
+
+    if owner_id is not None and int(owner_id) == int(actor_id):
+        return True, "partner"
+    return False, "unauthorized"
+
+
 async def callback_uid_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     try:
-        admin_id = query.from_user.id
-        if not _is_admin(admin_id):
-            await query.edit_message_text("❌ Unauthorized: admin only.")
-            return
-
+        actor_id = query.from_user.id
         user_id = int(query.data.split("_")[-1])
         now_iso = datetime.now(timezone.utc).isoformat()
 
         from app.supabase_repo import _client
 
         s = _client()
+        authorized, actor_role = _is_authorized_reviewer(s, actor_id, user_id)
+        if not authorized:
+            await query.edit_message_text("❌ Unauthorized: only admin or assigned community partner can review this UID.")
+            return
 
-        # Fetch existing uid; fallback to legacy table if needed.
-        existing = s.table("user_verifications").select("bitunix_uid").eq("telegram_id", user_id).limit(1).execute()
-        existing_uid = (existing.data or [{}])[0].get("bitunix_uid")
-        if not existing_uid:
-            legacy = s.table("autotrade_sessions").select("bitunix_uid").eq("telegram_id", user_id).limit(1).execute()
-            existing_uid = (legacy.data or [{}])[0].get("bitunix_uid") or "unknown"
+        existing_uid = _load_existing_uid(s, user_id)
 
         # Central verification state used by website gatekeeper.
         s.table("user_verifications").upsert(
@@ -60,7 +152,7 @@ async def callback_uid_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "bitunix_uid": existing_uid,
                 "status": "approved",
                 "reviewed_at": now_iso,
-                "reviewed_by_admin_id": admin_id,
+                "reviewed_by_admin_id": actor_id,
                 "updated_at": now_iso,
             },
             on_conflict="telegram_id",
@@ -75,6 +167,7 @@ async def callback_uid_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             },
             on_conflict="telegram_id",
         ).execute()
+        logger.info("[UIDReview] approved user=%s reviewer=%s role=%s", user_id, actor_id, actor_role)
 
         from app.lib.auth import generate_dashboard_url
 
@@ -115,24 +208,19 @@ async def callback_uid_reject(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
 
     try:
-        admin_id = query.from_user.id
-        if not _is_admin(admin_id):
-            await query.edit_message_text("❌ Unauthorized: admin only.")
-            return
-
+        actor_id = query.from_user.id
         user_id = int(query.data.split("_")[-1])
         now_iso = datetime.now(timezone.utc).isoformat()
 
         from app.supabase_repo import _client
 
         s = _client()
+        authorized, actor_role = _is_authorized_reviewer(s, actor_id, user_id)
+        if not authorized:
+            await query.edit_message_text("❌ Unauthorized: only admin or assigned community partner can review this UID.")
+            return
 
-        # Fetch existing uid; fallback to legacy table if needed.
-        existing = s.table("user_verifications").select("bitunix_uid").eq("telegram_id", user_id).limit(1).execute()
-        existing_uid = (existing.data or [{}])[0].get("bitunix_uid")
-        if not existing_uid:
-            legacy = s.table("autotrade_sessions").select("bitunix_uid").eq("telegram_id", user_id).limit(1).execute()
-            existing_uid = (legacy.data or [{}])[0].get("bitunix_uid") or "unknown"
+        existing_uid = _load_existing_uid(s, user_id)
 
         # Central verification state used by website gatekeeper.
         s.table("user_verifications").upsert(
@@ -141,7 +229,7 @@ async def callback_uid_reject(update: Update, context: ContextTypes.DEFAULT_TYPE
                 "bitunix_uid": existing_uid,
                 "status": "rejected",
                 "reviewed_at": now_iso,
-                "reviewed_by_admin_id": admin_id,
+                "reviewed_by_admin_id": actor_id,
                 "updated_at": now_iso,
             },
             on_conflict="telegram_id",
@@ -156,6 +244,7 @@ async def callback_uid_reject(update: Update, context: ContextTypes.DEFAULT_TYPE
             },
             on_conflict="telegram_id",
         ).execute()
+        logger.info("[UIDReview] rejected user=%s reviewer=%s role=%s", user_id, actor_id, actor_role)
 
         await context.bot.send_message(
             chat_id=user_id,

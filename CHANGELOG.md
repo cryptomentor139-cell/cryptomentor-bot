@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.2.47] — 2026-04-18 — Gatekeeper Verification Drift Fix (Admin + Partner)
+
+### 🎯 Root Cause + Access Fix
+- Fixed UID review callback authorization drift in `Bismillah/app/handlers_autotrade_admin.py`:
+  - `uid_acc_*` / `uid_reject_*` now allow **admin OR assigned community partner**.
+  - Partner authorization resolution order:
+    - `user_verifications.resolved_partner_telegram_id`
+    - fallback `community_code -> community_partners(status=active).telegram_id`
+  - Non-owner/non-admin reviewers now receive a clear unauthorized response.
+
+### 🔄 Canonical Status Write Parity
+- Enforced canonical gatekeeper write parity on all approval paths:
+  - `uid_acc_*` / `uid_reject_*` always upsert `user_verifications` (`approved` / `rejected`) and mirror `autotrade_sessions` (`uid_verified` / `uid_rejected`).
+  - `Bismillah/app/handlers_community.py` member approve/reject (`cmember_acc_*`, `cmember_reject_*`) now also updates `user_verifications` (previously only legacy session status changed).
+
+### 🛡️ Consistency Hardening
+- Added missing `ADMIN3` support in backend admin loader:
+  - `website-backend/app/routes/user.py`
+- Expanded bot status normalization in `Bismillah/app/handlers_autotrade.py`:
+  - canonical statuses (`approved/pending/rejected`) and aliases now normalize consistently for bot/web parity.
+
+### 🧰 Ops Repair Utility
+- Added one-time drift repair script: `scripts/repair_verification_drift.py`
+  - default mode: dry-run (no writes)
+  - apply mode: `--apply`
+  - optional scan bound: `--limit N`
+  - repair mapping:
+    - `user_verifications.status='pending'` + `autotrade_sessions.status in ('uid_verified','active')` -> `approved`
+    - `user_verifications.status='pending'` + `autotrade_sessions.status='uid_rejected'` -> `rejected`
+  - summary output metrics: `scanned`, `eligible`, `updated`, `unchanged`, `errors`
+
 ## [2.2.46] — 2026-04-18 — Open-Trade R:R Parity Persistence Fix (StackMentor)
 
 ### 🎯 Trade Persistence Parity
