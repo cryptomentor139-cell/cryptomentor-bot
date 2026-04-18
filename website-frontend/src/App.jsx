@@ -15,6 +15,7 @@ const _CONFIGURED_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const _FALLBACK_BASE = '/api';
 const FALLBACK_REFERRAL_URL = 'https://www.bitunix.com/register?vipCode=sq45';
 const BUILD_MARKER = (typeof __APP_BUILD_MARKER__ !== 'undefined' && __APP_BUILD_MARKER__) || import.meta.env.VITE_BUILD_MARKER || 'dev-local';
+const MIXED_AUTO_LOCK_REASON = 'Mixed mode uses per-symbol auto routing and bypasses legacy global auto-switch.';
 
 // Tracks which base URL is confirmed working so we don't retry every call.
 // null = untested, string = confirmed working base.
@@ -332,7 +333,20 @@ export default function App() {
   const [equity, setEquity] = useState(null);
   const [connectorStatus, setConnectorStatus] = useState({ linked: null, online: null, error: null });
   const [portfolioLoaded, setPortfolioLoaded] = useState(false);
-  const [engineState, setEngineState] = useState({ autoModeEnabled: true, tradingMode: 'swing', stackMentorActive: true, riskMode: 'moderate' });
+  const [engineState, setEngineState] = useState({
+    autoModeEnabled: true,
+    autoModeLocked: false,
+    autoModeLockReason: null,
+    tradingMode: 'swing',
+    stackMentorActive: true,
+    riskMode: 'moderate',
+  });
+  const [engineControlBusy, setEngineControlBusy] = useState({
+    autoMode: false,
+    mode: false,
+    stackMentor: false,
+  });
+  const [engineControlError, setEngineControlError] = useState(null);
   const [botRunning, setBotRunning] = useState(false);
   const [botBusy, setBotBusy] = useState(false);
   const [botError, setBotError] = useState(null);
@@ -569,7 +583,17 @@ export default function App() {
         }
         // Only set logged in if we have a token
         if (data.access_token) {
-          setEngineState({ autoModeEnabled: true, tradingMode: 'swing', stackMentorActive: true, riskMode: 'moderate', isActive: true, current_balance: 0, total_profit: 0 });
+          setEngineState({
+            autoModeEnabled: true,
+            autoModeLocked: false,
+            autoModeLockReason: null,
+            tradingMode: 'swing',
+            stackMentorActive: true,
+            riskMode: 'moderate',
+            isActive: true,
+            current_balance: 0,
+            total_profit: 0,
+          });
           setRealPositions([]);
           setRealPnl(0);
           setIsLoggedIn(true);
@@ -606,7 +630,17 @@ export default function App() {
               setUser(nextUser);
               try { localStorage.setItem('cm_user', JSON.stringify(nextUser)); } catch {}
             }
-            setEngineState({ autoModeEnabled: true, tradingMode: 'swing', stackMentorActive: true, riskMode: 'moderate', isActive: true, current_balance: 0, total_profit: 0 });
+            setEngineState({
+              autoModeEnabled: true,
+              autoModeLocked: false,
+              autoModeLockReason: null,
+              tradingMode: 'swing',
+              stackMentorActive: true,
+              riskMode: 'moderate',
+              isActive: true,
+              current_balance: 0,
+              total_profit: 0,
+            });
             setRealPositions([]);
             setRealPnl(0);
             setIsLoggedIn(true);
@@ -676,6 +710,95 @@ export default function App() {
   };
   const handleCancelStart = () => setShowBotStartModal(false);
   const handleToggleBot = () => callEngine(botRunning ? 'stop' : 'start');
+
+  const applyEngineSnapshot = (engine = {}) => {
+    if (!engine || typeof engine !== 'object') return;
+    const has = (key) => Object.prototype.hasOwnProperty.call(engine, key);
+    setEngineState(prev => {
+      const tradingMode = engine.trading_mode || prev.tradingMode || 'swing';
+      const autoModeLocked = has('auto_mode_locked')
+        ? !!engine.auto_mode_locked
+        : tradingMode === 'mixed';
+      const autoModeEnabledRaw = has('auto_mode_enabled')
+        ? !!engine.auto_mode_enabled
+        : !!prev.autoModeEnabled;
+      const autoModeEnabled = autoModeLocked ? false : autoModeEnabledRaw;
+      const lockReason = autoModeLocked
+        ? (engine.auto_mode_lock_reason || prev.autoModeLockReason || MIXED_AUTO_LOCK_REASON)
+        : null;
+      const stackMentorActive = has('stackmentor_enabled')
+        ? !!engine.stackmentor_enabled
+        : (has('stackmentor_active') ? !!engine.stackmentor_active : !!prev.stackMentorActive);
+      return {
+        ...prev,
+        tradingMode,
+        autoModeEnabled,
+        autoModeLocked,
+        autoModeLockReason: lockReason,
+        stackMentorActive,
+        riskMode: engine.risk_mode || prev.riskMode,
+        isActive: has('is_active') ? !!engine.is_active : prev.isActive,
+        current_balance: has('current_balance') ? engine.current_balance : prev.current_balance,
+        total_profit: has('total_profit') ? engine.total_profit : prev.total_profit,
+      };
+    });
+  };
+
+  const applyEngineControl = async ({ key, endpoint, body, fallbackError }) => {
+    setEngineControlBusy(prev => ({ ...prev, [key]: true }));
+    setEngineControlError(null);
+    try {
+      const resp = await apiFetch(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const msg = await readApiErrorMessage(resp, fallbackError);
+        throw new Error(msg);
+      }
+      const data = await resp.json().catch(() => ({}));
+      if (data?.engine) applyEngineSnapshot(data.engine);
+      return data;
+    } catch (e) {
+      setEngineControlError(e.message || fallbackError);
+      return null;
+    } finally {
+      setEngineControlBusy(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleToggleAutoMode = async () => {
+    const locked = !!engineState.autoModeLocked || engineState.tradingMode === 'mixed';
+    if (locked || engineControlBusy.autoMode || engineControlBusy.mode) return;
+    await applyEngineControl({
+      key: 'autoMode',
+      endpoint: '/dashboard/engine/auto-mode',
+      body: { enabled: !engineState.autoModeEnabled },
+      fallbackError: 'Failed to update Auto Mode',
+    });
+  };
+
+  const handleSelectTradingMode = async (tradingMode) => {
+    if (engineControlBusy.mode || engineControlBusy.autoMode) return;
+    await applyEngineControl({
+      key: 'mode',
+      endpoint: '/dashboard/engine/mode',
+      body: { trading_mode: tradingMode },
+      fallbackError: 'Failed to switch trading mode',
+    });
+  };
+
+  const handleToggleStackMentor = async () => {
+    if (engineControlBusy.stackMentor) return;
+    await applyEngineControl({
+      key: 'stackMentor',
+      endpoint: '/dashboard/engine/stackmentor',
+      body: { enabled: !engineState.stackMentorActive },
+      fallbackError: 'Failed to update StackMentor preference',
+    });
+  };
+
   const updateOneClickRisk = (rawRisk) => {
     const normalized = normalizeOneClickRisk(rawRisk);
     setOneClickRiskPct(normalized);
@@ -843,7 +966,11 @@ export default function App() {
     let cancelled = false;
     apiFetch('/dashboard/engine/state')
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !cancelled) setBotRunning(!!d.running); })
+      .then(d => {
+        if (!d || cancelled) return;
+        setBotRunning(!!d.running);
+        if (d.engine) applyEngineSnapshot(d.engine);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [isLoggedIn]);
@@ -1133,18 +1260,7 @@ export default function App() {
           setConnectorStatus(prev => ({ ...prev, linked: prev.linked === null ? false : prev.linked }));
         }
         if (!cancelled) setPortfolioLoaded(true);
-        if (d.engine) {
-          setEngineState(prev => ({
-            ...prev,
-            current_balance: d.engine.current_balance ?? prev.current_balance,
-            total_profit: d.engine.total_profit ?? prev.total_profit,
-            tradingMode: d.engine.trading_mode || prev.tradingMode,
-            stackMentorActive: d.engine.stackmentor_active ?? prev.stackMentorActive,
-            autoModeEnabled: d.engine.auto_mode_enabled ?? prev.autoModeEnabled,
-            riskMode: d.engine.risk_mode || prev.riskMode,
-            isActive: d.engine.is_active ?? prev.isActive,
-          }));
-        }
+        if (d.engine) applyEngineSnapshot(d.engine);
       } catch (err) {
         if (!cancelled) {
           setConnectorStatus({ linked: false, online: false, error: `Network error: ${err.message}` });
@@ -1371,7 +1487,22 @@ export default function App() {
         {/* MAIN CONTENT */}
         <main className="flex-1 min-w-0 overflow-y-auto p-4 md:p-8 lg:p-10 w-full relative z-0 pb-20 md:pb-10 custom-scrollbar">
           {activeTab === 'portfolio' && <PortfolioTab positions={realPositions.length > 0 ? realPositions : []} engineState={engineState} unrealizedPnl={realPnl} cumulativePnl={cumulativePnl} equity={equity} hasRealData={realPositions.length > 0} hasCumulative={hasCumulativePnl} botRunning={botRunning} onToggleBot={handleToggleBot} botBusy={botBusy} connectorStatus={connectorStatus} onCloseOneClickPosition={closeOneClickPosition} />}
-          {activeTab === 'engine' && <EngineTab engineState={engineState} setEngineState={setEngineState} botRunning={botRunning} onToggleBot={handleToggleBot} riskSettings={riskSettings} onUpdateRisk={updateRiskSetting} onUpdateLeverage={updateLeverageSetting} onUpdateMarginMode={updateMarginModeSetting} />}
+          {activeTab === 'engine' && (
+            <EngineTab
+              engineState={engineState}
+              botRunning={botRunning}
+              onToggleBot={handleToggleBot}
+              onToggleAutoMode={handleToggleAutoMode}
+              onSelectTradingMode={handleSelectTradingMode}
+              onToggleStackMentor={handleToggleStackMentor}
+              controlBusy={engineControlBusy}
+              controlError={engineControlError}
+              riskSettings={riskSettings}
+              onUpdateRisk={updateRiskSetting}
+              onUpdateLeverage={updateLeverageSetting}
+              onUpdateMarginMode={updateMarginModeSetting}
+            />
+          )}
           {activeTab === 'settings' && <SettingsTab onBotConnected={handleBotConnected} />}
           {activeTab === 'signals' && (
             <SignalsTab
@@ -1778,9 +1909,13 @@ function PortfolioTab({
 
 function EngineTab({
   engineState,
-  setEngineState,
   botRunning,
   onToggleBot,
+  onToggleAutoMode,
+  onSelectTradingMode,
+  onToggleStackMentor,
+  controlBusy = { autoMode: false, mode: false, stackMentor: false },
+  controlError = null,
   riskSettings = {
     risk_per_trade: 0.5,
     leverage: 10,
@@ -1794,8 +1929,14 @@ function EngineTab({
   onUpdateRisk,
   onUpdateLeverage,
   onUpdateMarginMode,
-  liveEquity,
 }) {
+  const autoModeLocked = !!engineState.autoModeLocked || engineState.tradingMode === 'mixed';
+  const autoToggleBusy = !!controlBusy.autoMode;
+  const modeBusy = !!controlBusy.mode;
+  const stackMentorBusy = !!controlBusy.stackMentor;
+  const autoToggleDisabled = autoModeLocked || autoToggleBusy || modeBusy;
+  const modeButtonsDisabled = autoToggleBusy || modeBusy;
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-both">
       <header className="mb-8 md:mb-12"><h2 className="text-3xl md:text-5xl font-black text-white mb-2 tracking-tighter">Engine Controls</h2><p className="text-slate-400 font-medium text-sm md:text-lg">Configure AutoTrade behavior, StackMentor, Risk management, and Position sizing.</p></header>
@@ -1837,22 +1978,63 @@ function EngineTab({
         </button>
       </div>
 
+      {controlError && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-sm font-semibold text-rose-300">
+          {controlError}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <div className={`bg-[#0a0a0a]/60 backdrop-blur-2xl border ${engineState.autoModeEnabled ? 'border-fuchsia-500/50 shadow-[0_0_40px_rgba(217,70,239,0.15)]' : 'border-white/10'} rounded-[1.5rem] md:rounded-[2.5rem] p-6 md:p-8 relative overflow-hidden transition-all duration-500 group`}>
           {engineState.autoModeEnabled && <div className="absolute top-0 right-0 w-32 h-32 bg-fuchsia-500/10 blur-[40px] rounded-full pointer-events-none" />}
           <div className="flex justify-between items-start mb-5 relative z-10">
             <div className="p-2.5 bg-white/5 rounded-xl border border-white/5"><RefreshCw className={engineState.autoModeEnabled ? "text-fuchsia-400 animate-spin-slow w-6 h-6" : "text-slate-500 w-6 h-6"} /></div>
-            <button onClick={() => setEngineState({...engineState, autoModeEnabled: !engineState.autoModeEnabled})} className="p-1 -m-1 transition-transform active:scale-90">{engineState.autoModeEnabled ? <ToggleRight className="text-fuchsia-500 w-9 h-9" /> : <ToggleLeft className="text-slate-600 w-9 h-9" />}</button>
+            <button
+              onClick={onToggleAutoMode}
+              disabled={autoToggleDisabled}
+              className={`p-1 -m-1 transition-transform active:scale-90 ${autoToggleDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {engineState.autoModeEnabled ? <ToggleRight className="text-fuchsia-500 w-9 h-9" /> : <ToggleLeft className="text-slate-600 w-9 h-9" />}
+            </button>
           </div>
           <h3 className="text-xl md:text-2xl font-black text-white mb-2 relative z-10">Auto Mode Switcher</h3>
           <p className="text-slate-400 text-xs md:text-sm font-medium leading-relaxed relative z-10 mb-6">Legacy auto-switch flips between Scalping and Swing. Mixed mode uses per-symbol auto routing and bypasses legacy global flips.</p>
+          {autoModeLocked && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-4 relative z-10">
+              <p className="text-[11px] font-bold text-amber-300 uppercase tracking-wider mb-1">Locked in Mixed Mode</p>
+              <p className="text-xs text-amber-200/80">{engineState.autoModeLockReason || MIXED_AUTO_LOCK_REASON}</p>
+            </div>
+          )}
+          {(autoToggleBusy || modeBusy) && (
+            <p className="text-[11px] text-fuchsia-300 font-semibold mb-3 relative z-10">
+              {modeBusy ? 'Applying trading mode change...' : 'Applying auto mode preference...'}
+            </p>
+          )}
           {!engineState.autoModeEnabled && (
             <div className="bg-white/5 p-4 rounded-xl border border-white/10 relative z-10">
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Manual Override</p>
               <div className="flex gap-2">
-                <button onClick={() => setEngineState({...engineState, tradingMode: 'scalping'})} className={`flex-1 py-3 rounded-lg font-bold text-xs transition-all ${engineState.tradingMode === 'scalping' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-[#050505] text-slate-400 border border-white/5'}`}>SCALPING</button>
-                <button onClick={() => setEngineState({...engineState, tradingMode: 'swing'})} className={`flex-1 py-3 rounded-lg font-bold text-xs transition-all ${engineState.tradingMode === 'swing' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-[#050505] text-slate-400 border border-white/5'}`}>SWING</button>
-                <button onClick={() => setEngineState({...engineState, tradingMode: 'mixed'})} className={`flex-1 py-3 rounded-lg font-bold text-xs transition-all ${engineState.tradingMode === 'mixed' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-[#050505] text-slate-400 border border-white/5'}`}>MIXED</button>
+                <button
+                  onClick={() => onSelectTradingMode('scalping')}
+                  disabled={modeButtonsDisabled}
+                  className={`flex-1 py-3 rounded-lg font-bold text-xs transition-all ${engineState.tradingMode === 'scalping' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-[#050505] text-slate-400 border border-white/5'} ${modeButtonsDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  SCALPING
+                </button>
+                <button
+                  onClick={() => onSelectTradingMode('swing')}
+                  disabled={modeButtonsDisabled}
+                  className={`flex-1 py-3 rounded-lg font-bold text-xs transition-all ${engineState.tradingMode === 'swing' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-[#050505] text-slate-400 border border-white/5'} ${modeButtonsDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  SWING
+                </button>
+                <button
+                  onClick={() => onSelectTradingMode('mixed')}
+                  disabled={modeButtonsDisabled}
+                  className={`flex-1 py-3 rounded-lg font-bold text-xs transition-all ${engineState.tradingMode === 'mixed' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-[#050505] text-slate-400 border border-white/5'} ${modeButtonsDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  MIXED
+                </button>
               </div>
             </div>
           )}
@@ -1861,12 +2043,21 @@ function EngineTab({
           {engineState.stackMentorActive && <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 blur-[40px] rounded-full pointer-events-none" />}
           <div className="flex justify-between items-start mb-5 relative z-10">
             <div className="p-2.5 bg-white/5 rounded-xl border border-white/5"><Layers className={engineState.stackMentorActive ? "text-cyan-400 w-6 h-6" : "text-slate-500 w-6 h-6"} /></div>
-            <button onClick={() => setEngineState({...engineState, stackMentorActive: !engineState.stackMentorActive})} className="p-1 -m-1 transition-transform active:scale-90">{engineState.stackMentorActive ? <ToggleRight className="text-cyan-500 w-9 h-9" /> : <ToggleLeft className="text-slate-600 w-9 h-9" />}</button>
+            <button
+              onClick={onToggleStackMentor}
+              disabled={stackMentorBusy}
+              className={`p-1 -m-1 transition-transform active:scale-90 ${stackMentorBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {engineState.stackMentorActive ? <ToggleRight className="text-cyan-500 w-9 h-9" /> : <ToggleLeft className="text-slate-600 w-9 h-9" />}
+            </button>
           </div>
-          <h3 className="text-xl md:text-2xl font-black text-white mb-2 relative z-10">StackMentor Tracking</h3>
-          <p className="text-slate-400 text-xs md:text-sm font-medium leading-relaxed relative z-10 mb-6">Enables 3-Tier partial Take Profit (TP1, TP2, TP3) system and automatically moves Stop Loss to breakeven after TP1.</p>
+          <h3 className="text-xl md:text-2xl font-black text-white mb-2 relative z-10">StackMentor Preference</h3>
+          <p className="text-slate-400 text-xs md:text-sm font-medium leading-relaxed relative z-10 mb-6">Persists your StackMentor preference from web controls. Runtime execution behavior is unchanged in this release.</p>
+          {stackMentorBusy && (
+            <p className="text-[11px] text-cyan-300 font-semibold mb-3 relative z-10">Saving StackMentor preference...</p>
+          )}
           <div className={`space-y-2.5 relative z-10 transition-all duration-300 ${!engineState.stackMentorActive ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
-            {[{label:'TP1: Scale out 30%', color:'cyan'},{label:'TP2: Scale out 40%', color:'cyan'},{label:'TP3: Runner 30% (SL Breakeven)', color:'fuchsia'}].map((tp, i) => (
+            {[{label:'Preference ON: stackmentor profile', color:'cyan'},{label:'Preference OFF: keep legacy profile flag', color:'cyan'},{label:'Execution path unchanged in this patch', color:'fuchsia'}].map((tp, i) => (
               <div key={i} className="flex items-center gap-3 bg-[#050505] border border-white/5 p-3 rounded-xl">
                 <div className={`w-2.5 h-2.5 rounded-full ${engineState.stackMentorActive ? (tp.color === 'cyan' ? 'bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.8)]' : 'bg-fuchsia-400 shadow-[0_0_8px_rgba(217,70,239,0.8)]') : 'bg-slate-700'}`} />
                 <span className="text-xs font-bold text-slate-300">{tp.label}</span>
