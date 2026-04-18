@@ -280,8 +280,24 @@ async def _switch_user_mode_runtime(tg_id: int, trading_mode: str) -> dict:
         if not isinstance(result, dict):
             return {"success": False, "message": "Invalid switch_mode response"}
         return result
+    except ModuleNotFoundError as e:
+        missing_module = str(getattr(e, "name", "") or "").strip() or "unknown"
+        return {
+            "success": False,
+            "error_code": "runtime_dependency_missing",
+            "dependency": missing_module,
+            "message": (
+                f"runtime_dependency_missing:{missing_module} "
+                "Install required runtime dependencies in website-backend venv "
+                "(python-telegram-bot[job-queue]==21.6)."
+            ),
+        }
     except Exception as e:
-        return {"success": False, "message": str(e)}
+        return {
+            "success": False,
+            "error_code": "runtime_switch_failed",
+            "message": str(e),
+        }
 
 
 def _build_engine_controls_state(session_row: dict, runtime_running: bool | None = None) -> dict:
@@ -575,8 +591,10 @@ async def update_engine_mode(
     if is_running and requested_mode != current_mode:
         switch_result = await _switch_user_mode_runtime(tg_id, requested_mode)
         if not switch_result.get("success"):
+            error_code = str(switch_result.get("error_code") or "").strip().lower()
+            status_code = 503 if error_code == "runtime_dependency_missing" else 500
             raise HTTPException(
-                status_code=500,
+                status_code=status_code,
                 detail=f"Failed to switch mode: {switch_result.get('message') or 'unknown error'}",
             )
         runtime_action = "switched_live"

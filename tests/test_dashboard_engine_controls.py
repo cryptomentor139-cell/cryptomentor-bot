@@ -4,6 +4,7 @@ import sys
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -177,6 +178,81 @@ async def test_mode_switch_running_uses_live_switch_path(monkeypatch):
 
     assert result["runtime_action"] == "switched_live"
     assert result["engine"]["trading_mode"] == "scalping"
+    switch_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_mode_switch_running_dependency_missing_returns_503_and_keeps_db_mode(monkeypatch):
+    sessions = {
+        106: {
+            "telegram_id": 106,
+            "trading_mode": "swing",
+            "auto_mode_enabled": True,
+            "stackmentor_enabled": True,
+            "status": "active",
+            "engine_active": True,
+        }
+    }
+    fake = _FakeSupabase(sessions)
+    switch_mock = AsyncMock(
+        return_value={
+            "success": False,
+            "error_code": "runtime_dependency_missing",
+            "dependency": "telegram",
+            "message": "runtime_dependency_missing:telegram Install required runtime dependencies.",
+        }
+    )
+
+    monkeypatch.setattr(dashboard, "_client", lambda: fake)
+    monkeypatch.setattr(dashboard, "_is_engine_runtime_running", lambda _tg, _row=None: True)
+    monkeypatch.setattr(dashboard, "_switch_user_mode_runtime", switch_mock)
+
+    with pytest.raises(HTTPException) as err:
+        await dashboard.update_engine_mode(
+            dashboard.EngineModePayload(trading_mode="scalping"),
+            tg_id=106,
+        )
+
+    assert err.value.status_code == 503
+    assert "runtime_dependency_missing:telegram" in str(err.value.detail)
+    assert sessions[106]["trading_mode"] == "swing"
+    switch_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_mode_switch_running_failure_does_not_persist_mode(monkeypatch):
+    sessions = {
+        107: {
+            "telegram_id": 107,
+            "trading_mode": "swing",
+            "auto_mode_enabled": True,
+            "stackmentor_enabled": True,
+            "status": "active",
+            "engine_active": True,
+        }
+    }
+    fake = _FakeSupabase(sessions)
+    switch_mock = AsyncMock(
+        return_value={
+            "success": False,
+            "error_code": "runtime_switch_failed",
+            "message": "unexpected runtime failure",
+        }
+    )
+
+    monkeypatch.setattr(dashboard, "_client", lambda: fake)
+    monkeypatch.setattr(dashboard, "_is_engine_runtime_running", lambda _tg, _row=None: True)
+    monkeypatch.setattr(dashboard, "_switch_user_mode_runtime", switch_mock)
+
+    with pytest.raises(HTTPException) as err:
+        await dashboard.update_engine_mode(
+            dashboard.EngineModePayload(trading_mode="scalping"),
+            tg_id=107,
+        )
+
+    assert err.value.status_code == 500
+    assert "unexpected runtime failure" in str(err.value.detail)
+    assert sessions[107]["trading_mode"] == "swing"
     switch_mock.assert_awaited_once()
 
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.2.55] — 2026-04-19 — Web Mode Switch Dependency Guard (`telegram` import)
+
+### 🧩 Runtime Dependency Fix (Web API)
+- Added `python-telegram-bot[job-queue]==21.6` to `website-backend/requirements.txt` so live mode-switch runtime imports can resolve in `website-backend` venv.
+
+### 🛡️ Fail-Safe Mode Switching
+- Hardened `website-backend/app/routes/dashboard.py` mode switch runtime helper:
+  - `ModuleNotFoundError` now returns structured failure metadata (`error_code=runtime_dependency_missing`, dependency name).
+  - `PUT /dashboard/engine/mode` now returns `503` for runtime dependency missing errors while engine is running.
+  - No DB mode persistence occurs on running-engine switch failure (prevents runtime/DB drift).
+
+### 🧪 Tests
+- Extended `tests/test_dashboard_engine_controls.py`:
+  - running engine + missing runtime dependency => `503`, DB `trading_mode` unchanged.
+  - running engine + runtime switch failure => `500`, DB `trading_mode` unchanged.
+
 ## [2.2.54] — 2026-04-19 — Daily Report Live Equity Refresh + Balance Drift Backfill
 
 ### 💰 Live Equity in Admin Report
