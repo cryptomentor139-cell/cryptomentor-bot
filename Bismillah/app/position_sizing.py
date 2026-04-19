@@ -10,9 +10,31 @@ This enables:
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
+import math
+from app.leverage_policy import (
+    SYMBOL_MAX_LEVERAGE,
+    get_auto_max_safe_leverage,
+)
 
 logger = logging.getLogger(__name__)
+
+def calculate_max_safe_leverage(entry_price: float, sl_price: float, symbol: str = "") -> int:
+    """
+    Legacy function name kept for compatibility.
+    Current behavior: return max leverage allowed for the trading pair.
+    """
+    try:
+        return get_auto_max_safe_leverage(
+            symbol=symbol,
+            entry_price=entry_price,
+            sl_price=sl_price,
+            baseline_leverage=None,
+        )
+    except Exception as e:
+        logger.error(f"[PositionSizing] Error calculating max pair leverage: {e}")
+        return get_auto_max_safe_leverage(symbol=symbol)
+
 
 
 def calculate_position_size(

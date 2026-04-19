@@ -1,3 +1,4 @@
+import logging
 import time
 from fastapi import APIRouter, HTTPException
 from app.auth.telegram import verify_telegram_auth
@@ -6,6 +7,7 @@ from app.db.supabase import upsert_web_login
 from app.models.user import TelegramAuthData
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 MAX_AUTH_AGE_SECONDS = 86400  # 24 jam
 
@@ -27,12 +29,17 @@ async def telegram_login(data: TelegramAuthData):
         raise HTTPException(status_code=401, detail="Auth data expired")
 
     # 3. Upsert user ke Supabase
-    user = upsert_web_login(
-        tg_id=data.id,
-        username=data.username or "",
-        first_name=data.first_name,
-        last_name=data.last_name,
-    )
+    try:
+        user = upsert_web_login(
+            tg_id=data.id,
+            username=data.username or "",
+            first_name=data.first_name,
+            last_name=data.last_name,
+            referred_by=data.referred_by,
+        )
+    except Exception:
+        logger.exception("Failed to upsert web login for tg_id=%s", data.id)
+        raise HTTPException(status_code=503, detail="Login service temporarily unavailable")
 
     # 4. Buat JWT
     token = create_token(

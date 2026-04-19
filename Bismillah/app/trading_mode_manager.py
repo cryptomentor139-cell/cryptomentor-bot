@@ -4,6 +4,8 @@ Manages trading mode selection, persistence, and switching between scalping and 
 """
 
 import logging
+import os
+import time
 from datetime import datetime
 from typing import Dict, Optional
 from app.trading_mode import TradingMode
@@ -19,6 +21,12 @@ class TradingModeManager:
     
     # In-memory cache: {user_id: TradingMode}
     _mode_cache: Dict[int, TradingMode] = {}
+    # In-memory manual override: {user_id: epoch_seconds_until_auto_switch_allowed}
+    _manual_override_until: Dict[int, float] = {}
+    _manual_override_seconds_default: int = max(
+        0,
+        int(os.getenv("AUTO_MODE_MANUAL_OVERRIDE_SECONDS", "1800") or "1800"),
+    )
     
     @staticmethod
     def get_mode(user_id: int) -> TradingMode:
@@ -70,9 +78,51 @@ class TradingModeManager:
         except Exception as e:
             logger.error(f"[TradingMode:{user_id}] Error updating mode: {e}")
             return False
+
+    @staticmethod
+    def mark_manual_override(user_id: int, duration_seconds: Optional[int] = None) -> None:
+        """
+        Mark a user as manually overridden so auto mode switcher pauses mode flips.
+        """
+        try:
+            duration = TradingModeManager._manual_override_seconds_default if duration_seconds is None else int(duration_seconds)
+            duration = max(0, duration)
+            if duration <= 0:
+                TradingModeManager._manual_override_until.pop(int(user_id), None)
+                return
+            TradingModeManager._manual_override_until[int(user_id)] = time.time() + duration
+        except Exception as e:
+            logger.warning(f"[TradingMode:{user_id}] Failed to mark manual override: {e}")
+
+    @staticmethod
+    def clear_manual_override(user_id: int) -> None:
+        TradingModeManager._manual_override_until.pop(int(user_id), None)
+
+    @staticmethod
+    def is_manual_override_active(user_id: int) -> bool:
+        """
+        Returns True when a recent manual mode change should block auto switch.
+        """
+        try:
+            uid = int(user_id)
+            until_ts = float(TradingModeManager._manual_override_until.get(uid, 0.0) or 0.0)
+            now_ts = time.time()
+            if until_ts <= now_ts:
+                if uid in TradingModeManager._manual_override_until:
+                    TradingModeManager._manual_override_until.pop(uid, None)
+                return False
+            return True
+        except Exception:
+            return False
     
     @staticmethod
-    async def switch_mode(user_id: int, new_mode: TradingMode, bot, context) -> Dict:
+    async def switch_mode(
+        user_id: int,
+        new_mode: TradingMode,
+        bot,
+        context,
+        switch_source: str = "manual",
+    ) -> Dict:
         """
         Switch trading mode with engine restart
         
@@ -88,6 +138,7 @@ class TradingModeManager:
             new_mode: TradingMode enum value to switch to
             bot: Telegram bot instance
             context: Telegram context
+            switch_source: "manual" or "auto" (manual enables temporary auto-switch override)
             
         Returns:
             Dict with success status and message
@@ -95,6 +146,7 @@ class TradingModeManager:
         current_mode = None
         engine_stopped = False
         db_updated = False
+        source = str(switch_source or "manual").strip().lower()
         
         try:
             # Step 1: Get current mode
@@ -106,13 +158,16 @@ class TradingModeManager:
                     "message": f"Already in {new_mode.value} mode"
                 }
             
-            # Step 2: Stop engine (close sideways positions first if switching from scalping)
+            # Step 2: Stop engine (close sideways positions first when leaving any scalping-capable runtime)
             try:
-                from app.autotrade_engine import stop_engine, get_engine
-                # Close open sideways positions before stopping if switching away from scalping
-                if current_mode == TradingMode.SCALPING and new_mode != TradingMode.SCALPING:
+                from app.autotrade_engine import stop_engine_async, get_scalping_engine
+                # Close open sideways positions before stopping when target runtime has no scalping component.
+                if (
+                    current_mode in (TradingMode.SCALPING, TradingMode.MIXED)
+                    and new_mode == TradingMode.SWING
+                ):
                     try:
-                        engine = get_engine(user_id)
+                        engine = get_scalping_engine(user_id)
                         if engine and hasattr(engine, 'positions'):
                             sideways_symbols = [
                                 sym for sym, pos in engine.positions.items()
@@ -124,7 +179,7 @@ class TradingModeManager:
                                 logger.info(f"[ModeSwitch:{user_id}] Closed sideways position {sym} before mode switch")
                     except Exception as sw_err:
                         logger.warning(f"[ModeSwitch:{user_id}] Could not close sideways positions: {sw_err}")
-                stop_engine(user_id)
+                await stop_engine_async(user_id, mark_inactive=False)
                 engine_stopped = True
                 logger.info(f"[ModeSwitch:{user_id}] Stopped {current_mode.value} engine")
             except Exception as e:
@@ -183,11 +238,14 @@ class TradingModeManager:
             logger.info(
                 f"[ModeSwitch:{user_id}] Successfully switched from {current_mode.value} to {new_mode.value}"
             )
+            if source != "auto":
+                TradingModeManager.mark_manual_override(user_id)
             return {
                 "success": True,
                 "message": f"Switched to {new_mode.value} mode",
                 "mode": new_mode,
-                "previous_mode": current_mode
+                "previous_mode": current_mode,
+                "switch_source": source,
             }
         
         except Exception as e:
@@ -208,7 +266,7 @@ class TradingModeManager:
             bot: Telegram bot instance
             context: Telegram context
         """
-        from app.autotrade_engine import start_engine
+        from app.autotrade_engine import start_engine_async
         from app.handlers_autotrade import get_user_api_keys, get_autotrade_session
         from app.supabase_repo import get_user_by_tid
         
@@ -224,7 +282,7 @@ class TradingModeManager:
         is_premium = user_data.get("premium_active", False) if user_data else False
         
         # Start engine with mode-specific config (silent=False to send notification)
-        start_engine(
+        await start_engine_async(
             bot=bot,
             user_id=user_id,
             api_key=keys['api_key'],

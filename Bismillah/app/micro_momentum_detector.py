@@ -22,7 +22,7 @@ class MomentumSignal:
     tp_price: float
     sl_price: float
     rr_ratio: float
-    confidence: int       # 60-90
+    confidence: int       # 72-90
     reason: str
 
 
@@ -41,8 +41,8 @@ class MicroMomentumDetector:
     EMA_FAST = 5
     EMA_SLOW = 13
     RSI_PERIOD = 9       # Shorter RSI for 1M
-    MIN_VOLUME_RATIO = 1.3
-    MIN_ROOM_PCT = 0.15  # Minimum 0.15% room to next S/R
+    MIN_VOLUME_RATIO = 1.05
+    MIN_ROOM_PCT = 0.10  # Minimum 0.10% room to next S/R
 
     def detect(
         self,
@@ -98,10 +98,10 @@ class MicroMomentumDetector:
 
         # Step 2: RSI 1M filter — must be in momentum zone
         rsi = self._rsi([c['close'] for c in candles_1m], self.RSI_PERIOD)
-        if direction == "LONG" and not (35 <= rsi <= 65):
+        if direction == "LONG" and not (30 <= rsi <= 70):
             logger.debug(f"[MicroMomentum] LONG rejected: RSI {rsi:.1f} out of range")
             return None
-        if direction == "SHORT" and not (35 <= rsi <= 65):
+        if direction == "SHORT" and not (30 <= rsi <= 70):
             logger.debug(f"[MicroMomentum] SHORT rejected: RSI {rsi:.1f} out of range")
             return None
 
@@ -182,13 +182,13 @@ class MicroMomentumDetector:
 
         # Recalculate R:R
         rr = tp_dist / sl_dist if sl_dist > 0 else 0
-        if rr < 1.2:
-            logger.debug(f"[MicroMomentum] Rejected: R:R {rr:.2f} < 1.2")
+        if rr < 1.05:
+            logger.debug(f"[MicroMomentum] Rejected: R:R {rr:.2f} < 1.05")
             return None
 
         # Confidence score
-        confidence = 62 + rsi_bonus + vol_bonus + room_bonus
-        confidence = min(88, confidence)
+        confidence = 72 + rsi_bonus + vol_bonus + room_bonus
+        confidence = min(90, confidence)
 
         cross_type = "EMA5×EMA13 bullish cross" if direction == "LONG" else "EMA5×EMA13 bearish cross"
         reason = (

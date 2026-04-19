@@ -7,12 +7,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional
 import time
+import os
 
 
 class TradingMode(Enum):
     """Trading mode enumeration"""
     SCALPING = "scalping"
     SWING = "swing"
+    MIXED = "mixed"
     
     @classmethod
     def from_string(cls, mode_str: str):
@@ -30,6 +32,8 @@ class TradingMode(Enum):
             return cls.SCALPING
         elif mode_str == "swing":
             return cls.SWING
+        elif mode_str == "mixed":
+            return cls.MIXED
         else:
             return cls.SWING  # Default to swing
     
@@ -46,12 +50,24 @@ class ScalpingConfig:
     scan_interval: int = 15  # seconds between scans (back to 15s with proper async)
     
     # Signal requirements
-    min_confidence: float = 0.80  # 80% minimum
+    min_confidence: float = 0.72  # 72% minimum
     min_rr: float = 1.5  # Minimum risk-reward ratio
+    sideways_min_rr: float = float(os.getenv("SCALPING_SIDEWAYS_MIN_RR", "1.1"))  # temporary relax for sideways flow
+    emergency_candidate_mode: bool = os.getenv("SCALPING_EMERGENCY_CANDIDATE_MODE", "true").lower() == "true"
+    emergency_min_volume_ratio: float = float(os.getenv("SCALPING_EMERGENCY_MIN_VOL_RATIO", "0.9"))
     
     # Position management
     max_hold_time: int = 1800  # 30 minutes in seconds
     single_tp_multiplier: float = 1.5  # TP at 1.5R
+    adaptive_timeout_protection_enabled: bool = os.getenv(
+        "SCALPING_ADAPTIVE_TIMEOUT_PROTECTION_ENABLED",
+        os.getenv("SCALPING_TIMEOUT_PROTECTION_ENABLED", "false"),
+    ).lower() == "true"
+    timeout_be_trigger_pct: float = float(os.getenv("SCALPING_TIMEOUT_BE_TRIGGER_PCT", "0.20"))
+    timeout_trailing_trigger_pct: float = float(os.getenv("SCALPING_TIMEOUT_TRAILING_TRIGGER_PCT", "0.35"))
+    timeout_late_tighten_multiplier: float = float(os.getenv("SCALPING_TIMEOUT_LATE_TIGHTEN_MULTIPLIER", "1.4"))
+    timeout_protection_min_update_seconds: int = int(os.getenv("SCALPING_TIMEOUT_PROTECTION_MIN_UPDATE_SECONDS", "45"))
+    timeout_near_flat_usdt_threshold: float = float(os.getenv("SCALPING_TIMEOUT_NEAR_FLAT_USDT_THRESHOLD", "0.02"))
     
     # Risk management
     max_concurrent_positions: int = 4  # Shared with swing mode
@@ -60,8 +76,8 @@ class ScalpingConfig:
     # Trading pairs (expanded for more sideways opportunities)
     pairs: List[str] = field(default_factory=lambda: [
         "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", 
-        "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT",
-        "LINKUSDT", "UNIUSDT", "ATOMUSDT", "XAUUSDT", "CLUSDT", "QQQUSDT"
+        "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT", 
+        "UNIUSDT", "ATOMUSDT", "XAUUSDT", "CLUSDT", "QQQUSDT"
     ])
     
     # ATR multipliers
@@ -71,12 +87,12 @@ class ScalpingConfig:
     cooldown_seconds: int = 150  # 2.5 minutes between signals on same pair (was 5min)
     sideways_reentry_cooldown_seconds: int = 420  # 7 minutes after sideways close
     anti_flip_opposite_seconds: int = 600  # 10 minutes block for opposite-direction re-entry
-    signal_confirmations_required: int = 2  # require same-direction signal seen in consecutive scans
+    signal_confirmations_required: int = int(os.getenv("SCALPING_SIGNAL_CONFIRMATIONS_REQUIRED", "1"))  # temporary relax
     signal_confirmation_max_gap_seconds: int = 45  # invalidate stale confirmation chain
     
     # Volume and volatility filters
     min_volume_ratio: float = 2.0  # Volume must be >2x average
-    min_atr_pct: float = 0.3  # Skip if ATR < 0.3% (too flat)
+    min_atr_pct: float = float(os.getenv("SCALPING_MIN_ATR_PCT", "0.2"))  # relaxed from 0.3%
     max_atr_pct: float = 10.0  # Skip if ATR > 10% (too volatile)
 
 
@@ -148,6 +164,7 @@ class ScalpingPosition:
     
     # Timing
     opened_at: float  # Unix timestamp
+    open_order_id: str = ""
     max_hold_until: float = field(init=False)  # opened_at + 1800 seconds
     
     # Status
@@ -215,3 +232,27 @@ class MicroScalpSignal:
     # Markers
     is_sideways: bool = True
     max_hold_time: int = 120        # seconds
+
+
+@dataclass
+class SwingAdaptiveConfig:
+    """Configuration surface for swing adaptive parity controls."""
+
+    signal_confirmations_required: int = int(os.getenv("SWING_SIGNAL_CONFIRMATIONS_REQUIRED", "1"))
+    signal_confirmation_max_gap_seconds: int = int(os.getenv("SWING_SIGNAL_CONFIRMATION_MAX_GAP_SECONDS", "45"))
+    emergency_candidate_mode: bool = os.getenv("SWING_EMERGENCY_CANDIDATE_MODE", "true").lower() == "true"
+    emergency_conf_relax: int = int(os.getenv("SWING_EMERGENCY_CONF_RELAX", "8"))
+    emergency_min_confidence: int = int(os.getenv("SWING_EMERGENCY_MIN_CONFIDENCE", "50"))
+
+    adaptive_timeout_protection_enabled: bool = os.getenv(
+        "SWING_ADAPTIVE_TIMEOUT_PROTECTION_ENABLED",
+        os.getenv("SWING_TIMEOUT_PROTECTION_ENABLED", "false"),
+    ).lower() == "true"
+    timeout_be_trigger_pct: float = float(os.getenv("SWING_TIMEOUT_BE_TRIGGER_PCT", "0.20"))
+    timeout_trailing_trigger_pct: float = float(os.getenv("SWING_TIMEOUT_TRAILING_TRIGGER_PCT", "0.35"))
+    timeout_late_tighten_multiplier: float = float(os.getenv("SWING_TIMEOUT_LATE_TIGHTEN_MULTIPLIER", "1.4"))
+    timeout_protection_min_update_seconds: int = int(os.getenv("SWING_TIMEOUT_PROTECTION_MIN_UPDATE_SECONDS", "45"))
+    timeout_near_flat_usdt_threshold: float = float(os.getenv("SWING_TIMEOUT_NEAR_FLAT_USDT_THRESHOLD", "0.02"))
+
+    dynamic_max_hold_enabled: bool = os.getenv("SWING_DYNAMIC_MAX_HOLD_ENABLED", "false").lower() == "true"
+    max_hold_default_seconds: int = int(os.getenv("SWING_MAX_HOLD_DEFAULT_SECONDS", "1800"))

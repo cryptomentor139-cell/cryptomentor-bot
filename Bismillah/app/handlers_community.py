@@ -68,6 +68,31 @@ def _get_admin_ids() -> list:
     return list(set(admin_ids))
 
 
+def _load_existing_uid_for_user(user_id: int) -> str:
+    """Read UID from user_verifications first, then autotrade_sessions fallback."""
+    s = _db()
+    ver = (
+        s.table("user_verifications")
+        .select("bitunix_uid")
+        .eq("telegram_id", int(user_id))
+        .limit(1)
+        .execute()
+    )
+    uid = (ver.data or [{}])[0].get("bitunix_uid")
+    if uid:
+        return str(uid)
+
+    legacy = (
+        s.table("autotrade_sessions")
+        .select("bitunix_uid")
+        .eq("telegram_id", int(user_id))
+        .limit(1)
+        .execute()
+    )
+    legacy_uid = (legacy.data or [{}])[0].get("bitunix_uid")
+    return str(legacy_uid or "unknown")
+
+
 # ------------------------------------------------------------------ #
 #  Entry: tombol Partners di dashboard autotrade                      #
 # ------------------------------------------------------------------ #
@@ -463,25 +488,40 @@ async def callback_community_member_acc(update: Update, context: ContextTypes.DE
     await query.answer("✅ Anggota di-approve")
 
     target_user_id = int(query.data.split("_")[-1])
+    leader_id = query.from_user.id
+    now_iso = datetime.utcnow().isoformat()
 
-    # Update status di autotrade_sessions
+    # Update canonical verification status first (website gatekeeper source-of-truth).
+    try:
+        uid = _load_existing_uid_for_user(target_user_id)
+        _db().table("user_verifications").upsert({
+            "telegram_id": target_user_id,
+            "bitunix_uid": uid,
+            "status": "approved",
+            "reviewed_at": now_iso,
+            "reviewed_by_admin_id": int(leader_id),
+            "updated_at": now_iso,
+        }, on_conflict="telegram_id").execute()
+    except Exception as e:
+        logger.error(f"[Community] approve member canonical update error: {e}")
+
+    # Keep legacy mirror aligned for older bot/session flows.
     try:
         _db().table("autotrade_sessions").update({
             "status": "uid_verified",
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": now_iso,
         }).eq("telegram_id", target_user_id).execute()
     except Exception as e:
         logger.error(f"[Community] approve member error: {e}")
 
     # Update member count
-    leader_id = query.from_user.id
     try:
         community = get_community_by_leader(leader_id)
         if community:
             new_count = (community.get("member_count") or 0) + 1
             _db().table("community_partners").update({
                 "member_count": new_count,
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": now_iso,
             }).eq("telegram_id", leader_id).execute()
     except Exception:
         pass
@@ -530,11 +570,27 @@ async def callback_community_member_reject(update: Update, context: ContextTypes
     await query.answer("❌ Anggota ditolak")
 
     target_user_id = int(query.data.split("_")[-1])
+    leader_id = query.from_user.id
+    now_iso = datetime.utcnow().isoformat()
+
+    # Update canonical verification status first (website gatekeeper source-of-truth).
+    try:
+        uid = _load_existing_uid_for_user(target_user_id)
+        _db().table("user_verifications").upsert({
+            "telegram_id": target_user_id,
+            "bitunix_uid": uid,
+            "status": "rejected",
+            "reviewed_at": now_iso,
+            "reviewed_by_admin_id": int(leader_id),
+            "updated_at": now_iso,
+        }, on_conflict="telegram_id").execute()
+    except Exception as e:
+        logger.error(f"[Community] reject member canonical update error: {e}")
 
     try:
         _db().table("autotrade_sessions").update({
             "status": "uid_rejected",
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": now_iso,
         }).eq("telegram_id", target_user_id).execute()
     except Exception:
         pass

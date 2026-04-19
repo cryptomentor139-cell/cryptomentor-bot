@@ -10,6 +10,7 @@ class TelegramAuthData(BaseModel):
     photo_url: Optional[str] = None
     auth_date: int
     hash: str
+    referred_by: Optional[str] = None
 
 
 class UserProfile(BaseModel):

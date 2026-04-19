@@ -785,6 +785,193 @@ class BitunixAutoTradeClient:
             return {'success': True, 'response': "\n".join(lines)}
         return {'success': False, 'response': f"Failed to fetch history: {result['error']}"}
 
+    def get_order_financials(self, order_id: str, symbol: str = "", limit: int = 200) -> Dict:
+        """
+        Best-effort extraction of fee and realized PnL for a specific order_id
+        from Bitunix history orders endpoint.
+        """
+        try:
+            result = self._request(
+                'GET',
+                '/api/v1/futures/trade/get_history_orders',
+                params={'limit': int(limit)},
+                signed=True
+            )
+            if not result.get('success'):
+                return result
+
+            data = result.get('data') or {}
+            orders = data.get('orderList', []) if isinstance(data, dict) else (data or [])
+            oid = str(order_id)
+            row = None
+            for o in orders:
+                if str(o.get('orderId') or o.get('id') or o.get('order_id')) != oid:
+                    continue
+                if symbol and str(o.get('symbol') or '').upper() != str(symbol).upper():
+                    continue
+                row = o
+                break
+
+            if not row:
+                return {'success': False, 'error': f'Order not found in history: {order_id}'}
+
+            def _pick_float(src: dict, keys: list):
+                for k in keys:
+                    v = src.get(k)
+                    if v is None or v == "":
+                        continue
+                    try:
+                        return float(v)
+                    except Exception:
+                        continue
+                return None
+
+            fee = _pick_float(row, [
+                'fee', 'tradeFee', 'execFee', 'closeFee', 'takerFee', 'makerFee'
+            ])
+            realized = _pick_float(row, [
+                'realizedPnl', 'realizedPNL', 'closePnl', 'closedPnl', 'profit', 'pnl'
+            ])
+
+            return {
+                'success': True,
+                'order_id': oid,
+                'symbol': row.get('symbol'),
+                'fee': fee if fee is not None else 0.0,
+                'realized_pnl': realized,
+                'raw': row,
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def get_roundtrip_financials(
+        self,
+        symbol: str,
+        open_order_id: str = "",
+        entry_side: str = "",
+        opened_at_iso: str = "",
+        limit: int = 200,
+    ) -> Dict:
+        """
+        Best-effort roundtrip PnL resolver from Bitunix history orders.
+        Returns close realized PnL and fee-aware net PnL:
+          net = close_realized_pnl - open_fee - close_fee
+        """
+        try:
+            result = self._request(
+                'GET',
+                '/api/v1/futures/trade/get_history_orders',
+                params={'limit': int(limit)},
+                signed=True
+            )
+            if not result.get('success'):
+                return result
+
+            data = result.get('data') or {}
+            orders = data.get('orderList', []) if isinstance(data, dict) else (data or [])
+            if not orders:
+                return {'success': False, 'error': 'No history orders'}
+
+            sym = str(symbol or "").upper()
+            open_oid = str(open_order_id or "")
+
+            opened_ms = None
+            if opened_at_iso:
+                try:
+                    dt = datetime.fromisoformat(str(opened_at_iso).replace("Z", "+00:00"))
+                    opened_ms = int(dt.timestamp() * 1000)
+                except Exception:
+                    opened_ms = None
+
+            def _pick_float(src: dict, keys: list):
+                for k in keys:
+                    v = src.get(k)
+                    if v is None or v == "":
+                        continue
+                    try:
+                        return float(v)
+                    except Exception:
+                        continue
+                return None
+
+            def _ctime_ms(row: dict) -> int:
+                try:
+                    return int(float(row.get('ctime') or 0))
+                except Exception:
+                    return 0
+
+            # Keep only filled orders for target symbol.
+            candidates = [
+                o for o in orders
+                if str(o.get('symbol') or '').upper() == sym and str(o.get('status') or '').upper() == 'FILLED'
+            ]
+            if opened_ms is not None:
+                candidates = [o for o in candidates if _ctime_ms(o) >= opened_ms]
+
+            if not candidates:
+                return {'success': False, 'error': f'No filled history for {sym}'}
+
+            # Open leg:
+            # 1) exact open_order_id match if present
+            # 2) fallback to earliest non-reduceOnly order in range
+            open_leg = None
+            if open_oid:
+                for o in candidates:
+                    oid = str(o.get('orderId') or o.get('id') or o.get('order_id') or '')
+                    if oid == open_oid:
+                        open_leg = o
+                        break
+
+            if not open_leg:
+                non_reduce = [o for o in candidates if not bool(o.get('reduceOnly'))]
+                if non_reduce:
+                    open_leg = min(non_reduce, key=_ctime_ms)
+
+            # Close leg:
+            # prefer reduceOnly filled order after open leg; fallback latest filled.
+            if open_leg:
+                open_ms = _ctime_ms(open_leg)
+                reduce_only = [o for o in candidates if bool(o.get('reduceOnly')) and _ctime_ms(o) >= open_ms]
+                if reduce_only:
+                    close_leg = max(reduce_only, key=_ctime_ms)
+                else:
+                    close_leg = max(candidates, key=_ctime_ms)
+            else:
+                close_leg = max(candidates, key=_ctime_ms)
+
+            close_realized = _pick_float(close_leg, [
+                'realizedPnl', 'realizedPNL', 'closePnl', 'closedPnl', 'profit', 'pnl'
+            ])
+            close_fee = abs(_pick_float(close_leg, ['fee', 'tradeFee', 'execFee', 'closeFee', 'takerFee', 'makerFee']) or 0.0)
+            open_fee = 0.0
+            if open_leg:
+                open_fee = abs(_pick_float(open_leg, ['fee', 'tradeFee', 'execFee', 'openFee', 'takerFee', 'makerFee']) or 0.0)
+
+            if close_realized is None:
+                return {'success': False, 'error': f'No realized PnL in close leg for {sym}'}
+
+            net_pnl = float(close_realized) - float(open_fee) - float(close_fee)
+
+            avg_close = _pick_float(close_leg, ['avgPrice', 'avg_price', 'price'])
+            avg_open = _pick_float(open_leg or {}, ['avgPrice', 'avg_price', 'price']) if open_leg else None
+
+            return {
+                'success': True,
+                'symbol': sym,
+                'open_order_id': str((open_leg or {}).get('orderId') or ''),
+                'close_order_id': str(close_leg.get('orderId') or ''),
+                'open_fee': float(open_fee),
+                'close_fee': float(close_fee),
+                'close_realized_pnl': float(close_realized),
+                'net_pnl': float(net_pnl),
+                'open_avg_price': avg_open,
+                'close_avg_price': avg_close,
+                'raw_open': open_leg,
+                'raw_close': close_leg,
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
 
 # ------------------------------------------------------------------ #
 #  Quick test                                                          #

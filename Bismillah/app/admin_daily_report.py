@@ -5,6 +5,7 @@ Covers: active engines, trades, PnL, stopped engines with reasoning.
 """
 
 import asyncio
+import html
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -33,6 +34,71 @@ def _fmt(val, prefix="$", decimals=2) -> str:
         return "N/A"
 
 
+def _to_float(val, default: float = 0.0) -> float:
+    try:
+        return float(val or 0)
+    except Exception:
+        return float(default)
+
+
+def _escape_html(value) -> str:
+    return html.escape(str(value if value is not None else ""))
+
+
+def _split_message_lines(text: str, max_len: int = 3800) -> list[str]:
+    """
+    Split long Telegram messages safely by line boundaries.
+    Keeps HTML entities/tags intact per line and avoids 4096-char limit.
+    """
+    if len(text) <= max_len:
+        return [text]
+
+    chunks: list[str] = []
+    current_lines: list[str] = []
+    current_len = 0
+
+    for raw_line in text.splitlines(keepends=True):
+        line = raw_line
+
+        # Fallback: a single very long line still must be split.
+        while len(line) > max_len:
+            head = line[:max_len]
+            tail = line[max_len:]
+            if current_lines:
+                chunks.append("".join(current_lines).rstrip())
+                current_lines = []
+                current_len = 0
+            chunks.append(head.rstrip())
+            line = tail
+
+        line_len = len(line)
+        if current_lines and (current_len + line_len) > max_len:
+            chunks.append("".join(current_lines).rstrip())
+            current_lines = [line]
+            current_len = line_len
+        else:
+            current_lines.append(line)
+            current_len += line_len
+
+    if current_lines:
+        chunks.append("".join(current_lines).rstrip())
+
+    return chunks
+
+
+def _is_real_user_id(raw_id) -> bool:
+    """
+    Accept real Telegram user IDs without legacy hard cutoff.
+    Old logic used < 999,999,990 and excluded most modern 10-digit IDs.
+    """
+    try:
+        uid = int(raw_id)
+    except Exception:
+        return False
+    # Exclude empty/invalid and obviously non-user sentinels.
+    return uid > 0
+
+
 def _engine_stop_reason(session: dict, has_api_keys: bool) -> str:
     """Determine why an engine is stopped based on session data."""
     status = session.get("status", "")
@@ -56,6 +122,13 @@ async def send_daily_report(bot):
         from app.supabase_repo import _client
         from app.autotrade_engine import is_running
         from app.handlers_autotrade import get_user_api_keys
+        from app.exchange_registry import get_client
+        from app.adaptive_confluence import classify_outcome_class, get_adaptive_overrides
+        from app.confidence_adaptation import (
+            get_confidence_adaptation_snapshot,
+            refresh_global_confidence_adaptation_state,
+        )
+        from app.win_playbook import refresh_global_win_playbook_state, get_win_playbook_snapshot
 
         s = _client()
         now_wib = datetime.now(TZ_WIB)
@@ -68,7 +141,7 @@ async def send_daily_report(bot):
 
         total_users = len([
             sess for sess in all_sessions
-            if sess.get("telegram_id") and int(sess.get("telegram_id", 0)) < 999999990
+            if _is_real_user_id(sess.get("telegram_id"))
         ])
 
         active_engines = []
@@ -77,7 +150,7 @@ async def send_daily_report(bot):
 
         for sess in all_sessions:
             uid = sess.get("telegram_id")
-            if not uid or int(uid) >= 999999990:
+            if not _is_real_user_id(uid):
                 continue
             status = sess.get("status", "")
             if status in ("pending_verification", "uid_rejected", "pending"):
@@ -87,13 +160,84 @@ async def send_daily_report(bot):
             else:
                 stopped_engines.append(sess)
 
+        key_cache: dict[int, dict | None] = {}
+
+        def _cached_user_keys(uid: int):
+            try:
+                uid_i = int(uid)
+            except Exception:
+                return None
+            if uid_i not in key_cache:
+                try:
+                    key_cache[uid_i] = get_user_api_keys(uid_i)
+                except Exception:
+                    key_cache[uid_i] = None
+            return key_cache[uid_i]
+
+        async def _resolve_live_equity(sess: dict) -> tuple[float, str]:
+            uid = int(sess.get("telegram_id") or 0)
+            fallback = _to_float(sess.get("current_balance"), 0.0)
+            keys = _cached_user_keys(uid)
+            if not keys:
+                return fallback, "db_no_keys"
+
+            exchange_id = str(keys.get("exchange") or sess.get("exchange") or "bitunix")
+            try:
+                ex_client = get_client(exchange_id, keys["api_key"], keys["api_secret"])
+                acc = await asyncio.wait_for(
+                    asyncio.to_thread(ex_client.get_account_info),
+                    timeout=4.0,
+                )
+                if bool(acc.get("success")):
+                    available = _to_float(acc.get("available"), 0.0)
+                    frozen = _to_float(acc.get("frozen"), 0.0)
+                    unrealized = _to_float(acc.get("total_unrealized_pnl"), 0.0)
+                    equity = available + frozen + unrealized
+
+                    # Keep DB snapshot fresh so admin reports and other consumers
+                    # do not keep showing stale bootstrap balances.
+                    if abs(equity - fallback) > 0.01:
+                        try:
+                            s.table("autotrade_sessions").update({
+                                "current_balance": equity,
+                                "updated_at": datetime.now(timezone.utc).isoformat(),
+                            }).eq("telegram_id", uid).execute()
+                        except Exception as e:
+                            logger.warning(
+                                f"[DailyReport] Failed to persist equity snapshot for {uid}: {e}"
+                            )
+                    return equity, "live"
+            except Exception as e:
+                logger.warning(f"[DailyReport] Live equity fetch failed for {uid}: {e}")
+
+            return fallback, "db_fallback"
+
+        # Hydrate live equity for all users shown in active/stopped sections.
+        report_sessions = []
+        report_sessions.extend(active_engines)
+        report_sessions.extend(stopped_engines)
+        if report_sessions:
+            sem = asyncio.Semaphore(8)
+
+            async def _hydrate_one(sess: dict):
+                uid = int(sess.get("telegram_id") or 0)
+                if uid <= 0:
+                    return
+                async with sem:
+                    equity, source = await _resolve_live_equity(sess)
+                sess["_equity_value"] = equity
+                sess["_equity_source"] = source
+
+            await asyncio.gather(*[_hydrate_one(sess) for sess in report_sessions])
+
         # ── 2. Today's trades ─────────────────────────────────────────
         trades_res = s.table("autotrade_trades").select(
-            "telegram_id, symbol, side, pnl_usdt, status, opened_at, closed_at"
+            "telegram_id, symbol, side, pnl_usdt, status, close_reason, loss_reasoning, "
+            "win_reasoning, playbook_match_score, effective_risk_pct, risk_overlay_pct, opened_at, closed_at"
         ).gte("opened_at", since_24h).execute()
         trades_today = trades_res.data or []
 
-        closed_trades = [t for t in trades_today if t.get("status", "").startswith("closed")]
+        closed_trades = [t for t in trades_today if str(t.get("status") or "").lower() != "open"]
         open_trades = [t for t in trades_today if t.get("status") == "open"]
 
         total_pnl = sum(float(t.get("pnl_usdt") or 0) for t in closed_trades)
@@ -102,6 +246,109 @@ async def send_daily_report(bot):
         win_pnl = sum(float(t.get("pnl_usdt") or 0) for t in wins)
         loss_pnl = sum(float(t.get("pnl_usdt") or 0) for t in losses)
         win_rate = (len(wins) / len(closed_trades) * 100) if closed_trades else 0
+
+        # ── 2b. Outcome taxonomy + adaptive snapshot ───────────────────
+        taxonomy_counts = {
+            "strategy_loss": 0,
+            "strategy_win": 0,
+            "timeout_exit": 0,
+            "ops_reconcile": 0,
+            "unknown": 0,
+        }
+        for t in closed_trades:
+            oc = classify_outcome_class(t)
+            taxonomy_counts[oc] = taxonomy_counts.get(oc, 0) + 1
+
+        strategy_total = taxonomy_counts["strategy_loss"] + taxonomy_counts["strategy_win"]
+        strategy_loss_rate_24h = (
+            taxonomy_counts["strategy_loss"] / strategy_total * 100
+            if strategy_total > 0 else 0.0
+        )
+        ops_rate_24h = (
+            taxonomy_counts["ops_reconcile"] / len(closed_trades) * 100
+            if closed_trades else 0.0
+        )
+        timeout_exits = [t for t in closed_trades if classify_outcome_class(t) == "timeout_exit"]
+        timeout_losses = [t for t in timeout_exits if float(t.get("pnl_usdt") or 0) < 0]
+        timeout_loss_pnl = sum(float(t.get("pnl_usdt") or 0) for t in timeout_losses)
+        timeout_loss_count = len(timeout_losses)
+        timeout_loss_rate = (
+            timeout_loss_count / len(timeout_exits) * 100
+            if timeout_exits else 0.0
+        )
+        timeout_avg_loss = (
+            timeout_loss_pnl / timeout_loss_count if timeout_loss_count > 0 else 0.0
+        )
+        timeout_protected = [
+            t for t in timeout_exits
+            if "timeout_protection=applied" in str(t.get("loss_reasoning") or "").lower()
+        ]
+        timeout_protected_near_flat = [
+            t for t in timeout_protected
+            if abs(float(t.get("pnl_usdt") or 0)) <= 0.02
+        ]
+        timeout_protection_effectiveness = (
+            len(timeout_protected_near_flat) / len(timeout_protected) * 100
+            if timeout_protected else 0.0
+        )
+
+        adaptive = get_adaptive_overrides()
+        try:
+            refresh_global_win_playbook_state()
+        except Exception:
+            pass
+        playbook_snapshot = get_win_playbook_snapshot()
+        try:
+            refresh_global_confidence_adaptation_state()
+        except Exception:
+            pass
+        confidence_adapt_snapshot = get_confidence_adaptation_snapshot()
+        overlay_pct = float(playbook_snapshot.get("risk_overlay_pct", 0.0) or 0.0)
+        effective_risk_min = min(10.0, 0.25 + overlay_pct)
+        effective_risk_max = min(10.0, 5.0 + overlay_pct)
+        active_tags = playbook_snapshot.get("active_tags", []) or []
+        top_tags = [str(t.get("tag")) for t in active_tags[:5]]
+        wins_with_reason = [w for w in wins if str(w.get("win_reasoning") or "").strip()]
+        win_reason_coverage = (len(wins_with_reason) / len(wins) * 100) if wins else 0.0
+        playbook_matched_wins = [
+            w for w in wins if float(w.get("playbook_match_score") or 0) >= 0.55
+        ]
+        non_matched_wins = max(0, len(wins) - len(playbook_matched_wins))
+        conf_modes = confidence_adapt_snapshot.get("modes") or {}
+        conf_swing = conf_modes.get("swing") or {}
+        conf_scalp = conf_modes.get("scalping") or {}
+
+        def _fmt_bucket(bucket: dict | None) -> str:
+            if not bucket:
+                return "-"
+            return (
+                f"{bucket.get('bucket', '-')} "
+                f"(n={int(bucket.get('n', 0) or 0)}, edge={float(bucket.get('edge_adj', 0.0) or 0.0):+.3f}, "
+                f"penalty={int(bucket.get('bucket_penalty', 0) or 0)}, "
+                f"scale={float(bucket.get('bucket_risk_scale', 1.0) or 1.0):.2f})"
+            )
+
+        def _fmt_active(active_rows: list, max_rows: int = 4) -> str:
+            rows = list(active_rows or [])[:max_rows]
+            if not rows:
+                return "-"
+            return ", ".join(
+                f"{str(r.get('bucket', '-'))}:p{int(r.get('bucket_penalty', 0) or 0)}/s{float(r.get('bucket_risk_scale', 1.0) or 1.0):.2f}"
+                for r in rows
+            )
+
+        # 7-day trend from closed trades
+        since_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        closed_7d_res = s.table("autotrade_trades").select(
+            "status, close_reason, pnl_usdt, loss_reasoning"
+        ).gte("closed_at", since_7d).neq("status", "open").execute()
+        closed_7d = closed_7d_res.data or []
+        strategy_7d = [r for r in closed_7d if classify_outcome_class(r) in ("strategy_loss", "strategy_win")]
+        strategy_losses_7d = [r for r in strategy_7d if classify_outcome_class(r) == "strategy_loss"]
+        strategy_loss_rate_7d = (
+            len(strategy_losses_7d) / len(strategy_7d) * 100 if strategy_7d else 0.0
+        )
+        trades_per_day_7d = (len(strategy_7d) / 7.0) if strategy_7d else 0.0
 
         # ── 3. New users today ────────────────────────────────────────
         new_users_res = s.table("users").select("telegram_id, first_name, created_at").gte(
@@ -141,44 +388,90 @@ async def send_daily_report(bot):
             f"• Win rate: <b>{win_rate:.1f}%</b> ({len(wins)}W / {len(losses)}L)\n"
             f"• Total PnL: <b>{pnl_str}</b>\n"
             f"• Profit: <b>+${win_pnl:,.2f}</b> | Loss: <b>-${abs(loss_pnl):,.2f}</b>\n\n"
+
+            f"🧠 <b>ADAPTIVE CONFLUENCE (24h)</b>\n"
+            f"• Strategy outcomes: <b>{strategy_total}</b> "
+            f"({taxonomy_counts['strategy_win']}W / {taxonomy_counts['strategy_loss']}L)\n"
+            f"• Strategy loss rate: <b>{strategy_loss_rate_24h:.1f}%</b>\n"
+            f"• Timeout exits: <b>{taxonomy_counts['timeout_exit']}</b>\n"
+            f"• Ops/reconcile closures: <b>{taxonomy_counts['ops_reconcile']}</b> ({ops_rate_24h:.1f}%)\n"
+            f"• Timeout losses: <b>{timeout_loss_count}</b> "
+            f"({timeout_loss_rate:.1f}% of timeout exits)\n"
+            f"• Timeout loss PnL: <b>{_fmt(timeout_loss_pnl)}</b> "
+            f"(avg <b>{_fmt(timeout_avg_loss)}</b>)\n"
+            f"• Timeout protection effectiveness: <b>{timeout_protection_effectiveness:.1f}%</b> "
+            f"(near-flat {len(timeout_protected_near_flat)}/{len(timeout_protected)})\n"
+            f"• Active thresholds: conf_delta=<b>{int(adaptive.get('conf_delta', 0)):+d}</b>, "
+            f"vol_delta=<b>{float(adaptive.get('volume_min_ratio_delta', 0.0)):+.2f}</b>, "
+            f"ob_mode=<b>{adaptive.get('ob_fvg_requirement_mode', 'soft')}</b>\n"
+            f"• 7-day trend: strategy_loss=<b>{strategy_loss_rate_7d:.1f}%</b>, "
+            f"strategy_trades/day=<b>{trades_per_day_7d:.1f}</b>\n\n"
+
+            f"🏆 <b>WIN PLAYBOOK (Global)</b>\n"
+            f"• Active tags: <b>{len(active_tags)}</b>"
+            + (f" ({', '.join(top_tags)})" if top_tags else "") + "\n"
+            f"• Runtime overlay: <b>{overlay_pct:+.2f}%</b>\n"
+            f"• Effective risk bounds: <b>{effective_risk_min:.2f}% - {effective_risk_max:.2f}%</b>\n"
+            f"• Guardrails: win_rate=<b>{float(playbook_snapshot.get('rolling_win_rate', 0.0))*100:.1f}%</b>, "
+            f"expectancy=<b>{float(playbook_snapshot.get('rolling_expectancy', 0.0)):+.4f}</b>, "
+            f"sample=<b>{int(playbook_snapshot.get('sample_size', 0) or 0)}</b>\n"
+            f"• Win-reason coverage: <b>{win_reason_coverage:.1f}%</b> "
+            f"({len(wins_with_reason)}/{len(wins) if wins else 0})\n"
+            f"• Playbook-matched wins: <b>{len(playbook_matched_wins)}</b> | "
+            f"Non-matched wins: <b>{non_matched_wins}</b>\n\n"
+
+            f"🎚️ <b>CONFIDENCE ADAPTATION (Global)</b>\n"
+            f"• Enabled: <b>{bool(confidence_adapt_snapshot.get('enabled', False))}</b> | "
+            f"lookback=<b>{int(confidence_adapt_snapshot.get('lookback_days', 14) or 14)}d</b> | "
+            f"min_support=<b>{int(confidence_adapt_snapshot.get('min_support', 30) or 30)}</b>\n"
+            f"• Swing sample: <b>{int(conf_swing.get('sample_size', 0) or 0)}</b> | "
+            f"top=<b>{_escape_html(_fmt_bucket(conf_swing.get('top_bucket')))}</b> | "
+            f"worst=<b>{_escape_html(_fmt_bucket(conf_swing.get('worst_bucket')))}</b>\n"
+            f"• Swing active table: <b>{_escape_html(_fmt_active(conf_swing.get('active_adaptations') or []))}</b>\n"
+            f"• Scalping sample: <b>{int(conf_scalp.get('sample_size', 0) or 0)}</b> | "
+            f"top=<b>{_escape_html(_fmt_bucket(conf_scalp.get('top_bucket')))}</b> | "
+            f"worst=<b>{_escape_html(_fmt_bucket(conf_scalp.get('worst_bucket')))}</b>\n"
+            f"• Scalping active table: <b>{_escape_html(_fmt_active(conf_scalp.get('active_adaptations') or []))}</b>\n\n"
         )
 
         # ── 6. Stopped engines with reasoning ────────────────────────
         if stopped_engines:
             msg += f"🔴 <b>STOPPED ENGINES ({len(stopped_engines)})</b>\n"
-            for sess in stopped_engines[:10]:  # max 10 to avoid message too long
+            for sess in stopped_engines:
                 uid = sess.get("telegram_id")
-                username = sess.get("username") or f"#{uid}"
-                has_keys = get_user_api_keys(uid) is not None
+                username = _escape_html(sess.get("username") or f"#{uid}")
+                has_keys = _cached_user_keys(uid) is not None
                 reason = _engine_stop_reason(sess, has_keys)
                 last_update = sess.get("updated_at", "")[:10] if sess.get("updated_at") else "N/A"
-                msg += f"  • <code>{uid}</code> @{username} — {reason} (last: {last_update})\n"
-            if len(stopped_engines) > 10:
-                msg += f"  ... and {len(stopped_engines) - 10} more\n"
+                equity = _to_float(sess.get("_equity_value", sess.get("current_balance")), 0.0)
+                msg += (
+                    f"  • <code>{uid}</code> @{username} — "
+                    f"{_escape_html(reason)} | Equity: ${equity:,.2f} "
+                    f"(last: {_escape_html(last_update)})\n"
+                )
             msg += "\n"
 
         # ── 7. Active engines summary ─────────────────────────────────
         if active_engines:
             msg += f"🟢 <b>ACTIVE ENGINES ({len(active_engines)})</b>\n"
-            for sess in active_engines[:8]:
+            for sess in active_engines:
                 uid = sess.get("telegram_id")
-                mode = sess.get("trading_mode", "scalping").title()
-                risk = sess.get("risk_per_trade", 1.0)
-                balance = sess.get("current_balance", 0)
-                msg += f"  • <code>{uid}</code> — {mode} | Risk: {risk}% | Bal: ${float(balance or 0):,.0f}\n"
-            if len(active_engines) > 8:
-                msg += f"  ... and {len(active_engines) - 8} more\n"
+                mode = _escape_html(sess.get("trading_mode", "scalping").title())
+                risk = _to_float(sess.get("risk_per_trade"), 1.0)
+                equity = _to_float(sess.get("_equity_value", sess.get("current_balance")), 0.0)
+                msg += (
+                    f"  • <code>{uid}</code> — {mode} | "
+                    f"Risk: {risk:.2f}% | Equity: ${equity:,.2f}\n"
+                )
             msg += "\n"
 
         # ── 8. New users list ─────────────────────────────────────────
         if new_users:
             msg += f"🆕 <b>NEW USERS TODAY</b>\n"
-            for u in new_users[:5]:
-                name = u.get("first_name", "Unknown")
+            for u in new_users:
+                name = _escape_html(u.get("first_name", "Unknown"))
                 uid = u.get("telegram_id", "?")
                 msg += f"  • {name} (<code>{uid}</code>)\n"
-            if len(new_users) > 5:
-                msg += f"  ... and {len(new_users) - 5} more\n"
             msg += "\n"
 
         # ── 9. Top trades today ───────────────────────────────────────
@@ -188,7 +481,9 @@ async def send_daily_report(bot):
             for t in top_trades:
                 pnl = float(t.get("pnl_usdt") or 0)
                 emoji = "✅" if pnl > 0 else "❌"
-                msg += f"  {emoji} {t.get('symbol', '?')} {t.get('side', '?')} — {_fmt(pnl)}\n"
+                symbol = _escape_html(t.get("symbol", "?"))
+                side = _escape_html(t.get("side", "?"))
+                msg += f"  {emoji} {symbol} {side} — {_fmt(pnl)}\n"
             msg += "\n"
 
         msg += f"{'─' * 35}\n"
@@ -198,11 +493,20 @@ async def send_daily_report(bot):
         admin_ids = _get_admin_ids()
         for admin_id in admin_ids:
             try:
-                await bot.send_message(
-                    chat_id=admin_id,
-                    text=msg,
-                    parse_mode='HTML'
-                )
+                chunks = _split_message_lines(msg)
+                total = len(chunks)
+                for idx, chunk in enumerate(chunks, start=1):
+                    chunk_text = chunk
+                    if total > 1 and idx > 1:
+                        chunk_text = (
+                            f"📊 <b>CryptoMentor Daily Report (Cont. {idx}/{total})</b>\n\n"
+                            f"{chunk}"
+                        )
+                    await bot.send_message(
+                        chat_id=admin_id,
+                        text=chunk_text,
+                        parse_mode='HTML'
+                    )
                 logger.info(f"[DailyReport] ✅ Sent to admin {admin_id}")
             except Exception as e:
                 logger.error(f"[DailyReport] ❌ Failed to send to admin {admin_id}: {e}")

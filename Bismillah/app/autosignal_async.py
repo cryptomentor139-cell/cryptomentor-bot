@@ -34,67 +34,92 @@ async def compute_signal_scalping_async(base_symbol: str) -> Optional[Dict[str, 
         
         # Wrap sync get_klines in async with cache
         async def fetch_klines_async(sym, interval, limit):
-            # Use to_thread to prevent blocking
-            return await asyncio.to_thread(
-                alternative_klines_provider.get_klines,
-                sym, interval, limit
-            )
+            # Use to_thread to prevent blocking and rotate source priority on retries.
+            source_orders = [
+                ["bitunix", "binance", "cryptocompare", "coingecko"],
+                ["binance", "bitunix", "cryptocompare", "coingecko"],
+                ["binance", "cryptocompare", "bitunix", "coingecko"],
+            ]
+            for order in source_orders:
+                data = await asyncio.to_thread(
+                    alternative_klines_provider.get_klines,
+                    sym, interval, limit, order
+                )
+                if data:
+                    return data
+            return []
         
-        # ===== Step 1: Get 15M trend (with cache) =====
-        klines_15m = await get_candles_cached(
-            fetch_klines_async, symbol, '15m', 100
-        )
-        
-        if not klines_15m or len(klines_15m) < 50:
-            return None
-        
-        c15 = [float(k[4]) for k in klines_15m]
-        ema21_15 = _calc_ema(c15, 21)
-        ema50_15 = _calc_ema(c15, 50)
-        price = c15[-1]
-        
-        # Determine 15M trend
-        if price > ema21_15 > ema50_15:
-            trend_15m = "LONG"
-            trend_strength = "STRONG"
-        elif price < ema21_15 < ema50_15:
-            trend_15m = "SHORT"
-            trend_strength = "STRONG"
-        elif price > ema21_15:
-            trend_15m = "LONG"
-            trend_strength = "WEAK"  # Ranging but bullish bias
-        elif price < ema21_15:
-            trend_15m = "SHORT"
-            trend_strength = "WEAK"  # Ranging but bearish bias
-        else:
-            trend_15m = "NEUTRAL"
-            trend_strength = "RANGING"
-        
-        # ===== Step 2: Get 5M entry trigger (with cache) =====
+        # ===== Step 1: Get 5M entry data (required) =====
         klines_5m = await get_candles_cached(
             fetch_klines_async, symbol, '5m', 60
         )
-        
         if not klines_5m or len(klines_5m) < 30:
             return None
-        
+
         c5 = [float(k[4]) for k in klines_5m]
         h5 = [float(k[2]) for k in klines_5m]
         l5 = [float(k[3]) for k in klines_5m]
         v5 = [float(k[5]) for k in klines_5m]
+        price = c5[-1]
+
+        # ===== Step 2: Get 15M trend (optional with degraded fallback) =====
+        feed_degraded = False
+        klines_15m = await get_candles_cached(
+            fetch_klines_async, symbol, '15m', 100
+        )
+
+        if klines_15m and len(klines_15m) >= 50:
+            c15 = [float(k[4]) for k in klines_15m]
+            ema21_15 = _calc_ema(c15, 21)
+            ema50_15 = _calc_ema(c15, 50)
+
+            # Determine 15M trend
+            if price > ema21_15 > ema50_15:
+                trend_15m = "LONG"
+                trend_strength = "STRONG"
+            elif price < ema21_15 < ema50_15:
+                trend_15m = "SHORT"
+                trend_strength = "STRONG"
+            elif price > ema21_15:
+                trend_15m = "LONG"
+                trend_strength = "WEAK"
+            elif price < ema21_15:
+                trend_15m = "SHORT"
+                trend_strength = "WEAK"
+            else:
+                trend_15m = "NEUTRAL"
+                trend_strength = "RANGING"
+        else:
+            # During partial feed outages, use 5M trend proxy instead of dropping the symbol.
+            feed_degraded = True
+            ema21_5 = _calc_ema(c5, 21)
+            ema50_5 = _calc_ema(c5, 50)
+            if price > ema21_5 > ema50_5:
+                trend_15m = "LONG"
+                trend_strength = "WEAK"
+            elif price < ema21_5 < ema50_5:
+                trend_15m = "SHORT"
+                trend_strength = "WEAK"
+            else:
+                trend_15m = "NEUTRAL"
+                trend_strength = "RANGING"
         
         rsi_5m = _calc_rsi(c5)
         atr_5m = _calc_atr(h5, l5, c5, 14)
         vol_ratio = _calc_volume_ratio(v5, 20)
+        min_vol_strong = 1.6 if not feed_degraded else 1.3
+        min_vol_weak = 1.0 if not feed_degraded else 0.9
         
         # ===== Step 3: Signal logic (SCALPING - more flexible) =====
         side = None
-        confidence = 75  # Base confidence for scalping
+        confidence = 75 if not feed_degraded else 73
         reasons = []
+        if feed_degraded:
+            reasons.append("Partial feed outage: using 5M trend proxy")
         
         # STRONG TREND SIGNALS (Original logic - high confidence)
         if trend_strength == "STRONG":
-            if trend_15m == "LONG" and rsi_5m < 30 and vol_ratio > 2.0:
+            if trend_15m == "LONG" and rsi_5m < 30 and vol_ratio > min_vol_strong:
                 side = "LONG"
                 confidence = 85
                 reasons.append(f"Strong 15M uptrend + 5M oversold (RSI {rsi_5m:.0f})")
@@ -102,7 +127,7 @@ async def compute_signal_scalping_async(base_symbol: str) -> Optional[Dict[str, 
                 if vol_ratio > 3.0:
                     confidence += 5
                     reasons.append("Exceptional volume")
-            elif trend_15m == "SHORT" and rsi_5m > 70 and vol_ratio > 2.0:
+            elif trend_15m == "SHORT" and rsi_5m > 70 and vol_ratio > min_vol_strong:
                 side = "SHORT"
                 confidence = 85
                 reasons.append(f"Strong 15M downtrend + 5M overbought (RSI {rsi_5m:.0f})")
@@ -114,13 +139,13 @@ async def compute_signal_scalping_async(base_symbol: str) -> Optional[Dict[str, 
         # WEAK TREND / RANGING SIGNALS (New - for sideways market)
         elif trend_strength in ["WEAK", "RANGING"]:
             # More relaxed conditions for ranging market
-            if trend_15m == "LONG" and rsi_5m < 40 and vol_ratio > 1.5:
+            if trend_15m == "LONG" and rsi_5m < 42 and vol_ratio > min_vol_weak:
                 side = "LONG"
                 confidence = 80
                 reasons.append(f"15M bullish bias + 5M pullback (RSI {rsi_5m:.0f})")
                 reasons.append(f"Volume increase {vol_ratio:.1f}x")
                 reasons.append("Range trading - buy support")
-            elif trend_15m == "SHORT" and rsi_5m > 60 and vol_ratio > 1.5:
+            elif trend_15m == "SHORT" and rsi_5m > 58 and vol_ratio > min_vol_weak:
                 side = "SHORT"
                 confidence = 80
                 reasons.append(f"15M bearish bias + 5M bounce (RSI {rsi_5m:.0f})")
@@ -128,18 +153,39 @@ async def compute_signal_scalping_async(base_symbol: str) -> Optional[Dict[str, 
                 reasons.append("Range trading - sell resistance")
             elif trend_15m == "NEUTRAL":
                 # Pure ranging - trade both sides based on 5M extremes
-                if rsi_5m < 35 and vol_ratio > 1.5:
+                if rsi_5m < 38 and vol_ratio > min_vol_weak:
                     side = "LONG"
                     confidence = 80  # Raised to pass 80% threshold
                     reasons.append(f"Ranging market + 5M oversold (RSI {rsi_5m:.0f})")
                     reasons.append(f"Volume {vol_ratio:.1f}x - buy support")
                     reasons.append("Scalping range low")
-                elif rsi_5m > 65 and vol_ratio > 1.5:
+                elif rsi_5m > 62 and vol_ratio > min_vol_weak:
                     side = "SHORT"
                     confidence = 80  # Raised to pass 80% threshold
                     reasons.append(f"Ranging market + 5M overbought (RSI {rsi_5m:.0f})")
                     reasons.append(f"Volume {vol_ratio:.1f}x - sell resistance")
                     reasons.append("Scalping range high")
+
+        # Outage/low-vol fallback: still emit conservative candidates so scanner
+        # stays productive instead of returning all-None under partial data gaps.
+        if side is None and vol_ratio >= 0.9:
+            if trend_15m == "LONG" and rsi_5m <= 50:
+                side = "LONG"
+                confidence = 72 if not feed_degraded else 73
+                reasons.append(f"Fallback LONG: trend={trend_15m}, RSI={rsi_5m:.0f}, vol={vol_ratio:.1f}x")
+            elif trend_15m == "SHORT" and rsi_5m >= 50:
+                side = "SHORT"
+                confidence = 72 if not feed_degraded else 73
+                reasons.append(f"Fallback SHORT: trend={trend_15m}, RSI={rsi_5m:.0f}, vol={vol_ratio:.1f}x")
+            elif trend_15m == "NEUTRAL":
+                if rsi_5m <= 48:
+                    side = "LONG"
+                    confidence = 72
+                    reasons.append(f"Fallback NEUTRAL LONG: RSI={rsi_5m:.0f}, vol={vol_ratio:.1f}x")
+                elif rsi_5m >= 52:
+                    side = "SHORT"
+                    confidence = 72
+                    reasons.append(f"Fallback NEUTRAL SHORT: RSI={rsi_5m:.0f}, vol={vol_ratio:.1f}x")
         
         if side is None:
             return None
@@ -174,6 +220,7 @@ async def compute_signal_scalping_async(base_symbol: str) -> Optional[Dict[str, 
             "rsi_5m": rsi_5m,
             "trend_15m": trend_15m,
             "trend_strength": trend_strength,  # NEW: indicate trend strength
+            "feed_degraded": feed_degraded,
             "reasons": reasons,
         }
         

@@ -1,0 +1,1874 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CryptoMentor AI — Start Here</title>
+  <style>
+    :root {
+      --bg: #04060f;
+      --surface: rgba(8, 14, 28, 0.82);
+      --border: rgba(34, 211, 238, 0.22);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --cyan: #22d3ee;
+      --emerald: #34d399;
+      --amber: #fbbf24;
+      --rose: #fb7185;
+      --indigo: #818cf8;
+      --glow-cyan: rgba(34, 211, 238, 0.18);
+      --glow-emerald: rgba(52, 211, 153, 0.12);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    /* ── ANIMATED STARFIELD ── */
+    #starfield {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .star {
+      position: absolute;
+      border-radius: 50%;
+      background: #fff;
+      animation: twinkle linear infinite;
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.1; transform: scale(1); }
+      50% { opacity: 0.9; transform: scale(1.4); }
+    }
+
+    /* ── GRID OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(34,211,238,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34,211,238,0.04) 1px, transparent 1px);
+      background-size: 64px 64px;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(4, 6, 15, 0.85);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.3s;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 800;
+      font-size: 1.1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-logo .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--cyan), var(--emerald));
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0.6); }
+      50% { box-shadow: 0 0 0 6px rgba(34,211,238,0); }
+    }
+
+    .nav-right { display: flex; align-items: center; gap: 1rem; }
+
+    .lang-toggle {
+      display: flex;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .lang-btn {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 0.3rem 0.75rem;
+      border-radius: 99px;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.05em;
+    }
+
+    .lang-btn.active {
+      background: linear-gradient(135deg, var(--cyan), var(--emerald));
+      color: #04060f;
+    }
+
+    .nav-cta {
+      background: linear-gradient(135deg, var(--cyan), var(--emerald));
+      color: #04060f;
+      border: none;
+      border-radius: 10px;
+      padding: 0.55rem 1.2rem;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .nav-cta:hover { opacity: 0.88; transform: translateY(-1px); }
+
+    /* ── SCROLL PROGRESS ── */
+    #scroll-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--cyan), var(--emerald));
+      z-index: 200;
+      transition: width 0.1s;
+    }
+
+    /* ── SECTIONS ── */
+    section {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      padding: 7rem 2rem;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* ── REVEAL ANIMATIONS ── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .reveal-left {
+      opacity: 0;
+      transform: translateX(-40px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal-left.visible { opacity: 1; transform: translateX(0); }
+    .reveal-right {
+      opacity: 0;
+      transform: translateX(40px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal-right.visible { opacity: 1; transform: translateX(0); }
+
+    /* ── HERO ── */
+    #hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding-top: 5rem;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(34,211,238,0.15), transparent),
+        radial-gradient(ellipse 50% 40% at 85% 50%, rgba(52,211,153,0.1), transparent);
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(34,211,238,0.08);
+      border: 1px solid rgba(34,211,238,0.3);
+      border-radius: 99px;
+      padding: 0.35rem 1rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-eyebrow::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--cyan);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    h1.hero-title {
+      font-size: clamp(2.8rem, 7vw, 6rem);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.5rem;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, var(--cyan) 0%, var(--emerald) 50%, var(--indigo) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      font-size: 1.2rem;
+      color: var(--muted);
+      max-width: 560px;
+      line-height: 1.7;
+      margin-bottom: 2.5rem;
+    }
+
+    .hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 4rem; }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--cyan), var(--emerald));
+      color: #04060f;
+      border: none;
+      border-radius: 14px;
+      padding: 0.9rem 2rem;
+      font-weight: 800;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 0 30px rgba(34,211,238,0.3);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 50px rgba(34,211,238,0.5);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid rgba(148,163,184,0.35);
+      border-radius: 14px;
+      padding: 0.9rem 2rem;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-ghost:hover { border-color: var(--cyan); color: var(--cyan); }
+
+    /* ── HERO STATS ── */
+    .hero-stats {
+      display: flex;
+      gap: 2.5rem;
+      flex-wrap: wrap;
+    }
+
+    .stat-item { display: flex; flex-direction: column; gap: 0.2rem; }
+    .stat-val {
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+    }
+    .stat-label { font-size: 0.8rem; color: var(--muted); letter-spacing: 0.05em; }
+
+    /* ── SECTION HEADER ── */
+    .section-eyebrow {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 0.75rem;
+    }
+
+    h2.section-title {
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.025em;
+      margin-bottom: 1rem;
+    }
+
+    .section-sub {
+      font-size: 1.05rem;
+      color: var(--muted);
+      max-width: 560px;
+      line-height: 1.7;
+    }
+
+    /* ── WHAT IS IT SECTION ── */
+    #what {
+      background: radial-gradient(ellipse 60% 40% at 100% 50%, rgba(52,211,153,0.06), transparent);
+    }
+
+    .what-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-top: 3.5rem;
+      align-items: center;
+    }
+
+    .what-visual {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .what-visual::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 70% 30%, rgba(34,211,238,0.07), transparent 60%);
+      pointer-events: none;
+    }
+
+    .mini-chart {
+      height: 120px;
+      position: relative;
+      margin-bottom: 1rem;
+    }
+
+    .mini-chart svg { width: 100%; height: 100%; }
+
+    .chart-line {
+      stroke: url(#chartGrad);
+      stroke-width: 2.5;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 300;
+      stroke-dashoffset: 300;
+      animation: drawLine 2s ease forwards 0.5s;
+    }
+
+    .chart-fill {
+      fill: url(#fillGrad);
+      opacity: 0;
+      animation: fadeIn 1s ease forwards 1.5s;
+    }
+
+    @keyframes drawLine { to { stroke-dashoffset: 0; } }
+    @keyframes fadeIn { to { opacity: 1; } }
+
+    .signal-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(148,163,184,0.1);
+      font-size: 0.85rem;
+    }
+
+    .signal-row:last-child { border-bottom: none; }
+
+    .signal-badge {
+      padding: 0.2rem 0.6rem;
+      border-radius: 99px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .badge-buy { background: rgba(52,211,153,0.15); color: var(--emerald); border: 1px solid rgba(52,211,153,0.3); }
+    .badge-hold { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.25); }
+    .badge-watch { background: rgba(129,140,248,0.12); color: var(--indigo); border: 1px solid rgba(129,140,248,0.25); }
+
+    /* ── HOW IT WORKS ── */
+    #how {
+      background: radial-gradient(ellipse 70% 50% at 0% 50%, rgba(34,211,238,0.06), transparent);
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      margin-top: 3.5rem;
+    }
+
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1.75rem;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+      backdrop-filter: blur(10px);
+    }
+
+    .step-card:hover {
+      transform: translateY(-6px);
+      border-color: rgba(34,211,238,0.5);
+      box-shadow: 0 20px 60px rgba(34,211,238,0.1);
+    }
+
+    .step-number {
+      font-size: 3.5rem;
+      font-weight: 900;
+      line-height: 1;
+      background: linear-gradient(135deg, var(--cyan), var(--emerald));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.75rem;
+      opacity: 0.7;
+    }
+
+    .step-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+    }
+
+    .step-desc { font-size: 0.9rem; color: var(--muted); line-height: 1.65; }
+
+    .step-icon {
+      position: absolute;
+      bottom: 1rem;
+      right: 1.25rem;
+      font-size: 2rem;
+      opacity: 0.15;
+    }
+
+    /* ── FEATURES ── */
+    #features {
+      background: radial-gradient(ellipse 60% 50% at 50% 100%, rgba(52,211,153,0.06), transparent);
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+      margin-top: 3.5rem;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      display: flex;
+      gap: 1.25rem;
+      align-items: flex-start;
+      backdrop-filter: blur(10px);
+      transition: transform 0.3s, border-color 0.3s;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(34,211,238,0.4);
+    }
+
+    .feature-icon-wrap {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .icon-cyan { background: rgba(34,211,238,0.12); border: 1px solid rgba(34,211,238,0.25); }
+    .icon-emerald { background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.25); }
+    .icon-amber { background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.22); }
+    .icon-indigo { background: rgba(129,140,248,0.1); border: 1px solid rgba(129,140,248,0.22); }
+
+    .feature-body h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.4rem; }
+    .feature-body p { font-size: 0.88rem; color: var(--muted); line-height: 1.65; }
+
+    /* ── RISK SECTION ── */
+    #risk {
+      background: radial-gradient(ellipse 60% 50% at 80% 50%, rgba(251,113,133,0.05), transparent);
+    }
+
+    .risk-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: center;
+      margin-top: 3.5rem;
+    }
+
+    .risk-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 1.75rem;
+      backdrop-filter: blur(12px);
+    }
+
+    .risk-panel-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+    }
+
+    .risk-meter {
+      margin-bottom: 1rem;
+    }
+
+    .risk-meter-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.83rem;
+      margin-bottom: 0.35rem;
+      color: var(--text);
+    }
+
+    .risk-meter-val { color: var(--cyan); font-weight: 700; }
+
+    .meter-bar {
+      height: 8px;
+      background: rgba(148,163,184,0.15);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .meter-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--cyan), var(--emerald));
+      width: 0;
+      transition: width 1.5s ease;
+    }
+
+    .meter-fill.animate { width: var(--target-width); }
+
+    .risk-list { list-style: none; }
+    .risk-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid rgba(148,163,184,0.08);
+      font-size: 0.92rem;
+      color: #cbd5e1;
+      line-height: 1.55;
+    }
+    .risk-list li:last-child { border-bottom: none; }
+    .risk-list li::before {
+      content: '✓';
+      color: var(--emerald);
+      font-weight: 700;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* ── GROWTH PHASES ── */
+    #growth {
+      background: radial-gradient(ellipse 70% 50% at 20% 50%, rgba(129,140,248,0.06), transparent);
+    }
+
+    .phases-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      margin-top: 3.5rem;
+      position: relative;
+    }
+
+    .phases-row::before {
+      content: '';
+      position: absolute;
+      top: 3rem;
+      left: 16.67%;
+      right: 16.67%;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), var(--emerald), var(--indigo));
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    .phase-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem 1.5rem;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+      backdrop-filter: blur(10px);
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+
+    .phase-card:hover { transform: translateY(-6px); box-shadow: 0 20px 60px rgba(34,211,238,0.08); }
+
+    .phase-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--cyan), var(--emerald));
+      font-weight: 900;
+      font-size: 1.1rem;
+      color: #04060f;
+      margin: 0 auto 1rem;
+    }
+
+    .phase-badge.p2 { background: linear-gradient(135deg, var(--emerald), var(--indigo)); }
+    .phase-badge.p3 { background: linear-gradient(135deg, var(--indigo), var(--rose)); }
+
+    .phase-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .phase-desc { font-size: 0.88rem; color: var(--muted); line-height: 1.65; }
+    .growth-scenario-card {
+      margin-top: 2rem;
+      background: rgba(8,14,28,0.76);
+      border: 1px solid rgba(148,163,184,0.2);
+      border-radius: 16px;
+      padding: 1rem;
+      backdrop-filter: blur(8px);
+      display: grid;
+      gap: 0.75rem;
+    }
+    .scenario-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+    }
+    .scenario-tab {
+      border: 1px solid rgba(148,163,184,0.28);
+      background: rgba(15,23,42,0.52);
+      border-radius: 10px;
+      padding: 0.5rem 0.45rem;
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+    }
+    .scenario-tab:hover,
+    .scenario-tab:focus-visible {
+      border-color: rgba(34,211,238,0.55);
+      color: #e2ecfb;
+      outline: none;
+    }
+    .scenario-tab.is-active {
+      background: linear-gradient(135deg, rgba(34,211,238,0.24), rgba(129,140,248,0.24));
+      border-color: rgba(34,211,238,0.66);
+      color: #e4f8ff;
+    }
+    .scenario-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.55rem;
+    }
+    .scenario-metric {
+      border: 1px solid rgba(148,163,184,0.2);
+      border-radius: 10px;
+      background: rgba(15,23,42,0.44);
+      padding: 0.62rem;
+    }
+    .scenario-k {
+      font-size: 0.66rem;
+      letter-spacing: 0.08em;
+      color: var(--dim);
+      text-transform: uppercase;
+      display: block;
+      margin-bottom: 0.24rem;
+    }
+    .scenario-v {
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: #dbe7f6;
+      display: block;
+    }
+    .scenario-v.bad { color: var(--rose); }
+    .scenario-v.warn { color: var(--amber); }
+    .scenario-v.good { color: var(--emerald); }
+    .scenario-bars {
+      display: grid;
+      gap: 0.48rem;
+      margin-top: 0.1rem;
+    }
+    .scenario-row {
+      display: grid;
+      grid-template-columns: 76px 1fr;
+      gap: 0.6rem;
+      align-items: center;
+      font-size: 0.78rem;
+    }
+    .scenario-label { color: var(--muted); }
+    .scenario-track {
+      background: rgba(148,163,184,0.12);
+      border-radius: 10px;
+      height: 24px;
+      overflow: hidden;
+      position: relative;
+    }
+    .scenario-fill {
+      height: 100%;
+      width: 0;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      padding-left: 0.65rem;
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: #04060f;
+      transition: width 1.45s cubic-bezier(0.2, 0.9, 0.2, 1);
+    }
+    .scenario-explain {
+      font-size: 0.8rem;
+      line-height: 1.55;
+      color: var(--muted);
+      border: 1px solid rgba(148,163,184,0.2);
+      background: rgba(15,23,42,0.38);
+      border-radius: 10px;
+      padding: 0.65rem 0.78rem;
+    }
+    .scenario-htr {
+      font-size: 0.76rem;
+      color: var(--dim);
+      line-height: 1.6;
+      border-top: 1px dashed rgba(148,163,184,0.28);
+      padding-top: 0.6rem;
+    }
+    .scenario-htr strong { color: #dbe7f6; }
+
+    /* ── PAIN POINTS VS SOLUTION ── */
+    #compare {
+      background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(34,211,238,0.05), transparent);
+    }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-top: 3.5rem;
+    }
+
+    .compare-col h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      padding: 0.6rem 1rem;
+      border-radius: 10px;
+    }
+
+    .col-bad h3 { background: rgba(251,113,133,0.1); color: var(--rose); border: 1px solid rgba(251,113,133,0.2); }
+    .col-good h3 { background: rgba(52,211,153,0.1); color: var(--emerald); border: 1px solid rgba(52,211,153,0.2); }
+
+    .compare-item {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      padding: 0.65rem 0;
+      border-bottom: 1px solid rgba(148,163,184,0.08);
+      font-size: 0.9rem;
+      color: #cbd5e1;
+      line-height: 1.55;
+    }
+    .compare-item:last-child { border-bottom: none; }
+
+    .icon-x { color: var(--rose); font-size: 0.85rem; flex-shrink: 0; margin-top: 2px; }
+    .icon-check { color: var(--emerald); font-size: 0.85rem; flex-shrink: 0; margin-top: 2px; }
+
+    /* ── CTA ── */
+    #cta {
+      text-align: center;
+      padding: 8rem 2rem;
+      background:
+        radial-gradient(ellipse 70% 50% at 50% 50%, rgba(34,211,238,0.1), transparent),
+        radial-gradient(ellipse 50% 40% at 30% 80%, rgba(52,211,153,0.08), transparent);
+    }
+
+    .cta-badge {
+      display: inline-block;
+      background: rgba(34,211,238,0.08);
+      border: 1px solid rgba(34,211,238,0.3);
+      border-radius: 99px;
+      padding: 0.4rem 1.2rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 1.5rem;
+    }
+
+    h2.cta-title {
+      font-size: clamp(2rem, 5vw, 4rem);
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.25rem;
+    }
+
+    .cta-sub {
+      font-size: 1.1rem;
+      color: var(--muted);
+      max-width: 500px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.7;
+    }
+
+    .cta-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 2rem;
+      border-top: 1px solid rgba(148,163,184,0.1);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    /* ── FLOATING SCROLL HINT ── */
+    #scroll-hint {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      z-index: 50;
+      opacity: 1;
+      transition: opacity 0.5s;
+    }
+
+    #scroll-hint.hide { opacity: 0; pointer-events: none; }
+
+    .scroll-hint-text { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+
+    .scroll-arrow {
+      width: 28px;
+      height: 46px;
+      border: 2px solid rgba(34,211,238,0.4);
+      border-radius: 99px;
+      position: relative;
+    }
+
+    .scroll-arrow::after {
+      content: '';
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 4px;
+      height: 8px;
+      background: var(--cyan);
+      border-radius: 99px;
+      animation: scroll-bounce 1.5s ease-in-out infinite;
+    }
+
+    @keyframes scroll-bounce {
+      0% { transform: translateX(-50%) translateY(0); opacity: 1; }
+      100% { transform: translateX(-50%) translateY(16px); opacity: 0; }
+    }
+
+    /* ── TOOLTIP ── */
+    .tooltip-wrap { position: relative; display: inline-block; }
+    .tooltip-wrap:hover .tooltip { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .tooltip {
+      position: absolute;
+      bottom: 120%;
+      left: 50%;
+      transform: translateX(-50%) translateY(6px);
+      background: rgba(8,14,28,0.95);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.5rem 0.9rem;
+      font-size: 0.78rem;
+      color: var(--text);
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    /* ── TICKER TAPE ── */
+    .ticker-wrap {
+      overflow: hidden;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: rgba(8,14,28,0.5);
+      padding: 0.55rem 0;
+      margin-bottom: 5rem;
+    }
+
+    .ticker-inner {
+      display: flex;
+      gap: 3rem;
+      animation: ticker 18s linear infinite;
+      white-space: nowrap;
+    }
+
+    @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+    .ticker-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .ticker-up { color: var(--emerald); }
+    .ticker-down { color: var(--rose); }
+    .ticker-sym { color: var(--text); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      .what-grid, .risk-split, .compare-grid { grid-template-columns: 1fr; }
+      .steps-grid, .features-grid, .phases-grid { grid-template-columns: 1fr 1fr; }
+      .phases-row { grid-template-columns: 1fr 1fr; }
+      .phases-row::before { display: none; }
+      .scenario-metrics { grid-template-columns: 1fr 1fr; }
+      .scenario-tabs { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 600px) {
+      section { padding: 5rem 1.25rem; }
+      .steps-grid, .features-grid, .phases-row { grid-template-columns: 1fr; }
+      nav { padding: 0.75rem 1.25rem; }
+      .nav-cta { display: none; }
+      .scenario-metrics { grid-template-columns: 1fr; }
+      .scenario-row { grid-template-columns: 68px 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Scroll progress -->
+<div id="scroll-progress"></div>
+
+<!-- Starfield -->
+<div id="starfield"></div>
+
+<!-- Nav -->
+<nav>
+  <div class="nav-logo">
+    <div class="dot"></div>
+    <span>CryptoMentor AI</span>
+  </div>
+  <div class="nav-right">
+    <div class="lang-toggle">
+      <button class="lang-btn active" data-lang="en">EN</button>
+      <button class="lang-btn" data-lang="id">ID</button>
+    </div>
+    <button class="nav-cta" data-i18n="nav_cta">Get Started</button>
+  </div>
+</nav>
+
+<!-- Scroll hint -->
+<div id="scroll-hint">
+  <div class="scroll-arrow"></div>
+  <span class="scroll-hint-text" data-i18n="scroll_hint">Scroll to explore</span>
+</div>
+
+<!-- ═══ HERO ═══ -->
+<section id="hero">
+  <div class="container">
+    <div class="reveal">
+      <div class="hero-eyebrow" data-i18n="hero_eyebrow">AI-Powered Crypto Intelligence</div>
+      <h1 class="hero-title">
+        <span data-i18n="hero_title_1">Trade smarter.</span><br>
+        <span class="gradient-text" data-i18n="hero_title_2">Grow steadier.</span>
+      </h1>
+      <p class="hero-sub" data-i18n="hero_sub">
+        CryptoMentor AI reads market conditions in real time, adapts its strategy to volatility, and protects your capital while compounding consistently.
+      </p>
+      <div class="hero-actions">
+        <button class="btn-primary" data-i18n="hero_cta_primary">Start Your Journey</button>
+        <button class="btn-ghost" data-i18n="hero_cta_secondary">See How It Works</button>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-item">
+          <span class="stat-val gradient-text">24/7</span>
+          <span class="stat-label" data-i18n="stat_1">Market monitoring</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val gradient-text">Adaptive</span>
+          <span class="stat-label" data-i18n="stat_2">Signal engine</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val gradient-text">Capital-first</span>
+          <span class="stat-label" data-i18n="stat_3">Risk approach</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val gradient-text">Multi-pair</span>
+          <span class="stat-label" data-i18n="stat_4">Coverage</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ TICKER ═══ -->
+<div class="ticker-wrap">
+  <div class="ticker-inner" id="ticker">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- ═══ WHAT IS IT ═══ -->
+<section id="what">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-eyebrow" data-i18n="what_eyebrow">What is CryptoMentor AI</div>
+      <h2 class="section-title" data-i18n="what_title">An AI co-pilot built for crypto markets.</h2>
+      <p class="section-sub" data-i18n="what_sub">Not a static bot. Not guesswork. A living system that reads regime, filters noise, and executes with discipline you can rely on.</p>
+    </div>
+    <div class="what-grid">
+      <div class="reveal-left" style="transition-delay:0.1s">
+        <div style="display:flex;flex-direction:column;gap:1.25rem;">
+          <div class="step-card">
+            <div class="feature-icon-wrap icon-cyan" style="margin-bottom:0.75rem;font-size:1.3rem;">🧠</div>
+            <h3 class="step-title" data-i18n="what_f1_title">Regime Intelligence</h3>
+            <p class="step-desc" data-i18n="what_f1_desc">Continuously classifies the market as trending, ranging, or volatile — then adjusts strategy accordingly. No static rules.</p>
+          </div>
+          <div class="step-card">
+            <div class="feature-icon-wrap icon-emerald" style="margin-bottom:0.75rem;font-size:1.3rem;">🛡️</div>
+            <h3 class="step-title" data-i18n="what_f2_title">Built-in Capital Guard</h3>
+            <p class="step-desc" data-i18n="what_f2_desc">Every signal carries a pre-defined invalidation point. Risk is sized before entry — stops never move against you after the fact.</p>
+          </div>
+        </div>
+      </div>
+      <div class="reveal-right" style="transition-delay:0.2s">
+        <div class="what-visual">
+          <div class="mini-chart">
+            <svg viewBox="0 0 280 110" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="chartGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#22d3ee"/>
+                  <stop offset="100%" stop-color="#34d399"/>
+                </linearGradient>
+                <linearGradient id="fillGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.25"/>
+                  <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path class="chart-fill" d="M0,90 L30,82 L60,75 L90,68 L110,72 L130,60 L160,45 L190,38 L220,25 L250,18 L280,10 L280,110 L0,110 Z"/>
+              <path class="chart-line" d="M0,90 L30,82 L60,75 L90,68 L110,72 L130,60 L160,45 L190,38 L220,25 L250,18 L280,10"/>
+            </svg>
+          </div>
+          <div class="signal-row">
+            <span style="color:var(--muted);font-size:0.82rem;">BTC/USDT</span>
+            <span style="font-weight:700;">$67,240</span>
+            <span class="signal-badge badge-buy" data-i18n="signal_buy">BUY</span>
+          </div>
+          <div class="signal-row">
+            <span style="color:var(--muted);font-size:0.82rem;">ETH/USDT</span>
+            <span style="font-weight:700;">$3,490</span>
+            <span class="signal-badge badge-hold" data-i18n="signal_hold">HOLD</span>
+          </div>
+          <div class="signal-row">
+            <span style="color:var(--muted);font-size:0.82rem;">SOL/USDT</span>
+            <span style="font-weight:700;">$172.4</span>
+            <span class="signal-badge badge-watch" data-i18n="signal_watch">WATCH</span>
+          </div>
+          <div style="margin-top:1rem;padding:0.65rem;background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.15);border-radius:10px;font-size:0.8rem;color:var(--muted);">
+            <span style="color:var(--cyan);">●</span>&nbsp;<span data-i18n="regime_label">Current Regime:</span>&nbsp;<span style="color:var(--emerald);font-weight:700;" data-i18n="regime_val">Trend-Following Active</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ HOW IT WORKS ═══ -->
+<section id="how">
+  <div class="container">
+    <div class="reveal" style="text-align:center;margin-bottom:0;">
+      <div class="section-eyebrow" data-i18n="how_eyebrow">How It Works</div>
+      <h2 class="section-title" data-i18n="how_title">Three layers. One seamless system.</h2>
+      <p class="section-sub" style="margin:0 auto;" data-i18n="how_sub">From raw market data to capital-protected execution — every step is handled automatically.</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card reveal" style="transition-delay:0.0s">
+        <div class="step-number">01</div>
+        <div class="step-title" data-i18n="step1_title">Signal Detection</div>
+        <p class="step-desc" data-i18n="step1_desc">The AI continuously scans price structure, momentum, volume, and volatility across multiple pairs to identify valid setups — filtering out noise automatically.</p>
+        <div class="step-icon">📡</div>
+      </div>
+      <div class="step-card reveal" style="transition-delay:0.15s">
+        <div class="step-number">02</div>
+        <div class="step-title" data-i18n="step2_title">Risk Calculation</div>
+        <p class="step-desc" data-i18n="step2_desc">Before any signal is actioned, the engine calculates exact position size, stop placement, and exposure limits — locking in a favorable risk-reward ratio.</p>
+        <div class="step-icon">⚖️</div>
+      </div>
+      <div class="step-card reveal" style="transition-delay:0.3s">
+        <div class="step-number">03</div>
+        <div class="step-title" data-i18n="step3_title">Adaptive Execution</div>
+        <p class="step-desc" data-i18n="step3_desc">Entries, targets, and exits are managed dynamically. When conditions change mid-trade, the system re-evaluates and adjusts — no emotional override.</p>
+        <div class="step-icon">🚀</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FEATURES ═══ -->
+<section id="features">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-eyebrow" data-i18n="feat_eyebrow">Core Features</div>
+      <h2 class="section-title" data-i18n="feat_title">Every tool you need. Nothing you don't.</h2>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card reveal" style="transition-delay:0.0s">
+        <div class="feature-icon-wrap icon-cyan">📊</div>
+        <div class="feature-body">
+          <h3 data-i18n="feat1_title">Multi-Regime Detection</h3>
+          <p data-i18n="feat1_desc">Identifies whether the market is trending, ranging, or volatile — then applies the appropriate strategy layer. No single-mode limitations.</p>
+        </div>
+      </div>
+      <div class="feature-card reveal" style="transition-delay:0.1s">
+        <div class="feature-icon-wrap icon-emerald">🛡️</div>
+        <div class="feature-body">
+          <h3 data-i18n="feat2_title">Dynamic Position Sizing</h3>
+          <p data-i18n="feat2_desc">Risk is defined as a percentage of equity. Size adjusts with volatility and confidence score — large winners don't require large bets.</p>
+        </div>
+      </div>
+      <div class="feature-card reveal" style="transition-delay:0.2s">
+        <div class="feature-icon-wrap icon-amber">⚡</div>
+        <div class="feature-body">
+          <h3 data-i18n="feat3_title">Real-time Signal Engine</h3>
+          <p data-i18n="feat3_desc">Powered by fused technical + market-structure data. Signals include entry, stop, and two target levels with explicit invalidation criteria.</p>
+        </div>
+      </div>
+      <div class="feature-card reveal" style="transition-delay:0.3s">
+        <div class="feature-icon-wrap icon-indigo">📈</div>
+        <div class="feature-body">
+          <h3 data-i18n="feat4_title">Compounding Framework</h3>
+          <p data-i18n="feat4_desc">Built-in phases guide you from capital preservation to controlled scaling — so growth happens steadily, not recklessly.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ COMPARE (Pain points) ═══ -->
+<section id="compare">
+  <div class="container">
+    <div class="reveal" style="text-align:center;">
+      <div class="section-eyebrow" data-i18n="compare_eyebrow">Why It Matters</div>
+      <h2 class="section-title" data-i18n="compare_title">Manual trading vs. CryptoMentor AI.</h2>
+      <p class="section-sub" style="margin:0 auto;" data-i18n="compare_sub">The difference isn't just speed — it's discipline, consistency, and freedom from emotional decisions.</p>
+    </div>
+    <div class="compare-grid">
+      <div class="compare-col col-bad reveal-left" style="transition-delay:0.1s">
+        <h3 data-i18n="compare_bad_title">❌ Manual / Emotional Trading</h3>
+        <div class="compare-item"><span class="icon-x">✗</span><span data-i18n="compare_bad_1">Chasing green candles, panic-selling red ones</span></div>
+        <div class="compare-item"><span class="icon-x">✗</span><span data-i18n="compare_bad_2">Over-leveraging on conviction, wiped on a wick</span></div>
+        <div class="compare-item"><span class="icon-x">✗</span><span data-i18n="compare_bad_3">No consistent process — entries based on feel</span></div>
+        <div class="compare-item"><span class="icon-x">✗</span><span data-i18n="compare_bad_4">Trying to time exact tops and bottoms</span></div>
+        <div class="compare-item"><span class="icon-x">✗</span><span data-i18n="compare_bad_5">Recent wins/losses distort next decision</span></div>
+      </div>
+      <div class="compare-col col-good reveal-right" style="transition-delay:0.2s">
+        <h3 data-i18n="compare_good_title">✓ CryptoMentor AI</h3>
+        <div class="compare-item"><span class="icon-check">✓</span><span data-i18n="compare_good_1">Only enters on validated setups with defined edge</span></div>
+        <div class="compare-item"><span class="icon-check">✓</span><span data-i18n="compare_good_2">Exposure capped by design — no emotion, no FOMO</span></div>
+        <div class="compare-item"><span class="icon-check">✓</span><span data-i18n="compare_good_3">Rule-based execution every single time</span></div>
+        <div class="compare-item"><span class="icon-check">✓</span><span data-i18n="compare_good_4">Probability-first: manages expectancy over many trades</span></div>
+        <div class="compare-item"><span class="icon-check">✓</span><span data-i18n="compare_good_5">Each trade is independent — no recency bias</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ RISK SECTION ═══ -->
+<section id="risk">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-eyebrow" data-i18n="risk_eyebrow">Capital Protection</div>
+      <h2 class="section-title" data-i18n="risk_title">Risk management isn't optional. It's the edge.</h2>
+      <p class="section-sub" data-i18n="risk_sub">One oversized loss can erase many small wins. Every layer of the system is designed to keep you in the game long enough to compound.</p>
+    </div>
+    <div class="risk-split">
+      <div class="reveal-left" style="transition-delay:0.1s">
+        <ul class="risk-list">
+          <li data-i18n="risk_li1">Risk defined as a fixed percentage of equity per trade — never a dollar amount</li>
+          <li data-i18n="risk_li2">Stop loss placement comes before position size calculation</li>
+          <li data-i18n="risk_li3">Maximum concurrent exposure is capped across all open positions</li>
+          <li data-i18n="risk_li4">Correlated pairs are monitored to avoid stacked directional risk</li>
+          <li data-i18n="risk_li5">Leverage is used as a tool, not a goal — effective exposure stays bounded</li>
+          <li data-i18n="risk_li6">Drawdown thresholds trigger automatic reduction in activity</li>
+        </ul>
+      </div>
+      <div class="reveal-right" style="transition-delay:0.2s">
+        <div class="risk-panel">
+          <div class="risk-panel-title" data-i18n="risk_panel_title">Live Risk Snapshot</div>
+          <div class="risk-meter">
+            <div class="risk-meter-label">
+              <span data-i18n="risk_m1_label">Risk per Trade</span>
+              <span class="risk-meter-val">1.0%</span>
+            </div>
+            <div class="meter-bar"><div class="meter-fill" style="--target-width:10%" data-animate></div></div>
+          </div>
+          <div class="risk-meter">
+            <div class="risk-meter-label">
+              <span data-i18n="risk_m2_label">Open Exposure</span>
+              <span class="risk-meter-val">2.8%</span>
+            </div>
+            <div class="meter-bar"><div class="meter-fill" style="--target-width:28%" data-animate></div></div>
+          </div>
+          <div class="risk-meter">
+            <div class="risk-meter-label">
+              <span data-i18n="risk_m3_label">Max Drawdown Limit</span>
+              <span class="risk-meter-val">8%</span>
+            </div>
+            <div class="meter-bar"><div class="meter-fill" style="--target-width:8%; background: linear-gradient(90deg, #fbbf24, #fb7185);" data-animate></div></div>
+          </div>
+          <div class="risk-meter">
+            <div class="risk-meter-label">
+              <span data-i18n="risk_m4_label">Liquidation Buffer</span>
+              <span class="risk-meter-val" style="color:var(--emerald);" data-i18n="risk_m4_val">HIGH</span>
+            </div>
+            <div class="meter-bar"><div class="meter-fill" style="--target-width:92%;background:linear-gradient(90deg,#34d399,#22d3ee);" data-animate></div></div>
+          </div>
+          <div style="margin-top:1.25rem;padding:0.75rem;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.2);border-radius:10px;font-size:0.82rem;color:var(--muted);">
+            <span style="color:var(--emerald);font-weight:700;">✓</span>&nbsp;<span data-i18n="risk_note">All positions within defined risk parameters</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ GROWTH PHASES ═══ -->
+<section id="growth">
+  <div class="container">
+    <div class="reveal" style="text-align:center;">
+      <div class="section-eyebrow" data-i18n="growth_eyebrow">Growth Framework</div>
+      <h2 class="section-title" data-i18n="growth_title">A three-phase path to compound growth.</h2>
+      <p class="section-sub" style="margin:0 auto;" data-i18n="growth_sub">Built to scale you up safely — not get you rich quick. Each phase unlocks the next once consistency is proven.</p>
+    </div>
+    <div class="phases-row">
+      <div class="phase-card reveal" style="transition-delay:0.0s">
+        <div class="phase-badge">1</div>
+        <div class="phase-title" data-i18n="phase1_title">Protect</div>
+        <p class="phase-desc" data-i18n="phase1_desc">Capital preservation mode. Low risk per trade, focus on clean execution and building trust in the system. No scaling yet.</p>
+      </div>
+      <div class="phase-card reveal" style="transition-delay:0.15s">
+        <div class="phase-badge p2">2</div>
+        <div class="phase-title" data-i18n="phase2_title">Stabilize</div>
+        <p class="phase-desc" data-i18n="phase2_desc">Consistent execution across multiple market regimes. Variance decreases. Win quality and expectancy are tracked — not just PnL.</p>
+      </div>
+      <div class="phase-card reveal" style="transition-delay:0.3s">
+        <div class="phase-badge p3">3</div>
+        <div class="phase-title" data-i18n="phase3_title">Scale</div>
+        <p class="phase-desc" data-i18n="phase3_desc">Controlled compounding with strict risk ceilings. Scale only after proven consistency windows — and only within pre-approved bounds.</p>
+      </div>
+    </div>
+    <div class="growth-scenario-card reveal" data-scenario-panel="intro-growth" style="transition-delay:0.2s">
+      <div class="section-eyebrow" style="margin-bottom:0;" data-i18n="growth_scenario_title">Scenario Explorer</div>
+      <div class="scenario-tabs" role="tablist" aria-label="Growth scenarios">
+        <button class="scenario-tab" type="button" data-scenario-tab="conservative" aria-pressed="false" data-i18n="growth_tab_conservative">Conservative</button>
+        <button class="scenario-tab" type="button" data-scenario-tab="base" aria-pressed="false" data-i18n="growth_tab_base">Base</button>
+        <button class="scenario-tab is-active" type="button" data-scenario-tab="stress" aria-pressed="true" data-i18n="growth_tab_stress">Stress</button>
+        <button class="scenario-tab" type="button" data-scenario-tab="extreme" aria-pressed="false" data-i18n="growth_tab_extreme">Extreme</button>
+      </div>
+      <div class="scenario-metrics">
+        <div class="scenario-metric">
+          <span class="scenario-k" data-i18n="growth_metric_dd">Max Drawdown</span>
+          <span class="scenario-v bad" id="growth_dd_value">-35%</span>
+        </div>
+        <div class="scenario-metric">
+          <span class="scenario-k" data-i18n="growth_metric_recovery">Recovery Window</span>
+          <span class="scenario-v warn" id="growth_recovery_value">~Month 11</span>
+        </div>
+        <div class="scenario-metric">
+          <span class="scenario-k" data-i18n="growth_metric_outcome">Outcome at 12M</span>
+          <span class="scenario-v good" id="growth_outcome_value">+2% to +10%</span>
+        </div>
+      </div>
+      <div class="scenario-bars">
+        <div class="scenario-row">
+          <span class="scenario-label" data-i18n="growth_m0">Start</span>
+          <div class="scenario-track"><div class="scenario-fill" data-scenario-bar="0" data-w="35" style="background:linear-gradient(90deg,#22d3ee,#34d399)">100%</div></div>
+        </div>
+        <div class="scenario-row">
+          <span class="scenario-label" data-i18n="growth_m3">3 months</span>
+          <div class="scenario-track"><div class="scenario-fill" data-scenario-bar="1" data-w="25" style="background:linear-gradient(90deg,#fb7185,#f59e0b)">72%</div></div>
+        </div>
+        <div class="scenario-row">
+          <span class="scenario-label" data-i18n="growth_m6">6 months</span>
+          <div class="scenario-track"><div class="scenario-fill" data-scenario-bar="2" data-w="29" style="background:linear-gradient(90deg,#f59e0b,#fbbf24)">82%</div></div>
+        </div>
+        <div class="scenario-row">
+          <span class="scenario-label" data-i18n="growth_m12">12 months</span>
+          <div class="scenario-track"><div class="scenario-fill" data-scenario-bar="3" data-w="36" style="background:linear-gradient(90deg,#34d399,#818cf8)">102%-110%</div></div>
+        </div>
+      </div>
+      <div class="scenario-explain" id="growth_explain" data-i18n="growth_explain_stress">Loss phase: returns are hit by clustered losses and choppy conditions. Stabilization: exposure stays constrained while signal quality rebuilds. Recovery conditions: upside only improves when expectancy and execution consistency hold.</div>
+      <div class="scenario-htr"><strong data-i18n="growth_htr_title">How to read this:</strong> <span data-i18n="growth_htr_body">Treat each scenario as a stress path. Losses can cluster, recovery speed depends on regime quality, and a positive expectancy still comes with uneven equity movement.</span></div>
+      <p class="section-sub" style="margin:0;text-align:left;max-width:none;font-size:0.8rem;" data-i18n="growth_proj_note">Simulation only: outcomes are scenario ranges, not promises. Real performance can deviate materially.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CTA ═══ -->
+<section id="cta">
+  <div class="container">
+    <div class="reveal">
+      <div class="cta-badge" data-i18n="cta_badge">Ready when you are</div>
+      <h2 class="cta-title">
+        <span data-i18n="cta_title_1">Your capital deserves</span><br>
+        <span class="gradient-text" data-i18n="cta_title_2">a smarter strategy.</span>
+      </h2>
+      <p class="cta-sub" data-i18n="cta_sub">Join CryptoMentor AI and let an adaptive system handle the discipline — so you can focus on the bigger picture.</p>
+      <div class="cta-actions">
+        <button class="btn-primary" data-i18n="cta_btn_primary">Get Started Free</button>
+        <button class="btn-ghost" data-i18n="cta_btn_secondary">View Full Deck</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p data-i18n="footer_note">CryptoMentor AI — Capital preservation and adaptive trading. Past performance does not guarantee future results. Trade responsibly.</p>
+</footer>
+
+<script>
+/* ══════════════════════════════════════
+   I18N — English & Bahasa Indonesia
+   ══════════════════════════════════════ */
+const i18n = {
+  en: {
+    nav_cta: 'Get Started',
+    scroll_hint: 'Scroll to explore',
+    hero_eyebrow: 'AI-Powered Crypto Intelligence',
+    hero_title_1: 'Trade smarter.',
+    hero_title_2: 'Grow steadier.',
+    hero_sub: 'CryptoMentor AI reads market conditions in real time, adapts its strategy to volatility, and protects your capital while compounding consistently.',
+    hero_cta_primary: 'Start Your Journey',
+    hero_cta_secondary: 'See How It Works',
+    stat_1: 'Market monitoring',
+    stat_2: 'Signal engine',
+    stat_3: 'Risk approach',
+    stat_4: 'Coverage',
+
+    what_eyebrow: 'What is CryptoMentor AI',
+    what_title: 'An AI co-pilot built for crypto markets.',
+    what_sub: 'Not a static bot. Not guesswork. A living system that reads regime, filters noise, and executes with discipline you can rely on.',
+    what_f1_title: 'Regime Intelligence',
+    what_f1_desc: 'Continuously classifies the market as trending, ranging, or volatile — then adjusts strategy accordingly. No static rules.',
+    what_f2_title: 'Built-in Capital Guard',
+    what_f2_desc: 'Every signal carries a pre-defined invalidation point. Risk is sized before entry — stops never move against you after the fact.',
+    signal_buy: 'BUY',
+    signal_hold: 'HOLD',
+    signal_watch: 'WATCH',
+    regime_label: 'Current Regime:',
+    regime_val: 'Trend-Following Active',
+
+    how_eyebrow: 'How It Works',
+    how_title: 'Three layers. One seamless system.',
+    how_sub: 'From raw market data to capital-protected execution — every step is handled automatically.',
+    step1_title: 'Signal Detection',
+    step1_desc: 'The AI continuously scans price structure, momentum, volume, and volatility across multiple pairs to identify valid setups — filtering out noise automatically.',
+    step2_title: 'Risk Calculation',
+    step2_desc: 'Before any signal is actioned, the engine calculates exact position size, stop placement, and exposure limits — locking in a favorable risk-reward ratio.',
+    step3_title: 'Adaptive Execution',
+    step3_desc: 'Entries, targets, and exits are managed dynamically. When conditions change mid-trade, the system re-evaluates and adjusts — no emotional override.',
+
+    feat_eyebrow: 'Core Features',
+    feat_title: 'Every tool you need. Nothing you don\'t.',
+    feat1_title: 'Multi-Regime Detection',
+    feat1_desc: 'Identifies whether the market is trending, ranging, or volatile — then applies the appropriate strategy layer. No single-mode limitations.',
+    feat2_title: 'Dynamic Position Sizing',
+    feat2_desc: 'Risk is defined as a percentage of equity. Size adjusts with volatility and confidence score — large winners don\'t require large bets.',
+    feat3_title: 'Real-time Signal Engine',
+    feat3_desc: 'Powered by fused technical + market-structure data. Signals include entry, stop, and two target levels with explicit invalidation criteria.',
+    feat4_title: 'Compounding Framework',
+    feat4_desc: 'Built-in phases guide you from capital preservation to controlled scaling — so growth happens steadily, not recklessly.',
+
+    compare_eyebrow: 'Why It Matters',
+    compare_title: 'Manual trading vs. CryptoMentor AI.',
+    compare_sub: 'The difference isn\'t just speed — it\'s discipline, consistency, and freedom from emotional decisions.',
+    compare_bad_title: '❌ Manual / Emotional Trading',
+    compare_bad_1: 'Chasing green candles, panic-selling red ones',
+    compare_bad_2: 'Over-leveraging on conviction, wiped on a wick',
+    compare_bad_3: 'No consistent process — entries based on feel',
+    compare_bad_4: 'Trying to time exact tops and bottoms',
+    compare_bad_5: 'Recent wins/losses distort next decision',
+    compare_good_title: '✓ CryptoMentor AI',
+    compare_good_1: 'Only enters on validated setups with defined edge',
+    compare_good_2: 'Exposure capped by design — no emotion, no FOMO',
+    compare_good_3: 'Rule-based execution every single time',
+    compare_good_4: 'Probability-first: manages expectancy over many trades',
+    compare_good_5: 'Each trade is independent — no recency bias',
+
+    risk_eyebrow: 'Capital Protection',
+    risk_title: 'Risk management isn\'t optional. It\'s the edge.',
+    risk_sub: 'One oversized loss can erase many small wins. Every layer of the system is designed to keep you in the game long enough to compound.',
+    risk_li1: 'Risk defined as a fixed percentage of equity per trade — never a dollar amount',
+    risk_li2: 'Stop loss placement comes before position size calculation',
+    risk_li3: 'Maximum concurrent exposure is capped across all open positions',
+    risk_li4: 'Correlated pairs are monitored to avoid stacked directional risk',
+    risk_li5: 'Leverage is used as a tool, not a goal — effective exposure stays bounded',
+    risk_li6: 'Drawdown thresholds trigger automatic reduction in activity',
+    risk_panel_title: 'Live Risk Snapshot',
+    risk_m1_label: 'Risk per Trade',
+    risk_m2_label: 'Open Exposure',
+    risk_m3_label: 'Max Drawdown Limit',
+    risk_m4_label: 'Liquidation Buffer',
+    risk_m4_val: 'HIGH',
+    risk_note: 'All positions within defined risk parameters',
+
+    growth_eyebrow: 'Growth Framework',
+    growth_title: 'A three-phase path to compound growth.',
+    growth_sub: 'Built to scale you up safely — not get you rich quick. Each phase unlocks the next once consistency is proven.',
+    growth_scenario_title: 'Scenario Explorer',
+    growth_tab_conservative: 'Conservative',
+    growth_tab_base: 'Base',
+    growth_tab_stress: 'Stress',
+    growth_tab_extreme: 'Extreme',
+    growth_metric_dd: 'Max Drawdown',
+    growth_metric_recovery: 'Recovery Window',
+    growth_metric_outcome: 'Outcome at 12M',
+    growth_recovery_prefix: '~Month',
+    growth_recovery_over12: '>12 months',
+    growth_range_sep: 'to',
+    growth_m0: 'Start',
+    growth_m3: '3 months',
+    growth_m6: '6 months',
+    growth_m12: '12 months',
+    growth_explain_conservative: 'Loss phase: pullbacks remain controlled with tighter sizing and fewer aggressive entries. Stabilization: capital erosion slows as trade selection stays strict. Recovery conditions: gains resume if consistency holds through mixed regimes.',
+    growth_explain_base: 'Loss phase: moderate drawdown appears during normal volatility clusters. Stabilization: variance compresses as invalid setups are filtered. Recovery conditions: compounding resumes once expectancy and win quality remain positive.',
+    growth_explain_stress: 'Loss phase: returns are hit by clustered losses and choppy conditions. Stabilization: exposure stays constrained while signal quality rebuilds. Recovery conditions: upside only improves when expectancy and execution consistency hold.',
+    growth_explain_extreme: 'Loss phase: severe adverse regimes trigger deep capital contraction. Stabilization: defensive posture prioritizes survival over growth. Recovery conditions: recovery can extend beyond 12 months unless market structure and execution quality improve.',
+    growth_htr_title: 'How to read this:',
+    growth_htr_body: 'Treat each scenario as a stress path. Losses can cluster, recovery speed depends on regime quality, and a positive expectancy still comes with uneven equity movement.',
+    growth_proj_note: 'Simulation only: outcomes are scenario ranges, not promises. Real performance can deviate materially.',
+    phase1_title: 'Protect',
+    phase1_desc: 'Capital preservation mode. Low risk per trade, focus on clean execution and building trust in the system. No scaling yet.',
+    phase2_title: 'Stabilize',
+    phase2_desc: 'Consistent execution across multiple market regimes. Variance decreases. Win quality and expectancy are tracked — not just PnL.',
+    phase3_title: 'Scale',
+    phase3_desc: 'Controlled compounding with strict risk ceilings. Scale only after proven consistency windows — and only within pre-approved bounds.',
+
+    cta_badge: 'Ready when you are',
+    cta_title_1: 'Your capital deserves',
+    cta_title_2: 'a smarter strategy.',
+    cta_sub: 'Join CryptoMentor AI and let an adaptive system handle the discipline — so you can focus on the bigger picture.',
+    cta_btn_primary: 'Get Started Free',
+    cta_btn_secondary: 'View Full Deck',
+    footer_note: 'CryptoMentor AI — Capital preservation and adaptive trading. Past performance does not guarantee future results. Trade responsibly.',
+  },
+
+  id: {
+    nav_cta: 'Mulai Sekarang',
+    scroll_hint: 'Gulir untuk jelajahi',
+    hero_eyebrow: 'Kecerdasan Kripto Bertenaga AI',
+    hero_title_1: 'Trading lebih cerdas.',
+    hero_title_2: 'Tumbuh lebih stabil.',
+    hero_sub: 'CryptoMentor AI membaca kondisi pasar secara real-time, menyesuaikan strategi terhadap volatilitas, dan melindungi modal Anda sambil terus berkembang secara konsisten.',
+    hero_cta_primary: 'Mulai Perjalananmu',
+    hero_cta_secondary: 'Lihat Cara Kerjanya',
+    stat_1: 'Pemantauan pasar',
+    stat_2: 'Mesin sinyal',
+    stat_3: 'Pendekatan risiko',
+    stat_4: 'Cakupan pasangan',
+
+    what_eyebrow: 'Apa itu CryptoMentor AI',
+    what_title: 'Co-pilot AI yang dibangun khusus untuk pasar kripto.',
+    what_sub: 'Bukan bot statis. Bukan tebak-tebakan. Sistem hidup yang membaca rezim pasar, menyaring noise, dan mengeksekusi dengan disiplin yang bisa Anda andalkan.',
+    what_f1_title: 'Deteksi Rezim Pasar',
+    what_f1_desc: 'Secara terus-menerus mengklasifikasikan pasar sebagai trending, ranging, atau volatil — lalu menyesuaikan strategi. Tidak ada aturan statis.',
+    what_f2_title: 'Perlindungan Modal Bawaan',
+    what_f2_desc: 'Setiap sinyal memiliki titik invalidasi yang telah ditentukan. Risiko dihitung sebelum masuk — stop loss tidak pernah diubah secara emosional.',
+    signal_buy: 'BELI',
+    signal_hold: 'TAHAN',
+    signal_watch: 'PANTAU',
+    regime_label: 'Rezim Saat Ini:',
+    regime_val: 'Mode Trend-Following Aktif',
+
+    how_eyebrow: 'Cara Kerjanya',
+    how_title: 'Tiga lapisan. Satu sistem yang mulus.',
+    how_sub: 'Dari data pasar mentah hingga eksekusi yang terlindungi — setiap langkah ditangani secara otomatis.',
+    step1_title: 'Deteksi Sinyal',
+    step1_desc: 'AI terus memindai struktur harga, momentum, volume, dan volatilitas di berbagai pasangan untuk mengidentifikasi setup yang valid — menyaring noise secara otomatis.',
+    step2_title: 'Kalkulasi Risiko',
+    step2_desc: 'Sebelum sinyal dieksekusi, mesin menghitung ukuran posisi, penempatan stop, dan batas eksposur — mengunci rasio risk-reward yang menguntungkan.',
+    step3_title: 'Eksekusi Adaptif',
+    step3_desc: 'Entry, target, dan exit dikelola secara dinamis. Saat kondisi berubah di tengah trade, sistem mengevaluasi ulang dan menyesuaikan — tanpa pengaruh emosi.',
+
+    feat_eyebrow: 'Fitur Utama',
+    feat_title: 'Semua alat yang Anda butuhkan. Tidak lebih.',
+    feat1_title: 'Deteksi Multi-Rezim',
+    feat1_desc: 'Mengidentifikasi apakah pasar sedang trending, ranging, atau volatil — lalu menerapkan lapisan strategi yang tepat. Tanpa batasan mode tunggal.',
+    feat2_title: 'Ukuran Posisi Dinamis',
+    feat2_desc: 'Risiko didefinisikan sebagai persentase ekuitas. Ukuran menyesuaikan volatilitas dan skor kepercayaan — kemenangan besar tidak membutuhkan taruhan besar.',
+    feat3_title: 'Mesin Sinyal Real-time',
+    feat3_desc: 'Didukung data teknikal + struktur pasar yang tergabung. Sinyal mencakup entry, stop, dan dua level target dengan kriteria invalidasi yang jelas.',
+    feat4_title: 'Kerangka Compounding',
+    feat4_desc: 'Fase bawaan memandu Anda dari pelestarian modal ke scaling terkontrol — sehingga pertumbuhan terjadi secara stabil, bukan gegabah.',
+
+    compare_eyebrow: 'Mengapa Ini Penting',
+    compare_title: 'Trading manual vs. CryptoMentor AI.',
+    compare_sub: 'Perbedaannya bukan hanya kecepatan — ini soal disiplin, konsistensi, dan kebebasan dari keputusan emosional.',
+    compare_bad_title: '❌ Trading Manual / Emosional',
+    compare_bad_1: 'Mengejar candle hijau, panik jual saat candle merah',
+    compare_bad_2: 'Over-leverage karena keyakinan berlebih, habis terkena wick',
+    compare_bad_3: 'Tidak ada proses konsisten — entry berdasarkan perasaan',
+    compare_bad_4: 'Mencoba menebak puncak dan dasar yang tepat',
+    compare_bad_5: 'Kemenangan/kekalahan terbaru mendistorsi keputusan berikutnya',
+    compare_good_title: '✓ CryptoMentor AI',
+    compare_good_1: 'Hanya masuk pada setup yang telah divalidasi dengan edge yang jelas',
+    compare_good_2: 'Eksposur dibatasi by design — tanpa emosi, tanpa FOMO',
+    compare_good_3: 'Eksekusi berbasis aturan setiap saat tanpa pengecualian',
+    compare_good_4: 'Prioritas probabilitas: mengelola ekspektansi dari banyak trade',
+    compare_good_5: 'Setiap trade berdiri sendiri — tanpa bias dari trade sebelumnya',
+
+    risk_eyebrow: 'Perlindungan Modal',
+    risk_title: 'Manajemen risiko bukan pilihan. Ini adalah keunggulan.',
+    risk_sub: 'Satu kerugian besar dapat menghapus banyak kemenangan kecil. Setiap lapisan sistem dirancang untuk menjaga Anda tetap bermain cukup lama untuk compound.',
+    risk_li1: 'Risiko didefinisikan sebagai persentase tetap ekuitas per trade — bukan jumlah dolar',
+    risk_li2: 'Penempatan stop loss dilakukan sebelum kalkulasi ukuran posisi',
+    risk_li3: 'Eksposur bersamaan maksimum dibatasi di semua posisi terbuka',
+    risk_li4: 'Pasangan yang berkorelasi dipantau untuk menghindari risiko searah yang menumpuk',
+    risk_li5: 'Leverage digunakan sebagai alat, bukan tujuan — eksposur efektif tetap terbatas',
+    risk_li6: 'Ambang drawdown memicu pengurangan aktivitas secara otomatis',
+    risk_panel_title: 'Snapshot Risiko Langsung',
+    risk_m1_label: 'Risiko per Trade',
+    risk_m2_label: 'Eksposur Terbuka',
+    risk_m3_label: 'Batas Drawdown Maks',
+    risk_m4_label: 'Buffer Likuidasi',
+    risk_m4_val: 'TINGGI',
+    risk_note: 'Semua posisi dalam parameter risiko yang ditentukan',
+
+    growth_eyebrow: 'Kerangka Pertumbuhan',
+    growth_title: 'Tiga fase menuju pertumbuhan compound.',
+    growth_sub: 'Dibangun untuk meningkatkan skala Anda dengan aman — bukan kaya cepat. Setiap fase membuka fase berikutnya setelah konsistensi terbukti.',
+    growth_scenario_title: 'Penjelajah Skenario',
+    growth_tab_conservative: 'Konservatif',
+    growth_tab_base: 'Dasar',
+    growth_tab_stress: 'Stres',
+    growth_tab_extreme: 'Ekstrem',
+    growth_metric_dd: 'Drawdown Maks',
+    growth_metric_recovery: 'Jendela Pemulihan',
+    growth_metric_outcome: 'Hasil di 12 Bulan',
+    growth_recovery_prefix: '~Bulan',
+    growth_recovery_over12: '>12 bulan',
+    growth_range_sep: 'sampai',
+    growth_m0: 'Mulai',
+    growth_m3: '3 bulan',
+    growth_m6: '6 bulan',
+    growth_m12: '12 bulan',
+    growth_explain_conservative: 'Fase rugi: koreksi tetap terkendali dengan sizing ketat dan entry agresif yang lebih sedikit. Stabilisasi: erosi modal melambat karena seleksi trade tetap ketat. Syarat pemulihan: pertumbuhan kembali jika konsistensi terjaga di rezim campuran.',
+    growth_explain_base: 'Fase rugi: drawdown moderat muncul saat kluster volatilitas normal. Stabilisasi: variansi menyempit saat setup tidak valid tersaring. Syarat pemulihan: compounding lanjut ketika ekspektansi dan kualitas menang tetap positif.',
+    growth_explain_stress: 'Fase rugi: hasil tertekan oleh kerugian beruntun dan kondisi choppy. Stabilisasi: eksposur tetap dibatasi sambil kualitas sinyal dibangun ulang. Syarat pemulihan: upside membaik hanya jika ekspektansi dan konsistensi eksekusi terjaga.',
+    growth_explain_extreme: 'Fase rugi: rezim yang sangat buruk memicu kontraksi modal yang dalam. Stabilisasi: mode defensif memprioritaskan bertahan dibanding tumbuh. Syarat pemulihan: pemulihan bisa melewati 12 bulan kecuali struktur pasar dan kualitas eksekusi membaik.',
+    growth_htr_title: 'Cara membaca ini:',
+    growth_htr_body: 'Perlakukan setiap skenario sebagai jalur stres. Kerugian bisa beruntun, kecepatan pemulihan bergantung pada kualitas rezim, dan ekspektansi positif tetap menghasilkan kurva ekuitas yang tidak mulus.',
+    growth_proj_note: 'Hanya simulasi: hasil adalah rentang skenario, bukan janji. Kinerja riil bisa berbeda secara material.',
+    phase1_title: 'Lindungi',
+    phase1_desc: 'Mode pelestarian modal. Risiko rendah per trade, fokus pada eksekusi bersih dan membangun kepercayaan pada sistem. Belum ada scaling.',
+    phase2_title: 'Stabilkan',
+    phase2_desc: 'Eksekusi konsisten di berbagai rezim pasar. Variansi menurun. Kualitas kemenangan dan ekspektansi dilacak — bukan hanya PnL.',
+    phase3_title: 'Skalakan',
+    phase3_desc: 'Compounding terkontrol dengan batas risiko ketat. Scale hanya setelah jendela konsistensi terbukti — dan hanya dalam batas yang telah disetujui.',
+
+    cta_badge: 'Siap kapan pun Anda mau',
+    cta_title_1: 'Modal Anda layak mendapatkan',
+    cta_title_2: 'strategi yang lebih cerdas.',
+    cta_sub: 'Bergabunglah dengan CryptoMentor AI dan biarkan sistem adaptif menangani disiplin — sehingga Anda bisa fokus pada gambaran yang lebih besar.',
+    cta_btn_primary: 'Mulai Gratis',
+    cta_btn_secondary: 'Lihat Deck Lengkap',
+    footer_note: 'CryptoMentor AI — Pelestarian modal dan trading adaptif. Kinerja masa lalu tidak menjamin hasil di masa depan. Berdagang dengan bijak.',
+  }
+};
+
+const growthScenarios = {
+  conservative: {
+    maxDrawdownPct: -22,
+    recoveryMonths: 9,
+    endRangePctMin: 10,
+    endRangePctMax: 18,
+    monthPoints: [100, 88, 78, 110],
+    explainKey: 'growth_explain_conservative'
+  },
+  base: {
+    maxDrawdownPct: -14,
+    recoveryMonths: 6,
+    endRangePctMin: 22,
+    endRangePctMax: 34,
+    monthPoints: [100, 92, 96, 122],
+    explainKey: 'growth_explain_base'
+  },
+  stress: {
+    maxDrawdownPct: -35,
+    recoveryMonths: 11,
+    endRangePctMin: 2,
+    endRangePctMax: 10,
+    monthPoints: [100, 72, 82, 102],
+    explainKey: 'growth_explain_stress'
+  },
+  extreme: {
+    maxDrawdownPct: -48,
+    recoveryMonths: 13,
+    endRangePctMin: -6,
+    endRangePctMax: 4,
+    monthPoints: [100, 60, 52, 94],
+    explainKey: 'growth_explain_extreme'
+  }
+};
+
+let currentLang = 'en';
+let activeGrowthScenario = 'stress';
+
+function applyLang(lang) {
+  currentLang = lang;
+  const dict = i18n[lang];
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    if (dict[key]) el.textContent = dict[key];
+  });
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === lang);
+  });
+  document.documentElement.lang = lang;
+  renderGrowthScenario(activeGrowthScenario, { animate: false });
+}
+
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => applyLang(btn.dataset.lang));
+});
+
+function toGrowthBarWidth(equityPct) {
+  return Math.max(8, Math.min(92, Math.round(equityPct * 0.35)));
+}
+
+function setGrowthTabState(id) {
+  document.querySelectorAll('[data-scenario-tab]').forEach(btn => {
+    const active = btn.dataset.scenarioTab === id;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function renderGrowthScenario(id, { animate = true } = {}) {
+  const scenario = growthScenarios[id];
+  const dict = i18n[currentLang] || i18n.en;
+  if (!scenario) return;
+  activeGrowthScenario = id;
+  setGrowthTabState(id);
+
+  const ddEl = document.getElementById('growth_dd_value');
+  const recoveryEl = document.getElementById('growth_recovery_value');
+  const outcomeEl = document.getElementById('growth_outcome_value');
+  const explainEl = document.getElementById('growth_explain');
+
+  if (ddEl) ddEl.textContent = `${scenario.maxDrawdownPct}%`;
+  if (recoveryEl) {
+    recoveryEl.textContent = scenario.recoveryMonths > 12
+      ? (dict.growth_recovery_over12 || '>12 months')
+      : `${dict.growth_recovery_prefix || '~Month'} ${scenario.recoveryMonths}`;
+  }
+  if (outcomeEl) {
+    const min = scenario.endRangePctMin >= 0 ? `+${scenario.endRangePctMin}%` : `${scenario.endRangePctMin}%`;
+    const max = scenario.endRangePctMax >= 0 ? `+${scenario.endRangePctMax}%` : `${scenario.endRangePctMax}%`;
+    outcomeEl.textContent = `${min} ${dict.growth_range_sep || 'to'} ${max}`;
+  }
+  if (explainEl && dict[scenario.explainKey]) {
+    explainEl.textContent = dict[scenario.explainKey];
+  }
+
+  const points = scenario.monthPoints || [];
+  document.querySelectorAll('.scenario-fill[data-scenario-bar]').forEach((bar, idx) => {
+    const val = points[idx] ?? 100;
+    const target = toGrowthBarWidth(val);
+    const endEq = points[3] ?? 100;
+    const delta = scenario.endRangePctMax - scenario.endRangePctMin;
+    bar.dataset.w = String(target);
+    bar.textContent = idx === 3 ? `${endEq}%-${endEq + delta}%` : `${val}%`;
+    if (animate) {
+      bar.style.width = '0';
+      setTimeout(() => {
+        bar.style.width = `${target}%`;
+      }, 90 + idx * 55);
+    } else {
+      bar.style.width = `${target}%`;
+    }
+  });
+}
+
+document.querySelectorAll('[data-scenario-tab]').forEach(btn => {
+  btn.addEventListener('click', () => renderGrowthScenario(btn.dataset.scenarioTab));
+});
+
+/* ══════════════════════════════════════
+   STARFIELD
+   ══════════════════════════════════════ */
+(function() {
+  const sf = document.getElementById('starfield');
+  for (let i = 0; i < 80; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    const size = Math.random() * 2 + 0.5;
+    s.style.cssText = `
+      width: ${size}px; height: ${size}px;
+      left: ${Math.random() * 100}%;
+      top: ${Math.random() * 100}%;
+      animation-duration: ${Math.random() * 5 + 3}s;
+      animation-delay: ${Math.random() * 6}s;
+    `;
+    sf.appendChild(s);
+  }
+})();
+
+/* ══════════════════════════════════════
+   TICKER TAPE
+   ══════════════════════════════════════ */
+const tickerData = [
+  { sym: 'BTC/USDT', price: '$67,240', chg: '+2.41%', up: true },
+  { sym: 'ETH/USDT', price: '$3,490',  chg: '+1.83%', up: true },
+  { sym: 'SOL/USDT', price: '$172.4',  chg: '+4.12%', up: true },
+  { sym: 'BNB/USDT', price: '$589',    chg: '-0.74%', up: false },
+  { sym: 'XRP/USDT', price: '$0.631',  chg: '+0.55%', up: true },
+  { sym: 'DOGE/USDT',price: '$0.148',  chg: '-1.22%', up: false },
+  { sym: 'AVAX/USDT',price: '$38.2',   chg: '+3.07%', up: true },
+  { sym: 'LINK/USDT',price: '$14.80',  chg: '+1.44%', up: true },
+  { sym: 'OP/USDT',  price: '$2.71',   chg: '+5.30%', up: true },
+  { sym: 'ARB/USDT', price: '$1.14',   chg: '-0.91%', up: false },
+];
+
+function buildTicker() {
+  const inner = document.getElementById('ticker');
+  const doubled = [...tickerData, ...tickerData];
+  inner.innerHTML = doubled.map(t => `
+    <div class="ticker-item">
+      <span class="ticker-sym">${t.sym}</span>
+      <span>${t.price}</span>
+      <span class="${t.up ? 'ticker-up' : 'ticker-down'}">${t.chg}</span>
+    </div>
+  `).join('');
+}
+buildTicker();
+
+/* ══════════════════════════════════════
+   SCROLL PROGRESS
+   ══════════════════════════════════════ */
+const progress = document.getElementById('scroll-progress');
+window.addEventListener('scroll', () => {
+  const max = document.documentElement.scrollHeight - window.innerHeight;
+  const pct = Math.min((window.scrollY / max) * 100, 100);
+  progress.style.width = pct + '%';
+}, { passive: true });
+
+/* ══════════════════════════════════════
+   SCROLL HINT HIDE
+   ══════════════════════════════════════ */
+const hint = document.getElementById('scroll-hint');
+window.addEventListener('scroll', () => {
+  if (window.scrollY > 120) hint.classList.add('hide');
+  else hint.classList.remove('hide');
+}, { passive: true });
+
+/* ══════════════════════════════════════
+   REVEAL ON SCROLL (IntersectionObserver)
+   ══════════════════════════════════════ */
+const revealObs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      revealObs.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
+
+document.querySelectorAll('.reveal, .reveal-left, .reveal-right').forEach(el => revealObs.observe(el));
+
+/* ══════════════════════════════════════
+   RISK METER ANIMATION
+   ══════════════════════════════════════ */
+const meterObs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.querySelectorAll('.meter-fill[data-animate]').forEach(bar => {
+        bar.classList.add('animate');
+      });
+      meterObs.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.3 });
+
+const riskPanel = document.querySelector('.risk-panel');
+if (riskPanel) meterObs.observe(riskPanel);
+
+const growthPanel = document.querySelector('[data-scenario-panel="intro-growth"]');
+if (growthPanel) {
+  const growthObs = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        renderGrowthScenario(activeGrowthScenario, { animate: true });
+        growthObs.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.25 });
+  growthObs.observe(growthPanel);
+}
+
+/* ══════════════════════════════════════
+   SMOOTH ANCHOR FOR HERO CTA
+   ══════════════════════════════════════ */
+document.querySelector('.btn-ghost[data-i18n="hero_cta_secondary"]')?.addEventListener('click', () => {
+  document.getElementById('how').scrollIntoView({ behavior: 'smooth' });
+});
+document.querySelector('.btn-ghost[data-i18n="cta_btn_secondary"]')?.addEventListener('click', () => {
+  window.location.href = '/cryptomentor-onboarding-deck.html';
+});
+
+// Primary CTAs → main app
+document.querySelectorAll('.btn-primary').forEach(btn => {
+  btn.addEventListener('click', () => {
+    window.location.href = 'https://cryptomentor.id';
+  });
+});
+document.querySelector('.nav-cta')?.addEventListener('click', () => {
+  window.location.href = 'https://cryptomentor.id';
+});
+
+/* initial render */
+applyLang('en');
+</script>
+</body>
+</html>

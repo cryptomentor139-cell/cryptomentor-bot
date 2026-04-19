@@ -7,7 +7,7 @@ import asyncio
 import logging
 import os
 import time
-from typing import Optional, Dict
+from typing import Any, Optional, Dict, List
 from datetime import datetime
 from html import escape
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -16,6 +16,49 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.trading_mode import ScalpingConfig, ScalpingSignal, ScalpingPosition
 from app.supabase_repo import _client
+from app.symbol_coordinator import (
+    get_coordinator,
+    StrategyOwner,
+    PositionSide,
+)
+from app.engine_execution_shared import (
+    build_cumulative_close_update_payload,
+    coordinator_clear_pending,
+    coordinator_confirm_closed,
+    coordinator_confirm_open,
+    coordinator_set_pending,
+    evaluate_and_apply_playbook_risk,
+    format_and_emit_order_open_risk_audit,
+)
+from app.engine_runtime_shared import (
+    get_top_volume_pairs,
+    is_ttl_cooldown_active as _shared_is_ttl_cooldown_active,
+    refresh_runtime_snapshot,
+    sanitize_startup_pending_locks,
+    set_ttl_cooldown as _shared_set_ttl_cooldown,
+    should_notify_blocked_pending as _shared_should_notify_blocked_pending,
+    should_stop_engine,
+)
+from app.adaptive_confluence import refresh_global_adaptive_state, get_adaptive_overrides
+from app.confidence_adaptation import (
+    apply_confidence_risk_brake,
+    get_confidence_adaptation,
+    get_confidence_adaptation_snapshot,
+    refresh_global_confidence_adaptation_state,
+)
+from app.sideways_governor import (
+    refresh_sideways_governor_state,
+    get_sideways_governor_snapshot,
+    get_sideways_entry_overrides,
+    resolve_dynamic_max_hold_seconds,
+)
+from app.leverage_policy import get_auto_max_safe_leverage
+from app.pair_strategy_router import get_mixed_pair_assignments
+from app.win_playbook import (
+    refresh_global_win_playbook_state,
+    get_win_playbook_snapshot,
+)
+from app.volume_pair_selector import mark_runtime_untradable_symbol
 
 logger = logging.getLogger(__name__)
 WEB_DASHBOARD_URL = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
@@ -24,6 +67,24 @@ WEB_DASHBOARD_URL = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
 def _fmt_price(v: float) -> str:
     s = f"{float(v):,.6f}"
     return s.rstrip("0").rstrip(".")
+
+
+def _derive_rr_ratio(entry_price: float, sl_price: float, tp_price: float, fallback_rr: float = 0.0) -> float:
+    """Derive R:R from executed levels and fallback to signal R:R when invalid."""
+    try:
+        entry = float(entry_price)
+        sl = float(sl_price)
+        tp = float(tp_price)
+        risk = abs(entry - sl)
+        reward = abs(tp - entry)
+        if risk > 0 and reward > 0:
+            return round(reward / risk, 2)
+    except Exception:
+        pass
+    try:
+        return float(fallback_rr)
+    except Exception:
+        return 0.0
 
 
 def _build_trade_url(trade_id: Optional[int] = None, order_id: str = "", symbol: str = "") -> str:
@@ -57,10 +118,19 @@ class ScalpingEngine:
     - Single TP at 1.5R
     - 30-minute max hold time
     - 5-minute cooldown between signals
-    - 80% minimum confidence
+    - 72% minimum confidence
     """
     
-    def __init__(self, user_id: int, client, bot, notify_chat_id: int, config: Optional[ScalpingConfig] = None):
+    def __init__(
+        self,
+        user_id: int,
+        client,
+        bot,
+        notify_chat_id: int,
+        config: Optional[ScalpingConfig] = None,
+        mixed_mode: bool = False,
+        startup_notification: bool = True,
+    ):
         """
         Initialize scalping engine
         
@@ -76,6 +146,8 @@ class ScalpingEngine:
         self.bot = bot
         self.notify_chat_id = notify_chat_id
         self.config = config or ScalpingConfig()
+        self._mixed_mode = bool(mixed_mode)
+        self._startup_notification = bool(startup_notification)
         
         # Position tracking
         self.positions: Dict[str, ScalpingPosition] = {}
@@ -89,41 +161,380 @@ class ScalpingEngine:
         self.sideways_error_counter: Dict[str, int] = {}
         self.signal_streaks: Dict[str, Dict[str, float]] = {}
         self.last_closed_meta: Dict[str, Dict[str, float]] = {}
+        self._blocked_pending_notify_ts: Dict[str, float] = {}
+        self._stale_price_cooldown_ts: Dict[str, float] = {}
         
         # Running state
         self.running = False
-        
+        self._adaptive_overlay: Dict[str, float] = {
+            "conf_delta": 0,
+            "volume_min_ratio_delta": 0.0,
+            "ob_fvg_requirement_mode": "soft",
+            "strategy_loss_rate": 0.0,
+            "ops_reconcile_rate": 0.0,
+            "trade_count_per_day": 0.0,
+            "strategy_sample_size": 0,
+            "decision_reason": "bootstrap",
+        }
+        self._adaptive_next_refresh = 0.0
+        self._active_scan_pairs = list(self.config.pairs)
+        self._sideways_governor_snapshot: Dict[str, Any] = {
+            "mode": "normal",
+            "allow_sideways_entries": True,
+            "allow_sideways_fallback": True,
+            "sideways_min_rr_override": None,
+            "sideways_min_volume_floor": 0.9,
+            "sideways_confidence_bonus": 0,
+            "sideways_confirmations_required": 1,
+            "sideways_expectancy_24h": 0.0,
+            "sideways_timeout_loss_rate_24h": 0.0,
+            "sample_size_24h": 0,
+            "decision_reason": "bootstrap",
+            "dynamic_hold_sideways_seconds": 120,
+            "dynamic_hold_non_sideways_seconds": int(self.config.max_hold_time),
+        }
+        self._sideways_governor_next_refresh = 0.0
+        self._sideways_hourly_kpi_next = 0.0
+        self._win_playbook_snapshot: Dict[str, Any] = {
+            "risk_overlay_pct": 0.0,
+            "rolling_win_rate": 0.0,
+            "rolling_expectancy": 0.0,
+            "sample_size": 0,
+            "active_tags": [],
+            "guardrails_healthy": False,
+        }
+        self._win_playbook_next_refresh = 0.0
+        self._confidence_adapt_snapshot: Dict[str, Any] = {
+            "enabled": False,
+            "modes": {"scalping": {"active_adaptations": [], "sample_size": 0}},
+        }
+        self._confidence_adapt_next_refresh = 0.0
+
+        # Multi-user symbol coordinator
+        self.coordinator = get_coordinator()
+
         logger.info(f"[Scalping:{user_id}] Engine initialized with config: {self.config}")
+
+    @staticmethod
+    def _is_scalping_trade_row(row: Dict[str, Any]) -> bool:
+        trade_type = str(row.get("trade_type") or "").strip().lower()
+        if trade_type:
+            return trade_type == "scalping"
+        timeframe = str(row.get("timeframe") or "").strip().lower()
+        if timeframe == "5m":
+            return True
+        strategy = str(row.get("strategy") or "").strip().lower()
+        return strategy in {"scalping", "micro_scalp", "sideways_scalp"}
+
+    def _should_notify_blocked_pending(self, symbol: str, ttl_sec: int = 600) -> bool:
+        return _shared_should_notify_blocked_pending(
+            self._blocked_pending_notify_ts,
+            key=str(symbol).upper(),
+            ttl_sec=float(ttl_sec),
+        )
+
+    def _mark_stale_price_cooldown(
+        self,
+        symbol: str,
+        ttl_sec: float = 120.0,
+        now_ts: Optional[float] = None,
+    ) -> float:
+        key = str(symbol).upper()
+        expiry = _shared_set_ttl_cooldown(
+            self.cooldown_tracker,
+            key=key,
+            ttl_sec=float(ttl_sec),
+            now_ts=now_ts,
+        )
+        _shared_set_ttl_cooldown(
+            self._stale_price_cooldown_ts,
+            key=key,
+            ttl_sec=float(ttl_sec),
+            now_ts=now_ts,
+        )
+        return expiry
+
+    def _is_stale_price_cooldown_active(self, symbol: str, now_ts: Optional[float] = None) -> bool:
+        return _shared_is_ttl_cooldown_active(
+            self._stale_price_cooldown_ts,
+            key=str(symbol).upper(),
+            now_ts=now_ts,
+        )
+
+    def _apply_generic_failure_cooldown(
+        self,
+        symbol: str,
+        ttl_sec: float = 300.0,
+        now_ts: Optional[float] = None,
+    ) -> bool:
+        if self._is_stale_price_cooldown_active(symbol, now_ts=now_ts):
+            return False
+        _shared_set_ttl_cooldown(
+            self.cooldown_tracker,
+            key=str(symbol).upper(),
+            ttl_sec=float(ttl_sec),
+            now_ts=now_ts,
+        )
+        return True
+
+    async def _open_managed_position_safe(self, open_managed_position_fn, **kwargs):
+        """
+        Compatibility guard for mixed deployments:
+        retry without tp_price if remote/runtime function signature is older.
+        """
+        try:
+            return await open_managed_position_fn(**kwargs)
+        except TypeError as te:
+            msg = str(te)
+            if "unexpected keyword argument 'tp_price'" not in msg:
+                raise
+            retry_kwargs = dict(kwargs)
+            retry_kwargs.pop("tp_price", None)
+            logger.warning(
+                "[Scalping:%s] open_managed_position tp_price unsupported in runtime; retrying without tp_price for %s",
+                self.user_id,
+                retry_kwargs.get("symbol", "?"),
+            )
+            return await open_managed_position_fn(**retry_kwargs)
+
+    def _fmt_pnl_usdt(self, pnl: float) -> str:
+        """Format PnL with higher precision for tiny values."""
+        try:
+            p = float(pnl)
+        except Exception:
+            p = 0.0
+        if abs(p) < 0.01:
+            return f"{p:+.4f}"
+        return f"{p:+.2f}"
+
+    async def _resolve_exit_price(self, symbol: str, fallback: float, order_result: Optional[dict] = None) -> tuple[float, bool]:
+        """
+        Resolve exit price for PnL calculation.
+        Returns (price, is_estimated_from_ticker).
+        """
+        try:
+            if isinstance(order_result, dict):
+                fp = order_result.get("fill_price")
+                if fp is not None:
+                    fpv = float(fp)
+                    if fpv > 0:
+                        return fpv, False
+        except Exception:
+            pass
+
+        try:
+            ticker = await asyncio.to_thread(self.client.get_ticker, symbol)
+            if ticker and ticker.get("success"):
+                px = float(
+                    ticker.get("mark_price")
+                    or ticker.get("last_price")
+                    or ticker.get("price")
+                    or fallback
+                )
+                if px > 0:
+                    return px, True
+        except Exception:
+            pass
+
+        return float(fallback), True
+
+    async def _resolve_net_pnl(
+        self,
+        symbol: str,
+        gross_pnl: float,
+        open_order_id: str = "",
+        close_order_id: str = "",
+    ) -> tuple[float, float, float, bool]:
+        """
+        Best-effort net PnL estimation using exchange order fees/details.
+        Returns: (net_pnl, open_fee, close_fee, used_exchange_data)
+        """
+        open_fee = 0.0
+        close_fee = 0.0
+        used_exchange_data = False
+        close_realized = None
+
+        get_fin = getattr(self.client, "get_order_financials", None)
+        if not callable(get_fin):
+            return gross_pnl, open_fee, close_fee, used_exchange_data
+
+        try:
+            if open_order_id:
+                o = await asyncio.to_thread(get_fin, open_order_id, symbol)
+                if o.get("success"):
+                    open_fee = abs(float(o.get("fee", 0) or 0))
+                    used_exchange_data = True
+        except Exception:
+            pass
+
+        try:
+            if close_order_id:
+                c = await asyncio.to_thread(get_fin, close_order_id, symbol)
+                if c.get("success"):
+                    close_fee = abs(float(c.get("fee", 0) or 0))
+                    if c.get("realized_pnl") is not None:
+                        close_realized = float(c.get("realized_pnl"))
+                    used_exchange_data = True
+        except Exception:
+            pass
+
+        base = close_realized if close_realized is not None else gross_pnl
+        net = base - open_fee - close_fee
+        return net, open_fee, close_fee, used_exchange_data
+
+    async def _get_open_trade_row(self, symbol: str) -> Dict[str, Any]:
+        try:
+            s = _client()
+            res = (
+                s.table("autotrade_trades")
+                .select("*")
+                .eq("telegram_id", self.user_id)
+                .eq("symbol", symbol)
+                .eq("status", "open")
+                .order("opened_at", desc=True)
+                .limit(10)
+                .execute()
+            )
+            for row in (res.data or []):
+                row_dict = dict(row)
+                if self._is_scalping_trade_row(row_dict):
+                    return row_dict
+        except Exception as e:
+            logger.warning(f"[Scalping:{self.user_id}] Failed open trade fetch for {symbol}: {e}")
+        return {}
+
+    async def _resolve_close_quantity(self, position: ScalpingPosition) -> float:
+        """
+        Determine safest close quantity for reduce-only close.
+        Priority:
+        1) DB remaining quantity snapshot (if partial TP already happened)
+        2) Live exchange position quantity
+        3) Local in-memory position quantity
+        """
+        open_row = await self._get_open_trade_row(position.symbol)
+        for key in ("remaining_quantity", "quantity", "qty"):
+            try:
+                q = float(open_row.get(key) or 0.0)
+                if q > 0:
+                    return q
+            except Exception:
+                continue
+
+        try:
+            pos_resp = await asyncio.to_thread(self.client.get_positions)
+            if pos_resp and pos_resp.get("success"):
+                for p in pos_resp.get("positions", []):
+                    if str(p.get("symbol")) != str(position.symbol):
+                        continue
+                    q = abs(float(p.get("qty") or p.get("size") or 0.0))
+                    if q > 0:
+                        return q
+        except Exception:
+            pass
+
+        return max(0.0, float(getattr(position, "quantity", 0.0) or 0.0))
     
     async def run(self):
         """Main trading loop - scans every 15 seconds"""
         self.running = True
         logger.info(f"[Scalping:{self.user_id}] Engine started")
         
+        # ── Recover existing state ───────────────────────────────────────────
+        # 1. Reconcile DB with Exchange (close stale rows if positions closed manually)
+        try:
+            from app.trade_history import reconcile_open_trades_with_exchange
+            reconciled = await asyncio.to_thread(
+                reconcile_open_trades_with_exchange,
+                self.user_id,
+                self.client,
+                "scalping",
+            )
+            if reconciled > 0:
+                logger.info(f"[Scalping:{self.user_id}] Reconciled {reconciled} stale positions on startup")
+        except Exception as e:
+            logger.error(f"[Scalping:{self.user_id}] Reconciliation failed: {e}")
+
+        # 2. Load open positions from DB to resume monitoring
+        await self._load_existing_positions()
+        await sanitize_startup_pending_locks(
+            self.coordinator,
+            int(self.user_id),
+            logger,
+            label=f"[Scalping:{self.user_id}]",
+        )
+        
         # Send startup notification
         try:
-            await self.bot.send_message(
-                chat_id=self.notify_chat_id,
-                text=(
-                    "🤖 <b>Scalping Engine Active!</b>\n\n"
-                    "⚡ <b>Mode: Scalping (5M)</b>\n\n"
-                    "📊 Configuration:\n"
-                    f"• Timeframe: {self.config.timeframe}\n"
-                    f"• Scan interval: {self.config.scan_interval}s\n"
-                    f"• Min confidence: {self.config.min_confidence * 100:.0f}%\n"
-                    f"• Min R:R: 1:{self.config.min_rr}\n"
-                    f"• Max hold time: {self.config.max_hold_time // 60} minutes\n"
-                    f"• Max concurrent: {self.config.max_concurrent_positions} positions\n"
-                    f"• Trading pairs: {len(self.config.pairs)} pairs\n\n"
-                    "Bot will scan for high-probability setups every 15 seconds.\n"
-                    "Patience = profit. 🎯"
-                ),
-                parse_mode='HTML'
-            )
+            # Best-effort initial adaptive load.
+            try:
+                await asyncio.to_thread(refresh_global_adaptive_state)
+                self._adaptive_overlay = await asyncio.to_thread(get_adaptive_overrides)
+            except Exception as adapt_err:
+                logger.warning(f"[Scalping:{self.user_id}] Initial adaptive load failed: {adapt_err}")
+            try:
+                await asyncio.to_thread(refresh_sideways_governor_state)
+                self._sideways_governor_snapshot = await asyncio.to_thread(get_sideways_governor_snapshot)
+            except Exception as governor_err:
+                logger.warning(f"[Scalping:{self.user_id}] Initial sideways governor load failed: {governor_err}")
+            try:
+                await asyncio.to_thread(refresh_global_win_playbook_state)
+                self._win_playbook_snapshot = await asyncio.to_thread(get_win_playbook_snapshot)
+            except Exception as playbook_err:
+                logger.warning(f"[Scalping:{self.user_id}] Initial win-playbook load failed: {playbook_err}")
+            try:
+                await asyncio.to_thread(refresh_global_confidence_adaptation_state)
+                self._confidence_adapt_snapshot = await asyncio.to_thread(get_confidence_adaptation_snapshot)
+            except Exception as conf_adapt_err:
+                logger.warning(f"[Scalping:{self.user_id}] Initial confidence adaptation load failed: {conf_adapt_err}")
+            if self._mixed_mode:
+                assignments = await get_mixed_pair_assignments(
+                    user_id=int(self.user_id),
+                    limit=10,
+                    fallback_pairs=list(self.config.pairs),
+                    logger_override=logger,
+                    label=f"[Scalping:{self.user_id}]",
+                )
+                self._active_scan_pairs = list(assignments.get("scalp") or [])
+            else:
+                self._active_scan_pairs = await get_top_volume_pairs(
+                    limit=10,
+                    fallback_pairs=list(self.config.pairs),
+                    logger=logger,
+                    label=f"[Scalping:{self.user_id}]",
+                )
+
+            if self._startup_notification:
+                await self.bot.send_message(
+                    chat_id=self.notify_chat_id,
+                    text=(
+                        ("🤖 <b>Scalping Engine Active!</b>\n\n" if not self._mixed_mode else "🤖 <b>Mixed Component Active (Scalping)</b>\n\n")
+                        + ("⚡ <b>Mode: Scalping (5M)</b>\n\n" if not self._mixed_mode else "⚖️ <b>Mode: Mixed (Scalp Partition)</b>\n\n")
+                        + "📊 Configuration:\n"
+                        + f"• Timeframe: {self.config.timeframe}\n"
+                        + f"• Scan interval: {self.config.scan_interval}s\n"
+                        + f"• Min confidence: {self.config.min_confidence * 100:.0f}%\n"
+                        + f"• Min R:R: 1:{self.config.min_rr}\n"
+                        + f"• Max hold time: {self.config.max_hold_time // 60} minutes\n"
+                        + f"• Max concurrent: {self.config.max_concurrent_positions} positions\n"
+                        + f"• Assigned pairs: {len(self._active_scan_pairs)}\n\n"
+                        + f"• Adaptive conf delta: {int(self._adaptive_overlay.get('conf_delta', 0)):+d}\n"
+                        + f"• Adaptive vol delta: {float(self._adaptive_overlay.get('volume_min_ratio_delta', 0.0)):+.2f}\n"
+                        + f"• Sideways governor: {str(self._sideways_governor_snapshot.get('mode', 'normal')).upper()}\n"
+                        + f"• Win playbook tags: {len(self._win_playbook_snapshot.get('active_tags', []) or [])}\n"
+                        + f"• Runtime risk overlay: {float(self._win_playbook_snapshot.get('risk_overlay_pct', 0.0)):+.2f}%\n"
+                        + f"• Confidence adaptation: {'ON' if bool(self._confidence_adapt_snapshot.get('enabled', False)) else 'OFF'}\n"
+                        + f"• Confidence active buckets: "
+                        + f"{len((((self._confidence_adapt_snapshot.get('modes') or {}).get('scalping') or {}).get('active_adaptations') or []))}\n\n"
+                        + f"Bot will scan for high-probability setups every {self.config.scan_interval} seconds.\n"
+                        + "Patience = profit. 🎯"
+                    ),
+                    parse_mode='HTML'
+                )
         except Exception as e:
             logger.warning(f"[Scalping:{self.user_id}] Startup notification failed: {e}")
         
         scan_count = 0
+        self._sideways_hourly_kpi_next = time.time() + 3600.0
         try:
             while self.running:
                 try:
@@ -131,58 +542,180 @@ class ScalpingEngine:
                     # Only stop if status is explicitly "stopped" AND engine_active=False
                     # This prevents race conditions where status briefly shows "stopped"
                     # during user restart flow
-                    try:
-                        from app.supabase_repo import _client as _sc
-                        _sr = _sc().table("autotrade_sessions").select("status, engine_active").eq(
-                            "telegram_id", self.user_id
-                        ).limit(1).execute()
-                        if _sr.data:
-                            _row = _sr.data[0]
-                            _status = _row.get("status")
-                            _engine_active = _row.get("engine_active", True)
-                            # Only stop if BOTH status=stopped AND engine_active=False
-                            # If engine_active=True, user just restarted — keep running
-                            if _status == "stopped" and not _engine_active:
-                                logger.info(f"[Scalping:{self.user_id}] Stop signal from Supabase (status=stopped, engine_active=False)")
-                                self.running = False
-                                try:
-                                    await self.bot.send_message(
-                                        chat_id=self.notify_chat_id,
-                                        text="🛑 <b>AutoTrade stopped.</b>\n\nUse /autotrade to restart.",
-                                        parse_mode='HTML'
-                                    )
-                                except Exception:
-                                    pass
-                                break
-                    except Exception:
-                        pass
+                    if await should_stop_engine(
+                        self.user_id,
+                        logger=logger,
+                        label=f"[Scalping:{self.user_id}]",
+                    ):
+                        logger.info(f"[Scalping:{self.user_id}] Stop signal from Supabase (status=stopped, engine_active=False)")
+                        self.running = False
+                        try:
+                            await self.bot.send_message(
+                                chat_id=self.notify_chat_id,
+                                text="🛑 <b>AutoTrade stopped.</b>\n\nUse /autotrade to restart.",
+                                parse_mode='HTML'
+                            )
+                        except Exception:
+                            pass
+                        break
 
                     scan_count += 1
+                    now_ts = time.time()
+                    self._adaptive_next_refresh, self._adaptive_overlay, adaptive_refreshed, adaptive_err = await refresh_runtime_snapshot(
+                        now_ts=now_ts,
+                        next_refresh_ts=self._adaptive_next_refresh,
+                        refresh_fn=refresh_global_adaptive_state,
+                        snapshot_fn=get_adaptive_overrides,
+                        current_snapshot=self._adaptive_overlay,
+                        interval_sec=600.0,
+                    )
+                    if adaptive_refreshed:
+                        logger.info(
+                            f"[Scalping:{self.user_id}] Adaptive overlay refreshed — "
+                            f"conf_delta={self._adaptive_overlay.get('conf_delta')} "
+                            f"vol_delta={self._adaptive_overlay.get('volume_min_ratio_delta'):.2f} "
+                            f"mode={self._adaptive_overlay.get('ob_fvg_requirement_mode')} "
+                            f"loss_rate={self._adaptive_overlay.get('strategy_loss_rate'):.3f} "
+                            f"sample={self._adaptive_overlay.get('strategy_sample_size')}"
+                        )
+                    elif adaptive_err:
+                        logger.warning(f"[Scalping:{self.user_id}] Adaptive refresh failed: {adaptive_err}")
+
+                    self._sideways_governor_next_refresh, self._sideways_governor_snapshot, governor_refreshed, governor_err = await refresh_runtime_snapshot(
+                        now_ts=now_ts,
+                        next_refresh_ts=self._sideways_governor_next_refresh,
+                        refresh_fn=refresh_sideways_governor_state,
+                        snapshot_fn=get_sideways_governor_snapshot,
+                        current_snapshot=self._sideways_governor_snapshot,
+                        interval_sec=600.0,
+                    )
+                    if governor_refreshed:
+                        policy = get_sideways_entry_overrides(self._sideways_governor_snapshot)
+                        logger.info(
+                            f"[Scalping:{self.user_id}] Sideways governor refreshed | "
+                            f"mode={policy.get('mode')} sample={policy.get('sample_size_24h')} "
+                            f"exp={float(policy.get('sideways_expectancy_24h', 0.0)):+.6f} "
+                            f"timeout_loss_rate={float(policy.get('sideways_timeout_loss_rate_24h', 0.0)):.3f} "
+                            f"reason={policy.get('decision_reason')}"
+                        )
+                    elif governor_err:
+                        logger.warning(f"[Scalping:{self.user_id}] Sideways governor refresh failed: {governor_err}")
+
+                    self._win_playbook_next_refresh, self._win_playbook_snapshot, playbook_refreshed, playbook_err = await refresh_runtime_snapshot(
+                        now_ts=now_ts,
+                        next_refresh_ts=self._win_playbook_next_refresh,
+                        refresh_fn=refresh_global_win_playbook_state,
+                        snapshot_fn=get_win_playbook_snapshot,
+                        current_snapshot=self._win_playbook_snapshot,
+                        interval_sec=600.0,
+                    )
+                    if playbook_refreshed:
+                        logger.info(
+                            f"[Scalping:{self.user_id}] Win playbook refreshed — "
+                            f"sample={self._win_playbook_snapshot.get('sample_size')} "
+                            f"wr={float(self._win_playbook_snapshot.get('rolling_win_rate', 0.0)):.3f} "
+                            f"exp={float(self._win_playbook_snapshot.get('rolling_expectancy', 0.0)):+.4f} "
+                            f"overlay={float(self._win_playbook_snapshot.get('risk_overlay_pct', 0.0)):.2f}% "
+                            f"active_tags={len(self._win_playbook_snapshot.get('active_tags', []) or [])}"
+                        )
+                    elif playbook_err:
+                        logger.warning(f"[Scalping:{self.user_id}] Win playbook refresh failed: {playbook_err}")
+                    self._confidence_adapt_next_refresh, self._confidence_adapt_snapshot, conf_adapt_refreshed, conf_adapt_err = await refresh_runtime_snapshot(
+                        now_ts=now_ts,
+                        next_refresh_ts=self._confidence_adapt_next_refresh,
+                        refresh_fn=refresh_global_confidence_adaptation_state,
+                        snapshot_fn=get_confidence_adaptation_snapshot,
+                        current_snapshot=self._confidence_adapt_snapshot,
+                        interval_sec=600.0,
+                    )
+                    if conf_adapt_refreshed:
+                        mode_state = ((self._confidence_adapt_snapshot.get("modes") or {}).get("scalping") or {})
+                        logger.info(
+                            f"[Scalping:{self.user_id}] Confidence adaptation refreshed — "
+                            f"enabled={bool(self._confidence_adapt_snapshot.get('enabled', False))} "
+                            f"sample={int(mode_state.get('sample_size', 0) or 0)} "
+                            f"active_buckets={len(mode_state.get('active_adaptations', []) or [])} "
+                            f"top={((mode_state.get('top_bucket') or {}).get('bucket') or '-')}"
+                        )
+                    elif conf_adapt_err:
+                        logger.warning(f"[Scalping:{self.user_id}] Confidence adaptation refresh failed: {conf_adapt_err}")
+                    if now_ts >= self._sideways_hourly_kpi_next:
+                        policy = get_sideways_entry_overrides(self._sideways_governor_snapshot)
+                        logger.info(
+                            f"[Scalping:{self.user_id}] Sideways KPI hourly | "
+                            f"mode={policy.get('mode')} "
+                            f"expectancy_24h={float(policy.get('sideways_expectancy_24h', 0.0)):+.6f} "
+                            f"timeout_loss_rate_24h={float(policy.get('sideways_timeout_loss_rate_24h', 0.0)):.3f} "
+                            f"sample_24h={int(policy.get('sample_size_24h', 0) or 0)}"
+                        )
+                        self._sideways_hourly_kpi_next = now_ts + 3600.0
                     logger.info(f"[Scalping:{self.user_id}] Scan cycle #{scan_count} starting...")
-                    
+
                     # Monitor existing positions first (priority)
                     logger.info(f"[Scalping:{self.user_id}] Monitoring positions...")
+                    await self._process_expired_positions()
                     await self.monitor_positions()
                     
-                    # Scan for new signals in PARALLEL
-                    logger.info(f"[Scalping:{self.user_id}] Scanning {len(self.config.pairs)} pairs simultaneously...")
+                    # Scan for new signals in PARALLEL (dynamic top-volume universe).
+                    if self._mixed_mode:
+                        assignments = await get_mixed_pair_assignments(
+                            user_id=int(self.user_id),
+                            limit=10,
+                            fallback_pairs=list(self.config.pairs),
+                            logger_override=logger,
+                            label=f"[Scalping:{self.user_id}]",
+                        )
+                        ranked_pairs = list(assignments.get("scalp") or [])
+                    else:
+                        ranked_pairs = await get_top_volume_pairs(
+                            limit=10,
+                            fallback_pairs=list(self.config.pairs),
+                            logger=logger,
+                            label=f"[Scalping:{self.user_id}]",
+                        )
+                    self._active_scan_pairs = ranked_pairs if self._mixed_mode else (ranked_pairs or list(self.config.pairs))
+                    logger.info(
+                        f"[Scalping:{self.user_id}] Scanning {len(self._active_scan_pairs)} "
+                        + ("mixed scalp-routed" if self._mixed_mode else "top-volume")
+                        + " pairs: "
+                        + ", ".join(self._active_scan_pairs)
+                    )
                     signals_found = 0
                     signals_validated = 0
                     
                     scan_tasks = []
-                    for symbol in self.config.pairs:
+                    for symbol in self._active_scan_pairs:
                         scan_tasks.append(self._scan_single_symbol(symbol))
                         
                     if scan_tasks and self.running:
                         results = await asyncio.gather(*scan_tasks, return_exceptions=True)
                         
-                        valid_signals = []
+                        candidate_signals = []
                         for r in results:
                             if isinstance(r, Exception):
                                 logger.error(f"[Scalping:{self.user_id}] Gathered exception: {r}")
                             elif r is not None:
-                                valid_signals.append(r)
-                                
+                                candidate_signals.append(r)
+
+                        normal_signals = [s for s in candidate_signals if not getattr(s, "is_emergency", False)]
+                        emergency_signals = [s for s in candidate_signals if getattr(s, "is_emergency", False)]
+
+                        if normal_signals:
+                            valid_signals = normal_signals
+                        elif emergency_signals:
+                            best_emergency = max(
+                                emergency_signals,
+                                key=lambda s: float(getattr(s, "emergency_score", getattr(s, "confidence", 0)))
+                            )
+                            valid_signals = [best_emergency]
+                            logger.info(
+                                f"[Scalping:{self.user_id}] Emergency candidate selected: "
+                                f"{best_emergency.symbol} {best_emergency.side} "
+                                f"(score={getattr(best_emergency, 'emergency_score', best_emergency.confidence):.2f})"
+                            )
+                        else:
+                            valid_signals = []
+
                         signals_found += len(valid_signals)
                         
                         # Sequentially process the returned valid signals
@@ -206,6 +739,9 @@ class ScalpingEngine:
                                 self.mark_cooldown(signal.symbol)
                                 logger.info(f"[Scalping:{self.user_id}] {signal.symbol} - Order placed successfully!")
                             else:
+                                # Avoid hammering non-executable symbols in emergency mode.
+                                # Preserve stale-price cooldown when already set.
+                                self._apply_generic_failure_cooldown(signal.symbol, ttl_sec=300.0)
                                 logger.warning(f"[Scalping:{self.user_id}] {signal.symbol} - Order placement failed")
                     
                     logger.info(
@@ -239,18 +775,37 @@ class ScalpingEngine:
                 return None
                 
             signal = await self.generate_scalping_signal(symbol)
-            if signal is None:
-                return None
-                
-            if not self.validate_scalping_entry(signal):
+            if signal is not None:
+                if not self.validate_scalping_entry(signal):
+                    signal = None
+                elif not self._passes_anti_flip_filters(signal):
+                    signal = None
+                else:
+                    setattr(signal, "is_emergency", False)
+                    return signal
+
+            if not getattr(self.config, "emergency_candidate_mode", False):
                 return None
 
-            if not self._passes_anti_flip_filters(signal):
+            emergency_signal = await self._generate_emergency_candidate(symbol)
+            if emergency_signal is None:
                 return None
-                
-            return signal
+            if not self.validate_scalping_entry(emergency_signal):
+                return None
+            if not self._passes_anti_flip_filters(emergency_signal):
+                return None
+
+            setattr(emergency_signal, "is_emergency", True)
+            setattr(
+                emergency_signal,
+                "emergency_score",
+                float(emergency_signal.confidence) + (float(emergency_signal.rr_ratio) * 8.0) + (float(getattr(emergency_signal, "volume_ratio", 1.0)) * 4.0),
+            )
+            return emergency_signal
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error in _scan_single_symbol for {symbol}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
             
     async def generate_scalping_signal(self, symbol: str) -> Optional[ScalpingSignal]:
@@ -273,12 +828,19 @@ class ScalpingEngine:
             from app.trading_mode_manager import TradingModeManager
             from app.trading_mode import TradingMode
             mode = TradingModeManager.get_mode(self.user_id)
+            sideways_policy = get_sideways_entry_overrides(self._sideways_governor_snapshot)
 
-            if mode == TradingMode.SCALPING:
-                # Try sideways detection first
-                sideways_signal = await self._try_sideways_signal(symbol)
-                if sideways_signal is not None:
-                    return sideways_signal
+            if mode in (TradingMode.SCALPING, TradingMode.MIXED):
+                if bool(sideways_policy.get("allow_sideways_entries", True)):
+                    # Try sideways detection first
+                    sideways_signal = await self._try_sideways_signal(symbol)
+                    if sideways_signal is not None:
+                        return sideways_signal
+                else:
+                    logger.info(
+                        f"[Scalping:{self.user_id}] {symbol} sideways entry paused by governor "
+                        f"(mode={sideways_policy.get('mode')})"
+                    )
 
             # Fall through to trending signal (existing logic unchanged)
             from app.autosignal_async import compute_signal_scalping_async
@@ -316,6 +878,131 @@ class ScalpingEngine:
             logger.error(f"[Scalping:{self.user_id}] Error generating signal for {symbol}: {e}")
             return None
 
+    async def _generate_emergency_candidate(self, symbol: str) -> Optional[ScalpingSignal]:
+        """
+        Emergency candidate mode:
+        Build a conservative fallback candidate when normal logic produces nothing.
+        Safety checks are still enforced by validate_scalping_entry().
+        """
+        try:
+            from app.candle_cache import get_candles_cached
+            from app.providers.alternative_klines_provider import alternative_klines_provider
+
+            base_symbol = symbol.replace("USDT", "").upper()
+
+            async def fetch_klines_async(sym, interval, limit):
+                source_orders = [
+                    ["bitunix", "binance", "cryptocompare", "coingecko"],
+                    ["binance", "bitunix", "cryptocompare", "coingecko"],
+                ]
+                for order in source_orders:
+                    data = await asyncio.to_thread(
+                        alternative_klines_provider.get_klines,
+                        sym, interval, limit, order
+                    )
+                    if data:
+                        return data
+                return []
+
+            raw_5m = await get_candles_cached(fetch_klines_async, base_symbol, "5m", 80)
+            if not raw_5m or len(raw_5m) < 40:
+                return None
+
+            closes = [float(k[4]) for k in raw_5m]
+            highs = [float(k[2]) for k in raw_5m]
+            lows = [float(k[3]) for k in raw_5m]
+            vols = [float(k[5]) for k in raw_5m]
+            price = closes[-1]
+            if price <= 0:
+                return None
+
+            def _ema(values, period):
+                if len(values) < period:
+                    return values[-1]
+                k = 2 / (period + 1)
+                e = sum(values[:period]) / period
+                for v in values[period:]:
+                    e = v * k + e * (1 - k)
+                return e
+
+            def _rsi(values, period=14):
+                if len(values) < period + 1:
+                    return 50.0
+                gains = []
+                losses = []
+                for i in range(1, len(values)):
+                    d = values[i] - values[i - 1]
+                    gains.append(max(d, 0.0))
+                    losses.append(max(-d, 0.0))
+                avg_gain = sum(gains[-period:]) / period
+                avg_loss = sum(losses[-period:]) / period
+                if avg_loss == 0:
+                    return 100.0
+                rs = avg_gain / avg_loss
+                return 100 - (100 / (1 + rs))
+
+            ema21 = _ema(closes, 21)
+            ema50 = _ema(closes, 50)
+            rsi_5m = _rsi(closes, 14)
+
+            tr = []
+            for i in range(1, len(closes)):
+                tr.append(max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1])))
+            atr = (sum(tr[-14:]) / 14) if len(tr) >= 14 else 0.0
+            atr_pct = (atr / price) * 100 if price > 0 else 0.0
+            if atr_pct < max(0.08, self.config.min_atr_pct * 0.6):
+                return None
+
+            avg_vol = sum(vols[-21:-1]) / 20 if len(vols) >= 21 else (sum(vols[:-1]) / max(1, len(vols) - 1))
+            vol_ratio = (vols[-1] / avg_vol) if avg_vol > 0 else 0.0
+            if vol_ratio < getattr(self.config, "emergency_min_volume_ratio", 0.9):
+                return None
+
+            side = None
+            if ema21 >= ema50 and rsi_5m <= 62:
+                side = "LONG"
+            elif ema21 <= ema50 and rsi_5m >= 38:
+                side = "SHORT"
+            if side is None:
+                return None
+
+            sl_distance = max(atr * 1.15, price * 0.0025)
+            tp_distance = sl_distance * 1.6
+            if side == "LONG":
+                sl = price - sl_distance
+                tp = price + tp_distance
+                trend_15m = "LONG"
+            else:
+                sl = price + sl_distance
+                tp = price - tp_distance
+                trend_15m = "SHORT"
+
+            rr = tp_distance / sl_distance if sl_distance > 0 else 0.0
+            confidence = min(82, max(72, int(72 + max(0.0, (vol_ratio - 1.0) * 8.0) + (2 if atr_pct > 0.4 else 0))))
+
+            signal = ScalpingSignal(
+                symbol=symbol,
+                side=side,
+                confidence=confidence,
+                entry_price=price,
+                tp_price=tp,
+                sl_price=sl,
+                rr_ratio=rr,
+                atr_pct=atr_pct,
+                volume_ratio=vol_ratio,
+                rsi_5m=rsi_5m,
+                trend_15m=trend_15m,
+                reasons=[
+                    "Emergency candidate mode (top-ranked fallback)",
+                    f"EMA21/50={ema21:.4f}/{ema50:.4f}, RSI={rsi_5m:.1f}",
+                    f"ATR={atr_pct:.2f}%, Volume={vol_ratio:.2f}x",
+                ],
+            )
+            return signal
+        except Exception as e:
+            logger.debug(f"[Scalping:{self.user_id}] Emergency candidate error for {symbol}: {e}")
+            return None
+
     async def _try_sideways_signal(self, symbol: str):
         """
         Try to generate a sideways micro-scalp signal.
@@ -329,21 +1016,36 @@ class ScalpingEngine:
             from app.bounce_detector import BounceDetector
             from app.rsi_divergence_detector import RSIDivergenceDetector
             from app.trading_mode import MicroScalpSignal
+            sideways_policy = get_sideways_entry_overrides(self._sideways_governor_snapshot)
+            allow_fallback = bool(sideways_policy.get("allow_sideways_fallback", True))
 
             base_symbol = symbol.replace("USDT", "").upper()
 
             # Wrap sync get_klines in async with cache
             async def fetch_klines_async(sym, interval, limit):
-                return await asyncio.to_thread(
-                    alternative_klines_provider.get_klines,
-                    sym, interval, limit
-                )
+                source_orders = [
+                    ["bitunix", "binance", "cryptocompare", "coingecko"],
+                    ["binance", "bitunix", "cryptocompare", "coingecko"],
+                    ["binance", "cryptocompare", "bitunix", "coingecko"],
+                ]
+                for order in source_orders:
+                    data = await asyncio.to_thread(
+                        alternative_klines_provider.get_klines,
+                        sym, interval, limit, order
+                    )
+                    if data:
+                        return data
+                return []
 
             # Fetch klines (list format: [timestamp, open, high, low, close, volume, ...])
             raw_5m = await get_candles_cached(fetch_klines_async, base_symbol, "5m", 50)
             raw_15m = await get_candles_cached(fetch_klines_async, base_symbol, "15m", 60)
 
             if not raw_5m or not raw_15m:
+                logger.warning(
+                    f"[Scalping:{self.user_id}] {symbol} partial feed outage in sideways path "
+                    f"(5m={len(raw_5m) if raw_5m else 0}, 15m={len(raw_15m) if raw_15m else 0})"
+                )
                 return None
 
             # Convert list format to dict format expected by detectors
@@ -457,7 +1159,86 @@ class ScalpingEngine:
                     logger.warning(f"[Scalping:{self.user_id}] MicroMomentum error for {symbol}: {e}")
 
             if bounce_result is None:
-                logger.debug(f"[Scalping:{self.user_id}] {symbol} No bounce or momentum signal")
+                if not allow_fallback:
+                    logger.debug(
+                        f"[Scalping:{self.user_id}] {symbol} sideways fallback disabled "
+                        f"(mode={sideways_policy.get('mode')})"
+                    )
+                    return None
+                # Fallback: emit a conservative range-reversion candidate when
+                # market is sideways and a valid range exists, even without a
+                # clean wick bounce or micro-momentum trigger.
+                if range_result is not None:
+                    try:
+                        closes = [float(c["close"]) for c in candles_5m[-20:]]
+                        if len(closes) >= 15:
+                            gains, losses = [], []
+                            for i in range(1, len(closes)):
+                                d = closes[i] - closes[i - 1]
+                                gains.append(max(d, 0.0))
+                                losses.append(max(-d, 0.0))
+                            period = min(14, len(gains))
+                            avg_gain = sum(gains[-period:]) / period if period else 0.0
+                            avg_loss = sum(losses[-period:]) / period if period else 0.0
+                            rsi_5m = 100.0 if avg_loss == 0 else (100 - (100 / (1 + (avg_gain / avg_loss))))
+                        else:
+                            rsi_5m = 50.0
+
+                        support = range_result.support
+                        resistance = range_result.resistance
+                        width = max(1e-12, resistance - support)
+                        pos_in_range = (price - support) / width  # 0=near support, 1=near resistance
+
+                        direction = None
+                        if pos_in_range <= 0.35 and rsi_5m <= 58:
+                            direction = "LONG"
+                        elif pos_in_range >= 0.65 and rsi_5m >= 42:
+                            direction = "SHORT"
+
+                        if direction is not None:
+                            entry = price
+                            tr_list_fb = []
+                            for i in range(1, len(candles_5m)):
+                                c = candles_5m[i]
+                                p = candles_5m[i - 1]
+                                tr_list_fb.append(max(c["high"] - c["low"], abs(c["high"] - p["close"]), abs(c["low"] - p["close"])))
+                            atr_fb = (sum(tr_list_fb[-14:]) / 14) if len(tr_list_fb) >= 14 else 0.0
+                            sl_buffer = (atr_fb * 0.6) if atr_fb > 0 else (entry * 0.0025)
+                            if direction == "LONG":
+                                tp = entry + 0.55 * (resistance - entry)
+                                sl = support - sl_buffer
+                                rr = (tp - entry) / (entry - sl) if (entry - sl) > 0 else 0
+                            else:
+                                tp = entry - 0.55 * (entry - support)
+                                sl = resistance + sl_buffer
+                                rr = (entry - tp) / (sl - entry) if (sl - entry) > 0 else 0
+
+                            if rr >= getattr(self.config, "sideways_min_rr", 1.1):
+                                reasons = [
+                                    f"Sideways fallback: {sideways_result.reason}",
+                                    f"Range reversion candidate ({pos_in_range*100:.0f}% in range, RSI={rsi_5m:.1f})",
+                                    f"Range: {support:.4f} - {resistance:.4f} ({range_result.range_width_pct:.2f}%)",
+                                ]
+                                return MicroScalpSignal(
+                                    symbol=symbol,
+                                    side=direction,
+                                    entry_price=entry,
+                                    tp_price=round(tp, 6),
+                                    sl_price=round(sl, 6),
+                                    rr_ratio=round(rr, 2),
+                                    range_support=support,
+                                    range_resistance=resistance,
+                                    range_width_pct=range_result.range_width_pct,
+                                    confidence=72,
+                                    bounce_confirmed=False,
+                                    rsi_divergence_detected=False,
+                                    volume_ratio=1.0,
+                                    reasons=reasons,
+                                )
+                    except Exception as e:
+                        logger.debug(f"[Scalping:{self.user_id}] {symbol} sideways fallback failed: {e}")
+
+                logger.debug(f"[Scalping:{self.user_id}] {symbol} No bounce/momentum/fallback signal")
                 return None
 
             direction = bounce_result.direction  # "LONG" or "SHORT"
@@ -584,15 +1365,24 @@ class ScalpingEngine:
         now = time.time()
         symbol = signal.symbol
         direction = signal.side  # LONG / SHORT
+        is_sideways = bool(getattr(signal, "is_sideways", False))
+        sideways_policy = get_sideways_entry_overrides(self._sideways_governor_snapshot)
 
         # 1) Consecutive confirmation gate (stability filter)
         required = int(getattr(self.config, "signal_confirmations_required", 2))
+        if is_sideways:
+            required = max(required, int(sideways_policy.get("sideways_confirmations_required", 1) or 1))
         max_gap = int(getattr(self.config, "signal_confirmation_max_gap_seconds", 45))
         streak = self.signal_streaks.get(symbol)
+        if not isinstance(streak, dict):
+            streak = None
+            self.signal_streaks[symbol] = None
         if not streak:
             self.signal_streaks[symbol] = {"direction": direction, "count": 1, "ts": now}
-            logger.info(f"[Scalping:{self.user_id}] {symbol} anti-flip: first {direction} signal seen, waiting confirmation")
-            return False
+            if required > 1:
+                logger.info(f"[Scalping:{self.user_id}] {symbol} anti-flip: first {direction} signal seen, waiting confirmation")
+                return False
+            streak = self.signal_streaks[symbol]
 
         last_dir = streak.get("direction")
         last_ts = float(streak.get("ts", 0))
@@ -605,8 +1395,9 @@ class ScalpingEngine:
                 return False
         else:
             self.signal_streaks[symbol] = {"direction": direction, "count": 1, "ts": now}
-            logger.info(f"[Scalping:{self.user_id}] {symbol} anti-flip: direction changed/reset to {direction}, waiting confirmation")
-            return False
+            if required > 1:
+                logger.info(f"[Scalping:{self.user_id}] {symbol} anti-flip: direction changed/reset to {direction}, waiting confirmation")
+                return False
 
         # 2) Opposite-direction re-entry cooldown after close
         closed = self.last_closed_meta.get(symbol)
@@ -631,8 +1422,15 @@ class ScalpingEngine:
         self.signal_streaks.pop(symbol, None)
         return True
 
-    def calculate_position_size_pro(self, entry_price: float, sl_price: float, 
-                                    capital: float, leverage: int) -> tuple:
+    def calculate_position_size_pro(
+        self,
+        symbol: str,
+        entry_price: float,
+        sl_price: float,
+        capital: float,
+        leverage: int,
+        effective_risk_pct_override: Optional[float] = None,
+    ) -> tuple:
         """
         Calculate position size based on risk % per trade (PRO TRADER METHOD)
         
@@ -648,24 +1446,32 @@ class ScalpingEngine:
             (position_size, used_risk_sizing): tuple of (quantity, whether risk sizing was used)
         """
         try:
-            # CRITICAL: Cap leverage at 10x for scalping (safety)
-            leverage = min(leverage, 10)
+            # Auto Max-Safe leverage is passed in from caller
+            # leverage = min(leverage, 10)  # Removed hardcoded cap
             
-            # Get risk percentage from database
+            # Get base risk percentage from database
             from app.supabase_repo import get_risk_per_trade
-            risk_pct = get_risk_per_trade(self.user_id)
-            
-            # CRITICAL: Cap risk at 5% maximum for scalping
-            risk_pct = min(risk_pct, 5.0)
+            base_risk_pct = float(get_risk_per_trade(self.user_id) or 1.0)
+            base_risk_pct = max(0.25, min(base_risk_pct, 5.0))
+            if effective_risk_pct_override is None:
+                risk_pct = base_risk_pct
+            else:
+                risk_pct = max(0.25, min(float(effective_risk_pct_override), 10.0))
             
             # Get current balance from exchange
-            bal_result = self.client.get_balance()
-            if not bal_result.get('success'):
-                raise Exception(f"Balance fetch failed: {bal_result.get('error')}")
-            
-            balance = bal_result.get('balance', 0)
+            acc_result = self.client.get_account_info()
+            if not acc_result.get('success'):
+                raise Exception(f"Account info fetch failed: {acc_result.get('error')}")
+
+            available = float(acc_result.get('available', 0) or 0)
+            frozen = float(acc_result.get('frozen', 0) or 0)
+            unrealized = float(acc_result.get('total_unrealized_pnl', 0) or 0)
+            balance = available + frozen + unrealized
             if balance <= 0:
-                raise Exception(f"Invalid balance: {balance}")
+                raise Exception(
+                    f"Invalid equity: available={available:.2f} + frozen={frozen:.2f} + "
+                    f"unrealized={unrealized:.2f} = {balance:.2f}"
+                )
             
             # Calculate position size using risk-based formula
             from app.position_sizing import calculate_position_size
@@ -675,7 +1481,7 @@ class ScalpingEngine:
                 entry_price=entry_price,
                 sl_price=sl_price,
                 leverage=leverage,
-                symbol=f"BTCUSDT"  # Default symbol for precision
+                symbol=symbol,
             )
             
             if not sizing['valid']:
@@ -697,8 +1503,9 @@ class ScalpingEngine:
             
             logger.info(
                 f"[Scalping:{self.user_id}] RISK-BASED sizing: "
-                f"Balance=${balance:.2f}, Risk={risk_pct}% (capped at 5%), "
-                f"Leverage={leverage}x (capped at 10x), "
+                f"Equity=${balance:.2f} (Available=${available:.2f} + Frozen=${frozen:.2f} + Unrealized=${unrealized:.2f}), "
+                f"BaseRisk={base_risk_pct}% EffectiveRisk={risk_pct}%, "
+                f"Leverage={leverage}x (Auto Max-Safe), "
                 f"Entry=${entry_price:.2f}, SL=${sl_price:.2f}, "
                 f"SL_Dist={sizing['sl_distance_pct']:.2f}%, "
                 f"Position=${sizing['position_size_usdt']:.2f}, "
@@ -838,25 +1645,82 @@ class ScalpingEngine:
         """
         from app.trading_mode import MicroScalpSignal as _MicroScalpSignal
         is_sideways = isinstance(signal, _MicroScalpSignal)
+        is_emergency = bool(getattr(signal, "is_emergency", False))
+        sideways_policy = get_sideways_entry_overrides(self._sideways_governor_snapshot)
+        conf_delta = int(self._adaptive_overlay.get("conf_delta", 0) or 0)
+        vol_delta = float(self._adaptive_overlay.get("volume_min_ratio_delta", 0.0) or 0.0)
+        conf_adapt = get_confidence_adaptation(
+            mode="scalping",
+            confidence=float(getattr(signal, "confidence", 0.0) or 0.0),
+            is_emergency=is_emergency,
+            snapshot=self._confidence_adapt_snapshot,
+        )
+        setattr(signal, "confidence_bucket", str(conf_adapt.get("bucket", "")))
+        setattr(signal, "confidence_bucket_penalty", int(conf_adapt.get("bucket_penalty", 0) or 0))
+        setattr(signal, "confidence_bucket_risk_scale", float(conf_adapt.get("bucket_risk_scale", 1.0) or 1.0))
+        setattr(signal, "confidence_bucket_edge_adj", float(conf_adapt.get("edge_adj", 0.0) or 0.0))
+        setattr(signal, "confidence_bucket_sample_size", int(conf_adapt.get("bucket_sample_size", 0) or 0))
+        setattr(signal, "confidence_adapt_reason", str(conf_adapt.get("reason", "")))
 
         # Check confidence
-        if signal.confidence < self.config.min_confidence * 100:
+        min_conf_pct = max(0.0, min(100.0, (self.config.min_confidence * 100.0) + conf_delta))
+        if is_sideways:
+            min_conf_pct = max(
+                0.0,
+                min(
+                    100.0,
+                    min_conf_pct + int(sideways_policy.get("sideways_confidence_bonus", 0) or 0),
+                ),
+            )
+        min_conf_pct = max(
+            0.0,
+            min(100.0, min_conf_pct + int(conf_adapt.get("bucket_penalty", 0) or 0)),
+        )
+        setattr(signal, "confidence_effective_min_conf", float(min_conf_pct))
+        if signal.confidence < min_conf_pct:
             logger.debug(
                 f"[Scalping:{self.user_id}] Signal rejected: "
-                f"Confidence {signal.confidence}% < {self.config.min_confidence * 100}%"
+                f"Confidence {signal.confidence}% < {min_conf_pct}% "
+                f"(adaptive conf_delta={conf_delta}, trade_type=scalping "
+                f"conf_bucket={conf_adapt.get('bucket')} "
+                f"bucket_penalty={int(conf_adapt.get('bucket_penalty', 0) or 0)} "
+                f"bucket_risk_scale={float(conf_adapt.get('bucket_risk_scale', 1.0) or 1.0):.2f} "
+                f"edge_adj={float(conf_adapt.get('edge_adj', 0.0) or 0.0):+.4f})"
             )
             return False
         
-        # Check R:R
-        if signal.rr_ratio < self.config.min_rr:
+        # Check R:R (sideways uses a dedicated temporary floor)
+        required_rr = self.config.sideways_min_rr if is_sideways else self.config.min_rr
+        if is_sideways and sideways_policy.get("sideways_min_rr_override") is not None:
+            required_rr = max(required_rr, float(sideways_policy.get("sideways_min_rr_override") or required_rr))
+        if signal.rr_ratio < required_rr:
             logger.debug(
                 f"[Scalping:{self.user_id}] Signal rejected: "
-                f"R:R {signal.rr_ratio} < {self.config.min_rr}"
+                f"R:R {signal.rr_ratio} < {required_rr}"
+            )
+            return False
+
+        # Adaptive volume-quality gate for both trending and sideways.
+        # Keep conservative defaults to avoid abrupt behavior shifts.
+        base_vol_req = 0.9 if is_sideways else 1.0
+        required_vol = max(0.8, min(2.0, base_vol_req + vol_delta))
+        if is_sideways:
+            required_vol = max(required_vol, float(sideways_policy.get("sideways_min_volume_floor", 0.9) or 0.9))
+        signal_vol = float(getattr(signal, "volume_ratio", 0.0) or 0.0)
+        if signal_vol < required_vol:
+            logger.debug(
+                f"[Scalping:{self.user_id}] Signal rejected: "
+                f"Volume {signal_vol:.2f}x < {required_vol:.2f}x "
+                f"(adaptive vol_delta={vol_delta:.2f})"
             )
             return False
         
         # Check symbol in allowed list
-        if signal.symbol not in [f"{p}" for p in self.config.pairs]:
+        allowed_symbols = set(self._active_scan_pairs or ([] if self._mixed_mode else self.config.pairs))
+        if self._mixed_mode and not allowed_symbols:
+            logger.info(f"[Scalping:{self.user_id}] Mixed mode has no assigned scalp symbols, skipping signal.")
+            return False
+        if signal.symbol not in allowed_symbols:
             logger.debug(f"[Scalping:{self.user_id}] Signal rejected: Symbol {signal.symbol} not allowed")
             return False
         
@@ -893,7 +1757,16 @@ class ScalpingEngine:
         if self._circuit_breaker_triggered():
             logger.warning(f"[Scalping:{self.user_id}] Signal rejected: Circuit breaker triggered")
             return False
-        
+        logger.info(
+            f"[Scalping:{self.user_id}] Entry gate passed "
+            f"trade_type=scalping symbol={signal.symbol} conf={float(signal.confidence):.2f} "
+            f"min_conf={float(getattr(signal, 'confidence_effective_min_conf', 0.0)):.2f} "
+            f"conf_bucket={str(getattr(signal, 'confidence_bucket', '-'))} "
+            f"bucket_penalty={int(getattr(signal, 'confidence_bucket_penalty', 0) or 0)} "
+            f"bucket_risk_scale={float(getattr(signal, 'confidence_bucket_risk_scale', 1.0) or 1.0):.2f} "
+            f"edge_adj={float(getattr(signal, 'confidence_bucket_edge_adj', 0.0) or 0.0):+.4f} "
+            f"is_emergency={is_emergency}"
+        )
         return True
     
     def _circuit_breaker_triggered(self) -> bool:
@@ -907,20 +1780,30 @@ class ScalpingEngine:
                 "opened_at", datetime.utcnow().date().isoformat()
             ).execute()
             
-            if not res.data:
+            if not res or not isinstance(getattr(res, "data", None), list) or not res.data:
                 return False
             
-            total_pnl = sum(float(t.get("pnl_usdt", 0)) for t in res.data)
+            total_pnl = 0.0
+            for t in res.data:
+                if not isinstance(t, dict):
+                    continue
+                try:
+                    total_pnl += float(t.get("pnl_usdt", 0) or 0)
+                except Exception:
+                    continue
             
             # Get account balance
             session_res = s.table("autotrade_sessions").select("initial_deposit").eq(
                 "telegram_id", self.user_id
             ).limit(1).execute()
             
-            if not session_res.data:
+            if not session_res or not isinstance(getattr(session_res, "data", None), list) or not session_res.data:
                 return False
-            
-            balance = float(session_res.data[0].get("initial_deposit", 100))
+
+            first = session_res.data[0] if session_res.data else {}
+            if not isinstance(first, dict):
+                first = {}
+            balance = float(first.get("initial_deposit", 100) or 100)
             loss_pct = abs(total_pnl / balance) if balance > 0 else 0
             
             if loss_pct >= self.config.daily_loss_limit:
@@ -959,6 +1842,7 @@ class ScalpingEngine:
         
         max_retries = 3
         base_delay = 1.0
+        pending_marked = False
         
         for attempt in range(max_retries):
             try:
@@ -974,12 +1858,58 @@ class ScalpingEngine:
                 capital = float(session.data[0].get("initial_deposit", 100))
                 leverage = int(session.data[0].get("leverage", 10))
                 
+                # ── Auto Max Pair Leverage Calculation ──
+                effective_leverage = get_auto_max_safe_leverage(
+                    symbol=signal.symbol,
+                    entry_price=signal.entry_price,
+                    sl_price=signal.sl_price,
+                    baseline_leverage=leverage,
+                )
+                logger.info(
+                    f"[Scalping:{self.user_id}] leverage_mode=auto_max_safe symbol={signal.symbol} "
+                    f"baseline_leverage={leverage} effective_leverage={effective_leverage}"
+                )
+                from app.supabase_repo import get_risk_per_trade
+                base_risk_pct = float(get_risk_per_trade(self.user_id) or 1.0)
+                risk_eval = await evaluate_and_apply_playbook_risk(
+                    signal=signal,
+                    base_risk_pct=base_risk_pct,
+                    raw_reasons=getattr(signal, "reasons", []),
+                    logger=logger,
+                    label=f"[Scalping:{self.user_id}] {signal.symbol}",
+                )
+                playbook_effective_risk_pct = float(risk_eval.get("effective_risk_pct", 1.0))
+                risk_overlay_pct = float(risk_eval.get("risk_overlay_pct", 0.0))
+                playbook_match_score = float(risk_eval.get("playbook_match_score", 0.0))
+                playbook_match_tags = list(risk_eval.get("playbook_match_tags", []))
+                confidence_risk_scale = float(getattr(signal, "confidence_bucket_risk_scale", 1.0) or 1.0)
+                confidence_bucket = str(getattr(signal, "confidence_bucket", "-") or "-")
+                confidence_edge_adj = float(getattr(signal, "confidence_bucket_edge_adj", 0.0) or 0.0)
+                effective_risk_pct = apply_confidence_risk_brake(
+                    playbook_effective_risk_pct=playbook_effective_risk_pct,
+                    bucket_risk_scale=confidence_risk_scale,
+                )
+                setattr(signal, "effective_risk_pct", effective_risk_pct)
+                setattr(signal, "risk_overlay_pct", risk_overlay_pct)
+                setattr(signal, "base_risk_pct", base_risk_pct)
+                logger.info(
+                    f"[Scalping:{self.user_id}] Win playbook eval {signal.symbol} — "
+                    f"score={playbook_match_score:.3f} tags={playbook_match_tags[:3]} "
+                    f"guardrails={bool(risk_eval.get('guardrails_healthy', False))} "
+                    f"overlay={risk_overlay_pct:.2f}% -> playbook_risk={playbook_effective_risk_pct:.2f}% "
+                    f"conf_bucket={confidence_bucket} conf_scale={confidence_risk_scale:.2f} "
+                    f"edge_adj={confidence_edge_adj:+.4f} -> final_effective_risk={effective_risk_pct:.2f}% "
+                    f"action={risk_eval.get('overlay_action')} trade_type=scalping"
+                )
+                
                 # CRITICAL: Calculate position size based on risk (Phase 2)
                 quantity, used_risk_sizing = self.calculate_position_size_pro(
+                    symbol=signal.symbol,
                     entry_price=signal.entry_price,
                     sl_price=signal.sl_price,
                     capital=capital,
-                    leverage=leverage
+                    leverage=effective_leverage,
+                    effective_risk_pct_override=effective_risk_pct,
                 )
                 
                 if used_risk_sizing:
@@ -1002,11 +1932,10 @@ class ScalpingEngine:
                     "BTCUSDT": 0.001, "ETHUSDT": 0.01, "SOLUSDT": 0.1,
                     "BNBUSDT": 0.01,  "XRPUSDT": 1.0,  "DOGEUSDT": 10.0,
                     "ADAUSDT": 1.0,   "AVAXUSDT": 0.1, "DOTUSDT": 0.1,
-                    "MATICUSDT": 1.0, "LINKUSDT": 0.1, "UNIUSDT": 0.1,
-                    "ATOMUSDT": 0.1,  "XAUUSDT": 0.01, "CLUSDT": 0.01, "QQQUSDT": 0.1
+                    "LINKUSDT": 0.1,  "UNIUSDT": 0.1,  "ATOMUSDT": 0.1,
+                    "XAUUSDT": 0.01,  "CLUSDT": 0.01,  "QQQUSDT": 0.1
                 }
                 min_qty = MIN_QTY_MAP.get(signal.symbol, 0.001)
-                effective_leverage = leverage
                 
                 # CRITICAL: Skip trade if qty too small - NEVER auto-raise leverage
                 # Auto-raising leverage breaks risk management (user set leverage for specific risk %)
@@ -1018,6 +1947,32 @@ class ScalpingEngine:
                     return False  # Silent skip, engine will try other pairs
                 
                 # ═══════════════════════════════════════════════════════════
+                # Multi-user symbol coordination check
+                # ═══════════════════════════════════════════════════════════
+                can_enter, block_reason = await self.coordinator.can_enter(
+                    user_id=self.user_id,
+                    symbol=signal.symbol,
+                    strategy=StrategyOwner.SCALP,
+                    now_ts=time.time()
+                )
+                if not can_enter:
+                    logger.warning(f"[Coordinator:{self.user_id}] Entry BLOCKED for {signal.symbol}: {block_reason}")
+                    should_notify = True
+                    if "blocked_pending_order" in str(block_reason):
+                        should_notify = self._should_notify_blocked_pending(signal.symbol, ttl_sec=600)
+                    if should_notify:
+                        await self._notify_user(
+                            f"⚠️ <b>Trade skipped on {signal.symbol}</b>\n\n"
+                            f"<b>Reason:</b> {block_reason}\n\n"
+                            f"Another strategy may own this symbol.\nBot will continue scanning."
+                        )
+                    return False
+
+                # Mark pending
+                await coordinator_set_pending(self.coordinator, self.user_id, signal.symbol, StrategyOwner.SCALP)
+                pending_marked = True
+
+                # ═══════════════════════════════════════════════════════════
                 # Unified entry path — see app/trade_execution.py
                 # Atomic order with TP1 + SL on exchange + StackMentor register
                 # ═══════════════════════════════════════════════════════════
@@ -1025,13 +1980,15 @@ class ScalpingEngine:
                 from app.trading_mode import MicroScalpSignal as _MicroScalpSignalCheck
                 _is_sideways_signal = isinstance(signal, _MicroScalpSignalCheck)
 
-                exec_result = await open_managed_position(
+                exec_result = await self._open_managed_position_safe(
+                    open_managed_position,
                     client=self.client,
                     user_id=self.user_id,
                     symbol=signal.symbol,
                     side=signal.side,                # "LONG" / "SHORT"
                     entry_price=signal.entry_price,
                     sl_price=signal.sl_price,
+                    tp_price=signal.tp_price,
                     quantity=quantity_adjusted,
                     leverage=effective_leverage,
                     # Sideways positions have very tight TP/SL — skip reconcile
@@ -1051,11 +2008,21 @@ class ScalpingEngine:
                         entry_price=signal.entry_price,
                         quantity=quantity_adjusted,
                         leverage=effective_leverage,
+                        open_order_id=exec_result.order_id or "",
                         tp_price=levels.tp1,
                         sl_price=levels.sl,
                         opened_at=time.time(),
                         breakeven_set=False,
                     )
+                    setattr(position, "entry_reasons", list(getattr(signal, "reasons", []) or []))
+                    setattr(position, "playbook_match_score", float(getattr(signal, "playbook_match_score", 0.0) or 0.0))
+                    setattr(position, "playbook_match_tags", list(getattr(signal, "playbook_match_tags", []) or []))
+                    setattr(position, "effective_risk_pct", float(getattr(signal, "effective_risk_pct", 0.0) or 0.0))
+                    setattr(position, "risk_overlay_pct", float(getattr(signal, "risk_overlay_pct", 0.0) or 0.0))
+                    setattr(position, "initial_sl_price", float(levels.sl))
+                    setattr(position, "timeout_protection_applied", False)
+                    setattr(position, "timeout_protection_phase", "early")
+                    setattr(position, "timeout_last_sl_update_ts", 0.0)
                     self.positions[signal.symbol] = position
 
                     # Mark as sideways position if signal is MicroScalpSignal
@@ -1073,6 +2040,20 @@ class ScalpingEngine:
                         trade_id=trade_id,
                     )
 
+                    # Confirm position with coordinator
+                    position_side = PositionSide.LONG if signal.side == "LONG" else PositionSide.SHORT
+                    await coordinator_confirm_open(
+                        self.coordinator,
+                        user_id=self.user_id,
+                        symbol=signal.symbol,
+                        strategy=StrategyOwner.SCALP,
+                        side=position_side,
+                        size=quantity_adjusted,
+                        entry_price=signal.entry_price,
+                        exchange_position_id=getattr(exec_result, 'position_id', None),
+                    )
+                    pending_marked = False
+
                     logger.info(
                         f"[Scalping:{self.user_id}] StackMentor position opened: "
                         f"{signal.symbol} {side_str} @ {signal.entry_price:.4f}, "
@@ -1088,21 +2069,30 @@ class ScalpingEngine:
                         f"[{error_code}]: {error_msg}"
                     )
 
-                    # Non-retryable conditions
+                    # Non-retryable conditions — clear pending before returning
                     if error_code == "insufficient_balance":
                         await self._notify_user("❌ Order failed: Insufficient balance")
+                        await coordinator_clear_pending(self.coordinator, self.user_id, signal.symbol)
+                        pending_marked = False
                         return False
                     if error_code == "invalid_prices":
+                        expiry_ts = self._mark_stale_price_cooldown(signal.symbol, ttl_sec=120.0)
+                        cooldown_sec = max(1, int(round(expiry_ts - time.time())))
                         await self._notify_user(
                             f"⚠️ <b>Trade skipped: {signal.symbol}</b>\n\n"
-                            f"Market moved before entry: {error_msg}"
+                            f"Market moved before entry: {error_msg}\n\n"
+                            f"Cooldown on {signal.symbol}: {cooldown_sec}s to avoid repeated stale entries."
                         )
+                        await coordinator_clear_pending(self.coordinator, self.user_id, signal.symbol)
+                        pending_marked = False
                         return False
                     if error_code in ("auth", "ip_blocked"):
                         await self._notify_user(
                             f"⚠️ Exchange auth/IP error: {error_msg}\n"
                             f"Engine continues; check API key & proxy."
                         )
+                        await coordinator_clear_pending(self.coordinator, self.user_id, signal.symbol)
+                        pending_marked = False
                         return False
                     if error_code == "reconcile_failed":
                         await self._notify_user(
@@ -1112,9 +2102,27 @@ class ScalpingEngine:
                             f"closed to protect your capital.\n\n"
                             f"<code>{error_msg}</code>"
                         )
+                        await coordinator_clear_pending(self.coordinator, self.user_id, signal.symbol)
+                        pending_marked = False
+                        return False
+                    if error_code == "unsupported_symbol_api":
+                        quarantine_expiry = mark_runtime_untradable_symbol(signal.symbol, ttl_sec=21600.0)
+                        quarantine_sec = max(1, int(round(quarantine_expiry - time.time())))
+                        quarantine_hours = max(1, int(round(quarantine_sec / 3600.0)))
+                        await self._notify_user(
+                            f"⚠️ <b>Trade skipped: {signal.symbol}</b>\n\n"
+                            f"{error_msg}\n\n"
+                            f"Bitunix OpenAPI does not support this pair right now.\n"
+                            f"Runtime quarantine applied: {quarantine_hours}h.\n"
+                            f"Engine will continue scanning other top-volume pairs."
+                        )
+                        await coordinator_clear_pending(self.coordinator, self.user_id, signal.symbol)
+                        pending_marked = False
                         return False
                     if 'invalid symbol' in error_msg.lower():
                         await self._notify_user(f"❌ Order failed: Invalid symbol {signal.symbol}")
+                        await coordinator_clear_pending(self.coordinator, self.user_id, signal.symbol)
+                        pending_marked = False
                         return False
 
                     # Retryable error — backoff
@@ -1124,15 +2132,24 @@ class ScalpingEngine:
             
             except asyncio.TimeoutError:
                 logger.warning(f"[Scalping:{self.user_id}] Order timeout (attempt {attempt+1})")
+                if attempt == max_retries - 1 and pending_marked:
+                    await coordinator_clear_pending(self.coordinator, self.user_id, signal.symbol)
+                    pending_marked = False
                 if attempt < max_retries - 1:
                     await asyncio.sleep(base_delay * (2 ** attempt))
             
             except Exception as e:
                 logger.error(f"[Scalping:{self.user_id}] Order exception (attempt {attempt+1}): {e}")
+                if attempt == max_retries - 1 and pending_marked:
+                    await coordinator_clear_pending(self.coordinator, self.user_id, signal.symbol)
+                    pending_marked = False
                 if attempt < max_retries - 1:
                     await asyncio.sleep(base_delay * (2 ** attempt))
         
         # All retries failed — set cooldown to prevent spam
+        if pending_marked:
+            await coordinator_clear_pending(self.coordinator, self.user_id, signal.symbol)
+            pending_marked = False
         self.mark_cooldown(signal.symbol)
         await self._notify_user(
             f"❌ Failed to place order for {signal.symbol} after {max_retries} attempts.\n"
@@ -1167,28 +2184,215 @@ class ScalpingEngine:
             position = self.positions[symbol]
             
             try:
-                # Check sideways max hold (2 minutes) - local check only
-                if getattr(position, 'is_sideways', False):
-                    elapsed = time.time() - position.opened_at
-                    if elapsed > 120:  # 2 minutes
-                        await self._close_sideways_max_hold(position)
-                        continue
-                
-                # Check max hold time (30 minutes) - local check only
-                if position.is_expired():
-                    await self._close_position_max_hold(position)
+                if bool(getattr(self.config, "adaptive_timeout_protection_enabled", False)):
+                    try:
+                        await self._apply_timeout_protection(position)
+                    except Exception as protect_err:
+                        logger.warning(
+                            f"[Scalping:{self.user_id}] timeout protection check failed for "
+                            f"{position.symbol}: {protect_err}"
+                        )
+
+                # Check dynamic max hold by subtype/symbol performance.
+                elapsed = max(0.0, time.time() - float(position.opened_at))
+                max_hold_seconds = self._max_hold_seconds_for_position(position)
+                if elapsed >= float(max_hold_seconds):
+                    if getattr(position, 'is_sideways', False):
+                        await self._close_sideways_max_hold(position, max_hold_seconds=max_hold_seconds)
+                    else:
+                        await self._close_position_max_hold(position, max_hold_seconds=max_hold_seconds)
                     continue
-            
+
+                # Remove stale local tracker if DB row is no longer open.
+                open_row = await self._get_open_trade_row(symbol)
+                if not open_row:
+                    logger.info(
+                        f"[Scalping:{self.user_id}] Removing stale local position tracker for {symbol} "
+                        f"(no open DB row)"
+                    )
+                    self.positions.pop(symbol, None)
+                    continue
+             
             except Exception as e:
                 logger.error(f"[Scalping:{self.user_id}] Error checking {symbol}: {e}")
                 continue
+
+    async def _process_expired_positions(self):
+        """
+        Close positions that already exceeded dynamic max-hold before scanning.
+        This keeps timeout exits ahead of new-entry decisions in each cycle.
+        """
+        if not self.positions:
+            return
+        for symbol in list(self.positions.keys()):
+            position = self.positions.get(symbol)
+            if not position:
+                continue
+            try:
+                elapsed = max(0.0, time.time() - float(position.opened_at))
+                max_hold_seconds = self._max_hold_seconds_for_position(position)
+                if elapsed < float(max_hold_seconds):
+                    continue
+                if getattr(position, "is_sideways", False):
+                    await self._close_sideways_max_hold(position, max_hold_seconds=max_hold_seconds)
+                else:
+                    await self._close_position_max_hold(position, max_hold_seconds=max_hold_seconds)
+            except Exception as e:
+                logger.error(f"[Scalping:{self.user_id}] Error in pre-scan max-hold close for {symbol}: {e}")
+
+    def _max_hold_seconds_for_position(self, position: ScalpingPosition) -> int:
+        snapshot = getattr(self, "_sideways_governor_snapshot", {}) or {}
+        return resolve_dynamic_max_hold_seconds(
+            symbol=str(getattr(position, "symbol", "") or ""),
+            is_sideways=bool(getattr(position, "is_sideways", False)),
+            snapshot=snapshot,
+            default_non_sideways=int(self.config.max_hold_time),
+        )
+
+    def _timeout_phase(self, elapsed_seconds: float, max_hold_seconds: int) -> str:
+        if max_hold_seconds <= 0:
+            return "late"
+        ratio = max(0.0, min(1.0, float(elapsed_seconds) / float(max_hold_seconds)))
+        if ratio < 0.50:
+            return "early"
+        if ratio < 0.80:
+            return "mid"
+        return "late"
+
+    def _build_timeout_loss_reasoning(
+        self,
+        position: ScalpingPosition,
+        pnl: float,
+        phase: str,
+        protected: bool,
+        near_flat: bool,
+    ) -> str:
+        return (
+            f"timeout_exit; timeout_protection={'applied' if protected else 'none'}; "
+            f"phase={phase}; near_flat={1 if near_flat else 0}; pnl={float(pnl):+.6f}; "
+            f"symbol={position.symbol}; side={position.side}"
+        )
+
+    async def _apply_timeout_protection(self, position: ScalpingPosition):
+        """
+        Apply phased timeout protection:
+        - mid phase: breakeven promotion when unrealized progress is sufficient
+        - late phase: tighten trailing SL (more aggressive for sideways trades)
+        """
+        max_hold = self._max_hold_seconds_for_position(position)
+        now_ts = time.time()
+        elapsed = max(0.0, now_ts - float(position.opened_at))
+        phase = self._timeout_phase(elapsed, max_hold)
+        setattr(position, "timeout_protection_phase", phase)
+
+        if phase == "early":
+            return
+
+        last_update_ts = float(getattr(position, "timeout_last_sl_update_ts", 0.0) or 0.0)
+        min_update_gap = float(getattr(self.config, "timeout_protection_min_update_seconds", 45) or 45)
+        if now_ts - last_update_ts < min_update_gap:
+            return
+
+        ticker = await asyncio.to_thread(self.client.get_ticker, position.symbol)
+        if not ticker or not ticker.get("success"):
+            return
+        current_price = float(ticker.get("mark_price") or ticker.get("last_price") or ticker.get("price") or 0)
+        if current_price <= 0:
+            return
+
+        entry = float(position.entry_price)
+        old_sl = float(position.sl_price)
+        initial_sl = float(getattr(position, "initial_sl_price", old_sl) or old_sl)
+        if initial_sl <= 0:
+            initial_sl = old_sl
+            setattr(position, "initial_sl_price", initial_sl)
+
+        if position.side == "BUY":
+            favorable_pct = ((current_price - entry) / entry) * 100.0 if entry > 0 else 0.0
+            unrealized_pnl = (current_price - entry) * float(position.quantity)
+        else:
+            favorable_pct = ((entry - current_price) / entry) * 100.0 if entry > 0 else 0.0
+            unrealized_pnl = (entry - current_price) * float(position.quantity)
+
+        be_trigger = float(getattr(self.config, "timeout_be_trigger_pct", 0.20) or 0.20)
+        trailing_trigger = float(getattr(self.config, "timeout_trailing_trigger_pct", 0.35) or 0.35)
+        tighten = float(getattr(self.config, "timeout_late_tighten_multiplier", 1.4) or 1.4)
+        if phase == "late" and bool(getattr(position, "is_sideways", False)):
+            tighten *= 1.5
+        elif phase == "late":
+            tighten *= 1.2
+
+        new_sl = old_sl
+        reason = None
+        if favorable_pct >= be_trigger and not bool(getattr(position, "breakeven_set", False)):
+            new_sl = entry
+            reason = "breakeven"
+
+        if favorable_pct >= trailing_trigger:
+            risk_gap = abs(entry - initial_sl)
+            if risk_gap > 0:
+                trail_gap = risk_gap / max(1.0, tighten)
+                if position.side == "BUY":
+                    trail_target = max(entry, current_price - trail_gap)
+                    if trail_target > new_sl:
+                        new_sl = trail_target
+                        reason = "soft_trailing"
+                else:
+                    trail_target = min(entry, current_price + trail_gap)
+                    if trail_target < new_sl:
+                        new_sl = trail_target
+                        reason = "soft_trailing"
+
+        eps = max(1e-8, abs(entry) * 1e-6)
+        improve = (new_sl > old_sl + eps) if position.side == "BUY" else (new_sl < old_sl - eps)
+        if not improve:
+            return
+
+        if position.side == "BUY" and new_sl >= current_price:
+            return
+        if position.side == "SELL" and new_sl <= current_price:
+            return
+
+        result = await asyncio.to_thread(self.client.set_position_sl, position.symbol, float(new_sl))
+        if not result.get("success"):
+            logger.warning(
+                f"[Scalping:{self.user_id}] timeout_protection_apply_failed "
+                f"symbol={position.symbol} phase={phase} old_sl={old_sl:.6f} new_sl={new_sl:.6f} "
+                f"reason={reason} err={result.get('error')}"
+            )
+            return
+
+        position.sl_price = float(new_sl)
+        if reason == "breakeven" or (position.side == "BUY" and new_sl >= entry) or (position.side == "SELL" and new_sl <= entry):
+            position.breakeven_set = True
+        setattr(position, "timeout_last_sl_update_ts", now_ts)
+        setattr(position, "timeout_protection_applied", True)
+
+        logger.info(
+            f"[Scalping:{self.user_id}] timeout_protection_applied symbol={position.symbol} "
+            f"phase={phase} old_sl={old_sl:.6f} new_sl={new_sl:.6f} reason={reason} "
+            f"unrealized_pnl={unrealized_pnl:+.6f} minutes_open={elapsed/60.0:.2f}"
+        )
     
     async def _move_sl_to_breakeven(self, position: ScalpingPosition, current_price: float):
         """Move stop loss to breakeven (entry price) to protect profits"""
         try:
             # Update position SL to entry price
             old_sl = position.sl_price
+            result = await asyncio.to_thread(
+                self.client.set_position_sl, position.symbol, float(position.entry_price)
+            )
+            if not result.get("success"):
+                logger.warning(
+                    f"[Scalping:{self.user_id}] breakeven_sl_update_failed symbol={position.symbol} "
+                    f"old_sl={old_sl:.6f} new_sl={position.entry_price:.6f} err={result.get('error')}"
+                )
+                return
             position.sl_price = position.entry_price
+            position.breakeven_set = True
+            setattr(position, "timeout_last_sl_update_ts", time.time())
+            setattr(position, "timeout_protection_applied", True)
+            setattr(position, "timeout_protection_phase", "mid")
             
             # Notify user
             await self._notify_user(
@@ -1208,14 +2412,28 @@ class ScalpingEngine:
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error moving SL to breakeven: {e}")
     
-    async def _close_position_max_hold(self, position: ScalpingPosition):
-        """Force close position at market price after 30 minutes (for StackMentor positions)"""
+    async def _close_position_max_hold(
+        self,
+        position: ScalpingPosition,
+        max_hold_seconds: Optional[int] = None,
+    ):
+        """Force close position at market price when dynamic max hold is exceeded."""
         try:
+            if max_hold_seconds is None:
+                max_hold_seconds = self._max_hold_seconds_for_position(position)
             logger.info(
                 f"[Scalping:{self.user_id}] Max hold time exceeded for {position.symbol} "
-                f"(elapsed: {int(time.time() - position.opened_at)}s)"
+                f"(elapsed: {int(time.time() - position.opened_at)}s / max={int(max_hold_seconds)}s)"
             )
             
+            close_qty = await self._resolve_close_quantity(position)
+            if close_qty <= 0:
+                logger.warning(
+                    f"[Scalping:{self.user_id}] Max-hold close skipped for {position.symbol}: qty<=0"
+                )
+                self.positions.pop(position.symbol, None)
+                return
+
             # Close entire position at market
             close_side = "SELL" if position.side == "BUY" else "BUY"
             
@@ -1223,44 +2441,90 @@ class ScalpingEngine:
                 self.client.place_order,
                 symbol=position.symbol,
                 side=close_side,
-                qty=position.quantity,
+                qty=close_qty,
                 order_type='market',
                 reduce_only=True
             )
             
             if result.get('success'):
-                fill_price = float(result.get('fill_price', position.entry_price))
+                close_order_id = str(result.get("order_id") or "")
+                fill_price, px_estimated = await self._resolve_exit_price(
+                    position.symbol, position.entry_price, result
+                )
                 
                 # Calculate PnL
                 if position.side == "BUY":
-                    pnl = (fill_price - position.entry_price) * position.quantity
+                    pnl = (fill_price - position.entry_price) * close_qty
                 else:
-                    pnl = (position.entry_price - fill_price) * position.quantity
+                    pnl = (position.entry_price - fill_price) * close_qty
                 
-                pnl_with_leverage = pnl * position.leverage
+                pnl_usdt = pnl
+                pnl_net, open_fee, close_fee, used_exchange = await self._resolve_net_pnl(
+                    symbol=position.symbol,
+                    gross_pnl=pnl_usdt,
+                    open_order_id=getattr(position, "open_order_id", "") or "",
+                    close_order_id=close_order_id,
+                )
+                timeout_phase = str(getattr(position, "timeout_protection_phase", "late"))
+                timeout_protected = bool(getattr(position, "timeout_protection_applied", False))
+                near_flat_thr = float(getattr(self.config, "timeout_near_flat_usdt_threshold", 0.02) or 0.02)
+                near_flat = abs(float(pnl_net)) <= near_flat_thr
+                loss_reasoning = self._build_timeout_loss_reasoning(
+                    position=position,
+                    pnl=pnl_net,
+                    phase=timeout_phase,
+                    protected=timeout_protected,
+                    near_flat=near_flat,
+                )
                 
                 # Update database
                 await self._update_position_closed(
-                    position, fill_price, pnl_with_leverage, "max_hold_time_exceeded"
+                    position,
+                    fill_price,
+                    pnl_net,
+                    "max_hold_time_exceeded",
+                    loss_reasoning=loss_reasoning,
                 )
-                
+
+                logger.info(
+                    f"[Scalping:{self.user_id}] "
+                    f"{'timeout_exit_with_protection' if timeout_protected else 'timeout_exit_without_protection'} "
+                    f"symbol={position.symbol} reason=max_hold_time_exceeded phase={timeout_phase} "
+                    f"near_flat={int(near_flat)} pnl={pnl_net:+.6f}"
+                )
+
+                # Confirm position closed with coordinator
+                await coordinator_confirm_closed(
+                    self.coordinator,
+                    user_id=self.user_id,
+                    symbol=position.symbol,
+                    now_ts=time.time(),
+                )
+
                 # Update StackMentor tracking
                 try:
                     from app.stackmentor import remove_stackmentor_position
                     remove_stackmentor_position(self.user_id, position.symbol)
                 except Exception as sm_err:
                     logger.warning(f"[Scalping:{self.user_id}] Failed to update StackMentor: {sm_err}")
-                
+
                 # Notify user
+                hold_label = (
+                    f"{int(max_hold_seconds) // 60} minutes"
+                    if int(max_hold_seconds) >= 120
+                    else f"{int(max_hold_seconds)} seconds"
+                )
                 await self._notify_user(
                     f"⏰ <b>Position Closed (Max Hold Time)</b>\n\n"
                     f"Symbol: {position.symbol}\n"
-                    f"Entry: {position.entry_price:.4f}\n"
-                    f"Exit: {fill_price:.4f}\n"
-                    f"Hold Time: 30 minutes\n"
-                    f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
+                    f"Entry: {_fmt_price(position.entry_price)}\n"
+                    f"Exit: {_fmt_price(fill_price)}{' (estimated)' if px_estimated else ''}\n"
+                    f"Hold Time: {hold_label}\n"
+                    f"PnL (net): <b>{self._fmt_pnl_usdt(pnl_net)} USDT</b>\n"
+                    f"PnL (gross): <b>{self._fmt_pnl_usdt(pnl_usdt)} USDT</b>"
+                    + (f"\nFees: {self._fmt_pnl_usdt(-(open_fee + close_fee))} USDT" if used_exchange else "")
                 )
-                
+
                 # Remove from tracking
                 del self.positions[position.symbol]
             else:
@@ -1271,18 +2535,32 @@ class ScalpingEngine:
         except Exception as e:
             logger.error(f"[Scalping:{self.user_id}] Error closing max hold position: {e}")
     
-    async def _close_sideways_max_hold(self, position: ScalpingPosition):
-        """Force close sideways position after 2 minutes max hold"""
+    async def _close_sideways_max_hold(
+        self,
+        position: ScalpingPosition,
+        max_hold_seconds: Optional[int] = None,
+    ):
+        """Force close sideways position when dynamic max hold is exceeded."""
         if position.symbol in self._closing_symbols:
             logger.info(f"[Scalping:{self.user_id}] Skip duplicate close attempt for {position.symbol}")
             return
         self._closing_symbols.add(position.symbol)
         try:
+            if max_hold_seconds is None:
+                max_hold_seconds = self._max_hold_seconds_for_position(position)
             elapsed = int(time.time() - position.opened_at)
             logger.info(
                 f"[Scalping:{self.user_id}] Sideways max hold exceeded for {position.symbol} "
-                f"(elapsed: {elapsed}s)"
+                f"(elapsed: {elapsed}s / max={int(max_hold_seconds)}s)"
             )
+
+            close_qty = await self._resolve_close_quantity(position)
+            if close_qty <= 0:
+                logger.warning(
+                    f"[Scalping:{self.user_id}] Sideways close skipped for {position.symbol}: qty<=0"
+                )
+                self.positions.pop(position.symbol, None)
+                return
             
             close_side = "SELL" if position.side == "BUY" else "BUY"
             
@@ -1290,12 +2568,13 @@ class ScalpingEngine:
                 self.client.place_order,
                 symbol=position.symbol,
                 side=close_side,
-                qty=position.quantity,
+                qty=close_qty,
                 order_type='market',
                 reduce_only=True
             )
             
             if result.get('success'):
+                close_order_id = str(result.get("order_id") or "")
                 fill_price = float(result.get('fill_price', 0))
                 # If exchange doesn't return fill_price, get current mark price
                 if fill_price <= 0:
@@ -1309,30 +2588,67 @@ class ScalpingEngine:
                         fill_price = position.entry_price
 
                 if position.side == "BUY":
-                    pnl = (fill_price - position.entry_price) * position.quantity
+                    pnl = (fill_price - position.entry_price) * close_qty
                 else:
-                    pnl = (position.entry_price - fill_price) * position.quantity
+                    pnl = (position.entry_price - fill_price) * close_qty
 
-                pnl_with_leverage = pnl * position.leverage
+                pnl_usdt = pnl
+                pnl_net, open_fee, close_fee, used_exchange = await self._resolve_net_pnl(
+                    symbol=position.symbol,
+                    gross_pnl=pnl_usdt,
+                    open_order_id=getattr(position, "open_order_id", "") or "",
+                    close_order_id=close_order_id,
+                )
+                timeout_phase = str(getattr(position, "timeout_protection_phase", "late"))
+                timeout_protected = bool(getattr(position, "timeout_protection_applied", False))
+                near_flat_thr = float(getattr(self.config, "timeout_near_flat_usdt_threshold", 0.02) or 0.02)
+                near_flat = abs(float(pnl_net)) <= near_flat_thr
+                loss_reasoning = self._build_timeout_loss_reasoning(
+                    position=position,
+                    pnl=pnl_net,
+                    phase=timeout_phase,
+                    protected=timeout_protected,
+                    near_flat=near_flat,
+                )
 
                 closed_now = await self._update_position_closed(
-                    position, fill_price, pnl_with_leverage, "sideways_max_hold_exceeded"
+                    position,
+                    fill_price,
+                    pnl_net,
+                    "sideways_max_hold_exceeded",
+                    loss_reasoning=loss_reasoning,
                 )
                 if closed_now:
+                    logger.info(
+                        f"[Scalping:{self.user_id}] "
+                        f"{'timeout_exit_with_protection' if timeout_protected else 'timeout_exit_without_protection'} "
+                        f"symbol={position.symbol} reason=sideways_max_hold_exceeded phase={timeout_phase} "
+                        f"near_flat={int(near_flat)} pnl={pnl_net:+.6f}"
+                    )
+                    # Confirm position closed with coordinator
+                    await coordinator_confirm_closed(
+                        self.coordinator,
+                        user_id=self.user_id,
+                        symbol=position.symbol,
+                        now_ts=time.time(),
+                    )
+
                     self.last_closed_meta[position.symbol] = {
                         "ts": time.time(),
                         "side": position.side,
                         "reason": "sideways_max_hold_exceeded",
                     }
                     await self._notify_user_once(
-                        dedupe_key=f"sideways_2m:{position.symbol}:{position.entry_price:.4f}",
+                        dedupe_key=f"sideways_max_hold:{position.symbol}:{position.entry_price:.4f}",
                         message=(
-                            f"⏰ <b>SIDEWAYS Closed (2min)</b>\n\n"
+                            f"⏰ <b>SIDEWAYS Closed (Max Hold)</b>\n\n"
                             f"Symbol: {position.symbol}\n"
-                            f"Entry: {position.entry_price:.4f}\n"
-                            f"Exit: {fill_price:.4f}\n"
-                            f"Hold Time: {elapsed}s\n"
-                            f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
+                            f"Entry: {_fmt_price(position.entry_price)}\n"
+                            f"Exit: {_fmt_price(fill_price)}\n"
+                            f"Hold Time: {elapsed}s (max {int(max_hold_seconds)}s)\n"
+                            f"PnL (net): <b>{self._fmt_pnl_usdt(pnl_net)} USDT</b>\n"
+                            f"PnL (gross): <b>{self._fmt_pnl_usdt(pnl_usdt)} USDT</b>"
+                            + (f"\nFees: {self._fmt_pnl_usdt(-(open_fee + close_fee))} USDT" if used_exchange else "")
                         ),
                         ttl_sec=600,
                     )
@@ -1357,13 +2673,21 @@ class ScalpingEngine:
     async def _close_position_tp(self, position: ScalpingPosition, fill_price: float):
         """Close position when TP hit"""
         try:
+            close_qty = await self._resolve_close_quantity(position)
+            if close_qty <= 0:
+                logger.warning(
+                    f"[Scalping:{self.user_id}] TP close skipped for {position.symbol}: qty<=0"
+                )
+                self.positions.pop(position.symbol, None)
+                return
+
             close_side = "SELL" if position.side == "BUY" else "BUY"
             
             result = await asyncio.to_thread(
                 self.client.place_order,
                 symbol=position.symbol,
                 side=close_side,
-                qty=position.quantity,
+                qty=close_qty,
                 order_type='market',
                 reduce_only=True
             )
@@ -1371,32 +2695,40 @@ class ScalpingEngine:
             if result.get('success'):
                 # Calculate PnL
                 if position.side == "BUY":
-                    pnl = (fill_price - position.entry_price) * position.quantity
+                    pnl = (fill_price - position.entry_price) * close_qty
                 else:
-                    pnl = (position.entry_price - fill_price) * position.quantity
+                    pnl = (position.entry_price - fill_price) * close_qty
                 
-                pnl_with_leverage = pnl * position.leverage
+                pnl_usdt = pnl
                 
-                closed_now = await self._update_position_closed(position, fill_price, pnl_with_leverage, "closed_tp")
+                closed_now = await self._update_position_closed(position, fill_price, pnl_usdt, "closed_tp")
                 if closed_now:
+                    # Confirm position closed with coordinator
+                    await coordinator_confirm_closed(
+                        self.coordinator,
+                        user_id=self.user_id,
+                        symbol=position.symbol,
+                        now_ts=time.time(),
+                    )
+
                     self.last_closed_meta[position.symbol] = {
                         "ts": time.time(),
                         "side": position.side,
                         "reason": "closed_tp",
                     }
                     if position.is_sideways:
-                        await self._notify_sideways_closed(position, fill_price, pnl_with_leverage, "closed_tp")
+                        await self._notify_sideways_closed(position, fill_price, pnl_usdt, "closed_tp")
                     else:
                         await self._notify_user(
                             f"✅ <b>TP Hit!</b>\n\n"
                             f"Symbol: {position.symbol}\n"
                             f"Entry: {position.entry_price:.4f}\n"
                             f"Exit: {fill_price:.4f}\n"
-                            f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b> 🎉"
+                            f"PnL: <b>{pnl_usdt:+.2f} USDT</b> 🎉"
                         )
 
                 # Social proof broadcast — kirim ke semua user jika profit >= 2 USDT
-                if pnl_with_leverage >= 2.0:
+                if pnl_usdt >= 2.0:
                     try:
                         from app.social_proof import broadcast_profit
                         from app.supabase_repo import get_user_by_tid
@@ -1409,7 +2741,7 @@ class ScalpingEngine:
                             first_name=fname,
                             symbol=position.symbol,
                             side=position.side,
-                            pnl_usdt=pnl_with_leverage,
+                            pnl_usdt=pnl_usdt,
                             leverage=position.leverage,
                         ))
                     except Exception as _bp_err:
@@ -1423,13 +2755,21 @@ class ScalpingEngine:
     async def _close_position_sl(self, position: ScalpingPosition, fill_price: float):
         """Close position when SL hit"""
         try:
+            close_qty = await self._resolve_close_quantity(position)
+            if close_qty <= 0:
+                logger.warning(
+                    f"[Scalping:{self.user_id}] SL close skipped for {position.symbol}: qty<=0"
+                )
+                self.positions.pop(position.symbol, None)
+                return
+
             close_side = "SELL" if position.side == "BUY" else "BUY"
             
             result = await asyncio.to_thread(
                 self.client.place_order,
                 symbol=position.symbol,
                 side=close_side,
-                qty=position.quantity,
+                qty=close_qty,
                 order_type='market',
                 reduce_only=True
             )
@@ -1437,30 +2777,38 @@ class ScalpingEngine:
             if result.get('success'):
                 # Calculate PnL
                 if position.side == "BUY":
-                    pnl = (fill_price - position.entry_price) * position.quantity
+                    pnl = (fill_price - position.entry_price) * close_qty
                 else:
-                    pnl = (position.entry_price - fill_price) * position.quantity
+                    pnl = (position.entry_price - fill_price) * close_qty
                 
-                pnl_with_leverage = pnl * position.leverage
+                pnl_usdt = pnl
                 
-                closed_now = await self._update_position_closed(position, fill_price, pnl_with_leverage, "closed_sl")
+                closed_now = await self._update_position_closed(position, fill_price, pnl_usdt, "closed_sl")
                 if closed_now:
+                    # Confirm position closed with coordinator
+                    await coordinator_confirm_closed(
+                        self.coordinator,
+                        user_id=self.user_id,
+                        symbol=position.symbol,
+                        now_ts=time.time(),
+                    )
+
                     self.last_closed_meta[position.symbol] = {
                         "ts": time.time(),
                         "side": position.side,
                         "reason": "closed_sl",
                     }
                     if position.is_sideways:
-                        await self._notify_sideways_closed(position, fill_price, pnl_with_leverage, "closed_sl")
+                        await self._notify_sideways_closed(position, fill_price, pnl_usdt, "closed_sl")
                     else:
                         await self._notify_user(
                             f"🛑 <b>SL Hit</b>\n\n"
                             f"Symbol: {position.symbol}\n"
                             f"Entry: {position.entry_price:.4f}\n"
                             f"Exit: {fill_price:.4f}\n"
-                            f"PnL: <b>{pnl_with_leverage:+.2f} USDT</b>"
+                            f"PnL: <b>{pnl_usdt:+.2f} USDT</b>"
                         )
-                
+
                 self.positions.pop(position.symbol, None)
         
         except Exception as e:
@@ -1505,19 +2853,43 @@ class ScalpingEngine:
         try:
             from app.trading_mode import MicroScalpSignal as _MicroScalpSignal
             s = _client()
+            try:
+                persist_qty = float(getattr(position, "quantity", 0.0) or 0.0)
+            except Exception:
+                persist_qty = 0.0
+            if persist_qty <= 0:
+                logger.error(
+                    f"[Scalping:{self.user_id}] Refusing DB insert for {position.symbol}: non-positive quantity={persist_qty}"
+                )
+                return None
+            fallback_rr = float(getattr(signal, "rr_ratio", 0.0) or 0.0)
+            rr_ratio = _derive_rr_ratio(
+                entry_price=float(position.entry_price),
+                sl_price=float(position.sl_price),
+                tp_price=float(position.tp_price),
+                fallback_rr=fallback_rr,
+            )
 
             row = {
                 "telegram_id": self.user_id,
                 "symbol": position.symbol,
                 "side": position.side,
                 "entry_price": position.entry_price,
-                "quantity": position.quantity,
+                "qty": persist_qty,
+                "quantity": persist_qty,
+                "original_quantity": persist_qty,
+                "remaining_quantity": persist_qty,
                 "leverage": position.leverage,
                 "tp_price": position.tp_price,
                 "sl_price": position.sl_price,
+                "rr_ratio": rr_ratio,
                 "trade_type": "scalping",
                 "timeframe": "5m",
                 "confidence": signal.confidence,
+                "entry_reasons": list(getattr(signal, "reasons", []) or []),
+                "playbook_match_score": float(getattr(signal, "playbook_match_score", 0.0) or 0.0),
+                "effective_risk_pct": float(getattr(signal, "effective_risk_pct", 0.0) or 0.0),
+                "risk_overlay_pct": float(getattr(signal, "risk_overlay_pct", 0.0) or 0.0),
                 "status": "open",
                 "order_id": order_id or "",
                 "opened_at": datetime.utcnow().isoformat(),
@@ -1547,28 +2919,52 @@ class ScalpingEngine:
             logger.error(f"[Scalping:{self.user_id}] Error saving position to DB: {e}")
             return None
     
-    async def _update_position_closed(self, position: ScalpingPosition, close_price: float,
-                                     pnl: float, close_reason: str) -> bool:
+    async def _update_position_closed(
+        self,
+        position: ScalpingPosition,
+        close_price: float,
+        pnl: float,
+        close_reason: str,
+        loss_reasoning: str = "",
+        win_metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """Update position in database when closed.
         Returns True only when this call successfully closed an OPEN row.
         """
         try:
             s = _client()
-            open_rows = s.table("autotrade_trades").select("id").eq(
+            open_rows = s.table("autotrade_trades").select("*").eq(
                 "telegram_id", self.user_id
-            ).eq("symbol", position.symbol).eq("status", "open").order("opened_at", desc=True).limit(1).execute()
-            if not open_rows.data:
+            ).eq("symbol", position.symbol).eq("status", "open").order("opened_at", desc=True).limit(10).execute()
+            open_row = None
+            for row in (open_rows.data or []):
+                row_dict = dict(row)
+                if self._is_scalping_trade_row(row_dict):
+                    open_row = row_dict
+                    break
+            if open_row is None:
                 logger.info(f"[Scalping:{self.user_id}] No open DB row to close for {position.symbol} (already closed)")
                 return False
 
-            trade_id = open_rows.data[0]["id"]
-            res = s.table("autotrade_trades").update({
-                "close_price": close_price,
-                "pnl_usdt": pnl,
-                "close_reason": close_reason,
-                "status": close_reason,
-                "closed_at": datetime.utcnow().isoformat(),
-            }).eq("id", trade_id).eq("status", "open").execute()
+            trade_id = open_row["id"]
+            update_payload, cumulative_pnl, partial_realized = build_cumulative_close_update_payload(
+                open_row=open_row,
+                position=position,
+                close_price=close_price,
+                pnl=pnl,
+                close_reason=close_reason,
+                loss_reasoning=loss_reasoning,
+                win_metadata=win_metadata,
+                playbook_snapshot=self._win_playbook_snapshot,
+            )
+
+            if partial_realized > 0:
+                logger.info(
+                    f"[Scalping:{self.user_id}] cumulative_pnl applied for {position.symbol}: "
+                    f"partial={partial_realized:+.6f} final_leg={float(pnl):+.6f} total={cumulative_pnl:+.6f}"
+                )
+
+            res = s.table("autotrade_trades").update(update_payload).eq("id", trade_id).eq("status", "open").execute()
             if not getattr(res, "data", None):
                 logger.info(f"[Scalping:{self.user_id}] DB close skipped for {position.symbol} (race already closed)")
                 return False
@@ -1629,6 +3025,9 @@ class ScalpingEngine:
         """Notify user when position opened"""
         try:
             reasons_text = "\n".join(f"• {r}" for r in signal.reasons)
+            risk = abs(position.entry_price - position.sl_price)
+            reward = abs(position.tp_price - position.entry_price)
+            rr_live = (reward / risk) if risk > 0 else 0.0
             
             await self.bot.send_message(
                 chat_id=self.notify_chat_id,
@@ -1637,7 +3036,7 @@ class ScalpingEngine:
                     f"Symbol: {position.symbol}\n"
                     f"Side: {position.side}\n"
                     f"Entry: {position.entry_price:.4f}\n"
-                    f"TP: {position.tp_price:.4f} (1.5R)\n"
+                    f"TP: {position.tp_price:.4f} (R:R 1:{rr_live:.2f})\n"
                     f"SL: {position.sl_price:.4f}\n"
                     f"Confidence: {signal.confidence:.0f}%\n"
                     f"Max Hold: 30 minutes\n\n"
@@ -1662,6 +3061,23 @@ class ScalpingEngine:
         """
         try:
             risk_amount = abs(position.entry_price - levels.sl) * position.quantity
+            base_risk_pct = float(getattr(signal, "base_risk_pct", 1.0) or 1.0)
+            overlay_pct = float(getattr(signal, "risk_overlay_pct", 0.0) or 0.0)
+            effective_risk_pct = float(getattr(signal, "effective_risk_pct", base_risk_pct) or base_risk_pct)
+            risk_audit_line = format_and_emit_order_open_risk_audit(
+                logger=logger,
+                user_id=self.user_id,
+                symbol=position.symbol,
+                side=position.side,
+                order_id=str(order_id or "-"),
+                base_risk_pct=base_risk_pct,
+                overlay_pct=overlay_pct,
+                effective_risk_pct=effective_risk_pct,
+                implied_risk_usdt=risk_amount,
+            )
+            runner_active = float(getattr(levels, "qty_tp3", 0.0) or 0.0) > 0 and abs(
+                float(getattr(levels, "tp3", 0.0) or 0.0) - float(getattr(levels, "tp1", 0.0) or 0.0)
+            ) > 1e-9
             acc_result = await asyncio.to_thread(self.client.get_account_info)
             current_equity = 0.0
             if acc_result.get("success"):
@@ -1673,6 +3089,16 @@ class ScalpingEngine:
             direction = "Long" if position.side.upper() in ("BUY", "LONG") else "Short"
             opened_at = datetime.utcnow().strftime("%d %b %Y %H:%M:%S UTC")
             order_id_text = escape(str(order_id or "-"))
+            tp_block = (
+                (
+                    f"<b>TP1 (Partial):</b> {_fmt_price(levels.tp1)}\n"
+                    f"<b>Runner TP (TP3):</b> {_fmt_price(levels.tp3)}\n"
+                    f"<b>Split:</b> {float(levels.qty_tp1 / position.quantity * 100) if position.quantity > 0 else 0:.0f}% / "
+                    f"{float(levels.qty_tp3 / position.quantity * 100) if position.quantity > 0 else 0:.0f}%\n"
+                )
+                if runner_active else
+                f"<b>TP:</b> {_fmt_price(levels.tp1)}\n"
+            )
 
             await self.bot.send_message(
                 chat_id=self.notify_chat_id,
@@ -1681,14 +3107,15 @@ class ScalpingEngine:
                     f"<b>Direction:</b> {direction}\n"
                     f"<b>Trading Pair:</b> {position.symbol}\n"
                     f"<b>Entry:</b> {_fmt_price(position.entry_price)}\n"
-                    f"<b>TP:</b> {_fmt_price(levels.tp1)}\n"
-                    f"<b>SL:</b> {_fmt_price(levels.sl)}\n"
-                    f"<b>Risk PNL:</b> ${risk_amount:.2f}\n"
+                    + tp_block
+                    + f"<b>SL:</b> {_fmt_price(levels.sl)}\n"
+                    + f"<b>Risk PNL:</b> ${risk_amount:.2f}\n"
                     + (
                         f"<b>Risk % on equity:</b> {risk_pct_equity:.2f}%\n"
                         if risk_pct_equity is not None else
                         "<b>Risk % on equity:</b> N/A\n"
                     )
+                    + f"<b>{risk_audit_line}</b>\n"
                     + f"<b>Order ID:</b> <code>{order_id_text}</code>\n"
                     + f"<b>Date and time:</b> {opened_at}"
                 ),
@@ -1719,3 +3146,67 @@ class ScalpingEngine:
         self._recent_close_notifications[dedupe_key] = now
         await self._notify_user(message)
 
+    async def _load_existing_positions(self):
+        """Load open positions from database on startup to resume monitoring"""
+        try:
+            from app.supabase_repo import _client as _sc
+            from app.trading_mode import ScalpingPosition
+            from datetime import datetime
+            
+            s = _sc()
+            res = s.table("autotrade_trades").select("*").eq(
+                "telegram_id", self.user_id
+            ).eq("status", "open").execute()
+            
+            if res.data:
+                scalping_rows = [dict(row) for row in (res.data or []) if self._is_scalping_trade_row(dict(row))]
+                logger.info(f"[Scalping:{self.user_id}] Found {len(scalping_rows)} open scalping trades in DB. Resuming tracking...")
+                for row in scalping_rows:
+                    symbol = row.get("symbol")
+                    if not symbol or symbol in self.positions:
+                        continue
+                    
+                    # Convert ISO string to Unix timestamp
+                    opened_at_str = row.get("opened_at")
+                    try:
+                        if opened_at_str:
+                            # Handle different ISO formats (Z vs +00:00)
+                            if opened_at_str.endswith('Z'):
+                                opened_at_str = opened_at_str.replace('Z', '+00:00')
+                            dt = datetime.fromisoformat(opened_at_str)
+                            opened_at = dt.timestamp()
+                        else:
+                            opened_at = time.time()
+                    except Exception as parse_err:
+                        logger.warning(f"[Scalping:{self.user_id}] Could not parse timestamp {opened_at_str}: {parse_err}")
+                        opened_at = time.time()
+                    
+                    pos = ScalpingPosition(
+                        user_id=self.user_id,
+                        symbol=symbol,
+                        side=row.get("side", "BUY"),
+                        entry_price=float(row.get("entry_price", 0)),
+                        quantity=float(row.get("qty", row.get("quantity", 0)) or 0),
+                        leverage=int(row.get("leverage", 10)),
+                        tp_price=float(row.get("tp_price", 0)),
+                        sl_price=float(row.get("sl_price", 0)),
+                        opened_at=opened_at
+                    )
+                    setattr(pos, "entry_reasons", list(row.get("entry_reasons", []) or []))
+                    setattr(pos, "playbook_match_score", float(row.get("playbook_match_score", 0) or 0))
+                    setattr(pos, "effective_risk_pct", float(row.get("effective_risk_pct", 0) or 0))
+                    setattr(pos, "risk_overlay_pct", float(row.get("risk_overlay_pct", 0) or 0))
+                    setattr(pos, "initial_sl_price", float(row.get("sl_price", 0) or 0))
+                    setattr(pos, "timeout_protection_applied", False)
+                    setattr(pos, "timeout_protection_phase", "early")
+                    setattr(pos, "timeout_last_sl_update_ts", 0.0)
+                    
+                    # Check if it was a sideways trade
+                    if row.get("trade_subtype") == "sideways_scalp":
+                        pos.is_sideways = True
+                    
+                    self.positions[symbol] = pos
+                    logger.info(f"[Scalping:{self.user_id}] Resumed tracking for {symbol} (opened {int(time.time() - opened_at)}s ago)")
+            
+        except Exception as e:
+            logger.error(f"[Scalping:{self.user_id}] Failed to load existing positions: {e}")

@@ -8,13 +8,21 @@ the website are in sync with what the user sees in Telegram.
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+import logging
+import time
 
 from app.auth.jwt import decode_token
 from app.db.supabase import _client
 from app.services import bitunix as bsvc
+from app.services import one_click_trades as one_click_repo
+try:
+    from Bismillah.app.symbol_coordinator import get_coordinator
+except Exception:  # pragma: no cover
+    get_coordinator = None
 
 router = APIRouter(prefix="/bitunix", tags=["bitunix"])
 bearer = HTTPBearer()
+logger = logging.getLogger(__name__)
 
 class TPSLUpdate(BaseModel):
     symbol: str
@@ -62,6 +70,14 @@ def _norm_side(side: str | None) -> str:
     return ""
 
 
+def _conn_error(conn: dict) -> str:
+    if isinstance(conn, dict):
+        err = conn.get("error") or conn.get("message")
+        if err:
+            return str(err)
+    return "Invalid API Keys"
+
+
 def _is_same_position(live_pos: dict, db_trade: dict) -> bool:
     if _norm_symbol(live_pos.get("symbol")) != _norm_symbol(db_trade.get("symbol")):
         return False
@@ -97,11 +113,14 @@ def _is_same_position(live_pos: dict, db_trade: dict) -> bool:
 def _annotate_position_sources(tg_id: int, positions: list[dict]) -> list[dict]:
     """
     Mark each live exchange position as:
+    - source=1_click: matched with an open row in one_click_trades
     - source=autotrade: matched with an open row in autotrade_trades
-    - source=1_click: unmatched live position (opened manually/1-click)
+    - source=1_click (fallback): unmatched live position (manual/legacy)
     """
     try:
         s = _client()
+        one_click_open = one_click_repo.get_open_trades(tg_id)
+        remaining_one_click = list(one_click_open)
         db_res = s.table("autotrade_trades").select(
             "id, symbol, side, qty, quantity, entry_price, status"
         ).eq("telegram_id", int(tg_id)).eq("status", "open").execute()
@@ -125,12 +144,34 @@ def _annotate_position_sources(tg_id: int, positions: list[dict]) -> list[dict]:
         enriched = dict(pos)
         source = "1_click"
         matched_trade_id = None
-        for idx, db_trade in enumerate(remaining_db):
-            if _is_same_position(enriched, db_trade):
-                source = "autotrade"
-                matched_trade_id = db_trade.get("id")
-                remaining_db.pop(idx)
+
+        # First-class 1-click attribution (preferred)
+        for idx, oc_trade in enumerate(remaining_one_click):
+            if _is_same_position(
+                enriched,
+                {
+                    "symbol": oc_trade.get("symbol"),
+                    "side": oc_trade.get("side"),
+                    "qty": oc_trade.get("qty"),
+                    "entry_price": oc_trade.get("entry_price"),
+                },
+            ):
+                source = "1_click"
+                matched_trade_id = oc_trade.get("id")
+                remaining_one_click.pop(idx)
                 break
+
+        # Fallback to managed autotrade attribution
+        if source != "1_click" or matched_trade_id is None:
+            source = "1_click"
+            matched_trade_id = None
+            for idx, db_trade in enumerate(remaining_db):
+                if _is_same_position(enriched, db_trade):
+                    source = "autotrade"
+                    matched_trade_id = db_trade.get("id")
+                    remaining_db.pop(idx)
+                    break
+
         enriched["source"] = source
         enriched["source_label"] = "AutoTrade" if source == "autotrade" else "1-Click"
         enriched["autotrade_trade_id"] = matched_trade_id
@@ -274,6 +315,22 @@ async def bitunix_close_position(
             detail=close_res.get("error") or close_res.get("message") or "Close order rejected by exchange",
         )
 
+    if get_coordinator:
+        try:
+            coordinator = get_coordinator()
+            await coordinator.confirm_closed(tg_id, symbol, time.time())
+        except Exception as e:
+            logger.warning(f"[1ClickClose:{tg_id}] Coordinator sync failed for {symbol}: {e}")
+
+    try:
+        one_click_repo.mark_closed_manual(
+            tg_id=tg_id,
+            symbol=symbol,
+            side=position_side,
+        )
+    except Exception as e:
+        logger.warning(f"[1ClickClose:{tg_id}] one_click_trades close sync failed for {symbol}: {e}")
+
     return {
         "success": True,
         "symbol": symbol,
@@ -378,24 +435,26 @@ async def bitunix_save_keys(
     """
     Test and save Bitunix API Keys for the user.
     """
-    from app.bitunix_autotrade_client import BitunixAutoTradeClient
-    
-    # 1. Test connection first
-    client = BitunixAutoTradeClient(api_key=keys.api_key, api_secret=keys.api_secret)
-    conn = client.check_connection()
+    try:
+        conn = await bsvc.fetch_connection_with_keys(keys.api_key, keys.api_secret)
+    except PermissionError as e:
+        raise HTTPException(status_code=500, detail=f"Bitunix client unavailable: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Connection check failed: {e}")
+
     if not conn.get("online"):
         raise HTTPException(
-            status_code=400, 
-            detail=f"Connection failed: {conn.get('error', 'Invalid API Keys')}"
+            status_code=400,
+            detail=f"Connection failed: {_conn_error(conn)}"
         )
-        
-    # 2. Connection passed, encrypt and save
+
     try:
         bsvc.save_user_api_keys(tg_id, keys.api_key, keys.api_secret)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save keys securely: {e}")
-        
+
     return {"success": True, "message": "API Keys securely linked."}
+
 
 @router.post("/keys/test")
 async def bitunix_test_keys(
@@ -405,16 +464,16 @@ async def bitunix_test_keys(
     """
     Dry-run test for Bitunix API Keys without saving them.
     """
-    from app.bitunix_autotrade_client import BitunixAutoTradeClient
-    
-    client = BitunixAutoTradeClient(api_key=keys.api_key, api_secret=keys.api_secret)
-    conn = client.check_connection()
-    
+    try:
+        conn = await bsvc.fetch_connection_with_keys(keys.api_key, keys.api_secret)
+    except PermissionError as e:
+        raise HTTPException(status_code=500, detail=f"Bitunix client unavailable: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Connection check failed: {e}")
+
     if not conn.get("online"):
-        return {
-            "success": False, 
-            "message": f"Connection failed: {conn.get('error', 'Invalid API Keys')}"
-        }
+        raise HTTPException(status_code=400, detail=f"Connection failed: {_conn_error(conn)}")
+
     return {"success": True, "message": "Connection successful! Keys are valid."}
 
 @router.delete("/keys")

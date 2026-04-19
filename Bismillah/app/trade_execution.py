@@ -19,7 +19,7 @@ This module owns the canonical entry pipeline:
     1. Compute StackMentor TP/SL tiers and qty splits
     2. Validate prices against current mark price
     3. Set leverage
-    4. Place atomic order WITH TP1 + SL on the exchange
+    4. Place atomic order WITH exchange TP + SL (TP1 in unified mode, TP3 in runner mode)
     5. Register the position in the StackMentor in-memory registry
 
 Both engines call `open_managed_position(...)` so behavior cannot drift.
@@ -28,13 +28,15 @@ Both engines call `open_managed_position(...)` so behavior cannot drift.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 
-from app.stackmentor import (
+from .stackmentor import (
     calculate_stackmentor_levels,
     calculate_qty_splits,
+    get_exchange_tp_price,
     register_stackmentor_position,
 )
 
@@ -92,16 +94,24 @@ def build_stackmentor_levels(
     total_qty: float,
     symbol: str,
     precision: int = 3,
+    tp_price: Optional[float] = None,
 ) -> StackMentorLevels:
     """
     Compute the 3-tier StackMentor TP levels and quantity splits.
     Side must be "LONG" or "SHORT".
     """
-    tp1, tp2, tp3 = calculate_stackmentor_levels(
-        entry_price=entry_price,
-        sl_price=sl_price,
-        side=side,
-    )
+    # If caller provides an explicit TP, use it as the canonical target so
+    # execution stays aligned with strategy-level RR validation.
+    if tp_price is not None and tp_price > 0:
+        tp1 = float(tp_price)
+        tp2 = float(tp_price)
+        tp3 = float(tp_price)
+    else:
+        tp1, tp2, tp3 = calculate_stackmentor_levels(
+            entry_price=entry_price,
+            sl_price=sl_price,
+            side=side,
+        )
     
     # Calculate splits preserving Bitunix MIN_QTY limits
     min_qty = MIN_QTY_MAP.get(symbol, 0.001)
@@ -128,31 +138,22 @@ def validate_entry_prices(
     """
     Validate that SL/TP make sense relative to current mark price.
 
-    Returns: (is_valid, possibly_adjusted_sl, error_msg)
-      * If SL is on the wrong side of mark we nudge it 2% away from mark
-        and return the new value (adjusted_sl).
-      * If TP is on the wrong side of mark we abort the trade entirely.
+    Returns: (is_valid, sl, error_msg)
+      * If SL/TP is on the wrong side of mark we abort the trade.
+      * We intentionally do not auto-adjust SL because changing SL without
+        re-sizing quantity breaks the original risk model.
     """
-    adjusted_sl = sl
     if side == "LONG":
         if sl >= mark_price:
-            adjusted_sl = mark_price * 0.98
-            logger.warning(
-                "[trade_execution] LONG SL %.6f >= mark %.6f — adjusted to %.6f",
-                sl, mark_price, adjusted_sl,
-            )
+            return False, sl, f"LONG SL {sl:.6f} >= mark {mark_price:.6f}"
         if tp1 <= mark_price:
-            return False, adjusted_sl, f"LONG TP1 {tp1:.6f} <= mark {mark_price:.6f}"
+            return False, sl, f"LONG TP1 {tp1:.6f} <= mark {mark_price:.6f}"
     else:  # SHORT
         if sl <= mark_price:
-            adjusted_sl = mark_price * 1.02
-            logger.warning(
-                "[trade_execution] SHORT SL %.6f <= mark %.6f — adjusted to %.6f",
-                sl, mark_price, adjusted_sl,
-            )
+            return False, sl, f"SHORT SL {sl:.6f} <= mark {mark_price:.6f}"
         if tp1 >= mark_price:
-            return False, adjusted_sl, f"SHORT TP1 {tp1:.6f} >= mark {mark_price:.6f}"
-    return True, adjusted_sl, None
+            return False, sl, f"SHORT TP1 {tp1:.6f} >= mark {mark_price:.6f}"
+    return True, sl, None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -169,6 +170,22 @@ def _within_pct(actual: float, expected: float, pct: float) -> bool:
     if expected == 0:
         return abs(actual) < 1e-9
     return abs(actual - expected) / abs(expected) <= pct
+
+
+async def _call_sync_or_async(fn, *args, expect_dict: bool = False):
+    """
+    Execute client call safely for both sync clients (production) and AsyncMock
+    test doubles that may return coroutine objects.
+    """
+    result = await asyncio.to_thread(fn, *args)
+    while inspect.isawaitable(result):
+        result = await result
+    if expect_dict and not isinstance(result, dict):
+        return {
+            "success": False,
+            "error": f"Invalid response type from {getattr(fn, '__name__', 'call')}: {type(result).__name__}",
+        }
+    return result
 
 
 async def reconcile_position(
@@ -198,7 +215,7 @@ async def reconcile_position(
     """
     notes: list = []
     try:
-        pos_resp = await asyncio.to_thread(client.get_positions)
+        pos_resp = await _call_sync_or_async(client.get_positions, expect_dict=True)
     except Exception as e:
         notes.append(f"get_positions raised: {e}")
         return False, notes, 0.0
@@ -247,7 +264,7 @@ async def reconcile_position(
     set_tpsl = getattr(client, "set_position_tpsl", None)
     if callable(set_tpsl):
         try:
-            r = await asyncio.to_thread(set_tpsl, symbol, expected_tp, expected_sl)
+            r = await _call_sync_or_async(set_tpsl, symbol, expected_tp, expected_sl, expect_dict=True)
             repair_ok = bool(r.get("success"))
             if not repair_ok:
                 notes.append(f"set_position_tpsl failed: {r.get('error')}")
@@ -258,7 +275,7 @@ async def reconcile_position(
         # Fall back: at minimum re-set SL — losing TP is recoverable via the
         # in-memory StackMentor monitor, losing SL is not.
         try:
-            r = await asyncio.to_thread(client.set_position_sl, symbol, expected_sl)
+            r = await _call_sync_or_async(client.set_position_sl, symbol, expected_sl, expect_dict=True)
             repair_ok = bool(r.get("success"))
             if not repair_ok:
                 notes.append(f"set_position_sl failed: {r.get('error')}")
@@ -273,7 +290,7 @@ async def reconcile_position(
     notes.append("repair_failed_emergency_close")
     try:
         close_side = "SELL" if side.upper() == "LONG" else "BUY"
-        await asyncio.to_thread(
+        await _call_sync_or_async(
             client.place_order,
             symbol,
             close_side,
@@ -302,6 +319,7 @@ async def open_managed_position(
     sl_price: float,
     quantity: float,
     leverage: int,
+    tp_price: Optional[float] = None,
     precision: int = 3,
     set_leverage: bool = True,
     register_in_stackmentor: bool = True,
@@ -314,10 +332,11 @@ async def open_managed_position(
     Both the scalping and swing engines call this function so the on-exchange
     behavior is identical:
 
-      1. Compute TP1/TP2/TP3 + qty splits
+      1. Compute TP1/TP2/TP3 + qty splits (or honor explicit TP when provided)
       2. Get mark price → validate SL/TP, possibly adjust SL
       3. Set leverage on the symbol
-      4. Atomic `place_order_with_tpsl` (TP1 + SL attached at entry)
+      4. Atomic `place_order_with_tpsl` (TP + SL attached at entry:
+         TP1 in unified mode, TP3 when runner is enabled)
       5. Register the position in the StackMentor monitoring registry
 
     Returns an `ExecutionResult`. Callers are responsible for user-facing
@@ -341,6 +360,7 @@ async def open_managed_position(
             total_qty=quantity,
             symbol=symbol,
             precision=precision,
+            tp_price=tp_price,
         )
     except Exception as e:
         logger.exception("[trade_execution:%s] level calc failed", user_id)
@@ -352,7 +372,7 @@ async def open_managed_position(
 
     # 2. Validate against mark price ────────────────────────────────────────────
     try:
-        ticker = await asyncio.to_thread(client.get_ticker, symbol)
+        ticker = await _call_sync_or_async(client.get_ticker, symbol, expect_dict=True)
         if ticker.get("success"):
             mark_price = float(ticker.get("mark_price", entry_price))
             ok, adj_sl, err = validate_entry_prices(
@@ -389,23 +409,25 @@ async def open_managed_position(
     # 3. Set leverage ───────────────────────────────────────────────────────────
     if set_leverage:
         try:
-            await asyncio.to_thread(client.set_leverage, symbol, leverage)
+            await _call_sync_or_async(client.set_leverage, symbol, leverage)
         except Exception as e:
             logger.warning(
                 "[trade_execution:%s] set_leverage failed for %s: %s",
                 user_id, symbol, e,
             )
 
-    # 4. Atomic entry: place order WITH TP1 + SL on the exchange ───────────────
+    # 4. Atomic entry: place order WITH exchange TP + SL ────────────────────────
     order_side = "BUY" if side == "LONG" else "SELL"
+    exchange_tp = float(get_exchange_tp_price(levels.tp1, levels.tp3))
     try:
-        order_result = await asyncio.to_thread(
+        order_result = await _call_sync_or_async(
             client.place_order_with_tpsl,
             symbol,
             order_side,
             quantity,
-            levels.tp1,
+            exchange_tp,
             levels.sl,
+            expect_dict=True,
         )
     except Exception as e:
         logger.exception("[trade_execution:%s] place_order_with_tpsl raised", user_id)
@@ -418,14 +440,17 @@ async def open_managed_position(
 
     if not order_result.get("success"):
         err_msg = str(order_result.get("error", "Unknown error"))
+        err_msg_lc = err_msg.lower()
         # Classify error so callers can branch (auth, balance, SL price, etc.)
         if "TOKEN_INVALID" in err_msg or "SIGNATURE_ERROR" in err_msg:
             code = "auth"
         elif "HTTP 403" in err_msg or "IP_BLOCKED" in err_msg:
             code = "ip_blocked"
+        elif "710002" in err_msg or "does not currently support trading via openapi" in err_msg_lc:
+            code = "unsupported_symbol_api"
         elif "30029" in err_msg or "SL price must be" in err_msg:
             code = "invalid_sl_price"
-        elif "20003" in err_msg or "insufficient" in err_msg.lower():
+        elif "20003" in err_msg or "insufficient" in err_msg_lc:
             code = "insufficient_balance"
         else:
             code = "order_failed"
@@ -439,8 +464,8 @@ async def open_managed_position(
 
     order_id = order_result.get("order_id", "-")
     logger.info(
-        "[trade_execution:%s] %s %s opened qty=%.6f tp1=%.6f sl=%.6f order=%s",
-        user_id, symbol, side, quantity, levels.tp1, levels.sl, order_id,
+        "[trade_execution:%s] %s %s opened qty=%.6f tp_entry=%.6f tp1=%.6f tp3=%.6f sl=%.6f order=%s",
+        user_id, symbol, side, quantity, exchange_tp, levels.tp1, levels.tp3, levels.sl, order_id,
     )
 
     # 4b. Self-healing reconciliation ──────────────────────────────────────────
@@ -458,7 +483,7 @@ async def open_managed_position(
                 symbol=symbol,
                 side=side,
                 expected_qty=quantity,
-                expected_tp=levels.tp1,
+                expected_tp=exchange_tp,
                 expected_sl=levels.sl,
             )
             # Retrieve the update of the quantity after the position check

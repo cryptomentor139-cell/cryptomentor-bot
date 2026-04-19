@@ -17,9 +17,14 @@ def verify_telegram_auth(data: Dict[str, Any]) -> bool:
     if not received_hash:
         return False
 
-    # Buat data-check-string: semua field kecuali hash, sorted, newline-separated
-    # Semua nilai harus string
-    check_fields = {k: str(v) for k, v in data.items() if k != "hash" and v is not None}
+    # Telegram signatures only include these specific fields.
+    # We must exclude custom fields like 'referred_by' which we add in the frontend.
+    valid_auth_fields = {"id", "first_name", "last_name", "username", "photo_url", "auth_date"}
+    
+    check_fields = {
+        k: str(v) for k, v in data.items() 
+        if k in valid_auth_fields and v is not None
+    }
     data_check_string = "\n".join(
         f"{k}={v}" for k, v in sorted(check_fields.items())
     )

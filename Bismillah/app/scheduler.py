@@ -51,20 +51,95 @@ def _mark_requires_manual_restart(user_id: int):
     """
     Mark session as stopped so health-check won't auto-retry forever.
     User can start again manually via /autotrade.
+
+    EXCEPTION: if the user is still approved in user_verifications, restore
+    their status to 'uid_verified' so the health-check can resume once the
+    API key issue is resolved — do NOT permanently lock them out.
     """
     try:
         from app.supabase_repo import _client
-        _client().table("autotrade_sessions").upsert(
-            {
+        s = _client()
+
+        # Check whether user is still approved in user_verifications
+        ver = s.table("user_verifications").select("status, bitunix_uid").eq(
+            "telegram_id", int(user_id)
+        ).limit(1).execute()
+        is_approved = bool(ver.data) and ver.data[0].get("status") == "approved"
+
+        if is_approved:
+            # Keep them as uid_verified so health-check retries after API key fix;
+            # also sync bitunix_uid in case it drifted
+            uid = ver.data[0].get("bitunix_uid")
+            row = {
+                "telegram_id": int(user_id),
+                "status": "uid_verified",
+                "engine_active": False,
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+            if uid:
+                row["bitunix_uid"] = uid
+            logger.info(
+                f"[HealthCheck] User {user_id} is still approved in user_verifications "
+                f"— resetting to uid_verified instead of stopped"
+            )
+        else:
+            row = {
                 "telegram_id": int(user_id),
                 "status": "stopped",
                 "engine_active": False,
                 "updated_at": datetime.utcnow().isoformat(),
-            },
-            on_conflict="telegram_id",
+            }
+
+        s.table("autotrade_sessions").upsert(
+            row, on_conflict="telegram_id"
         ).execute()
     except Exception as e:
         logger.warning(f"[HealthCheck] Failed to mark user {user_id} as stopped: {e}")
+
+
+def _resolve_min_confidence_for_user(user_id: int, trading_mode: str) -> int:
+    """Return user-visible min confidence threshold for current mode."""
+    mode = (trading_mode or "").strip().lower()
+    try:
+        if mode == "scalping":
+            from app.trading_mode import ScalpingConfig
+            return int(round(ScalpingConfig().min_confidence * 100))
+
+        from app.supabase_repo import get_risk_per_trade
+        from app.autotrade_engine import _normalize_risk_pct, _risk_profile
+
+        user_risk = _normalize_risk_pct(get_risk_per_trade(user_id), default=1.0)
+        return int(round(_risk_profile(user_risk)["min_confidence"]))
+    except Exception as e:
+        logger.warning(
+            f"[Scheduler] Failed to resolve dynamic min confidence for user {user_id} mode={mode}: {e}"
+        )
+        return 72 if mode == "scalping" else 68
+
+
+async def _fetch_live_equity(exchange_id: str, api_key: str, api_secret: str, fallback: float) -> float:
+    """
+    Best-effort equity fetch: available + frozen + unrealized.
+    Falls back to session amount when exchange call fails.
+    """
+    try:
+        from app.exchange_registry import get_client
+
+        ex_client = get_client(exchange_id, api_key, api_secret)
+        acc = await asyncio.wait_for(
+            asyncio.to_thread(ex_client.get_account_info),
+            timeout=4.0,
+        )
+        if acc.get("success"):
+            available = float(acc.get("available", 0) or 0)
+            frozen = float(acc.get("frozen", 0) or 0)
+            unrealized = float(acc.get("total_unrealized_pnl", 0) or 0)
+            equity = available + frozen + unrealized
+            if equity > 0:
+                return equity
+    except Exception as e:
+        logger.warning(f"[Scheduler] Live equity fetch failed ({exchange_id}): {e}")
+    return float(fallback or 0)
 
 
 class TaskScheduler:
@@ -262,8 +337,8 @@ def start_scheduler(application):
         try:
             from app.supabase_repo import _client
             from app.handlers_autotrade import get_user_api_keys
-            from app.autotrade_engine import start_engine, is_running
-            from app.engine_restore import migrate_to_risk_based, set_scalping_mode
+            from app.autotrade_engine import start_engine_async, is_running
+            from app.engine_restore import migrate_to_risk_based
             from app.skills_repo import has_skill
 
             # Query sessions that should be restored (exclude stopped, pending, rejected)
@@ -382,7 +457,9 @@ def start_scheduler(application):
                 # Get session settings
                 amount = float(session.get("initial_deposit") or 10)
                 leverage = int(session.get("leverage") or 10)
-                trading_mode = session.get("trading_mode", "swing")
+                trading_mode = str(session.get("trading_mode", "swing") or "").strip().lower()
+                if trading_mode not in ("swing", "scalping", "mixed"):
+                    trading_mode = "swing"
                 exchange_id = keys.get("exchange", "bitunix")
 
                 logger.info(
@@ -394,19 +471,14 @@ def start_scheduler(application):
                     # Migrate to risk-based mode for safety (if not already)
                     migrate_to_risk_based(user_id)
                     
-                    # Preserve user's trading mode preference (don't force scalping)
-                    # Only set scalping if they don't have a mode set
-                    if not trading_mode or trading_mode == "swing":
-                        logger.info(f"[AutoRestore] User {user_id} - Setting to scalping mode (default)")
-                        set_scalping_mode(user_id)
-                    else:
-                        logger.info(f"[AutoRestore] User {user_id} - Keeping {trading_mode} mode")
+                    # Preserve user's trading mode preference. Never force scalping here.
+                    logger.info(f"[AutoRestore] User {user_id} - Keeping persisted mode: {trading_mode}")
                     
                     # Check premium status
                     is_premium = has_skill(user_id, "dual_tp_rr3")
                     
                     # Start engine
-                    start_engine(
+                    await start_engine_async(
                         bot=application.bot,
                         user_id=user_id,
                         api_key=keys["api_key"],
@@ -415,7 +487,8 @@ def start_scheduler(application):
                         leverage=leverage,
                         notify_chat_id=user_id,
                         is_premium=is_premium,
-                        silent=False,  # Send notification so user knows engine restarted
+                        # Keep a single startup notification path (scheduler message below).
+                        silent=True,
                         exchange_id=exchange_id,
                     )
                     restored += 1
@@ -423,11 +496,41 @@ def start_scheduler(application):
 
                     # Send detailed startup notification with full config (await directly)
                     try:
-                        # Get trading mode details
-                        from app.trading_mode_manager import TradingMode
-                        is_scalping = trading_mode == "scalping"
-                        
-                        if is_scalping:
+                        # Resolve actual runtime mode after engine start (source of truth).
+                        from app.trading_mode_manager import TradingModeManager
+                        actual_mode = TradingModeManager.get_mode(user_id).value
+                        is_scalping = actual_mode == "scalping"
+                        if actual_mode != trading_mode:
+                            logger.warning(
+                                f"[AutoRestore] User {user_id} - Mode mismatch after restart: "
+                                f"persisted={trading_mode}, actual={actual_mode}"
+                            )
+                        min_confidence_display = _resolve_min_confidence_for_user(user_id, actual_mode)
+                        live_equity = await _fetch_live_equity(
+                            exchange_id=exchange_id,
+                            api_key=keys["api_key"],
+                            api_secret=keys["api_secret"],
+                            fallback=amount,
+                        )
+                         
+                        if actual_mode == "mixed":
+                            await application.bot.send_message(
+                                chat_id=user_id,
+                                text=(
+                                    "⚖️ <b>Mixed Engine Active!</b>\n\n"
+                                    "Mode: <b>Mixed (Top 10 Auto-Routed)</b>\n"
+                                    "• Routing cadence: <b>10 minutes (sticky)</b>\n"
+                                    "• Concurrent cap: <b>Swing 4 + Scalping 4</b>\n"
+                                    "• Trading pairs: <b>Top 10 by volume</b>\n\n"
+                                    f"💰 Equity: <b>{live_equity:.2f} USDT</b>\n"
+                                    f"⚡ Base leverage setting: <b>{leverage}x</b>\n"
+                                    "⚙️ Applied leverage is auto-adjusted per pair (max-safe).\n\n"
+                                    "Bot will run swing and scalping components in parallel."
+                                ),
+                                parse_mode='HTML'
+                            )
+                            logger.info(f"[AutoRestore] User {user_id} - ✅ Mixed notification sent")
+                        elif is_scalping:
                             # Scalping mode notification
                             await application.bot.send_message(
                                 chat_id=user_id,
@@ -437,13 +540,14 @@ def start_scheduler(application):
                                     "<b>Configuration:</b>\n"
                                     "• Timeframe: <b>5m</b>\n"
                                     "• Scan interval: <b>15s</b>\n"
-                                    "• Min confidence: <b>80%</b>\n"
+                                    f"• Min confidence: <b>{min_confidence_display}%</b>\n"
                                     "• Min R:R: <b>1:1.5</b>\n"
                                     "• Max hold time: <b>30 minutes</b>\n"
                                     f"• Max concurrent: <b>4 positions</b>\n"
-                                    "• Trading pairs: <b>10 pairs</b>\n\n"
-                                    f"💰 Capital: <b>{amount} USDT</b>\n"
-                                    f"⚡ Leverage: <b>{leverage}x</b>\n\n"
+                                    "• Trading pairs: <b>Top 10 by volume</b>\n\n"
+                                    f"💰 Equity: <b>{live_equity:.2f} USDT</b>\n"
+                                    f"⚡ Base leverage setting: <b>{leverage}x</b>\n"
+                                    "⚙️ Applied leverage is auto-adjusted per pair (max-safe).\n\n"
                                     "Bot will scan for high-probability setups every 15 seconds.\n"
                                     "Patience = profit. 🎯"
                                 ),
@@ -460,12 +564,13 @@ def start_scheduler(application):
                                     "<b>Configuration:</b>\n"
                                     "• Timeframe: <b>15m</b>\n"
                                     "• Scan interval: <b>45s</b>\n"
-                                    "• Min confidence: <b>68%</b>\n"
+                                    f"• Min confidence: <b>{min_confidence_display}%</b> (dynamic by risk profile)\n"
                                     "• Min R:R: <b>1:2</b>\n"
                                     f"• Max concurrent: <b>4 positions</b>\n"
-                                    "• Trading pairs: <b>10 pairs</b>\n\n"
-                                    f"💰 Capital: <b>{amount} USDT</b>\n"
-                                    f"⚡ Leverage: <b>{leverage}x</b>\n\n"
+                                    "• Trading pairs: <b>Top 10 by volume</b>\n\n"
+                                    f"💰 Equity: <b>{live_equity:.2f} USDT</b>\n"
+                                    f"⚡ Base leverage setting: <b>{leverage}x</b>\n"
+                                    "⚙️ Applied leverage is auto-adjusted per pair (max-safe).\n\n"
                                     "Bot will scan for high-quality setups every 45 seconds.\n"
                                     "Professional trading = patience. 🎯"
                                 ),
@@ -564,7 +669,7 @@ async def _engine_health_check_task(application):
             await asyncio.sleep(CHECK_INTERVAL_SECONDS)
             
             from app.supabase_repo import _client
-            from app.autotrade_engine import is_running, start_engine
+            from app.autotrade_engine import is_running, start_engine_async
             from app.handlers_autotrade import get_user_api_keys
             from app.skills_repo import has_skill
             
@@ -637,12 +742,14 @@ async def _engine_health_check_task(application):
                         # Get settings
                         amount = float(session.get("initial_deposit") or 10)
                         leverage = int(session.get("leverage") or 10)
-                        trading_mode = session.get("trading_mode", "scalping")
+                        trading_mode = str(session.get("trading_mode", "swing") or "").strip().lower()
+                        if trading_mode not in ("swing", "scalping", "mixed"):
+                            trading_mode = "swing"
                         exchange_id = keys.get("exchange", "bitunix")
                         is_premium = has_skill(user_id, "dual_tp_rr3")
                         
                         # Restart engine
-                        start_engine(
+                        await start_engine_async(
                             bot=application.bot,
                             user_id=user_id,
                             api_key=keys["api_key"],
@@ -651,7 +758,8 @@ async def _engine_health_check_task(application):
                             leverage=leverage,
                             notify_chat_id=user_id,
                             is_premium=is_premium,
-                            silent=False,
+                            # Keep a single startup notification path (health-check message below).
+                            silent=True,
                             exchange_id=exchange_id,
                         )
                         
@@ -659,15 +767,32 @@ async def _engine_health_check_task(application):
                         # Reset fail counter on successful restart
                         _api_key_fail_count.pop(user_id, None)
                         
-                        # Notify user
+                        # Notify user with actual runtime mode (source of truth)
+                        from app.trading_mode_manager import TradingModeManager
+                        actual_mode = TradingModeManager.get_mode(user_id).value
+                        mixed_runtime_note = (
+                            "• Runtime: <b>Swing + Scalping components in parallel</b>\n"
+                            "• Routing cadence: <b>10 minutes (sticky)</b>\n"
+                            if actual_mode == "mixed"
+                            else ""
+                        )
+                        live_equity = await _fetch_live_equity(
+                            exchange_id=exchange_id,
+                            api_key=keys["api_key"],
+                            api_secret=keys["api_secret"],
+                            fallback=amount,
+                        )
                         await application.bot.send_message(
                             chat_id=user_id,
                             text=(
                                 "🔄 <b>AutoTrade Engine Auto-Restarted</b>\n\n"
                                 "Your engine stopped unexpectedly and has been automatically restarted.\n\n"
-                                f"📊 Mode: <b>{trading_mode.title()}</b>\n"
-                                f"💰 Capital: <b>{amount} USDT</b>\n"
-                                f"⚡ Leverage: <b>{leverage}x</b>\n\n"
+                                f"📊 Mode: <b>{actual_mode.title()}</b>\n"
+                                f"💰 Equity: <b>{live_equity:.2f} USDT</b>\n"
+                                "• Trading pairs: <b>Top 10 by volume</b>\n"
+                                f"{mixed_runtime_note}"
+                                f"⚡ Base leverage setting: <b>{leverage}x</b>\n"
+                                "⚙️ Applied leverage is auto-adjusted per pair (max-safe).\n\n"
                                 "If this happens frequently, please contact support.\n\n"
                                 "Use /autotrade to check status."
                             ),

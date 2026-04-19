@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -22,6 +23,7 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)):
 
 class SubmitUIDRequest(BaseModel):
     uid: str
+    community_code: Optional[str] = None
 
 
 VER_PENDING = "pending"
@@ -51,6 +53,7 @@ def _load_admin_ids() -> list[int]:
         os.getenv("ADMIN_IDS", ""),
         os.getenv("ADMIN1", ""),
         os.getenv("ADMIN2", ""),
+        os.getenv("ADMIN3", ""),
         os.getenv("ADMIN_USER_ID", ""),
         os.getenv("ADMIN2_USER_ID", ""),
     ]
@@ -60,6 +63,93 @@ def _load_admin_ids() -> list[int]:
             if token.isdigit():
                 ids.add(int(token))
     return sorted(ids)
+
+
+def _sanitize_community_code(raw: str | None) -> str | None:
+    code = str(raw or "").strip().lower()
+    if not code:
+        return None
+    code = "".join(ch for ch in code if ch.isalnum())
+    return code[:32] or None
+
+
+def _fallback_referral_url() -> str:
+    return os.getenv(
+        "FALLBACK_REFERRAL_URL",
+        "https://www.bitunix.com/register?vipCode=sq45",
+    )
+
+
+def _telegram_safe_text(value: str) -> str:
+    """Normalize escaped newlines/tabs so Telegram renders readable message blocks."""
+    text = str(value or "")
+    # Handle double-escaped payloads first, then regular escaped sequences.
+    return (
+        text
+        .replace("\\\\r\\\\n", "\n")
+        .replace("\\\\n", "\n")
+        .replace("\\\\t", "\t")
+        .replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\t", "\t")
+    )
+
+
+def _resolve_referral_context(community_code: str | None) -> dict:
+    normalized = _sanitize_community_code(community_code)
+    if not normalized:
+        fallback = _fallback_referral_url()
+        logger.info("[Referral] ref_source=fallback community_code=none url=%s", fallback)
+        return {
+            "community_code": None,
+            "partner_telegram_id": None,
+            "partner_name": None,
+            "bitunix_referral_url": fallback,
+            "ref_source": "fallback",
+        }
+
+    s = _client()
+    try:
+        res = (
+            s.table("community_partners")
+            .select("telegram_id, community_name, community_code, bitunix_referral_url, status")
+            .eq("community_code", normalized)
+            .eq("status", "active")
+            .limit(1)
+            .execute()
+        )
+        row = (res.data or [None])[0]
+        if row and row.get("bitunix_referral_url"):
+            resolved_url = row.get("bitunix_referral_url")
+            logger.info(
+                "[Referral] ref_source=dynamic community_code=%s partner_id=%s url=%s",
+                row.get("community_code") or normalized,
+                row.get("telegram_id"),
+                resolved_url,
+            )
+            return {
+                "community_code": row.get("community_code") or normalized,
+                "partner_telegram_id": row.get("telegram_id"),
+                "partner_name": row.get("community_name"),
+                "bitunix_referral_url": resolved_url,
+                "ref_source": "dynamic",
+            }
+    except Exception as exc:
+        logger.error("[Referral] Failed to resolve community_code=%s: %s", normalized, exc)
+
+    fallback = _fallback_referral_url()
+    logger.warning(
+        "[Referral] ref_source=fallback community_code=%s reason=no_active_partner url=%s",
+        normalized,
+        fallback,
+    )
+    return {
+        "community_code": normalized,
+        "partner_telegram_id": None,
+        "partner_name": None,
+        "bitunix_referral_url": fallback,
+        "ref_source": "fallback",
+    }
 
 @router.get("/me")
 async def get_me(tg_id: int = Depends(get_current_user)):
@@ -76,17 +166,34 @@ async def get_verification_status(tg_id: int = Depends(get_current_user)):
         return {"status": VER_APPROVED, "exchange": "bitunix", "uid": None}
 
     s = _client()
-    res = (
-        s.table("user_verifications")
-        .select("status, bitunix_uid, submitted_via, reviewed_at, reviewed_by_admin_id")
-        .eq("telegram_id", tg_id)
-        .limit(1)
-        .execute()
-    )
+    try:
+        res = (
+            s.table("user_verifications")
+            .select("status, bitunix_uid, submitted_via, reviewed_at, reviewed_by_admin_id, community_code")
+            .eq("telegram_id", tg_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        res = (
+            s.table("user_verifications")
+            .select("status, bitunix_uid, submitted_via, reviewed_at, reviewed_by_admin_id")
+            .eq("telegram_id", tg_id)
+            .limit(1)
+            .execute()
+        )
     row = (res.data or [None])[0]
     if not row:
-        return {"status": "none", "exchange": None, "uid": None}
+        return {
+            "status": "none",
+            "exchange": None,
+            "uid": None,
+            "community_code": None,
+            "bitunix_referral_url": _fallback_referral_url(),
+            "ref_source": "fallback",
+        }
     normalized_status = _normalize_verification_status(row.get("status"))
+    referral = _resolve_referral_context(row.get("community_code"))
     return {
         "status": normalized_status,
         "raw_status": row.get("status") or "none",
@@ -95,7 +202,17 @@ async def get_verification_status(tg_id: int = Depends(get_current_user)):
         "submitted_via": row.get("submitted_via"),
         "reviewed_at": row.get("reviewed_at"),
         "reviewed_by_admin_id": row.get("reviewed_by_admin_id"),
+        "community_code": referral.get("community_code"),
+        "bitunix_referral_url": referral.get("bitunix_referral_url"),
+        "ref_source": referral.get("ref_source"),
     }
+
+
+@router.get("/referral-context")
+async def get_referral_context(
+    community_code: str | None = None,
+):
+    return _resolve_referral_context(community_code)
 
 @router.post("/submit-uid")
 async def submit_uid(payload: SubmitUIDRequest, tg_id: int = Depends(get_current_user)):
@@ -103,6 +220,9 @@ async def submit_uid(payload: SubmitUIDRequest, tg_id: int = Depends(get_current
     uid = str(payload.uid or "").strip()
     if not uid.isdigit() or len(uid) < 5:
         raise HTTPException(status_code=400, detail="Invalid UID. Must be numeric and at least 5 digits.")
+
+    community_code = _sanitize_community_code(payload.community_code)
+    referral = _resolve_referral_context(community_code)
 
     s = _client()
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -130,10 +250,24 @@ async def submit_uid(payload: SubmitUIDRequest, tg_id: int = Depends(get_current
             "reviewed_at": None,
             "reviewed_by_admin_id": None,
             "rejection_reason": None,
+            "community_code": community_code,
             "updated_at": now_iso,
         },
         on_conflict="telegram_id",
     ).execute()
+    # Best-effort enrichment for newer schemas that store resolved referral context.
+    # Keep compatibility with older DBs by swallowing unknown-column errors.
+    try:
+        s.table("user_verifications").update(
+            {
+                "resolved_partner_telegram_id": referral.get("partner_telegram_id"),
+                "resolved_partner_name": referral.get("partner_name"),
+                "resolved_referral_url": referral.get("bitunix_referral_url"),
+                "ref_source": referral.get("ref_source"),
+            }
+        ).eq("telegram_id", tg_id).execute()
+    except Exception:
+        logger.info("user_verifications referral enrichment columns unavailable; continuing.")
 
     # Backward compatibility for legacy flows still reading autotrade_sessions.
     try:
@@ -155,26 +289,49 @@ async def submit_uid(payload: SubmitUIDRequest, tg_id: int = Depends(get_current
     username = user.get("username") or user.get("first_name") or str(tg_id) if user else str(tg_id)
     resubmit_note = " (resubmission after rejection)" if current_status == VER_REJECTED else ""
 
-    # Admin notification
+    # Admin/Partner notification
     admin_ids = _load_admin_ids()
+    target_ids = admin_ids.copy()
+    referral_display = referral.get("community_code") or "StackMentor (Direct)"
+
+    # Check if this comes from a community partner
+    partner_id = referral.get("partner_telegram_id")
+    partner_name = referral.get("partner_name")
+    if partner_id:
+        if partner_id not in target_ids:
+            target_ids.append(partner_id)
+        if partner_name and referral.get("community_code"):
+            referral_display = f"{partner_name} ({referral.get('community_code')})"
+
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     notification_failed = False
 
-    if bot_token and admin_ids:
+    if bot_token and target_ids:
         async with httpx.AsyncClient(timeout=8.0) as client:
-            for admin_id in admin_ids:
+            for target_id in target_ids:
                 try:
+                    message_text = _telegram_safe_text(
+                        (
+                            f"🔔 <b>New UID Verification{resubmit_note}</b>\n\n"
+                            "<b>User Details</b>\n"
+                            f"• User: @{username}\n"
+                            f"• Telegram ID: <code>{tg_id}</code>\n"
+                            f"• Bitunix UID: <code>{uid}</code>\n\n"
+                            "<b>Referral Context</b>\n"
+                            f"• Community: <code>{referral_display}</code>\n"
+                            f"• Source: <code>{referral.get('ref_source') or 'fallback'}</code>\n"
+                            f"• URL: <code>{referral.get('bitunix_referral_url') or _fallback_referral_url()}</code>\n\n"
+                            f"<b>Submitted At</b>\n"
+                            f"• <code>{now_iso}</code>"
+                        )
+                    )
                     resp = await client.post(
                         f"https://api.telegram.org/bot{bot_token}/sendMessage",
                         json={
-                            "chat_id": admin_id,
-                            "text": (
-                                f"🔔 <b>New UID Verification{resubmit_note}</b>\n\n"
-                                f"👤 User: @{username} (ID: <code>{tg_id}</code>)\n"
-                                f"🔑 Bitunix UID: <code>{uid}</code>\n"
-                                f"🔗 Referral: sq45"
-                            ),
+                            "chat_id": target_id,
+                            "text": message_text,
                             "parse_mode": "HTML",
+                            "disable_web_page_preview": True,
                             "reply_markup": {"inline_keyboard": [[
                                 {"text": "✅ Approve", "callback_data": f"uid_acc_{tg_id}"},
                                 {"text": "❌ Reject", "callback_data": f"uid_reject_{tg_id}"}
@@ -192,7 +349,7 @@ async def submit_uid(payload: SubmitUIDRequest, tg_id: int = Depends(get_current
                         logger.error("Telegram sendMessage API returned ok=false: %s", str(body)[:300])
                 except Exception as e:
                     notification_failed = True
-                    logger.error("Telegram sendMessage exception for admin_id=%s: %s", admin_id, e)
+                    logger.error("Telegram sendMessage exception for target_id=%s: %s", target_id, e)
     else:
         # Keep user pending but surface notification pipeline issue.
         notification_failed = True
@@ -202,10 +359,19 @@ async def submit_uid(payload: SubmitUIDRequest, tg_id: int = Depends(get_current
         return {
             "status": VER_PENDING,
             "uid": uid,
+            "community_code": referral.get("community_code"),
+            "bitunix_referral_url": referral.get("bitunix_referral_url"),
+            "ref_source": referral.get("ref_source"),
             "warning": "UID submitted and pending, but admin notification failed. Please contact support/admin.",
         }
 
-    return {"status": VER_PENDING, "uid": uid}
+    return {
+        "status": VER_PENDING,
+        "uid": uid,
+        "community_code": referral.get("community_code"),
+        "bitunix_referral_url": referral.get("bitunix_referral_url"),
+        "ref_source": referral.get("ref_source"),
+    }
 
 @router.get("/dashboard")
 async def get_dashboard(tg_id: int = Depends(get_current_user)):
@@ -223,3 +389,4 @@ async def get_dashboard(tg_id: int = Depends(get_current_user)):
         "premium_until": user.get("premium_until"),
         "is_lifetime": user.get("is_lifetime", False),
     }
+

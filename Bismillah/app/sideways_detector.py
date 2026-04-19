@@ -8,6 +8,7 @@ Tiga metrik dengan voting (minimal 2 dari 3 harus terpenuhi untuk SIDEWAYS):
 """
 
 import logging
+import os
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -29,10 +30,10 @@ class SidewaysResult:
 class SidewaysDetector:
     """Mendeteksi kondisi market sideways berdasarkan ATR, EMA spread, dan range width."""
 
-    # Threshold klasifikasi
-    ATR_THRESHOLD        = 0.3   # %
-    EMA_SPREAD_THRESHOLD = 0.2   # %
-    RANGE_WIDTH_THRESHOLD = 1.5  # %
+    # Threshold klasifikasi (temporary relaxed gating via env-tunable values).
+    ATR_THRESHOLD = float(os.getenv("SIDEWAYS_ATR_THRESHOLD_PCT", "0.24"))          # %
+    EMA_SPREAD_THRESHOLD = float(os.getenv("SIDEWAYS_EMA_SPREAD_THRESHOLD_PCT", "0.18"))  # %
+    RANGE_WIDTH_THRESHOLD = float(os.getenv("SIDEWAYS_RANGE_THRESHOLD_PCT", "1.20"))      # %
 
     def detect(
         self,

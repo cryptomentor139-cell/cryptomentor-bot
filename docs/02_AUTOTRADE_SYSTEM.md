@@ -1,116 +1,137 @@
 # AutoTrade System - Complete Documentation
 
-**Status:** ✅ Production  
-**Last Updated:** April 7, 2026
+**Status:** Production  
+**Last Updated:** 2026-04-17
 
 ---
 
-## 🎯 Overview
+## Overview
 
-AutoTrade adalah sistem copy trading otomatis yang:
-- Menganalisis market 24/7
-- Generate trading signals
-- Execute trades otomatis
-- Manage TP/SL dengan StackMentor
-- Auto-switch mode berdasarkan market sentiment
-
----
-
-## 🔄 Trading Modes
-
-### 1. SCALPING Mode (5M)
-**Best For:** Sideways/ranging markets
-
-**Features:**
-- Timeframe: 5 minutes
-- StackMentor 3-tier TP (60%/30%/10%)
-- Max hold time: 30 minutes
-- Max risk: 5% per trade (safety cap)
-- Max leverage: 10x (safety cap)
-- Scan interval: 15 seconds
-
-**TP Strategy:**
-- TP1: 60% @ R:R 1:2
-- TP2: 30% @ R:R 1:3
-- TP3: 10% @ R:R 1:10
-- Auto-breakeven: SL moves to entry when TP1 hit
-
-**Safety Features:**
-- Emergency close if SL setup fails
-- Position size cap at 50% of balance
-- Fallback to 2% risk if calculation fails
-
-### 2. SWING Mode (15M)
-**Best For:** Trending markets
-
-**Features:**
-- Timeframe: 15 minutes
-- StackMentor 3-tier TP (60%/30%/10%)
-- No max hold time
-- User-defined risk %
-- User-defined leverage
-- Scan interval: 45 seconds
-
-**TP Strategy:**
-- Same as Scalping (StackMentor)
-- TP1: 60% @ R:R 1:2
-- TP2: 30% @ R:R 1:3
-- TP3: 10% @ R:R 1:10
-
-**Additional Features:**
-- BTC bias filter (40% threshold)
-- Multi-timeframe confluence
-- SMC (Smart Money Concepts)
-- 13 trading pairs
+AutoTrade adalah sistem execution automation yang:
+- Scan market 24/7
+- Generate and validate signals
+- Execute trades with risk controls
+- Persist trade lifecycle to Supabase
+- Sync behavior across Telegram runtime and web control-plane
 
 ---
 
-## 🤖 Auto Mode Switching
+## Trading Modes
 
-**File:** `app/auto_mode_switcher.py`
+### 1. SCALPING Mode (5m focus)
+**Best for:** Sideways/ranging conditions
 
-**How It Works:**
-1. Runs every 15 minutes (background task)
-2. Analyzes BTC market sentiment
-3. Detects: SIDEWAYS, TRENDING, or VOLATILE
-4. Auto-switches all users to optimal mode
-5. Sends notification to users
+**Current behavior:**
+- Scan interval: **15 seconds** (`ScalpingConfig.scan_interval`)
+- Max hold time: **30 minutes** (timeout close policy)
+- Confidence + anti-flip + cooldown filters active
+- Uses managed execution path (`trade_execution.open_managed_position`)
+- Timeout protection: feature-flagged (see section below)
 
-**Market Detection:**
-- ADX (trend strength)
-- Bollinger Band Width (volatility)
-- ATR (average true range)
-- Price range analysis
+### 2. SWING Mode (15m/1h confluence)
+**Best for:** Trending and higher-timeframe continuation setups
 
-**Decision Logic:**
-- SIDEWAYS → Switch to SCALPING
-- TRENDING → Switch to SWING
-- VOLATILE (50% area) → Default to SCALPING
-
-**Confidence Threshold:** 50% (aggressive switching)
+**Current behavior:**
+- Scan interval: **45 seconds** (`ENGINE_CONFIG.scan_interval`)
+- Dynamic candidate queue with confidence/risk gating
+- Reversal/flip protections and coordinator ownership rules
+- Managed execution with SL/TP validation and reconcile paths
 
 ---
 
-## 📊 StackMentor System
+## Pair Universe Standard
 
-**File:** `app/stackmentor.py`
+Pair routing for both swing + scalp is runtime dynamic:
+- Source: Bitunix futures tickers (`quoteVol`)
+- Selection: **Top 10 USDT pairs**, highest volume first
+- API/selector: `get_ranked_top_volume_pairs(10)`
+- Refresh TTL: 300s cache window in selector
 
-**Purpose:** 3-tier TP system untuk maximize profit
-
-**How It Works:**
-1. Calculate 3 TP levels based on entry & SL
-2. Split position into 60%/30%/10%
-3. Set TP orders for each split
-4. Monitor for TP hits
-5. Auto-move SL to breakeven when TP1 hit
-
-**Benefits:**
-- Secure early profit (60% at TP1)
-- Risk-free after TP1 (breakeven)
-- Capture extended moves (TP2)
-- Capture moonshots (TP3)
-
-**Database:** `tp_partial_tracking` table
+Fallback policy (fixed):
+1. Fresh ticker fetch
+2. Last-good cache fallback
+3. Bootstrap list fallback (only when cache unavailable)
 
 ---
 
+## Adaptive Confluence (Global)
+
+Adaptive fields used by engines:
+- `conf_delta`
+- `volume_min_ratio_delta`
+- `ob_fvg_requirement_mode` (`soft` or `required_when_risk_high`)
+
+Important runtime rules:
+- Engine refresh cadence: every **10 minutes**
+- Controller minimum adaptation interval: **6 hours**
+- Minimum strategy sample for adaptation: **40 trades**
+- Decision reasons include `rate_limited`, `insufficient_sample`, `tighten_quality`, `relax_for_volume`
+
+---
+
+## Runtime Risk Overlay (Win Playbook)
+
+Overlay behavior is runtime-only and does not overwrite base stored risk.
+
+Risk bounds:
+- Base risk clamp: `0.25%-5.0%`
+- Overlay max: `+5.0%`
+- Effective risk cap: `10.0%`
+
+Effective formula:
+- `effective_risk_pct = min(10.0, base_risk_pct + risk_overlay_pct)`
+
+Guardrails and actions:
+- Ramp only when win-rate/expectancy guardrails are healthy
+- Ramp step: `+0.25%`
+- Brake step: `-0.50%`
+- Overlay update minimum interval: `120s`
+
+---
+
+## Timeout Protection Policy (Scalping)
+
+Timeout protection is feature-flagged and backward-safe:
+- Primary key: `SCALPING_ADAPTIVE_TIMEOUT_PROTECTION_ENABLED`
+- Legacy alias key: `SCALPING_TIMEOUT_PROTECTION_ENABLED`
+- Runtime parser supports both keys
+
+Defaults:
+- Enabled default: `false`
+- Minimum update gap: `SCALPING_TIMEOUT_PROTECTION_MIN_UPDATE_SECONDS` default `45`
+
+---
+
+## Pending Lock Safety
+
+Symbol ownership coordination enforces no stale pending lock drift:
+- Pending TTL auto-clear for no-position states: **90 seconds**
+- Startup sanitize clears orphan pending locks
+- Reconcile paths clear pending-only orphans when exchange has no position
+- Stop/restart cleanup calls pending-clear paths
+
+---
+
+## StackMentor Exit Model (Current Runtime)
+
+Default runtime behavior remains **Unified Single-Target Strategy**:
+- Fixed target RR uses `target_rr = 3.0`
+- Position closes fully at TP target (`qty_tp1=100%`, `qty_tp2=0`, `qty_tp3=0`)
+
+Optional runner mode is feature-flagged (default OFF):
+- `STACKMENTOR_RUNNER_ENABLED=false` (default)
+- `STACKMENTOR_TP1_CLOSE_PCT=0.80` (default when runner enabled)
+- `STACKMENTOR_TP3_RR=5.0` (default when runner enabled)
+
+When runner mode is enabled:
+- TP1 remains fixed at **3R** and closes partial size (`qty_tp1=80%` by default)
+- SL is moved to breakeven after TP1 fill
+- Remaining runner size (`qty_tp3=20%` by default) targets **5R**
+- Exchange TP is attached at TP3 while StackMentor monitor executes TP1 partial logic
+
+---
+
+## Terminology Standard
+
+- Use **Equity** for account-value/risk basis.
+- Use **Available balance** only for free margin context.

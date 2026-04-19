@@ -13,18 +13,29 @@ from telegram.ext import (
 )
 from typing import Optional, Dict
 
-from app.supabase_repo import _client
+from app.supabase_repo import _client, get_risk_mode, get_risk_per_trade, set_risk_mode
 from app.lib.auth import generate_dashboard_url
 from app.lib.crypto import encrypt, decrypt
+from app.ui_components import section_header, settings_group
 
 # Conversation states
 WAITING_BITUNIX_UID = 6
+WAITING_NEW_AMOUNT = 7
+WAITING_NEW_LEVERAGE = 8
+WAITING_MANUAL_MARGIN = 9
+WAITING_LEVERAGE = 10
 
 # Legacy constants (tetap untuk backward compat)
 BITUNIX_REFERRAL_URL  = "https://www.bitunix.com/register?vipCode=sq45"
 BITUNIX_REFERRAL_CODE = "sq45"
 WEB_DASHBOARD_URL     = os.getenv("WEB_DASHBOARD_URL", "https://cryptomentor.id")
 logger = logging.getLogger(__name__)
+
+try:
+    from app.exchange_registry import get_exchange
+    BITUNIX_GROUP_URL = get_exchange("bitunix").get("group_url")
+except Exception:
+    BITUNIX_GROUP_URL = os.getenv("BITUNIX_GROUP_URL", "")
 
 VER_NONE = "none"
 VER_PENDING = "pending"
@@ -127,11 +138,11 @@ def update_autotrade_status(telegram_id: int, status: str):
 
 def _normalized_status_from_legacy(raw_status: str) -> str:
     status = str(raw_status or "").strip().lower()
-    if status in ("active", "uid_verified"):
+    if status in ("approved", "active", "uid_verified", "verified"):
         return VER_APPROVED
-    if status == "pending_verification":
+    if status in ("pending", "pending_verification", "awaiting_approval"):
         return VER_PENDING
-    if status == "uid_rejected":
+    if status in ("rejected", "uid_rejected", "denied"):
         return VER_REJECTED
     return VER_NONE
 
@@ -154,10 +165,14 @@ def _load_verification_snapshot(telegram_id: int) -> Dict[str, str]:
     )
     uv_row = (uv.data or [None])[0]
     if uv_row:
-        raw = str(uv_row.get("status") or "").strip().lower()
-        if raw in (VER_APPROVED, VER_PENDING, VER_REJECTED):
+        raw_status = uv_row.get("status")
+        normalized = _normalized_status_from_legacy(raw_status)
+        
+        # If the status is any of our known states, return it.
+        # This now benefits from aliases like 'active', 'uid_verified', etc.
+        if normalized != VER_NONE:
             return {
-                "status": raw,
+                "status": normalized,
                 "uid": uv_row.get("bitunix_uid") or "",
                 "source": "user_verifications",
             }
@@ -245,13 +260,20 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             "❌ <b>Verification Rejected</b>\n\n"
             f"UID: <code>{uid or '-'}</code>\n\n"
-            "Please submit a valid Bitunix UID again from the dashboard or directly in this bot."
+            "Please submit a valid Bitunix UID again from the dashboard or directly in this bot.\n\n"
+            "Next steps:\n"
+            "1️⃣ Register on Bitunix (if not done yet)\n"
+            "2️⃣ Submit your UID again\n"
+            "3️⃣ Configure API on dashboard\n"
+            "4️⃣ Join CryptoMentor x Bitunix Group"
         )
         keyboard = [
             [InlineKeyboardButton("🌐 Dashboard", url=dash_url)],
             [InlineKeyboardButton("🆔 Submit UID", callback_data="submit_uid_bot")],
             [InlineKeyboardButton("🔗 Bitunix", url=BITUNIX_REFERRAL_URL)],
         ]
+        if BITUNIX_GROUP_URL:
+            keyboard.append([InlineKeyboardButton("👥 Join CryptoMentor x Bitunix Group", url=BITUNIX_GROUP_URL)])
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
         return
 
@@ -261,7 +283,8 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"To start trading, verify your Bitunix account:\n\n"
         f"1️⃣ Register on Bitunix\n"
         f"2️⃣ Submit your UID\n"
-        f"3️⃣ Configure API on dashboard\n\n"
+        f"3️⃣ Configure API on dashboard\n"
+        f"4️⃣ Join CryptoMentor x Bitunix Group\n\n"
         f"Choose an option:"
     )
     keyboard = [
@@ -269,7 +292,65 @@ async def cmd_autotrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🆔 Submit UID", callback_data="submit_uid_bot")],
         [InlineKeyboardButton("🔗 Bitunix", url=BITUNIX_REFERRAL_URL)]
     ]
+    if BITUNIX_GROUP_URL:
+        keyboard.append([InlineKeyboardButton("👥 Join CryptoMentor x Bitunix Group", url=BITUNIX_GROUP_URL)])
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
+
+
+# ------------------------------------------------------------------ #
+#  Reminder CTA callbacks (for unregistered broadcast users)          #
+# ------------------------------------------------------------------ #
+
+async def callback_start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle reminder button: "Register AutoTrade Now".
+    This must work for users with no prior registration/session.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    user = query.from_user
+    dash_url = generate_dashboard_url(user.id, user.username, user.first_name)
+
+    await query.message.reply_text(
+        "🚀 <b>Start AutoTrade Setup</b>\n\n"
+        "Follow these quick steps:\n"
+        "1️⃣ Register on Bitunix\n"
+        "2️⃣ Submit your UID\n"
+        "3️⃣ Open dashboard to continue setup\n"
+        "4️⃣ Join CryptoMentor x Bitunix Group\n\n"
+        "Choose an option below:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🌐 Dashboard", url=dash_url)],
+            [InlineKeyboardButton("🆔 Submit UID", callback_data="submit_uid_bot")],
+            [InlineKeyboardButton("🔗 Bitunix", url=BITUNIX_REFERRAL_URL)],
+            *([[InlineKeyboardButton("👥 Join CryptoMentor x Bitunix Group", url=BITUNIX_GROUP_URL)]] if BITUNIX_GROUP_URL else []),
+        ]),
+    )
+
+
+async def callback_learn_more(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle reminder button: "Learn More".
+    Sends educational summary + direct CTA.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    await query.message.reply_text(
+        "📊 <b>How AutoTrade Works</b>\n\n"
+        "• Bot scans market continuously\n"
+        "• Opens trades only on high-confidence setups\n"
+        "• Manages SL/TP automatically\n"
+        "• Sends trade notifications in real time\n\n"
+        "🔒 Funds stay in your exchange account. API key should be set to <b>Trade only</b>.\n\n"
+        "When you're ready, tap <b>Register AutoTrade Now</b>.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🤖 Register AutoTrade Now", callback_data="at_start_onboarding")],
+        ]),
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -339,6 +420,7 @@ async def process_uid_input_bot(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🌐 Dashboard", url=dash_url)]]),
             parse_mode='HTML'
         )
+        await _send_group_invite_followup(context.bot, user_id)
     except Exception as e:
         await update.message.reply_text(f"❌ Error saving UID: {e}")
         
@@ -357,9 +439,50 @@ async def callback_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+async def callback_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Route inline "Back/Dashboard" callbacks back to the canonical /autotrade
+    gatekeeper screen so users always get a consistent source-of-truth view.
+    """
+    query = update.callback_query
+    await query.answer()
+    user = query.from_user
+
+    class _ProxyMessage:
+        async def reply_text(self, *args, **kwargs):
+            if query.message is not None:
+                return await query.message.reply_text(*args, **kwargs)
+            return await context.bot.send_message(chat_id=user.id, *args, **kwargs)
+
+    class _ProxyUpdate:
+        effective_user = user
+        effective_chat = query.message.chat if query.message else None
+        message = _ProxyMessage()
+
+    try:
+        await cmd_autotrade(_ProxyUpdate(), context)
+    except Exception as e:
+        logger.error(f"[Dashboard:{user.id}] Failed to render dashboard callback: {e}")
+        dash_url = generate_dashboard_url(user.id, user.username, user.first_name)
+        if query.message is not None:
+            await query.message.reply_text(
+                "⚠️ Could not render dashboard view directly. Open dashboard below:",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🌐 Dashboard", url=dash_url)]]),
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=user.id,
+                text="⚠️ Could not render dashboard view directly. Open dashboard below:",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🌐 Dashboard", url=dash_url)]]),
+            )
+    return ConversationHandler.END
+
+
 async def notify_admins_of_uid(bot, user_id: int, uid: str):
     admin_ids = []
-    for key in ['ADMIN_IDS', 'ADMIN1', 'ADMIN2', 'ADMIN_USER_ID', 'ADMIN2_USER_ID']:
+    for key in ['ADMIN_IDS', 'ADMIN1', 'ADMIN2', 'ADMIN3', 'ADMIN_USER_ID', 'ADMIN2_USER_ID']:
         val = os.getenv(key)
         if val:
             for part in val.split(','):
@@ -386,6 +509,27 @@ async def notify_admins_of_uid(bot, user_id: int, uid: str):
         except Exception: pass
 
 
+async def _send_group_invite_followup(bot, chat_id: int):
+    """Send dedicated post-onboarding group invite follow-up."""
+    if not BITUNIX_GROUP_URL:
+        return
+    await bot.send_message(
+        chat_id=chat_id,
+        text=(
+            "🚀 <b>AutoTrade Setup Complete</b>\n\n"
+            "Great job — your onboarding is done.\n\n"
+            "✅ Next step:\n"
+            "Join our official community group to get updates, event announcements, and support.\n\n"
+            "Tap below to join:"
+        ),
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("👥 Join CryptoMentor x Bitunix Group", url=BITUNIX_GROUP_URL)]]
+        ),
+        disable_web_page_preview=True,
+    )
+
+
 
 
 
@@ -393,90 +537,10 @@ async def notify_admins_of_uid(bot, user_id: int, uid: str):
 #  Admin: verifikasi UID user                                         #
 # ------------------------------------------------------------------ #
 
-async def callback_uid_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin acc UID user — update status dan notifikasi user."""
-    query = update.callback_query
-    await query.answer("✅ User di-ACC")
-    admin_id = query.from_user.id
-
-    # Parse target user_id dari callback data: uid_acc_{user_id}
-    target_user_id = int(query.data.split("_")[-1])
-
-    # Update status di Supabase
-    try:
-        _client().table("autotrade_sessions").update({
-            "status": "uid_verified",
-            "updated_at": datetime.utcnow().isoformat()
-        }).eq("telegram_id", target_user_id).execute()
-    except Exception:
-        pass
-
-    # Edit pesan admin
-    await query.edit_message_text(
-        query.message.text + f"\n\n✅ <b>Approved by admin</b>",
-        parse_mode='HTML'
-    )
-
-    # Notify user — send dashboard link after approval
-    try:
-        await context.bot.send_message(
-            chat_id=target_user_id,
-            text=(
-                "✅ <b>UID Verified!</b>\n\n"
-                "Complete setup:\n"
-                "• Add API key\n"
-                "• Configure risk\n"
-                "• Start trading\n"
-            ),
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🌐 Dashboard", url=WEB_DASHBOARD_URL)]
-            ])
-        )
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to notify user {target_user_id}: {e}")
+# Redundant admin callbacks removed. 
+# They are now properly registered from handlers_autotrade_admin.py in register_autotrade_handlers().
 
 
-async def callback_uid_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin tolak UID user — update status dan notifikasi user."""
-    query = update.callback_query
-    await query.answer("❌ User rejected")
-
-    target_user_id = int(query.data.split("_")[-1])
-
-    try:
-        _client().table("autotrade_sessions").update({
-            "status": "uid_rejected",
-            "updated_at": datetime.utcnow().isoformat()
-        }).eq("telegram_id", target_user_id).execute()
-    except Exception:
-        pass
-
-    await query.edit_message_text(
-        query.message.text + f"\n\n❌ <b>Rejected by admin</b>",
-        parse_mode='HTML'
-    )
-
-    # Notify user
-    try:
-        await context.bot.send_message(
-            chat_id=target_user_id,
-            text=(
-                "❌ <b>UID Rejected</b>\n\n"
-                "Not detected as registered under our referral.\n\n"
-                "Register using the link below, then retry."
-            ),
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔗 Register", url=BITUNIX_REFERRAL_URL)],
-                [InlineKeyboardButton("🔄 Retry", callback_data="submit_uid_bot")],
-            ]),
-            disable_web_page_preview=True
-        )
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to notify user {target_user_id}: {e}")
 
 
 # ------------------------------------------------------------------ #
@@ -526,7 +590,7 @@ async def callback_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             emoji="📊",
             items=[
                 f"Mode: 🎯 Rekomendasi (Risk Per Trade)",
-                f"Balance: <b>${current_amount:.0f} USDT</b>",
+                f"Equity: <b>${current_amount:.0f} USDT</b>",
                 f"Risk per trade: <b>{current_risk}%</b>",
                 f"Risk level: {risk_label}",
                 f"Auto Mode Switch: {auto_mode_status}",
@@ -642,13 +706,13 @@ async def callback_set_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
         pass
 
     await query.edit_message_text(
-        f"💰 <b>Change Trading Capital</b>\n\n"
+        f"💰 <b>Change Trading Equity</b>\n\n"
         f"{balance_line}"
-        f"Current capital: <b>{current_amount:.0f} USDT</b>\n"
+        f"Current equity target: <b>{current_amount:.0f} USDT</b>\n"
         f"Leverage: <b>{current_leverage}x</b>\n\n"
-        f"ℹ️ <b>Trading capital</b> = the amount of USDT from your Bitunix balance the bot uses to open positions.\n"
-        f"The larger the capital, the larger the potential profit <i>and</i> loss.\n\n"
-        f"Enter new capital amount (USDT):\n"
+        f"ℹ️ <b>Trading equity target</b> = the amount of USDT from your Bitunix equity the bot uses to open positions.\n"
+        f"The larger the equity target, the larger the potential profit <i>and</i> loss.\n\n"
+        f"Enter new equity amount (USDT):\n"
         f"📌 Min: 10 USDT | Max: 10,000 USDT",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
@@ -669,7 +733,7 @@ async def callback_set_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def receive_new_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle new capital input from text."""
+    """Handle new equity input from text."""
     try:
         amount = float(update.message.text.strip())
     except ValueError:
@@ -768,8 +832,8 @@ async def _apply_new_amount(msg_or_query, user_id: int, amount: float,
                 text = (
                     f"❌ <b>Insufficient balance</b>\n\n"
                     f"Available balance: <b>{avail:.2f} USDT</b>\n"
-                    f"Requested capital: <b>{amount:.0f} USDT</b>\n\n"
-                    f"Reduce the capital amount or top up your {ex_cfg2.get('name', 'exchange')} balance."
+                    f"Requested equity: <b>{amount:.0f} USDT</b>\n\n"
+                    f"Reduce the equity amount or top up your {ex_cfg2.get('name', 'exchange')} balance."
                 )
                 kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="at_set_amount")]])
                 if from_callback:
@@ -790,15 +854,13 @@ async def _apply_new_amount(msg_or_query, user_id: int, amount: float,
         pass
 
     # Restart engine jika sedang berjalan
-    from app.autotrade_engine import is_running, start_engine, stop_engine
+    from app.autotrade_engine import is_running, start_engine_async, stop_engine_async
     engine_restarted = ""
     if is_running(user_id) and keys and session:
-        stop_engine(user_id)
-        import asyncio
-        await asyncio.sleep(0.5)
         bot = msg_or_query.get_bot() if from_callback else context.bot
         exchange_id = keys.get("exchange", "bitunix")
-        start_engine(
+        await stop_engine_async(user_id, mark_inactive=False)
+        await start_engine_async(
             bot=bot,
             user_id=user_id,
             api_key=keys['api_key'],
@@ -808,13 +870,13 @@ async def _apply_new_amount(msg_or_query, user_id: int, amount: float,
             notify_chat_id=user_id,
             exchange_id=exchange_id,
         )
-        engine_restarted = "\n🔄 Engine restarted with new capital."
+        engine_restarted = "\n🔄 Engine restarted with new equity target."
 
     notional = amount * leverage
     liquidation_pct = round(100 / leverage, 1)
 
     text = (
-        f"✅ <b>Trading capital updated to {amount:.0f} USDT</b>\n\n"
+        f"✅ <b>Trading equity updated to {amount:.0f} USDT</b>\n\n"
         f"📊 Leverage: {leverage}x\n"
         f"📈 Notional value: <b>{notional:.0f} USDT</b>\n"
         f"💥 Liquidation if price moves: <b>{liquidation_pct}%</b>"
@@ -938,15 +1000,13 @@ async def _apply_new_leverage(msg_or_query, user_id: int, leverage: int,
             apply_status = f"\n\n⚠️ Failed to apply to Bitunix: {e}"
 
     # Restart engine with new leverage if running
-    from app.autotrade_engine import is_running, start_engine, stop_engine
+    from app.autotrade_engine import is_running, start_engine_async, stop_engine_async
     engine_restarted = ""
     if is_running(user_id) and keys and session:
-        stop_engine(user_id)
-        import asyncio
-        await asyncio.sleep(0.5)
         bot = msg_or_query.get_bot() if from_callback else context.bot
         exchange_id = keys.get("exchange", "bitunix")
-        start_engine(
+        await stop_engine_async(user_id, mark_inactive=False)
+        await start_engine_async(
             bot=bot,
             user_id=user_id,
             api_key=keys['api_key'],
@@ -1055,6 +1115,56 @@ async def callback_margin_select(update: Update, context: ContextTypes.DEFAULT_T
 #  Auto Mode Switcher Toggle                                          #
 # ------------------------------------------------------------------ #
 
+async def callback_switch_risk_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Toggle risk management mode between risk_based and manual."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    try:
+        current_mode = get_risk_mode(user_id)
+        if current_mode not in ("risk_based", "manual"):
+            current_mode = "risk_based"
+        new_mode = "manual" if current_mode == "risk_based" else "risk_based"
+
+        result = set_risk_mode(user_id, new_mode)
+        if not result.get("success"):
+            raise RuntimeError(result.get("error") or "unknown_error")
+
+        mode_title = "Manual (Fixed Margin)" if new_mode == "manual" else "Rekomendasi (Risk Per Trade)"
+        mode_summary = (
+            "• You can set fixed margin and leverage manually.\n"
+            "• Position sizing follows your configured fixed values."
+            if new_mode == "manual"
+            else
+            "• Position sizing is derived from risk % and SL distance.\n"
+            "• Leverage/margin are managed with safer adaptive behavior."
+        )
+
+        await query.edit_message_text(
+            "✅ <b>Risk Mode Updated</b>\n\n"
+            f"Current mode: <b>{mode_title}</b>\n\n"
+            f"{mode_summary}\n\n"
+            "Open Settings to review available controls for this mode.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⚙️ Settings", callback_data="at_settings")],
+                [InlineKeyboardButton("🏠 Dashboard", callback_data="at_dashboard")],
+            ]),
+        )
+        logger.info(f"[RiskMode:{user_id}] Switched {current_mode} -> {new_mode}")
+    except Exception as e:
+        logger.error(f"[RiskMode:{user_id}] Switch failed: {e}")
+        await query.edit_message_text(
+            "❌ Failed to switch risk mode. Please try again.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="at_settings")]
+            ]),
+        )
+    return ConversationHandler.END
+
+
 async def callback_toggle_auto_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Toggle auto mode switching on/off"""
     query = update.callback_query
@@ -1066,16 +1176,21 @@ async def callback_toggle_auto_mode(update: Update, context: ContextTypes.DEFAUL
         s = _client()
         
         # Get current status
-        result = s.table("autotrade_sessions").select("auto_mode_enabled").eq(
+        result = s.table("autotrade_sessions").select("auto_mode_enabled,trading_mode").eq(
             "telegram_id", int(user_id)
         ).limit(1).execute()
         
         current_status = True  # Default ON
+        current_mode = "swing"
         if result.data:
             current_status = result.data[0].get("auto_mode_enabled", True)
+            current_mode = str(result.data[0].get("trading_mode", "swing") or "swing").strip().lower()
         
         # Toggle status
         new_status = not current_status
+        if current_mode == "mixed":
+            # Mixed mode uses symbol-level routing and bypasses legacy global auto-switching.
+            new_status = False
         
         # Update database
         s.table("autotrade_sessions").upsert({
@@ -1108,9 +1223,16 @@ async def callback_toggle_auto_mode(update: Update, context: ContextTypes.DEFAUL
         else:
             message += (
                 "⚠️ <b>Auto Mode is now OFF</b>\n\n"
-                "You will stay in your current trading mode until you manually change it.\n\n"
-                "💡 Enable auto mode to let the system automatically "
-                "switch between scalping and swing based on market conditions."
+                + (
+                    "Legacy global auto-switch is disabled while <b>MIXED</b> mode is active.\n\n"
+                    "Mixed mode already routes symbols automatically every 10 minutes."
+                    if current_mode == "mixed"
+                    else (
+                        "You will stay in your current trading mode until you manually change it.\n\n"
+                        "💡 Enable auto mode to let the system automatically "
+                        "switch between scalping and swing based on market conditions."
+                    )
+                )
             )
         
         await query.edit_message_text(
@@ -1185,16 +1307,16 @@ async def callback_risk_settings(update: Update, context: ContextTypes.DEFAULT_T
     
     await query.edit_message_text(
         f"🎯 <b>Risk Management Settings</b>\n\n"
-        f"💰 Current Balance: <b>${balance:.2f}</b>\n"
+        f"💰 Current Equity: <b>${balance:.2f}</b>\n"
         f"{risk_info}\n"
-        f"💡 Recommended for your balance: <b>{recommended}%</b>\n\n"
+        f"💡 Recommended for your equity: <b>{recommended}%</b>\n\n"
         f"<b>What is Risk Per Trade?</b>\n"
-        f"Instead of fixed margin, you choose how much % of your balance to risk per trade. "
+        f"Instead of fixed margin, you choose how much % of your equity to risk per trade. "
         f"This enables safe compounding and protects your account.\n\n"
-        f"<b>Example:</b> Balance $100, Risk 2%\n"
+        f"<b>Example:</b> Equity $100, Risk 2%\n"
         f"• Max loss per trade: $2\n"
         f"• Position size auto-calculated based on stop loss\n"
-        f"• As balance grows, position size grows too\n\n"
+        f"• As equity grows, position size grows too\n\n"
         f"Select your risk level:",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
@@ -1278,10 +1400,10 @@ async def callback_set_risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Risk level: <b>{level}</b>\n"
         f"Max loss per trade: <b>${risk_amount:.2f}</b>\n\n"
         f"Your position sizes will now be calculated automatically based on:\n"
-        f"• Your current balance\n"
+        f"• Your current equity\n"
         f"• Risk percentage ({risk_pct}%)\n"
         f"• Stop loss distance\n\n"
-        f"This enables safe compounding as your balance grows! 📈"
+        f"This enables safe compounding as your equity grows! 📈"
         f"{restart_note}",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
@@ -1301,23 +1423,23 @@ async def callback_risk_education(update: Update, context: ContextTypes.DEFAULT_
         "📚 <b>Risk Per Trade Education</b>\n\n"
         "<b>Why Risk % Instead of Fixed Margin?</b>\n\n"
         "❌ <b>Fixed Margin Problem:</b>\n"
-        "• Balance $100, trade $10 = 10% risk\n"
-        "• Balance grows to $200, still trade $10 = 5% risk\n"
-        "• Balance drops to $50, still trade $10 = 20% risk!\n"
+        "• Equity $100, trade $10 = 10% risk\n"
+        "• Equity grows to $200, still trade $10 = 5% risk\n"
+        "• Equity drops to $50, still trade $10 = 20% risk!\n"
         "• Can't compound gains, high risk when losing\n\n"
         "✅ <b>Risk % Solution:</b>\n"
-        "• Always risk same % regardless of balance\n"
-        "• Position size grows with balance (compound)\n"
+        "• Always risk same % regardless of equity\n"
+        "• Position size grows with equity (compound)\n"
         "• Position size shrinks when losing (protection)\n"
         "• Professional money management\n\n"
         "<b>Example: 2% Risk</b>\n\n"
-        "Balance $100:\n"
+        "Equity $100:\n"
         "• Risk: $2 per trade\n"
         "• 50 consecutive losses to blow account\n\n"
-        "Balance grows to $150:\n"
+        "Equity grows to $150:\n"
         "• Risk: $3 per trade (auto-adjusted)\n"
         "• Still 50 consecutive losses to blow\n\n"
-        "Balance drops to $80:\n"
+        "Equity drops to $80:\n"
         "• Risk: $1.60 per trade (protected)\n"
         "• Still 50 consecutive losses to blow\n\n"
         "<b>Key Benefits:</b>\n"
@@ -1377,19 +1499,19 @@ async def callback_risk_simulator(update: Update, context: ContextTypes.DEFAULT_
     
     await query.edit_message_text(
         f"🧮 <b>Risk Simulator</b>\n\n"
-        f"Starting Balance: <b>${current_amount:.2f}</b>\n"
+        f"Starting Equity: <b>${current_amount:.2f}</b>\n"
         f"Risk per trade: <b>{current_risk}%</b>\n"
         f"Assumed R:R: <b>1:2</b>\n\n"
         f"<b>Scenario 1: 10 Wins</b>\n"
-        f"Final balance: <b>${balance_10w:.2f}</b>\n"
+        f"Final equity: <b>${balance_10w:.2f}</b>\n"
         f"Profit: <b>+${balance_10w - current_amount:.2f}</b> "
         f"({((balance_10w / current_amount - 1) * 100):.1f}%)\n\n"
         f"<b>Scenario 2: 5 Wins, 5 Losses</b>\n"
-        f"Final balance: <b>${balance_5w5l:.2f}</b>\n"
+        f"Final equity: <b>${balance_5w5l:.2f}</b>\n"
         f"Profit: <b>+${balance_5w5l - current_amount:.2f}</b> "
         f"({((balance_5w5l / current_amount - 1) * 100):.1f}%)\n\n"
         f"<b>Scenario 3: 10 Losses</b>\n"
-        f"Final balance: <b>${balance_10l:.2f}</b>\n"
+        f"Final equity: <b>${balance_10l:.2f}</b>\n"
         f"Loss: <b>-${current_amount - balance_10l:.2f}</b> "
         f"({((1 - balance_10l / current_amount) * 100):.1f}%)\n\n"
         f"<b>Survivability:</b>\n"
@@ -1420,6 +1542,7 @@ async def callback_trading_mode_menu(update: Update, context: ContextTypes.DEFAU
     
     scalping_check = "✅ " if current_mode == TradingMode.SCALPING else ""
     swing_check = "✅ " if current_mode == TradingMode.SWING else ""
+    mixed_check = "✅ " if current_mode == TradingMode.MIXED else ""
     
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(
@@ -1429,6 +1552,10 @@ async def callback_trading_mode_menu(update: Update, context: ContextTypes.DEFAU
         [InlineKeyboardButton(
             f"{swing_check}📊 Swing Mode (15M)",
             callback_data="mode_select_swing"
+        )],
+        [InlineKeyboardButton(
+            f"{mixed_check}⚖️ Mixed Mode (Auto Pair Routing)",
+            callback_data="mode_select_mixed"
         )],
         [InlineKeyboardButton("🔙 Back to Dashboard", callback_data="at_dashboard")],
     ])
@@ -1440,13 +1567,18 @@ async def callback_trading_mode_menu(update: Update, context: ContextTypes.DEFAU
         "• 10-20 trades per day\n"
         "• Single TP at 1.5R\n"
         "• 30-minute max hold time\n"
-        "• Pairs: BTC, ETH\n\n"
+        "• Pairs: Top 10 by volume (all scalping)\n\n"
         "📊 <b>Swing Mode (15M):</b>\n"
         "• Swing trades on 15-minute chart\n"
         "• 2-3 trades per day\n"
         "• 3-tier TP (StackMentor)\n"
         "• No max hold time\n"
-        "• Pairs: BTC, ETH, SOL, BNB\n\n"
+        "• Pairs: Top 10 by volume (all swing)\n\n"
+        "⚖️ <b>Mixed Mode (Top-10 Auto Routing):</b>\n"
+        "• Runs Swing + Scalping in parallel\n"
+        "• Each top-volume symbol auto-assigned to strategy\n"
+        "• Reassignment cadence: 10 minutes (sticky)\n"
+        "• Concurrent cap: Swing 4 + Scalping 4\n\n"
         f"Current mode: <b>{current_mode.value.upper()}</b>",
         parse_mode='HTML',
         reply_markup=keyboard
@@ -1474,10 +1606,16 @@ async def callback_select_scalping(update: Update, context: ContextTypes.DEFAULT
     
     # Switch mode
     result = await TradingModeManager.switch_mode(
-        user_id, TradingMode.SCALPING, context.application.bot, context
+        user_id,
+        TradingMode.SCALPING,
+        context.application.bot,
+        context,
+        switch_source="manual",
     )
     
     if result["success"]:
+        from app.trading_mode import ScalpingConfig
+        min_confidence = int(round(ScalpingConfig().min_confidence * 100))
         await query.edit_message_text(
             "✅ <b>Trading Mode Changed</b>\n\n"
             "⚡ <b>Scalping Mode Activated</b>\n\n"
@@ -1486,9 +1624,9 @@ async def callback_select_scalping(update: Update, context: ContextTypes.DEFAULT
             "• Scan interval: 15 seconds\n"
             "• Profit target: 1.5R (single TP)\n"
             "• Max hold time: 30 minutes\n"
-            "• Trading pairs: Top 10 (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, DOT, MATIC)\n"
+            "• Trading pairs: Top 10 by volume (auto-ranked)\n"
             "• Max concurrent: 4 positions\n"
-            "• Min confidence: 80%\n\n"
+            f"• Min confidence: {min_confidence}%\n\n"
             "🚀 Engine restarted with scalping parameters.\n"
             "You'll receive signals when high-probability setups appear.",
             parse_mode='HTML',
@@ -1513,9 +1651,37 @@ async def callback_select_swing(update: Update, context: ContextTypes.DEFAULT_TY
     
     user_id = query.from_user.id
     from app.trading_mode_manager import TradingModeManager, TradingMode
+    from app.autotrade_engine import get_scalping_engine
     current_mode = TradingModeManager.get_mode(user_id)
     
     if current_mode == TradingMode.SWING:
+        # Runtime/DB mismatch guard:
+        # DB may already be swing while an older scalping engine is still running.
+        # In that case, force a clean restart so runtime matches persisted mode.
+        if get_scalping_engine(user_id) is not None:
+            try:
+                await TradingModeManager._restart_engine_with_mode(
+                    user_id, TradingMode.SWING, context.application.bot, context
+                )
+                await query.edit_message_text(
+                    "✅ <b>Swing Engine Re-Synced</b>\n\n"
+                    "Your mode was already set to Swing, but runtime was still on Scalping.\n"
+                    "Engine has been restarted in <b>Swing Mode</b>.",
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📊 View Dashboard", callback_data="at_dashboard")]
+                    ])
+                )
+            except Exception as e:
+                await query.edit_message_text(
+                    f"❌ Failed to re-sync Swing engine: {str(e)[:120]}",
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Back", callback_data="trading_mode_menu")]
+                    ])
+                )
+            return
+
         await query.edit_message_text(
             "📊 You're already in Swing Mode!",
             parse_mode='HTML',
@@ -1527,10 +1693,18 @@ async def callback_select_swing(update: Update, context: ContextTypes.DEFAULT_TY
     
     # Switch mode
     result = await TradingModeManager.switch_mode(
-        user_id, TradingMode.SWING, context.application.bot, context
+        user_id,
+        TradingMode.SWING,
+        context.application.bot,
+        context,
+        switch_source="manual",
     )
     
     if result["success"]:
+        from app.supabase_repo import get_risk_per_trade
+        from app.autotrade_engine import _normalize_risk_pct, _risk_profile
+        risk_pct = _normalize_risk_pct(get_risk_per_trade(user_id), default=1.0)
+        min_confidence = int(round(_risk_profile(risk_pct)["min_confidence"]))
         await query.edit_message_text(
             "✅ <b>Trading Mode Changed</b>\n\n"
             "📊 <b>Swing Mode Activated</b>\n\n"
@@ -1539,10 +1713,65 @@ async def callback_select_swing(update: Update, context: ContextTypes.DEFAULT_TY
             "• Scan interval: 45 seconds\n"
             "• Profit targets: 3-tier (StackMentor)\n"
             "• No max hold time\n"
-            "• Trading pairs: Top 10 (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, DOT, MATIC)\n"
+            "• Trading pairs: Top 10 by volume (auto-ranked)\n"
             "• Max concurrent: 4 positions\n"
-            "• Min confidence: 68%\n\n"
+            f"• Min confidence: {min_confidence}% (dynamic by risk profile)\n\n"
             "🚀 Engine restarted with swing parameters.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📊 View Dashboard", callback_data="at_dashboard")]
+            ])
+        )
+    else:
+        await query.edit_message_text(
+            f"❌ Failed to switch mode: {result['message']}",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="trading_mode_menu")]
+            ])
+        )
+
+
+async def callback_select_mixed(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle mixed mode selection"""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    from app.trading_mode_manager import TradingModeManager, TradingMode
+    current_mode = TradingModeManager.get_mode(user_id)
+
+    if current_mode == TradingMode.MIXED:
+        await query.edit_message_text(
+            "⚖️ You're already in Mixed Mode!",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="trading_mode_menu")]
+            ])
+        )
+        return
+
+    result = await TradingModeManager.switch_mode(
+        user_id,
+        TradingMode.MIXED,
+        context.application.bot,
+        context,
+        switch_source="manual",
+    )
+
+    if result["success"]:
+        await query.edit_message_text(
+            "✅ <b>Trading Mode Changed</b>\n\n"
+            "⚖️ <b>Mixed Mode Activated</b>\n\n"
+            "📊 Configuration:\n"
+            "• Runtime: Swing + Scalping engines in parallel\n"
+            "• Trading pairs: Top 10 by volume (auto-ranked)\n"
+            "• Pair routing: Auto-classifier (per symbol)\n"
+            "• Reassignment cadence: 10 minutes (sticky)\n"
+            "• Max concurrent: Swing 4 + Scalping 4\n"
+            "• Leverage policy: Auto max-safe per pair\n\n"
+            "🚀 Engine restarted with mixed parameters.\n"
+            "You will receive one combined startup notification.",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📊 View Dashboard", callback_data="at_dashboard")]
@@ -1574,6 +1803,14 @@ def register_autotrade_handlers(application):
             WAITING_BITUNIX_UID: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, process_uid_input_bot),
             ],
+            WAITING_NEW_AMOUNT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_amount),
+                CallbackQueryHandler(callback_new_amount_select, pattern="^at_newamt_\\d+$"),
+            ],
+            WAITING_NEW_LEVERAGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_leverage_text),
+                CallbackQueryHandler(callback_new_leverage_select, pattern="^at_newlev_\\d+$"),
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cmd_cancel),
@@ -1582,7 +1819,32 @@ def register_autotrade_handlers(application):
         per_user=True, per_chat=True, allow_reentry=True,
     )
     application.add_handler(conv)
-    
+    application.add_handler(CallbackQueryHandler(callback_start_onboarding, pattern="^at_start_onboarding$"))
+    application.add_handler(CallbackQueryHandler(callback_learn_more, pattern="^at_learn_more$"))
+
+    # Dashboard/settings callbacks (must be registered before generic menu redirect handlers).
+    application.add_handler(CallbackQueryHandler(callback_dashboard, pattern="^at_dashboard$"))
+    application.add_handler(CallbackQueryHandler(callback_settings, pattern="^at_settings$"))
+    application.add_handler(CallbackQueryHandler(callback_set_amount, pattern="^at_set_amount$"))
+    application.add_handler(CallbackQueryHandler(callback_new_amount_select, pattern="^at_newamt_\\d+$"))
+    application.add_handler(CallbackQueryHandler(callback_set_leverage, pattern="^at_set_leverage$"))
+    application.add_handler(CallbackQueryHandler(callback_new_leverage_select, pattern="^at_newlev_\\d+$"))
+    application.add_handler(CallbackQueryHandler(callback_set_margin, pattern="^at_set_margin$"))
+    application.add_handler(CallbackQueryHandler(callback_margin_select, pattern="^at_margin_(cross|isolated)$"))
+    application.add_handler(CallbackQueryHandler(callback_toggle_auto_mode, pattern="^at_toggle_auto_mode$"))
+    application.add_handler(CallbackQueryHandler(callback_switch_risk_mode, pattern="^at_switch_risk_mode$"))
+    application.add_handler(CallbackQueryHandler(callback_risk_settings, pattern="^at_risk_settings$"))
+    application.add_handler(CallbackQueryHandler(callback_set_risk, pattern="^at_set_risk_(1|2|3|5)$"))
+    application.add_handler(CallbackQueryHandler(callback_risk_education, pattern="^at_risk_edu$"))
+    application.add_handler(CallbackQueryHandler(callback_risk_simulator, pattern="^at_risk_sim$"))
+    application.add_handler(CallbackQueryHandler(callback_trading_mode_menu, pattern="^trading_mode_menu$"))
+    application.add_handler(CallbackQueryHandler(callback_select_scalping, pattern="^mode_select_scalping$"))
+    application.add_handler(CallbackQueryHandler(callback_select_swing, pattern="^mode_select_swing$"))
+    application.add_handler(CallbackQueryHandler(callback_select_mixed, pattern="^mode_select_mixed$"))
+
+    # Backward-compat aliases for legacy callback values still present in some flows.
+    application.add_handler(CallbackQueryHandler(callback_settings, pattern="^at_choose_risk_mode$"))
+    application.add_handler(CallbackQueryHandler(callback_new_leverage_select, pattern="^at_lev_\\d+$"))
 
     # Ad-hoc UID approval callbacks for admins
     from app.handlers_autotrade_admin import callback_uid_acc, callback_uid_reject
