@@ -1,0 +1,70 @@
+{
+  "brand_name": "CryptoMentor",
+  "tagline": "AI Trading Assistant untuk trader kripto Indonesia",
+  "target_audience": "Trader kripto Indonesia, usia 20-35 tahun",
+  "products": {
+    "autotrade": {
+      "name": "AutoTrade",
+      "description": "Trading otomatis berbasis AI yang berjalan 24/7",
+      "exchanges": ["BingX", "Binance", "Bybit", "Bitunix"],
+      "key_features": ["Entry otomatis", "Stop loss otomatis", "Take profit otomatis", "Multi-exchange"],
+      "pain_solved": "Tidak perlu pantau chart 24 jam"
+    },
+    "stackmentor": {
+      "name": "StackMentor",
+      "description": "Sistem manajemen modal 60/30/10 untuk pertumbuhan konsisten",
+      "key_features": ["Alokasi modal otomatis", "Risk management", "Compound growth"],
+      "pain_solved": "Modal habis karena tidak ada manajemen risiko"
+    },
+    "scalping_mode": {
+      "name": "Scalping Mode",
+      "description": "Mode trading cepat untuk profit di market sideways",
+      "key_features": ["Deteksi sideways otomatis", "Entry presisi", "Quick profit"],
+      "pain_solved": "Tidak bisa profit saat market tidak trending"
+    },
+    "sideways_micro_scalping": {
+      "name": "Sideways Micro-Scalping",
+      "description": "Optimasi khusus untuk market ranging/sideways",
+      "key_features": ["Range detection", "Bounce trading", "RSI divergence"],
+      "pain_solved": "Rugi saat market sideways"
+    }
+  },
+  "social_proof": {
+    "user_count": "500+",
+    "avg_monthly_return": "Bervariasi sesuai market",
+    "exchanges_supported": 4,
+    "uptime": "99.9%"
+  },
+  "content_themes": [
+    "product_highlight",
+    "crypto_education",
+    "trading_psychology",
+    "market_update",
+    "community"
+  ],
+  "tone": "Santai, percaya diri, edukatif, tidak hard selling",
+  "disclaimer": "Bukan saran keuangan. Trading mengandung risiko.",
+  "telegram_link": "t.me/cryptomentor_bot",
+  "personas": {
+    "Beginner": {
+      "pain_points": ["Bingung cara entry", "Tidak tahu baca chart", "Takut salah beli"],
+      "emotion_trigger": "security",
+      "message": "Mulai trading dengan panduan AI, tanpa perlu jadi expert dulu"
+    },
+    "Intermediate_Trader": {
+      "pain_points": ["Sering loss karena emosi", "Entry tidak konsisten", "Tidak ada sistem"],
+      "emotion_trigger": "security",
+      "message": "Hilangkan emosi dari trading, biarkan AI yang eksekusi"
+    },
+    "Fear_Driven": {
+      "pain_points": ["Takut kehilangan modal", "Trauma loss besar", "Tidak percaya diri"],
+      "emotion_trigger": "fear",
+      "message": "Stop loss otomatis melindungi modal kamu 24/7"
+    },
+    "Greed_Driven": {
+      "pain_points": ["FOMO ketinggalan pump", "Ingin profit lebih cepat", "Tidak sabar"],
+      "emotion_trigger": "greed",
+      "message": "AI entry lebih cepat dari manusia, tidak pernah ketinggalan peluang"
+    }
+  }
+}
